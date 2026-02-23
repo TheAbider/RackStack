@@ -30,6 +30,8 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Networking** -- Static IP with rollback, VLAN tagging, Switch Embedded Teaming (auto-detect), custom SET vNICs (Backup, Cluster, Live Migration, Storage, or custom names with VLAN), DNS presets, iSCSI/SAN with A/B side MPIO and cabling auto-detect
 
+**Storage Backends** -- Pluggable storage backend (iSCSI, Fibre Channel, Storage Spaces Direct, SMB3, NVMe-oF, Local); auto-detection from system state; per-backend management menus; generalized MPIO dispatching; all batch mode steps adapt to the selected backend
+
 **Hyper-V** -- Role install, configurable VM templates (override specs or add new via `defaults.json`), batch queue deployment, VHD management, offline registry injection, Secure Boot Gen 2, cluster CSV support
 
 **Server Roles** -- Failover Clustering, MPIO, BitLocker, Deduplication, Storage Replica, 14 disk operations
@@ -65,7 +67,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\RackStack.ps1
 ```
 
-> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 59 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
+> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 60 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
 
 ### Single-File Deployment (Production)
 
@@ -76,9 +78,9 @@ For production use, generate a monolithic single-file script (~26K lines) that y
 .\sync-to-monolithic.ps1
 ```
 
-The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 59 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
+The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 60 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
-> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.2.0.ps1` = monolithic build for deployment/compilation.
+> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.3.0.ps1` = monolithic build for deployment/compilation.
 
 ## Requirements
 
@@ -227,8 +229,8 @@ Place `batch_config.json` next to the script and it runs automatically on launch
 
 ```
 RackStack/
-├── RackStack.ps1               # Modular loader -- dot-sources 59 modules (dev use)
-├── RackStack v1.2.0.ps1        # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack.ps1               # Modular loader -- dot-sources 60 modules (dev use)
+├── RackStack v1.3.0.ps1        # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
 ├── defaults.example.json       # Config template with examples
@@ -236,8 +238,8 @@ RackStack/
 ├── Modules/
 │   ├── 00-Initialization.ps1   # Constants, variables, config loading
 │   ├── 01-Console.ps1          # Console window management
-│   ├── ...                     # 57 more modules
-│   └── 58-NetworkDiagnostics.ps1
+│   ├── ...                     # 58 more modules
+│   └── 59-StorageBackends.ps1
 ├── Tests/
 │   ├── Run-Tests.ps1           # 1312 automated tests (109 sections)
 │   ├── Validate-Release.ps1    # Pre-release validation suite
@@ -248,18 +250,18 @@ RackStack/
 
 ### Module Architecture
 
-59 modules numbered for load order. Dependencies flow downward.
+60 modules numbered for load order. Dependencies flow downward.
 
 | Range | Category | Highlights |
 |---|---|---|
 | 00-05 | **Core** | Variables, console, logging, input validation, navigation, OS detection |
-| 06-14 | **Networking** | Adapters, IP config, VLANs, SET, iSCSI, hostname, domain, DNS |
+| 06-14 | **Networking** | Adapters, IP config, VLANs, SET, iSCSI, hostname, domain, DNS, NTP |
 | 15-24 | **System** | RDP, firewall, Defender, NTP, updates, licensing, passwords, local admin |
 | 25-33 | **Roles** | Hyper-V, MPIO, clustering, performance, events, services, BitLocker |
 | 34-39 | **Tools** | Help, utilities, batch config, health check, storage manager, cloud |
 | 40-44 | **VM Pipeline** | Host storage, VHD management, ISO downloads, offline VHD, VM deployment |
 | 45-50 | **Session** | Config export, session summary, cleanup, menus, entry point |
-| 51-58 | **Extended** | Cluster dashboard, checkpoints, export/import, HTML reports, QoL, operations, remote, diagnostics |
+| 51-59 | **Extended** | Cluster dashboard, checkpoints, export/import, HTML reports, QoL, operations, remote, diagnostics, storage backends |
 
 ## Testing
 
@@ -267,14 +269,14 @@ RackStack/
 # Full test suite (1312 tests, ~2 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
-# PSScriptAnalyzer (0 errors on all 59 modules + monolithic)
+# PSScriptAnalyzer (0 errors on all 60 modules + monolithic)
 powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 # Pre-release validation (parse + PSSA + structure + sync + version + tests)
 powershell -ExecutionPolicy Bypass -File Tests\Validate-Release.ps1
 ```
 
-Tests cover parsing, module loading, function existence (300+), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, and more.
+Tests cover parsing, module loading, function existence (300+), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
 
 ## Development
 
@@ -284,7 +286,7 @@ Tests cover parsing, module loading, function existence (300+), version consiste
 4. Test: `.\Tests\Run-Tests.ps1`
 5. Compile: `Invoke-PS2EXE -InputFile 'RackStack v{ver}.ps1' -OutputFile 'RackStack.exe'`
 
-The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 58 region pairs are flat (non-nested). Use `-DryRun` to preview.
+The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 59 region pairs are flat (non-nested). Use `-DryRun` to preview.
 
 > **File summary:** `RackStack.ps1` = modular loader (for dev). `RackStack v{version}.ps1` = monolithic build (for deployment). `RackStack.exe` = compiled from monolithic (for end users).
 

@@ -111,6 +111,9 @@ $script:VHDCachePath = "D:\Virtual Machines\_BaseImages"    # Cached sysprepped 
 $script:ClusterVHDCachePath = "C:\ClusterStorage\Volume1\_BaseImages"  # Cached VHDs on clusters
 $script:StorageInitialized = $false                                    # Whether host storage has been initialized
 
+# Storage backend type: iSCSI, FC, S2D, SMB3, NVMeoF, Local (override via defaults.json StorageBackendType)
+$script:StorageBackendType = "iSCSI"
+
 # Store script path at startup (MUST be before functions for Exit-Script to work)
 $script:ScriptPath = $PSCommandPath
 if (-not $script:ScriptPath) {
@@ -121,7 +124,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.2.0"
+$script:ScriptVersion = "1.3.0"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

@@ -747,60 +747,68 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Custom vNICs: skipped" -color "Debug"
     }
 
-    # Step 18: Configure iSCSI
+    # Step 18: Configure Shared Storage
     $stepNum++
-    if ($Config.ConfigureiSCSI -and $configType -eq "HOST") {
-        Write-OutputColor "  [$stepNum/$totalSteps] Configuring iSCSI..." -color "Info"
+    # Determine storage backend (new key takes priority, fall back to legacy ConfigureiSCSI)
+    $storageBackend = if ($Config.StorageBackendType) { $Config.StorageBackendType } else { "iSCSI" }
+    $configureStorage = $Config.ConfigureSharedStorage -or $Config.ConfigureiSCSI
+    if ($configureStorage -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Configuring shared storage ($storageBackend)..." -color "Info"
         try {
-            $hostNum = $Config.iSCSIHostNumber
-            if ($null -eq $hostNum) {
-                $hostNum = Get-HostNumberFromHostname
-            }
-            if ($null -ne $hostNum -and $hostNum -ge 1 -and $hostNum -le 24) {
-                $ip1 = Get-iSCSIAutoIP -HostNumber $hostNum -PortNumber 1
-                $ip2 = Get-iSCSIAutoIP -HostNumber $hostNum -PortNumber 2
-                # Find iSCSI candidate adapters (non-internet, non-virtual)
-                $iscsiAdapters = @()
-                if ($script:iSCSICandidateAdapters) {
-                    $iscsiAdapters = $script:iSCSICandidateAdapters | ForEach-Object { $_.Adapter }
-                } else {
-                    $iscsiAdapters = Get-NetAdapter | Where-Object {
-                        $_.Name -notlike "vEthernet*" -and
-                        $_.InterfaceDescription -notlike "*Hyper-V*" -and
-                        $_.InterfaceDescription -notlike "*Virtual*"
-                    }
+            if ($storageBackend -eq "iSCSI") {
+                # iSCSI-specific configuration (preserved from v1.2.0)
+                $hostNum = $Config.iSCSIHostNumber
+                if ($null -eq $hostNum) {
+                    $hostNum = Get-HostNumberFromHostname
                 }
-                if ($iscsiAdapters.Count -ge 2) {
-                    # Auto-detect A/B side via ping check
-                    $sideCheck = Test-iSCSICabling -Adapters $iscsiAdapters
-                    if ($sideCheck.Valid) {
-                        $aSide = $iscsiAdapters | Where-Object { $_.Name -eq $sideCheck.AdapterA }
-                        $bSide = $iscsiAdapters | Where-Object { $_.Name -eq $sideCheck.AdapterB }
-                        Write-OutputColor "           Auto-detected: $($sideCheck.AdapterA) = A-side, $($sideCheck.AdapterB) = B-side" -color "Info"
+                if ($null -ne $hostNum -and $hostNum -ge 1 -and $hostNum -le 24) {
+                    $ip1 = Get-iSCSIAutoIP -HostNumber $hostNum -PortNumber 1
+                    $ip2 = Get-iSCSIAutoIP -HostNumber $hostNum -PortNumber 2
+                    $iscsiAdapters = @()
+                    if ($script:iSCSICandidateAdapters) {
+                        $iscsiAdapters = $script:iSCSICandidateAdapters | ForEach-Object { $_.Adapter }
                     } else {
-                        # Fall back to order found
-                        $aSide = $iscsiAdapters[0]
-                        $bSide = $iscsiAdapters[1]
-                        Write-OutputColor "           A/B side auto-detect inconclusive, using adapter order." -color "Warning"
+                        $iscsiAdapters = Get-NetAdapter | Where-Object {
+                            $_.Name -notlike "vEthernet*" -and
+                            $_.InterfaceDescription -notlike "*Hyper-V*" -and
+                            $_.InterfaceDescription -notlike "*Virtual*"
+                        }
                     }
-                    # Configure A-side
-                    Remove-NetIPAddress -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
-                    Remove-NetRoute -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
-                    New-NetIPAddress -InterfaceAlias $aSide.Name -IPAddress $ip1 -PrefixLength 24 -ErrorAction Stop
-                    Disable-NetAdapterBinding -Name $aSide.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
-                    # Configure B-side
-                    Remove-NetIPAddress -InterfaceAlias $bSide.Name -Confirm:$false -ErrorAction SilentlyContinue
-                    Remove-NetRoute -InterfaceAlias $bSide.Name -Confirm:$false -ErrorAction SilentlyContinue
-                    New-NetIPAddress -InterfaceAlias $bSide.Name -IPAddress $ip2 -PrefixLength 24 -ErrorAction Stop
-                    Disable-NetAdapterBinding -Name $bSide.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
-                    Write-OutputColor "           iSCSI configured: A=$ip1, B=$ip2" -color "Success"
-                    $changesApplied++
-                    Add-SessionChange -Category "Network" -Description "Configured iSCSI: A-side $ip1, B-side $ip2"
+                    if ($iscsiAdapters.Count -ge 2) {
+                        $sideCheck = Test-iSCSICabling -Adapters $iscsiAdapters
+                        if ($sideCheck.Valid) {
+                            $aSide = $iscsiAdapters | Where-Object { $_.Name -eq $sideCheck.AdapterA }
+                            $bSide = $iscsiAdapters | Where-Object { $_.Name -eq $sideCheck.AdapterB }
+                            Write-OutputColor "           Auto-detected: $($sideCheck.AdapterA) = A-side, $($sideCheck.AdapterB) = B-side" -color "Info"
+                        } else {
+                            $aSide = $iscsiAdapters[0]
+                            $bSide = $iscsiAdapters[1]
+                            Write-OutputColor "           A/B side auto-detect inconclusive, using adapter order." -color "Warning"
+                        }
+                        Remove-NetIPAddress -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                        Remove-NetRoute -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                        New-NetIPAddress -InterfaceAlias $aSide.Name -IPAddress $ip1 -PrefixLength 24 -ErrorAction Stop
+                        Disable-NetAdapterBinding -Name $aSide.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+                        Remove-NetIPAddress -InterfaceAlias $bSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                        Remove-NetRoute -InterfaceAlias $bSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                        New-NetIPAddress -InterfaceAlias $bSide.Name -IPAddress $ip2 -PrefixLength 24 -ErrorAction Stop
+                        Disable-NetAdapterBinding -Name $bSide.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+                        Write-OutputColor "           iSCSI configured: A=$ip1, B=$ip2" -color "Success"
+                        $changesApplied++
+                        Add-SessionChange -Category "Network" -Description "Configured iSCSI: A-side $ip1, B-side $ip2"
+                    } else {
+                        Write-OutputColor "           Not enough iSCSI adapters found (need 2, found $($iscsiAdapters.Count))." -color "Warning"
+                    }
                 } else {
-                    Write-OutputColor "           Not enough iSCSI adapters found (need 2, found $($iscsiAdapters.Count))." -color "Warning"
+                    Write-OutputColor "           Could not determine host number for iSCSI." -color "Warning"
                 }
             } else {
-                Write-OutputColor "           Could not determine host number for iSCSI." -color "Warning"
+                # Non-iSCSI backends: use the generalized initializer
+                $configHash = @{}
+                if ($Config.SMB3SharePath) { $configHash["SMB3SharePath"] = $Config.SMB3SharePath }
+                $null = Initialize-StorageBackendBatch -Config $configHash -BackendType $storageBackend
+                $changesApplied++
+                Add-SessionChange -Category "Storage" -Description "Configured $storageBackend storage backend"
             }
         }
         catch {
@@ -809,20 +817,20 @@ function Start-BatchMode {
         }
     }
     else {
-        Write-OutputColor "  [$stepNum/$totalSteps] iSCSI: skipped" -color "Debug"
+        Write-OutputColor "  [$stepNum/$totalSteps] Shared storage: skipped" -color "Debug"
     }
 
-    # Step 19: Configure MPIO
+    # Step 19: Configure MPIO / Multipath
     $stepNum++
     if ($Config.ConfigureMPIO -and $configType -eq "HOST") {
-        Write-OutputColor "  [$stepNum/$totalSteps] Configuring MPIO for iSCSI..." -color "Info"
+        Write-OutputColor "  [$stepNum/$totalSteps] Configuring MPIO for $storageBackend..." -color "Info"
         try {
-            if (Test-MPIOInstalled) {
-                Enable-MSDSMAutomaticClaim -BusType iSCSI -ErrorAction Stop
-                Set-MSDSMGlobalDefaultLoadBalancePolicy -Policy RR -ErrorAction Stop
-                Write-OutputColor "           MPIO configured (Round Robin)." -color "Success"
+            if ($storageBackend -in @("S2D", "SMB3", "NVMeoF", "Local")) {
+                Write-OutputColor "           MPIO not required for $storageBackend (handled natively)." -color "Info"
+            } elseif (Test-MPIOInstalled) {
+                Initialize-MPIOForBackend -BackendType $storageBackend
                 $changesApplied++
-                Add-SessionChange -Category "System" -Description "Configured MPIO for iSCSI"
+                Add-SessionChange -Category "System" -Description "Configured MPIO for $storageBackend"
             } else {
                 Write-OutputColor "           MPIO not installed. Install it first (step 9)." -color "Warning"
             }

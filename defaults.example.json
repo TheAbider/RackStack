@@ -69,7 +69,12 @@
     ],
     "_CustomVNICs_help": "Virtual NICs to create on the SET switch during batch mode. Each entry needs a 'Name' (required) and optional 'VLAN' (1-4094, or null for no VLAN). These are management OS adapters for different traffic types. Common names: Backup, Cluster, Live Migration, Storage. RackStack creates these after the SET switch is built.",
 
-    "_section_iscsi": "========== iSCSI / SAN SETTINGS ==========",
+    "_section_storage": "========== STORAGE BACKEND ==========",
+
+    "StorageBackendType": "iSCSI",
+    "_StorageBackendType_help": "Which shared storage backend to use. Options: 'iSCSI' (default, SAN over Ethernet), 'FC' (Fibre Channel SAN), 'S2D' (Storage Spaces Direct, hyperconverged), 'SMB3' (SMB 3.0 file share / NAS), 'NVMeoF' (NVMe over Fabrics), 'Local' (no shared storage). This controls which storage menus appear and how batch mode configures storage.",
+
+    "_section_iscsi": "========== iSCSI / SAN SETTINGS (when StorageBackendType=iSCSI) ==========",
 
     "iSCSISubnet": "172.16.1",
     "_iSCSISubnet_help": "The first 3 octets of your iSCSI storage network. RackStack uses this to auto-configure iSCSI initiator connections. Example: if your SAN targets are at 172.16.1.10, 172.16.1.11, etc., put '172.16.1' here. The last octet comes from SANTargetMappings below.",

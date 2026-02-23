@@ -435,7 +435,7 @@ function Start-Show-HostNetworkMenu {
                 }
             }
             "4" {
-                Start-Show-iSCSISANMenu
+                Start-StorageSANMenu
                 # Check if we need to bubble up to main menu
                 if ($global:ReturnToMainMenu) {
                     return

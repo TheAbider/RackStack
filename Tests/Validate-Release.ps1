@@ -3,7 +3,7 @@
     Automated pre-release validation for RackStack
 .DESCRIPTION
     Runs all validation checks required before releasing a new version:
-    1. Parse check (all 59 modules + monolithic)
+    1. Parse check (all 60 modules + monolithic)
     2. PSScriptAnalyzer (0 errors required)
     3. Module count verification
     4. Region count verification (monolithic)

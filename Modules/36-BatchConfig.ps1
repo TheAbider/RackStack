@@ -120,13 +120,22 @@ function New-BatchConfigTemplate {
     "CustomVNICs": [],
     "_CustomVNICs_Help": "Array of virtual NICs to create on the SET switch. Each needs Name (required) and optional VLAN (1-4094). Example: [{\"Name\": \"Backup\"}, {\"Name\": \"Cluster\", \"VLAN\": 100}, {\"Name\": \"Live Migration\", \"VLAN\": 200}]",
 
+    "StorageBackendType": "iSCSI",
+    "_StorageBackendType_Help": "'iSCSI' (default), 'FC', 'S2D', 'SMB3', 'NVMeoF', or 'Local'. Controls which storage backend is configured in steps 18-19.",
+
+    "ConfigureSharedStorage": false,
+    "_ConfigureSharedStorage_Help": "Configure the shared storage backend (iSCSI NICs, FC scan, S2D enable, SMB test, NVMe scan). Backend determined by StorageBackendType.",
+
     "ConfigureiSCSI": false,
-    "_ConfigureiSCSI_Help": "Configure iSCSI NICs with auto-calculated IPs based on host number.",
+    "_ConfigureiSCSI_Help": "DEPRECATED: Use ConfigureSharedStorage + StorageBackendType=iSCSI. Kept for backward compat.",
     "iSCSIHostNumber": null,
-    "_iSCSIHostNumber_Help": "Host number for IP calculation (1-24). null = auto-detect from hostname.",
+    "_iSCSIHostNumber_Help": "Host number for iSCSI IP calculation (1-24). null = auto-detect from hostname.",
+
+    "SMB3SharePath": null,
+    "_SMB3SharePath_Help": "UNC path to SMB3 share (e.g., '\\\\\\\\server\\\\share'). Only used when StorageBackendType=SMB3.",
 
     "ConfigureMPIO": false,
-    "_ConfigureMPIO_Help": "Connect to iSCSI targets and configure MPIO multipath. Requires iSCSI configured first.",
+    "_ConfigureMPIO_Help": "Configure MPIO multipath for the active storage backend (iSCSI or FC). S2D/SMB3/NVMe handle paths natively.",
 
     "InitializeHostStorage": false,
     "_InitializeHostStorage_Help": "Select a data drive, create VM storage directories, set Hyper-V default paths.",

@@ -175,7 +175,7 @@ function Show-ConfigureServerMenu {
     Write-OutputColor "  │$("  CONFIGURATION".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[1]  Network Configuration ►"
-    Write-OutputColor "  │$("        IP, SET Teaming, iSCSI, VLAN".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("        IP, SET Teaming, Storage/SAN, VLAN".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[2]  System Configuration â–º" -Status $sysSummary -StatusColor $sysColor
     Write-OutputColor "  │$("        Hostname, Domain, Timezone, Updates, License, Power".PadRight(72))│" -color "Info"
@@ -476,7 +476,7 @@ function Show-NetworkMenu {
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-MenuItem "[1]  Configure Host Network"
-    Write-OutputColor "  │$("        Physical adapters, SET teaming, iSCSI".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("        Physical adapters, SET teaming, SAN/storage".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[2]  Configure Virtual Machine Network"
     Write-OutputColor "  │$("        VM IP configuration, DNS settings".PadRight(72))│" -color "Info"
@@ -504,7 +504,7 @@ function Show-HostNetworkMenu {
     Write-MenuItem "[1]  Configure Switch Embedded Team (SET)"
     Write-MenuItem "[2]  Add Virtual NIC to SET"
     Write-MenuItem "[3]  Configure IP Address"
-    Write-MenuItem "[4]  iSCSI & SAN Management ►"
+    Write-MenuItem "[4]  Storage & SAN Management ►"
     Write-MenuItem "[5]  Rename Network Adapter"
     Write-MenuItem "[6]  Disable IPv6 (All Adapters)"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"

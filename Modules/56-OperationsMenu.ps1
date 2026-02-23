@@ -357,6 +357,7 @@ function Import-Defaults {
             AgentFolder  = "Agents"
         }
         iSCSISubnet        = "172.16.1"
+        StorageBackendType = "iSCSI"
     }
 
     # Start with built-in defaults
@@ -410,6 +411,11 @@ function Import-Defaults {
     $script:BackupName = $merged.BackupName
     $BackupName = $merged.BackupName
     $script:iSCSISubnet = $merged.iSCSISubnet
+
+    # Override storage backend type
+    if ($merged.StorageBackendType -and $merged.StorageBackendType -in $script:ValidStorageBackends) {
+        $script:StorageBackendType = $merged.StorageBackendType
+    }
 
     # Override auto-update flag
     if ($null -ne $merged.AutoUpdate) {
@@ -680,6 +686,7 @@ function Export-Defaults {
         DNSPresets           = $customDNS
         FileServer          = $script:FileServer
         iSCSISubnet          = $script:iSCSISubnet
+        StorageBackendType   = $script:StorageBackendType
         CustomKMSKeys        = $script:CustomKMSKeys
         CustomAVMAKeys       = $script:CustomAVMAKeys
         CustomVMTemplates    = $script:CustomVMTemplates
@@ -737,6 +744,7 @@ function Show-EditDefaults {
         Write-MenuItem "[5]  Custom DNS Presets" -Status "$customDNSCount custom preset(s)" -StatusColor "Info"
         Write-MenuItem "[6]  FileServer Settings" -Status $acDisplay -StatusColor "Info"
         Write-MenuItem "[7]  iSCSI Subnet" -Status "$($script:iSCSISubnet).x" -StatusColor "Info"
+        Write-MenuItem "[8]  Storage Backend" -Status $script:StorageBackendType -StatusColor "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -869,6 +877,9 @@ function Show-EditDefaults {
                     Write-OutputColor "iSCSI subnet set to $val.x" -color "Success"
                 }
             }
+            "8" {
+                Set-StorageBackendType
+            }
             "S" {
                 Export-Defaults
                 Write-OutputColor "Defaults saved to $($script:DefaultsPath)" -color "Success"
@@ -883,6 +894,7 @@ function Show-EditDefaults {
                     $ManagementName = "Management"; $script:ManagementName = "Management"
                     $BackupName = "Backup"; $script:BackupName = "Backup"
                     $script:iSCSISubnet = "172.16.1"
+                    $script:StorageBackendType = "iSCSI"
 
                     # Remove custom DNS presets
                     $toRemove = @()

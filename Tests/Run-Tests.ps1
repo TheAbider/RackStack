@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 59 modules)
+    - Parse tests (monolithic + 60 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -108,7 +108,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Split-Path $script:ModuleRoot) "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 59  # 00-58 inclusive
+$expectedModuleCount = 60  # 00-59 inclusive
 
 # ============================================================================
 # BANNER
@@ -258,7 +258,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 59 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 60 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -526,8 +526,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "58-NetworkDiagnostics.ps1"
-    Write-TestResult "Module range 00-Initialization to 58-NetworkDiagnostics" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "59-StorageBackends.ps1"
+    Write-TestResult "Module range 00-Initialization to 59-StorageBackends" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -1865,8 +1865,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 58 #region tags" ($regionStartCount -eq 58) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 58 #endregion tags" ($regionEndCount -eq 58) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 59 #region tags" ($regionStartCount -eq 59) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 59 #endregion tags" ($regionEndCount -eq 59) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4044,7 +4044,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 59 modules" ($readmeContent -match '59 module')
+    Write-TestResult "README: mentions 60 modules" ($readmeContent -match '60 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -5736,7 +5736,7 @@ try {
     Write-TestResult "50-EntryPoint: step 17 is Custom vNICs" ($epContent -match '17.*Custom\s*vNIC')
 
     # EntryPoint: step 18 mentions iSCSI
-    Write-TestResult "50-EntryPoint: step 18 is iSCSI" ($epContent -match '18.*iSCSI')
+    Write-TestResult "50-EntryPoint: step 18 is shared storage" ($epContent -match '18.*Configure Shared Storage')
 
     # EntryPoint: step 19 mentions MPIO
     Write-TestResult "50-EntryPoint: step 19 is MPIO" ($epContent -match '19.*MPIO')
@@ -6111,6 +6111,166 @@ try {
 
 } catch {
     Write-TestResult "iSCSI Cabling Check Feature Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 110: STORAGE BACKENDS MODULE (v1.3.0)
+# ============================================================================
+
+Write-SectionHeader "SECTION 110: STORAGE BACKENDS MODULE"
+
+try {
+    $storageBackendsPath = Join-Path $modulesPath "59-StorageBackends.ps1"
+    Write-TestResult "59-StorageBackends.ps1 exists" (Test-Path $storageBackendsPath)
+
+    $sbContent = Get-Content $storageBackendsPath -Raw
+
+    # Region header
+    Write-TestResult "59-StorageBackends: has STORAGE BACKENDS region" ($sbContent -match '#region.*STORAGE BACKENDS')
+
+    # Valid backends list
+    Write-TestResult "59-StorageBackends: ValidStorageBackends defined" ($sbContent -match '\$script:ValidStorageBackends')
+    Write-TestResult "59-StorageBackends: supports iSCSI backend" ($sbContent -match '"iSCSI"')
+    Write-TestResult "59-StorageBackends: supports FC backend" ($sbContent -match '"FC"')
+    Write-TestResult "59-StorageBackends: supports S2D backend" ($sbContent -match '"S2D"')
+    Write-TestResult "59-StorageBackends: supports SMB3 backend" ($sbContent -match '"SMB3"')
+    Write-TestResult "59-StorageBackends: supports NVMeoF backend" ($sbContent -match '"NVMeoF"')
+    Write-TestResult "59-StorageBackends: supports Local backend" ($sbContent -match '"Local"')
+
+    # Core functions
+    Write-TestResult "59-StorageBackends: Show-StorageBackendSelector defined" ($sbContent -match 'function Show-StorageBackendSelector')
+    Write-TestResult "59-StorageBackends: Set-StorageBackendType defined" ($sbContent -match 'function Set-StorageBackendType')
+    Write-TestResult "59-StorageBackends: Get-DetectedStorageBackend defined" ($sbContent -match 'function Get-DetectedStorageBackend')
+    Write-TestResult "59-StorageBackends: Show-StorageBackendStatus defined" ($sbContent -match 'function Show-StorageBackendStatus')
+
+    # FC functions
+    Write-TestResult "59-StorageBackends: Show-FCAdapters defined" ($sbContent -match 'function Show-FCAdapters')
+    Write-TestResult "59-StorageBackends: Initialize-MPIOForFC defined" ($sbContent -match 'function Initialize-MPIOForFC')
+    Write-TestResult "59-StorageBackends: Invoke-FCScan defined" ($sbContent -match 'function Invoke-FCScan')
+    Write-TestResult "59-StorageBackends: Show-FCSANMenu defined" ($sbContent -match 'function Show-FCSANMenu')
+    Write-TestResult "59-StorageBackends: Start-FCSANMenu defined" ($sbContent -match 'function Start-FCSANMenu')
+
+    # S2D functions
+    Write-TestResult "59-StorageBackends: Test-S2DAvailable defined" ($sbContent -match 'function Test-S2DAvailable')
+    Write-TestResult "59-StorageBackends: Show-S2DStatus defined" ($sbContent -match 'function Show-S2DStatus')
+    Write-TestResult "59-StorageBackends: Enable-S2DOnCluster defined" ($sbContent -match 'function Enable-S2DOnCluster')
+    Write-TestResult "59-StorageBackends: New-S2DVirtualDisk defined" ($sbContent -match 'function New-S2DVirtualDisk')
+    Write-TestResult "59-StorageBackends: Show-S2DMenu defined" ($sbContent -match 'function Show-S2DMenu')
+    Write-TestResult "59-StorageBackends: Start-S2DMenu defined" ($sbContent -match 'function Start-S2DMenu')
+
+    # SMB3 functions
+    Write-TestResult "59-StorageBackends: Show-SMB3Status defined" ($sbContent -match 'function Show-SMB3Status')
+    Write-TestResult "59-StorageBackends: Test-SMB3SharePath defined" ($sbContent -match 'function Test-SMB3SharePath')
+    Write-TestResult "59-StorageBackends: Show-SMB3Menu defined" ($sbContent -match 'function Show-SMB3Menu')
+    Write-TestResult "59-StorageBackends: Start-SMB3Menu defined" ($sbContent -match 'function Start-SMB3Menu')
+
+    # NVMe-oF functions
+    Write-TestResult "59-StorageBackends: Show-NVMeoFStatus defined" ($sbContent -match 'function Show-NVMeoFStatus')
+    Write-TestResult "59-StorageBackends: Show-NVMeoFMenu defined" ($sbContent -match 'function Show-NVMeoFMenu')
+    Write-TestResult "59-StorageBackends: Start-NVMeoFMenu defined" ($sbContent -match 'function Start-NVMeoFMenu')
+
+    # Unified menu
+    Write-TestResult "59-StorageBackends: Show-StorageSANMenu defined" ($sbContent -match 'function Show-StorageSANMenu')
+    Write-TestResult "59-StorageBackends: Start-StorageSANMenu defined" ($sbContent -match 'function Start-StorageSANMenu')
+
+    # Batch helpers
+    Write-TestResult "59-StorageBackends: Initialize-StorageBackendBatch defined" ($sbContent -match 'function Initialize-StorageBackendBatch')
+    Write-TestResult "59-StorageBackends: Initialize-MPIOForBackend defined" ($sbContent -match 'function Initialize-MPIOForBackend')
+
+    # Backend detection checks for various storage types
+    Write-TestResult "59-StorageBackends: auto-detect checks iSCSI sessions" ($sbContent -match 'Get-DetectedStorageBackend[\s\S]*?iSCSISession')
+    Write-TestResult "59-StorageBackends: auto-detect checks FC HBAs" ($sbContent -match 'Get-DetectedStorageBackend[\s\S]*?Fibre Channel')
+    Write-TestResult "59-StorageBackends: auto-detect checks S2D cluster" ($sbContent -match 'Get-DetectedStorageBackend[\s\S]*?S2DEnabled')
+
+    # Menu dispatches to correct backend
+    Write-TestResult "59-StorageBackends: SAN menu dispatches iSCSI" ($sbContent -match 'Start-StorageSANMenu[\s\S]*?Start-Show-iSCSISANMenu')
+    Write-TestResult "59-StorageBackends: SAN menu dispatches FC" ($sbContent -match 'Start-StorageSANMenu[\s\S]*?Start-FCSANMenu')
+    Write-TestResult "59-StorageBackends: SAN menu dispatches S2D" ($sbContent -match 'Start-StorageSANMenu[\s\S]*?Start-S2DMenu')
+    Write-TestResult "59-StorageBackends: SAN menu dispatches SMB3" ($sbContent -match 'Start-StorageSANMenu[\s\S]*?Start-SMB3Menu')
+    Write-TestResult "59-StorageBackends: SAN menu dispatches NVMeoF" ($sbContent -match 'Start-StorageSANMenu[\s\S]*?Start-NVMeoFMenu')
+
+    # MPIO backend dispatch
+    Write-TestResult "59-StorageBackends: MPIO dispatch handles iSCSI" ($sbContent -match 'Initialize-MPIOForBackend[\s\S]*?iSCSI')
+    Write-TestResult "59-StorageBackends: MPIO dispatch handles FC" ($sbContent -match 'Initialize-MPIOForBackend[\s\S]*?Fibre Channel')
+    Write-TestResult "59-StorageBackends: MPIO dispatch skips S2D" ($sbContent -match 'Initialize-MPIOForBackend[\s\S]*?S2D[\s\S]*?natively')
+
+} catch {
+    Write-TestResult "Storage Backends Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 111: STORAGE BACKEND INTEGRATION (v1.3.0)
+# ============================================================================
+
+Write-SectionHeader "SECTION 111: STORAGE BACKEND INTEGRATION"
+
+try {
+    # 00-Initialization: StorageBackendType variable
+    $initContent = Get-Content (Join-Path $modulesPath "00-Initialization.ps1") -Raw
+    Write-TestResult "00-Init: StorageBackendType default iSCSI" ($initContent -match '\$script:StorageBackendType\s*=\s*"iSCSI"')
+
+    # 48-MenuDisplay: renamed menu
+    $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+    Write-TestResult "48-MenuDisplay: Storage & SAN Management label" ($menuContent -match 'Storage & SAN Management')
+
+    # 49-MenuRunner: dispatches to Start-StorageSANMenu
+    $runnerContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
+    Write-TestResult "49-MenuRunner: dispatches to Start-StorageSANMenu" ($runnerContent -match 'Start-StorageSANMenu')
+
+    # 55-QoLFeatures: storage backend favorites
+    $qolContent = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
+    Write-TestResult "55-QoL: Storage Backend Status favorite" ($qolContent -match '"Storage Backend Status"')
+    Write-TestResult "55-QoL: Change Storage Backend favorite" ($qolContent -match '"Change Storage Backend"')
+
+    # 56-OperationsMenu: settings menu option [8]
+    $opsContent = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+    Write-TestResult "56-Ops: settings has storage backend option" ($opsContent -match '\[8\].*[Ss]torage [Bb]ackend')
+    Write-TestResult "56-Ops: settings handler calls Set-StorageBackendType" ($opsContent -match '"8"[\s\S]*?Set-StorageBackendType')
+    Write-TestResult "56-Ops: builtin defaults has StorageBackendType" ($opsContent -match 'StorageBackendType\s*=\s*"iSCSI"')
+    Write-TestResult "56-Ops: import handles StorageBackendType" ($opsContent -match 'merged\.StorageBackendType')
+    Write-TestResult "56-Ops: export includes StorageBackendType" ($opsContent -match 'StorageBackendType\s*=\s*\$script:StorageBackendType')
+
+    # 36-BatchConfig: new batch keys
+    $batchContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+    Write-TestResult "36-Batch: template has StorageBackendType" ($batchContent -match 'StorageBackendType')
+    Write-TestResult "36-Batch: template has ConfigureSharedStorage" ($batchContent -match 'ConfigureSharedStorage')
+
+    # 50-EntryPoint: backend-aware batch steps
+    $entryContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-Entry: step 18 Configure Shared Storage" ($entryContent -match 'Configure Shared Storage')
+    Write-TestResult "50-Entry: step 18 dispatches by StorageBackendType" ($entryContent -match 'StorageBackendType')
+    Write-TestResult "50-Entry: step 19 uses Initialize-MPIOForBackend" ($entryContent -match 'Initialize-MPIOForBackend')
+    Write-TestResult "50-Entry: backward compat ConfigureiSCSI" ($entryContent -match 'ConfigureiSCSI')
+    Write-TestResult "50-Entry: Initialize-StorageBackendBatch for non-iSCSI" ($entryContent -match 'Initialize-StorageBackendBatch')
+
+    # defaults.example.json: storage backend section
+    $examplePath = Join-Path $script:ModuleRoot "defaults.example.json"
+    if (Test-Path $examplePath) {
+        $exampleContent = Get-Content $examplePath -Raw
+        Write-TestResult "defaults.example.json: has StorageBackendType" ($exampleContent -match 'StorageBackendType')
+        Write-TestResult "defaults.example.json: has storage backend help" ($exampleContent -match '_StorageBackendType_help')
+    } else {
+        Write-TestResult "defaults.example.json: exists" $false "File not found"
+    }
+
+    # RackStack.ps1 loader includes 59-StorageBackends.ps1
+    $loaderContent = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 59-StorageBackends.ps1" ($loaderContent -match '59-StorageBackends\.ps1')
+    Write-TestResult "RackStack.ps1: mentions 60 modules" ($loaderContent -match '60 modules')
+
+    # Module count verification
+    $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
+    Write-TestResult "Module count is 60" ($moduleCount -eq 60) "Found $moduleCount modules"
+
+    # Changelog mentions v1.3.0
+    $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
+    $changelogContent = Get-Content $changelogPath -Raw
+    Write-TestResult "Changelog: has v1.3.0 entry" ($changelogContent -match '## v1\.3\.0')
+    Write-TestResult "Changelog: mentions StorageBackendType" ($changelogContent -match 'StorageBackendType')
+    Write-TestResult "Changelog: mentions 60 modules" ($changelogContent -match '60 modules')
+
+} catch {
+    Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
