@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.1
+
+- **Bug Fixes:**
+  - Fixed: Undo stack parameter ordering now uses hashtable splatting instead of positional array (params could swap on multi-param undo scripts)
+  - Fixed: Bare `Exit` replaced with `[Environment]::Exit(0)` for ps2exe EXE compatibility (caused "System error" dialog)
+  - Fixed: Per-adapter internet detection on PS 5.x uses `ping.exe -S` for source-bound ping (all adapters reported true if any had internet)
+  - Fixed: NIC disable for identification now checks for default route and warns before disabling management NIC (could disconnect remote sessions)
+
 ## v1.4.0
 
 - **Server Role Templates (Module 60):** New JSON-driven system for installing common Windows Server roles and features — 10 built-in templates (DC, FS, WEB, DHCP, DNS, PRINT, WSUS, NPS, HV, RDS) with pre/post-install configuration; `Show-RoleTemplateSelector` interactive menu with installed status; `Install-ServerRoleTemplate` handles feature installation, reboot tracking, and post-install guidance; `Show-InstalledRoles` displays all installed roles grouped by type; custom templates via `defaults.json CustomRoleTemplates`

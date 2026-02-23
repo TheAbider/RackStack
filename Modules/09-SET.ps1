@@ -26,14 +26,14 @@ function Test-AdapterInternetConnectivity {
                     # PowerShell 6+ supports -Source
                     $canPing = Test-Connection -Source $ip -ComputerName $Target -Count 1 -Quiet -ErrorAction Stop
                 } else {
-                    # PowerShell 5.x: -Source may not exist (Server 2012 R2 / PS 4.0)
-                    # Fall back to basic connectivity test
-                    $canPing = Test-Connection -ComputerName $Target -Count 1 -Quiet -ErrorAction SilentlyContinue
+                    # PS 5.x: use ping.exe -S to bind to source adapter IP
+                    $pingResult = ping.exe -S $ip $Target -n 1 -w 1000 2>$null
+                    $canPing = ($LASTEXITCODE -eq 0)
                 }
             }
             catch {
-                # Fall back to basic test on any error
-                $canPing = Test-Connection -ComputerName $Target -Count 1 -Quiet -ErrorAction SilentlyContinue
+                $pingResult = ping.exe -S $ip $Target -n 1 -w 1000 2>$null
+                $canPing = ($LASTEXITCODE -eq 0)
             }
 
             $results += @{

@@ -30,10 +30,17 @@
     7h3 4b1d3r
 
 .VERSION
-    1.4.0
+    1.4.1
 
 .LAST UPDATED
     02/23/2026
+
+.CHANGELOG v1.4.1
+    BUG FIXES:
+    - FIXED: Undo stack parameter ordering now uses hashtable splatting instead of positional array
+    - FIXED: Bare Exit replaced with [Environment]::Exit(0) for ps2exe EXE compatibility
+    - FIXED: Per-adapter internet detection on PS 5.x uses ping.exe -S for source-bound ping
+    - FIXED: NIC disable for identification now warns if adapter carries default route (management NIC)
 
 .CHANGELOG v1.4.0
     NEW FEATURES:

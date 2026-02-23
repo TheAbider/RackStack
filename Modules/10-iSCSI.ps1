@@ -770,6 +770,20 @@ function Disable-NICForIdentification {
         $Adapter
     )
 
+    # Check if this adapter has the default route (likely management NIC)
+    $defaultRoute = Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue
+    if ($defaultRoute) {
+        Write-OutputColor "" -color "Error"
+        Write-OutputColor "  WARNING: This adapter ($($Adapter.Name)) carries the default route!" -color "Error"
+        Write-OutputColor "  Disabling it will disconnect any remote session (RDP, SSH, etc.)." -color "Error"
+        Write-OutputColor "  Only proceed if you have physical console access." -color "Error"
+        Write-OutputColor "" -color "Warning"
+        if (-not (Confirm-UserAction -Message "Disable this adapter anyway?")) {
+            Write-OutputColor "  Cancelled." -color "Info"
+            return
+        }
+    }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Disabling $($Adapter.Name) for identification..." -color "Warning"
     Write-OutputColor "  Watch your switch port lights to identify which NIC this is." -color "Info"

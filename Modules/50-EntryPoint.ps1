@@ -67,7 +67,7 @@ function Assert-Elevation {
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         Write-OutputColor "This script requires administrative privileges. Restarting with elevation..." -color "Error"
         Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-        Exit
+        [Environment]::Exit(0)
     }
     else {
         # Size and maximize console window before any output

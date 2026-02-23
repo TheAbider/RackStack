@@ -214,7 +214,8 @@ function Undo-LastChange {
 
         # Execute the undo script with parameters
         if ($lastAction.UndoParams.Count -gt 0) {
-            & $lastAction.UndoScript @($lastAction.UndoParams.Values)
+            $undoParams = $lastAction.UndoParams
+            & $lastAction.UndoScript @undoParams
         }
         else {
             & $lastAction.UndoScript
