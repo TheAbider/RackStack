@@ -39,14 +39,14 @@ sudo systemctl enable --now nginx
 ## Step 2: Create the file directory structure
 
 ```bash
-sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,KaseyaAgents}
+sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,Agents}
 sudo chown -R nginx:nginx /srv/files
 ```
 
 Upload your files into the appropriate folders:
 - `/srv/files/server-tools/ISOs/` -- Windows Server installation ISOs
 - `/srv/files/server-tools/VirtualHardDrives/` -- Sysprepped VHDX files
-- `/srv/files/server-tools/KaseyaAgents/` -- Kaseya agent installers
+- `/srv/files/server-tools/Agents/` -- agent installer files
 
 ## Step 3: SELinux context
 
@@ -247,7 +247,7 @@ Verify: `curl https://files.yourdomain.com/health` should return "OK" (if not ye
         "ClientSecret": "your-client-secret-hex-here",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -278,9 +278,9 @@ You should see a JSON directory listing of your ISOs.
         Server2019-Std-Sysprepped.vhdx
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents/
-        Kaseya_0451_AcmeHealth.exe
-        Kaseya_0452_AcmeClinic.exe
+    Agents/
+        Agent_0451_AcmeHealth.exe
+        Agent_0452_AcmeClinic.exe
     version.json
 ```
 

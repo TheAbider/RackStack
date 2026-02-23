@@ -56,9 +56,18 @@
         "VHDsFolder": "VirtualHardDrives",
         "_VHDsFolder_help": "Subfolder for VHD/VHDX template files (sysprepped Windows images or cloud-init Linux images). Used by the VHD Management menu to download base images for VM deployment.",
 
-        "KaseyaFolder": "KaseyaAgents",
-        "_KaseyaFolder_help": "Subfolder for your MSP agent installer files. The folder name here should match what's actually on your server. Despite the name 'KaseyaFolder', this works for ANY agent -- the name is just the config key."
+        "AgentFolder": "Agents",
+        "_AgentFolder_help": "Subfolder on your file server for agent installer files. The folder name here should match the actual directory on your server. Works with any MSP agent (Kaseya, ConnectWise, Datto, etc.)."
     },
+
+    "_section_set_vnics": "========== SET VIRTUAL NICs ==========",
+
+    "CustomVNICs": [
+        { "Name": "Backup", "VLAN": null },
+        { "Name": "Cluster", "VLAN": 100 },
+        { "Name": "Live Migration", "VLAN": 200 }
+    ],
+    "_CustomVNICs_help": "Virtual NICs to create on the SET switch during batch mode. Each entry needs a 'Name' (required) and optional 'VLAN' (1-4094, or null for no VLAN). These are management OS adapters for different traffic types. Common names: Backup, Cluster, Live Migration, Storage. RackStack creates these after the SET switch is built.",
 
     "_section_iscsi": "========== iSCSI / SAN SETTINGS ==========",
 
@@ -122,7 +131,7 @@
         "ToolName": "Kaseya",
         "_ToolName_help": "Display name shown in menus and messages. Example: 'Kaseya', 'ConnectWise Automate', 'Datto RMM', 'NinjaRMM'.",
 
-        "FolderName": "KaseyaAgents",
+        "FolderName": "Agents",
         "_FolderName_help": "Folder name on your file server (under FileServer.BaseURL) where agent installer EXEs are stored.",
 
         "FilePattern": "Kaseya.*\\.exe$",

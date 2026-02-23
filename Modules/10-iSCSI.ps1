@@ -1,4 +1,192 @@
 ﻿#region ===== iSCSI CONFIGURATION =====
+# Function to test which iSCSI side a single adapter connects to
+function Test-iSCSIAdapterSide {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$AdapterName,
+        [Parameter(Mandatory=$true)]
+        [string]$TempIP,
+        [string]$Subnet = $script:iSCSISubnet
+    )
+
+    $result = @{
+        Adapter    = $AdapterName
+        AReachable = 0
+        BReachable = 0
+        ATotal     = 0
+        BTotal     = 0
+        Side       = "None"
+    }
+
+    # Determine A-side and B-side targets from SANTargetMappings
+    $aSideTargets = @()
+    $bSideTargets = @()
+    foreach ($mapping in $script:SANTargetMappings) {
+        $ip = "$Subnet.$($mapping.Suffix)"
+        if ($mapping.Label -match '^A') {
+            $aSideTargets += $ip
+        } else {
+            $bSideTargets += $ip
+        }
+    }
+    $result.ATotal = $aSideTargets.Count
+    $result.BTotal = $bSideTargets.Count
+
+    # Temporarily assign IP on the adapter
+    try {
+        Remove-NetIPAddress -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-NetRoute -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
+        New-NetIPAddress -InterfaceAlias $AdapterName -IPAddress $TempIP -PrefixLength 24 -ErrorAction Stop | Out-Null
+        Start-Sleep -Seconds 2  # Allow ARP/routing to settle
+    }
+    catch {
+        Write-OutputColor "    Failed to assign temp IP $TempIP to $AdapterName`: $_" -color "Warning"
+        return $result
+    }
+
+    # Ping A-side targets
+    foreach ($target in $aSideTargets) {
+        $reachable = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
+        if ($reachable) { $result.AReachable++ }
+    }
+
+    # Ping B-side targets
+    foreach ($target in $bSideTargets) {
+        $reachable = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
+        if ($reachable) { $result.BReachable++ }
+    }
+
+    # Remove temporary IP
+    Remove-NetIPAddress -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-NetRoute -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
+
+    # Determine side
+    $hasA = $result.AReachable -gt 0
+    $hasB = $result.BReachable -gt 0
+
+    if ($hasA -and $hasB) {
+        $result.Side = "Both"
+    } elseif ($hasA) {
+        $result.Side = "A"
+    } elseif ($hasB) {
+        $result.Side = "B"
+    } else {
+        $result.Side = "None"
+    }
+
+    return $result
+}
+
+# Function to test iSCSI cabling by checking both adapters
+function Test-iSCSICabling {
+    param(
+        [array]$Adapters
+    )
+
+    $returnResult = @{ AdapterA = $null; AdapterB = $null; Valid = $false; Results = @() }
+
+    if (-not $Adapters -or $Adapters.Count -lt 2) {
+        # Find iSCSI candidate adapters
+        $Adapters = @(Get-NetAdapter | Where-Object {
+            $_.Name -notlike "vEthernet*" -and
+            $_.InterfaceDescription -notlike "*Hyper-V*" -and
+            $_.InterfaceDescription -notlike "*Virtual*"
+        })
+    }
+
+    if ($Adapters.Count -lt 2) {
+        Write-OutputColor "  Not enough physical adapters for cabling test (need 2, found $($Adapters.Count))." -color "Error"
+        return $returnResult
+    }
+
+    $subnet = $script:iSCSISubnet
+    # Use high addresses unlikely to conflict: .253 and .254
+    $tempIPs = @("$subnet.253", "$subnet.254")
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Testing iSCSI adapter connectivity..." -color "Info"
+    Write-OutputColor "  Subnet: $subnet.x  |  Temp IPs: $($tempIPs[0]), $($tempIPs[1])" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $allResults = @()
+    $adapterIndex = 0
+
+    foreach ($adapter in @($Adapters[0], $Adapters[1])) {
+        $adapterName = $adapter.Name
+        Write-OutputColor "  Testing $adapterName..." -color "Info"
+        $sideResult = Test-iSCSIAdapterSide -AdapterName $adapterName -TempIP $tempIPs[$adapterIndex] -Subnet $subnet
+        $allResults += $sideResult
+        $adapterIndex++
+    }
+
+    $returnResult.Results = $allResults
+
+    # Display results table
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌──────────────────────────┬─────────┬─────────┬──────────┐" -color "Info"
+    Write-OutputColor "  │ Adapter                  │ A-Side  │ B-Side  │ Result   │" -color "Info"
+    Write-OutputColor "  ├──────────────────────────┼─────────┼─────────┼──────────┤" -color "Info"
+
+    foreach ($res in $allResults) {
+        $name = $res.Adapter
+        if ($name.Length -gt 24) { $name = $name.Substring(0, 21) + "..." }
+        $aStr = "$($res.AReachable)/$($res.ATotal)"
+        $bStr = "$($res.BReachable)/$($res.BTotal)"
+        $sideStr = switch ($res.Side) {
+            "A"    { "A-SIDE" }
+            "B"    { "B-SIDE" }
+            "Both" { "BOTH!" }
+            default { "NONE" }
+        }
+        $color = switch ($res.Side) {
+            "A"    { "Success" }
+            "B"    { "Success" }
+            "Both" { "Warning" }
+            default { "Error" }
+        }
+        Write-OutputColor "  │ $($name.PadRight(24)) │ $($aStr.PadRight(7)) │ $($bStr.PadRight(7)) │ $($sideStr.PadRight(8)) │" -color $color
+    }
+
+    Write-OutputColor "  └──────────────────────────┴─────────┴─────────┴──────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Validation and warnings
+    $sides = $allResults | ForEach-Object { $_.Side }
+
+    if ($sides -contains "Both") {
+        Write-OutputColor "  WARNING: An adapter reaches both A and B side targets." -color "Warning"
+        Write-OutputColor "  It may be plugged into a switch that bridges both, or" -color "Warning"
+        Write-OutputColor "  the iSCSI network isn't properly isolated." -color "Warning"
+        Write-OutputColor "" -color "Info"
+    }
+
+    if ($sides[0] -eq $sides[1] -and $sides[0] -ne "None") {
+        Write-OutputColor "  WARNING: Both adapters reach the same side ($($sides[0]))." -color "Warning"
+        Write-OutputColor "  Check cabling - they should be on different switches." -color "Warning"
+        Write-OutputColor "" -color "Info"
+    }
+
+    if ($sides -contains "None") {
+        $noneAdapters = ($allResults | Where-Object { $_.Side -eq "None" }).Adapter -join ", "
+        Write-OutputColor "  WARNING: No SAN targets reachable on: $noneAdapters" -color "Warning"
+        Write-OutputColor "  Verify the adapter is connected and the iSCSI subnet ($subnet.x) is correct." -color "Warning"
+        Write-OutputColor "" -color "Info"
+    }
+
+    # Determine auto-assignment
+    $aAdapter = $allResults | Where-Object { $_.Side -eq "A" } | Select-Object -First 1
+    $bAdapter = $allResults | Where-Object { $_.Side -eq "B" } | Select-Object -First 1
+
+    if ($null -ne $aAdapter -and $null -ne $bAdapter -and $aAdapter.Adapter -ne $bAdapter.Adapter) {
+        $returnResult.AdapterA = $aAdapter.Adapter
+        $returnResult.AdapterB = $bAdapter.Adapter
+        $returnResult.Valid = $true
+        Write-OutputColor "  Auto-detected: $($aAdapter.Adapter) = A-side, $($bAdapter.Adapter) = B-side" -color "Success"
+    }
+
+    return $returnResult
+}
+
 # Function to extract host number from hostname (e.g., "123456-HV2" → 2)
 function Get-HostNumberFromHostname {
     param (
@@ -200,43 +388,60 @@ function Set-iSCSIAutoConfiguration {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Step 4: Select A-side NIC
-    Write-OutputColor "  Which adapter connects to the A-side switch (SAN A controller)?" -color "Warning"
-    Write-OutputColor "  Enter adapter number (or 'back' to cancel):" -color "Info"
-    $aSideInput = Read-Host
-    $navResult = Test-NavigationCommand -UserInput $aSideInput
-    if ($navResult.ShouldReturn) { return }
-
-    if (-not ($aSideInput -match '^\d+$') -or [int]$aSideInput -lt 1 -or [int]$aSideInput -gt $adapterList.Count) {
-        Write-OutputColor "  Invalid selection." -color "Error"
-        return
-    }
-    $aSideAdapter = ($adapterList | Where-Object { $_.Index -eq [int]$aSideInput }).Adapter
-    if ($null -eq $aSideAdapter) {
-        Write-OutputColor "  Failed to find selected A-side adapter." -color "Error"
-        return
-    }
-
-    # Step 5: Select B-side NIC
+    # Step 3b: Auto-detect A-side/B-side via ping check
+    $skipManualSelection = $false
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Which adapter connects to the B-side switch (SAN B controller)?" -color "Warning"
-    Write-OutputColor "  Enter adapter number (or 'back' to cancel):" -color "Info"
-    $bSideInput = Read-Host
-    $navResult = Test-NavigationCommand -UserInput $bSideInput
-    if ($navResult.ShouldReturn) { return }
+    Write-OutputColor "  Testing iSCSI adapter connectivity to detect A/B sides..." -color "Info"
+    $sideCheck = Test-iSCSICabling -Adapters $adapters
+    if ($sideCheck.Valid) {
+        Write-OutputColor "" -color "Info"
+        if (Confirm-UserAction -Message "Use auto-detected assignment?") {
+            $aSideAdapter = $adapters | Where-Object { $_.Name -eq $sideCheck.AdapterA }
+            $bSideAdapter = $adapters | Where-Object { $_.Name -eq $sideCheck.AdapterB }
+            if ($null -ne $aSideAdapter -and $null -ne $bSideAdapter) {
+                $skipManualSelection = $true
+            }
+        }
+    }
 
-    if (-not ($bSideInput -match '^\d+$') -or [int]$bSideInput -lt 1 -or [int]$bSideInput -gt $adapterList.Count) {
-        Write-OutputColor "  Invalid selection." -color "Error"
-        return
-    }
-    if ($bSideInput -eq $aSideInput) {
-        Write-OutputColor "  Cannot use the same adapter for both sides." -color "Error"
-        return
-    }
-    $bSideAdapter = ($adapterList | Where-Object { $_.Index -eq [int]$bSideInput }).Adapter
-    if ($null -eq $bSideAdapter) {
-        Write-OutputColor "  Failed to find selected B-side adapter." -color "Error"
-        return
+    # Step 4-5: Manual A/B side selection (skipped if auto-detected)
+    if (-not $skipManualSelection) {
+        Write-OutputColor "  Which adapter connects to the A-side switch (SAN A controller)?" -color "Warning"
+        Write-OutputColor "  Enter adapter number (or 'back' to cancel):" -color "Info"
+        $aSideInput = Read-Host
+        $navResult = Test-NavigationCommand -UserInput $aSideInput
+        if ($navResult.ShouldReturn) { return }
+
+        if (-not ($aSideInput -match '^\d+$') -or [int]$aSideInput -lt 1 -or [int]$aSideInput -gt $adapterList.Count) {
+            Write-OutputColor "  Invalid selection." -color "Error"
+            return
+        }
+        $aSideAdapter = ($adapterList | Where-Object { $_.Index -eq [int]$aSideInput }).Adapter
+        if ($null -eq $aSideAdapter) {
+            Write-OutputColor "  Failed to find selected A-side adapter." -color "Error"
+            return
+        }
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Which adapter connects to the B-side switch (SAN B controller)?" -color "Warning"
+        Write-OutputColor "  Enter adapter number (or 'back' to cancel):" -color "Info"
+        $bSideInput = Read-Host
+        $navResult = Test-NavigationCommand -UserInput $bSideInput
+        if ($navResult.ShouldReturn) { return }
+
+        if (-not ($bSideInput -match '^\d+$') -or [int]$bSideInput -lt 1 -or [int]$bSideInput -gt $adapterList.Count) {
+            Write-OutputColor "  Invalid selection." -color "Error"
+            return
+        }
+        if ($bSideInput -eq $aSideInput) {
+            Write-OutputColor "  Cannot use the same adapter for both sides." -color "Error"
+            return
+        }
+        $bSideAdapter = ($adapterList | Where-Object { $_.Index -eq [int]$bSideInput }).Adapter
+        if ($null -eq $bSideAdapter) {
+            Write-OutputColor "  Failed to find selected B-side adapter." -color "Error"
+            return
+        }
     }
 
     # Step 6: Confirm configuration
@@ -929,17 +1134,18 @@ function Show-iSCSISANMenu {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[1]  Configure iSCSI NICs"
     Write-MenuItem "[2]  Identify NICs (disable/enable for switch ID)"
-    Write-MenuItem "[3]  Discover SAN Targets (ping test)"
+    Write-MenuItem "[3]  Test iSCSI Cabling (A/B side check)"
+    Write-MenuItem "[4]  Discover SAN Targets (ping test)"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  CONNECTION".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-MenuItem "[4]  Connect to iSCSI Targets"
-    Write-MenuItem "[5]  Configure MPIO Multipath"
-    Write-MenuItem "[6]  Show iSCSI/MPIO Status"
-    Write-MenuItem "[7]  Disconnect iSCSI Targets"
+    Write-MenuItem "[5]  Connect to iSCSI Targets"
+    Write-MenuItem "[6]  Configure MPIO Multipath"
+    Write-MenuItem "[7]  Show iSCSI/MPIO Status"
+    Write-MenuItem "[8]  Disconnect iSCSI Targets"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -1012,11 +1218,17 @@ function Start-Show-iSCSISANMenu {
                 }
             }
             "3" {
+                # Test iSCSI cabling (A/B side check)
+                Write-OutputColor "" -color "Info"
+                $null = Test-iSCSICabling
+                Write-PressEnter
+            }
+            "4" {
                 Write-OutputColor "" -color "Info"
                 $null = Test-SANTargetConnectivity
                 Write-PressEnter
             }
-            "4" {
+            "5" {
                 # Connect to iSCSI Targets
                 Clear-Host
                 Write-CenteredOutput "Connect to iSCSI Targets" -color "Info"
@@ -1101,15 +1313,15 @@ function Start-Show-iSCSISANMenu {
                 }
                 Write-PressEnter
             }
-            "5" {
+            "6" {
                 $null = Initialize-MPIOForISCSI
                 Write-PressEnter
             }
-            "6" {
+            "7" {
                 Show-iSCSIStatus
                 Write-PressEnter
             }
-            "7" {
+            "8" {
                 Disconnect-iSCSITargets
                 Write-PressEnter
             }
@@ -1118,7 +1330,7 @@ function Start-Show-iSCSISANMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-7, B, or M." -color "Error"
+                Write-OutputColor "Invalid choice. Please enter 1-8, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

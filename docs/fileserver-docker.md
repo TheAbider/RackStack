@@ -12,7 +12,7 @@ See [FileServer-Setup.md](FileServer-Setup.md) for architecture overview and alt
 ## Step 1: Create the directory structure
 
 ```bash
-mkdir -p fileserver/data/server-tools/{ISOs,VirtualHardDrives,KaseyaAgents}
+mkdir -p fileserver/data/server-tools/{ISOs,VirtualHardDrives,Agents}
 mkdir -p fileserver/config
 cd fileserver
 ```
@@ -22,7 +22,7 @@ On Windows (PowerShell):
 ```powershell
 New-Item -Path "fileserver\data\server-tools\ISOs" -ItemType Directory -Force
 New-Item -Path "fileserver\data\server-tools\VirtualHardDrives" -ItemType Directory -Force
-New-Item -Path "fileserver\data\server-tools\KaseyaAgents" -ItemType Directory -Force
+New-Item -Path "fileserver\data\server-tools\Agents" -ItemType Directory -Force
 New-Item -Path "fileserver\config" -ItemType Directory -Force
 Set-Location fileserver
 ```
@@ -209,7 +209,7 @@ Your files in `data/` are not affected by `docker compose down` since they're bi
         "ClientSecret": "your-client-secret-hex-here",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -222,7 +222,7 @@ For LAN-only (no tunnel), point to the host IP:
         "BaseURL": "http://192.168.1.50/server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -261,9 +261,9 @@ fileserver/
                 Server2019-Std-Sysprepped.vhdx
                 Server2022-Std-Sysprepped.vhdx
                 Server2025-Std-Sysprepped.vhdx
-            KaseyaAgents/
-                Kaseya_0451_AcmeHealth.exe
-                Kaseya_0452_AcmeClinic.exe
+            Agents/
+                Agent_0451_AcmeHealth.exe
+                Agent_0452_AcmeClinic.exe
             version.json
 ```
 

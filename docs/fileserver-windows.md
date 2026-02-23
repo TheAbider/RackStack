@@ -31,13 +31,13 @@ Get-Service W3SVC | Select-Object Name, Status
 $root = "C:\FileServer\server-tools"
 New-Item -Path "$root\ISOs" -ItemType Directory -Force
 New-Item -Path "$root\VirtualHardDrives" -ItemType Directory -Force
-New-Item -Path "$root\KaseyaAgents" -ItemType Directory -Force
+New-Item -Path "$root\Agents" -ItemType Directory -Force
 ```
 
 Copy your files into the appropriate folders:
 - `C:\FileServer\server-tools\ISOs\` -- Windows Server installation ISOs
 - `C:\FileServer\server-tools\VirtualHardDrives\` -- Sysprepped VHDX files
-- `C:\FileServer\server-tools\KaseyaAgents\` -- Kaseya agent installers
+- `C:\FileServer\server-tools\Agents\` -- agent installer files
 
 ## Step 3: Configure IIS site
 
@@ -237,7 +237,7 @@ New-IISSiteBinding -Name "FileServer" -BindingInformation "*:443:" -Protocol htt
         "ClientSecret": "your-client-secret-hex-here",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -250,7 +250,7 @@ For Option B without Cloudflare Access, omit `ClientId` and `ClientSecret`:
         "BaseURL": "https://files.yourdomain.com/server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -283,9 +283,9 @@ C:\FileServer\server-tools\
         Server2019-Std-Sysprepped.vhdx
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents\
-        Kaseya_0451_AcmeHealth.exe
-        Kaseya_0452_AcmeClinic.exe
+    Agents\
+        Agent_0451_AcmeHealth.exe
+        Agent_0452_AcmeClinic.exe
     version.json
 ```
 

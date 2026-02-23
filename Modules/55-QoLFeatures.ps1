@@ -34,6 +34,8 @@ function Export-Favorites {
 # Dispatch map: maps favorite names to executable function names
 $script:FavoriteDispatch = @{
     "Configure SET"              = "New-SwitchEmbeddedTeam"
+    "Add Virtual NIC"            = "Add-CustomVNIC"
+    "Test iSCSI Cabling"         = "Test-iSCSICabling"
     "Set IP Address"             = "Set-StaticIP"
     "Set DNS"                    = "Set-DNSServers"
     "Set Hostname"               = "Set-Hostname"

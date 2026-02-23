@@ -34,7 +34,7 @@ $script:DefaultDownloadTimeoutSeconds = 1800    # 30 minutes for standard downlo
 # Configurable MSP agent installer (override via defaults.json AgentInstaller)
 $script:AgentInstaller = @{
     ToolName        = "Kaseya"
-    FolderName      = "KaseyaAgents"
+    FolderName      = "Agents"
     FilePattern     = "Kaseya.*\.exe$"
     ServiceName     = "Kaseya Agent*"
     InstallArgs     = "/s /norestart"
@@ -96,7 +96,7 @@ $script:FileServer = @{
     ClientSecret = ""
     ISOsFolder   = "ISOs"
     VHDsFolder   = "VirtualHardDrives"
-    KaseyaFolder = "KaseyaAgents"
+    AgentFolder  = "Agents"
 }
 
 # Folder file cache - keyed by folder path, each entry has Files array and CacheTime
@@ -121,7 +121,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.1.0"
+$script:ScriptVersion = "1.2.0"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

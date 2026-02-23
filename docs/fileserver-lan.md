@@ -32,7 +32,7 @@ sudo apt update && sudo apt install -y nginx
 ### Create directory structure
 
 ```bash
-sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,KaseyaAgents}
+sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,Agents}
 sudo chown -R www-data:www-data /srv/files
 ```
 
@@ -118,7 +118,7 @@ Expand-Archive -Path "$env:TEMP\nginx.zip" -DestinationPath "C:\nginx" -Force
 $root = "C:\FileServer\server-tools"
 New-Item -Path "$root\ISOs" -ItemType Directory -Force
 New-Item -Path "$root\VirtualHardDrives" -ItemType Directory -Force
-New-Item -Path "$root\KaseyaAgents" -ItemType Directory -Force
+New-Item -Path "$root\Agents" -ItemType Directory -Force
 ```
 
 ### Configure nginx
@@ -200,7 +200,7 @@ No `ClientId` or `ClientSecret` needed for LAN-only setups:
         "BaseURL": "http://192.168.1.50/server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -232,9 +232,9 @@ You should see a JSON directory listing of your ISOs.
         Server2019-Std-Sysprepped.vhdx
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents/
-        Kaseya_0451_AcmeHealth.exe
-        Kaseya_0452_AcmeClinic.exe
+    Agents/
+        Agent_0451_AcmeHealth.exe
+        Agent_0452_AcmeClinic.exe
     version.json
 ```
 
@@ -243,7 +243,7 @@ You should see a JSON directory listing of your ISOs.
 C:\FileServer\server-tools\
     ISOs\
     VirtualHardDrives\
-    KaseyaAgents\
+    Agents\
     version.json
 ```
 

@@ -269,7 +269,7 @@ function Start-BatchMode {
     Write-OutputColor "" -color "Info"
 
     $stepNum = 0
-    $totalSteps = 19
+    $totalSteps = 20
     $changesApplied = 0
     $errors = 0
 
@@ -703,7 +703,51 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] SET switch: skipped" -color "Debug"
     }
 
-    # Step 17: Configure iSCSI
+    # Step 17: Create Custom vNICs on SET
+    $stepNum++
+    if ($Config.CustomVNICs -and $Config.CustomVNICs.Count -gt 0 -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Creating custom vNICs on SET..." -color "Info"
+        try {
+            $setSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" -and $_.EmbeddedTeamingEnabled }
+            if ($setSwitch) {
+                $vnicCount = 0
+                foreach ($vnicDef in $Config.CustomVNICs) {
+                    $vnicName = $vnicDef.Name
+                    if (-not $vnicName) { continue }
+
+                    # Remove existing if present
+                    $existing = Get-VMNetworkAdapter -ManagementOS -SwitchName $setSwitch.Name -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $vnicName }
+                    if ($existing) {
+                        Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
+                        Start-Sleep -Seconds 1
+                    }
+
+                    Add-VMNetworkAdapter -ManagementOS -SwitchName $setSwitch.Name -Name $vnicName -ErrorAction Stop
+
+                    # Configure VLAN if specified
+                    $vlanId = $vnicDef.VLAN
+                    if ($null -ne $vlanId -and $vlanId -ge 1 -and $vlanId -le 4094) {
+                        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vnicName -Access -VlanId $vlanId -ErrorAction SilentlyContinue
+                    }
+                    $vnicCount++
+                }
+                Write-OutputColor "           Created $vnicCount custom vNIC(s) on SET." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "Network" -Description "Created $vnicCount custom vNIC(s) on SET"
+            } else {
+                Write-OutputColor "           No SET switch found. Create SET first (step 16)." -color "Warning"
+            }
+        }
+        catch {
+            Write-OutputColor "           Failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] Custom vNICs: skipped" -color "Debug"
+    }
+
+    # Step 18: Configure iSCSI
     $stepNum++
     if ($Config.ConfigureiSCSI -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Configuring iSCSI..." -color "Info"
@@ -727,8 +771,18 @@ function Start-BatchMode {
                     }
                 }
                 if ($iscsiAdapters.Count -ge 2) {
-                    $aSide = $iscsiAdapters[0]
-                    $bSide = $iscsiAdapters[1]
+                    # Auto-detect A/B side via ping check
+                    $sideCheck = Test-iSCSICabling -Adapters $iscsiAdapters
+                    if ($sideCheck.Valid) {
+                        $aSide = $iscsiAdapters | Where-Object { $_.Name -eq $sideCheck.AdapterA }
+                        $bSide = $iscsiAdapters | Where-Object { $_.Name -eq $sideCheck.AdapterB }
+                        Write-OutputColor "           Auto-detected: $($sideCheck.AdapterA) = A-side, $($sideCheck.AdapterB) = B-side" -color "Info"
+                    } else {
+                        # Fall back to order found
+                        $aSide = $iscsiAdapters[0]
+                        $bSide = $iscsiAdapters[1]
+                        Write-OutputColor "           A/B side auto-detect inconclusive, using adapter order." -color "Warning"
+                    }
                     # Configure A-side
                     Remove-NetIPAddress -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
                     Remove-NetRoute -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
@@ -758,7 +812,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] iSCSI: skipped" -color "Debug"
     }
 
-    # Step 18: Configure MPIO
+    # Step 19: Configure MPIO
     $stepNum++
     if ($Config.ConfigureMPIO -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Configuring MPIO for iSCSI..." -color "Info"
@@ -782,7 +836,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] MPIO config: skipped" -color "Debug"
     }
 
-    # Step 19: Configure Defender Exclusions
+    # Step 20: Configure Defender Exclusions
     $stepNum++
     if ($Config.ConfigureDefenderExclusions -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Configuring Defender exclusions..." -color "Info"

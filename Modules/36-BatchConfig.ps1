@@ -117,6 +117,9 @@ function New-BatchConfigTemplate {
     "SETAdapterMode": "auto",
     "_SETAdapterMode_Help": "'auto' = detect internet adapters for SET, 'manual' = prompt for selection.",
 
+    "CustomVNICs": [],
+    "_CustomVNICs_Help": "Array of virtual NICs to create on the SET switch. Each needs Name (required) and optional VLAN (1-4094). Example: [{\"Name\": \"Backup\"}, {\"Name\": \"Cluster\", \"VLAN\": 100}, {\"Name\": \"Live Migration\", \"VLAN\": 200}]",
+
     "ConfigureiSCSI": false,
     "_ConfigureiSCSI_Help": "Configure iSCSI NICs with auto-calculated IPs based on host number.",
     "iSCSIHostNumber": null,
@@ -386,6 +389,21 @@ function Export-BatchConfigFromState {
         $config["SETAdapterMode"]                  = "auto"
         $config["_SETAdapterMode_Help"]            = "'auto' = detect internet adapters for SET, 'manual' = prompt for selection."
 
+        # Detect existing vNICs on SET (excluding Management)
+        $customVNICs = @()
+        if ($hasSetSwitch) {
+            $setVNICs = Get-VMNetworkAdapter -ManagementOS -SwitchName $setSwitchName -ErrorAction SilentlyContinue
+            foreach ($vnic in $setVNICs) {
+                if ($vnic.Name -ne $setMgmtName) {
+                    $vlanInfo = Get-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vnic.Name -ErrorAction SilentlyContinue
+                    $vlanId = if ($null -ne $vlanInfo -and $vlanInfo.AccessVlanId -gt 0) { $vlanInfo.AccessVlanId } else { $null }
+                    $customVNICs += @{ Name = $vnic.Name; VLAN = $vlanId }
+                }
+            }
+        }
+        $config["CustomVNICs"]                     = $customVNICs
+        $config["_CustomVNICs_Help"]               = "Array of virtual NICs to create on the SET switch. Each needs Name (required) and optional VLAN (1-4094)."
+
         $config["ConfigureiSCSI"]                  = $hasISCSISessions
         $config["_ConfigureiSCSI_Help"]            = "Configure iSCSI NICs with auto-calculated IPs based on host number."
         $config["iSCSIHostNumber"]                 = $null
@@ -424,6 +442,7 @@ function Export-BatchConfigFromState {
         if ($isHyperVHost) {
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             Write-MenuItem "SET Switch:   $(if ($hasSetSwitch) { $setSwitchName } else { '(none)' })"
+            Write-MenuItem "Custom vNICs: $(if ($customVNICs.Count -gt 0) { "$($customVNICs.Count) detected" } else { '(none)' })"
             Write-MenuItem "iSCSI:        $(if ($hasISCSISessions) { 'Active sessions' } else { 'No sessions' })"
             Write-MenuItem "Storage:      $(if ($storageDrive) { "${storageDrive}:" } else { '(no data drive)' })"
         }

@@ -424,7 +424,7 @@ function Start-Show-HostNetworkMenu {
                 Write-PressEnter
             }
             "2" {
-                Add-BackupNIC -BackupName $BackupName
+                Add-CustomVNIC
                 Write-PressEnter
             }
             "3" {

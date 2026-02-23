@@ -134,7 +134,7 @@ Default storage paths for Hyper-V hosts. Drive letters are updated by Host Stora
 ```json
 "AgentInstaller": {
     "ToolName": "Kaseya",
-    "FolderName": "KaseyaAgents",
+    "FolderName": "Agents",
     "FilePattern": "Kaseya.*\\.exe$",
     "ServiceName": "Kaseya Agent*",
     "InstallArgs": "/s /norestart",
@@ -307,7 +307,7 @@ See the [Storage Manager Guide](Storage-Manager.md) for full details.
     "ClientSecret": "your-cloudflare-access-client-secret-hex-string",
     "ISOsFolder": "ISOs",
     "VHDsFolder": "VirtualHardDrives",
-    "KaseyaFolder": "KaseyaAgents"
+    "AgentFolder": "Agents"
 }
 ```
 

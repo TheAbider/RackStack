@@ -28,7 +28,7 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 ## Features
 
-**Networking** -- Static IP with rollback, VLAN tagging, Switch Embedded Teaming (auto-detect), DNS presets, iSCSI/SAN with A/B side MPIO
+**Networking** -- Static IP with rollback, VLAN tagging, Switch Embedded Teaming (auto-detect), custom SET vNICs (Backup, Cluster, Live Migration, Storage, or custom names with VLAN), DNS presets, iSCSI/SAN with A/B side MPIO and cabling auto-detect
 
 **Hyper-V** -- Role install, configurable VM templates (override specs or add new via `defaults.json`), batch queue deployment, VHD management, offline registry injection, Secure Boot Gen 2, cluster CSV support
 
@@ -78,7 +78,7 @@ For production use, generate a monolithic single-file script (~26K lines) that y
 
 The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 59 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
-> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.0.17.ps1` = monolithic build for deployment/compilation.
+> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.2.0.ps1` = monolithic build for deployment/compilation.
 
 ## Requirements
 
@@ -130,7 +130,7 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
 
     "AgentInstaller": {
         "ToolName": "Kaseya",
-        "FolderName": "KaseyaAgents",
+        "FolderName": "Agents",
         "FilePattern": "Kaseya.*\\.exe$",
         "ServiceName": "Kaseya Agent*",
         "InstallArgs": "/s /norestart",
@@ -145,7 +145,7 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
         "ClientSecret": "your-cloudflare-access-client-secret",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     },
 
     "DefenderExclusionPaths": [
@@ -221,14 +221,14 @@ Automate full server builds with a JSON config file:
 }
 ```
 
-Place `batch_config.json` next to the script and it runs automatically on launch. Set fields to `null` to skip steps. Use `ConfigType: "HOST"` to skip networking (for servers where you build the SET manually first).
+Place `batch_config.json` next to the script and it runs automatically on launch. Set fields to `null` to skip steps. Use `ConfigType: "HOST"` for Hyper-V hosts -- adds 6 extra steps (SET switch, custom vNICs, iSCSI with A/B auto-detect, MPIO, host storage, Defender exclusions) for a total of 20 automated steps.
 
 ## Project Structure
 
 ```
 RackStack/
 ├── RackStack.ps1               # Modular loader -- dot-sources 59 modules (dev use)
-├── RackStack v1.0.13.ps1       # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack v1.2.0.ps1        # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
 ├── defaults.example.json       # Config template with examples
@@ -239,7 +239,7 @@ RackStack/
 │   ├── ...                     # 57 more modules
 │   └── 58-NetworkDiagnostics.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 1058 automated tests (93 sections)
+│   ├── Run-Tests.ps1           # 1312 automated tests (109 sections)
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -264,7 +264,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (1058 tests, ~2 minutes)
+# Full test suite (1312 tests, ~2 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 59 modules + monolithic)
@@ -274,7 +274,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 powershell -ExecutionPolicy Bypass -File Tests\Validate-Release.ps1
 ```
 
-Tests cover parsing, module loading, function existence (300+), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, and more.
+Tests cover parsing, module loading, function existence (300+), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, and more.
 
 ## Development
 

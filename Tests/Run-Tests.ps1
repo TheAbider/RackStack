@@ -179,7 +179,7 @@ $script:LargeFileDownloadTimeoutSeconds = 3600
 $script:DefaultDownloadTimeoutSeconds = 1800
 $script:AgentInstaller = @{
     ToolName        = "Kaseya"
-    FolderName      = "KaseyaAgents"
+    FolderName      = "Agents"
     FilePattern     = "Kaseya.*\.exe$"
     ServiceName     = "Kaseya Agent*"
     InstallArgs     = "/s /norestart"
@@ -197,7 +197,7 @@ $script:FileServer = @{
     ClientSecret = ""
     ISOsFolder   = "ISOs"
     VHDsFolder   = "VirtualHardDrives"
-    KaseyaFolder = "KaseyaAgents"
+    AgentFolder  = "Agents"
 }
 $script:FileCache = @{}
 $script:AgentInstallerCache = $null
@@ -1250,8 +1250,8 @@ try {
     $pass = $script:FileServer.ContainsKey("BaseURL") -and
             $script:FileServer.ContainsKey("ISOsFolder") -and
             $script:FileServer.ContainsKey("VHDsFolder") -and
-            $script:FileServer.ContainsKey("KaseyaFolder")
-    Write-TestResult "FileServer has BaseURL, ISOsFolder, VHDsFolder, and KaseyaFolder keys" $pass
+            $script:FileServer.ContainsKey("AgentFolder")
+    Write-TestResult "FileServer has BaseURL, ISOsFolder, VHDsFolder, and AgentFolder keys" $pass
 } catch {
     Write-TestResult "FileServer structure" $false $_.Exception.Message
 }
@@ -2431,7 +2431,7 @@ if (Test-Path $defaultsFilePath2) {
         $hasAll = $hasAll -and ($null -ne $ac.ClientSecret -or $ac.PSObject.Properties.Name -contains "ClientSecret")
         $hasAll = $hasAll -and ($ac.ISOsFolder -eq "ISOs")
         $hasAll = $hasAll -and ($ac.VHDsFolder -eq "VirtualHardDrives")
-        $hasAll = $hasAll -and ($ac.KaseyaFolder -eq "KaseyaAgents")
+        $hasAll = $hasAll -and (($ac.AgentFolder -eq "Agents") -or ($ac.KaseyaFolder -eq "KaseyaAgents"))
         Write-TestResult "defaults.json: FileServer has all 6 keys" $hasAll
     } catch {
         Write-TestResult "defaults.json: FileServer structure" $false $_.Exception.Message
@@ -2486,7 +2486,7 @@ try {
 
 # --- 35e: FileServer variable structure at init ---
 try {
-    $keys = @("BaseURL", "ClientId", "ClientSecret", "ISOsFolder", "VHDsFolder", "KaseyaFolder")
+    $keys = @("BaseURL", "ClientId", "ClientSecret", "ISOsFolder", "VHDsFolder", "AgentFolder")
     $missing = @()
     foreach ($k in $keys) {
         if (-not $script:FileServer.ContainsKey($k)) { $missing += $k }
@@ -2498,7 +2498,7 @@ try {
 }
 
 Write-TestResult "FileServer: VHDsFolder defaults to 'VirtualHardDrives'" ($script:FileServer.VHDsFolder -eq "VirtualHardDrives")
-Write-TestResult "FileServer: KaseyaFolder defaults to 'KaseyaAgents'" ($script:FileServer.KaseyaFolder -eq "KaseyaAgents")
+Write-TestResult "FileServer: AgentFolder defaults to 'Agents'" ($script:FileServer.AgentFolder -eq "Agents")
 Write-TestResult "FileServer: ClientId is empty at init" ($script:FileServer.ClientId -eq "")
 Write-TestResult "FileServer: ClientSecret is empty at init" ($script:FileServer.ClientSecret -eq "")
 
@@ -2523,7 +2523,7 @@ try {
             ClientSecret = $_tcsec
             ISOsFolder   = "TestISOs"
             VHDsFolder   = "TestVHDs"
-            KaseyaFolder = "TestKaseya"
+            AgentFolder  = "TestAgents"
         }
     }
     $testDefaults | ConvertTo-Json -Depth 5 | Out-File "$testDir\defaults.json" -Encoding UTF8
@@ -2534,7 +2534,7 @@ try {
     Write-TestResult "Import-Defaults: FileServer.ClientSecret merged" ($script:FileServer.ClientSecret -eq $_tcsec)
     Write-TestResult "Import-Defaults: FileServer.ISOsFolder merged" ($script:FileServer.ISOsFolder -eq "TestISOs") "Got: $($script:FileServer.ISOsFolder)"
     Write-TestResult "Import-Defaults: FileServer.VHDsFolder merged" ($script:FileServer.VHDsFolder -eq "TestVHDs")
-    Write-TestResult "Import-Defaults: FileServer.KaseyaFolder merged" ($script:FileServer.KaseyaFolder -eq "TestKaseya")
+    Write-TestResult "Import-Defaults: FileServer.AgentFolder merged" ($script:FileServer.AgentFolder -eq "TestAgents")
 
     # Restore
     $script:DefaultsPath = $origDefaultsPath2
@@ -5241,7 +5241,7 @@ try {
     Write-TestResult "39-FileServer: uses FileCache hashtable" ($acContent -match 'FileCache')
 
     # FileServer variable structure
-    $acKeys = @("BaseURL", "ClientId", "ClientSecret", "ISOsFolder", "VHDsFolder", "KaseyaFolder")
+    $acKeys = @("BaseURL", "ClientId", "ClientSecret", "ISOsFolder", "VHDsFolder", "AgentFolder")
     foreach ($key in $acKeys) {
         Write-TestResult "FileServer variable has '$key' key" ($null -ne $script:FileServer.$key -or $script:FileServer.Contains($key))
     }
@@ -5723,8 +5723,8 @@ try {
     Write-TestResult "36-BatchConfig: Show-BatchConfigMenu exists" ($bcContent -match 'function\s+Show-BatchConfigMenu')
     Write-TestResult "36-BatchConfig: Export-BatchConfigFromState exists" ($bcContent -match 'function\s+Export-BatchConfigFromState')
 
-    # EntryPoint: totalSteps is 19
-    Write-TestResult "50-EntryPoint: totalSteps is 19" ($epContent -match 'totalSteps\s*=\s*19')
+    # EntryPoint: totalSteps is 20
+    Write-TestResult "50-EntryPoint: totalSteps is 20" ($epContent -match 'totalSteps\s*=\s*20')
 
     # EntryPoint: step 15 mentions Host Storage or Initialize
     Write-TestResult "50-EntryPoint: step 15 is Host Storage" ($epContent -match '15.*Host\s*Storage|15.*Initialize')
@@ -5732,14 +5732,17 @@ try {
     # EntryPoint: step 16 mentions SET
     Write-TestResult "50-EntryPoint: step 16 is SET" ($epContent -match '16.*SET')
 
-    # EntryPoint: step 17 mentions iSCSI
-    Write-TestResult "50-EntryPoint: step 17 is iSCSI" ($epContent -match '17.*iSCSI')
+    # EntryPoint: step 17 mentions Custom vNICs
+    Write-TestResult "50-EntryPoint: step 17 is Custom vNICs" ($epContent -match '17.*Custom\s*vNIC')
 
-    # EntryPoint: step 18 mentions MPIO
-    Write-TestResult "50-EntryPoint: step 18 is MPIO" ($epContent -match '18.*MPIO')
+    # EntryPoint: step 18 mentions iSCSI
+    Write-TestResult "50-EntryPoint: step 18 is iSCSI" ($epContent -match '18.*iSCSI')
 
-    # EntryPoint: step 19 mentions Defender
-    Write-TestResult "50-EntryPoint: step 19 is Defender" ($epContent -match '19.*Defender')
+    # EntryPoint: step 19 mentions MPIO
+    Write-TestResult "50-EntryPoint: step 19 is MPIO" ($epContent -match '19.*MPIO')
+
+    # EntryPoint: step 20 mentions Defender
+    Write-TestResult "50-EntryPoint: step 20 is Defender" ($epContent -match '20.*Defender')
 
     # Test-BatchConfig validates SETAdapterMode
     Write-TestResult "50-EntryPoint: Test-BatchConfig validates SETAdapterMode" ($epContent -match 'Test-BatchConfig[\s\S]*?SETAdapterMode')
@@ -5929,6 +5932,185 @@ try {
 
 } catch {
     Write-TestResult "Operations Menu Drift Check Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 108: CUSTOM VNIC FEATURE (v1.2.0)
+# ============================================================================
+
+Write-SectionHeader "SECTION 108: CUSTOM VNIC FEATURE"
+
+try {
+    $setContent = Get-Content (Join-Path $modulesPath "09-SET.ps1") -Raw
+
+    # Add-CustomVNIC function exists
+    Write-TestResult "09-SET: Add-CustomVNIC function exists" ($setContent -match 'function Add-CustomVNIC')
+
+    # Add-CustomVNIC has PresetName parameter
+    Write-TestResult "09-SET: Add-CustomVNIC has PresetName param" ($setContent -match 'Add-CustomVNIC[\s\S]*?\[string\]\$PresetName')
+
+    # Add-CustomVNIC finds existing SET switch
+    Write-TestResult "09-SET: Add-CustomVNIC finds SET switch" ($setContent -match 'Add-CustomVNIC[\s\S]*?Get-VMSwitch[\s\S]*?EmbeddedTeamingEnabled')
+
+    # Add-CustomVNIC shows existing vNICs on SET
+    Write-TestResult "09-SET: Add-CustomVNIC shows existing adapters" ($setContent -match 'Add-CustomVNIC[\s\S]*?Get-VMNetworkAdapter -ManagementOS')
+
+    # Add-CustomVNIC offers preset names (Backup, Cluster, Live Migration, Storage, Custom)
+    Write-TestResult "09-SET: Add-CustomVNIC has Backup preset" ($setContent -match 'Add-CustomVNIC[\s\S]*?"Backup"')
+    Write-TestResult "09-SET: Add-CustomVNIC has Cluster preset" ($setContent -match 'Add-CustomVNIC[\s\S]*?"Cluster"')
+    Write-TestResult "09-SET: Add-CustomVNIC has Live Migration preset" ($setContent -match 'Add-CustomVNIC[\s\S]*?"Live Migration"')
+    Write-TestResult "09-SET: Add-CustomVNIC has Storage preset" ($setContent -match 'Add-CustomVNIC[\s\S]*?"Storage"')
+
+    # Add-CustomVNIC handles duplicate vNIC (remove and recreate)
+    Write-TestResult "09-SET: Add-CustomVNIC handles existing vNIC" ($setContent -match 'Add-CustomVNIC[\s\S]*?Remove-VMNetworkAdapter -ManagementOS')
+
+    # Add-CustomVNIC creates adapter via Add-VMNetworkAdapter
+    Write-TestResult "09-SET: Add-CustomVNIC creates vNIC" ($setContent -match 'Add-CustomVNIC[\s\S]*?Add-VMNetworkAdapter -ManagementOS -SwitchName')
+
+    # Add-CustomVNIC supports VLAN configuration
+    Write-TestResult "09-SET: Add-CustomVNIC supports VLAN" ($setContent -match 'Add-CustomVNIC[\s\S]*?Set-VMNetworkAdapterVlan')
+
+    # Add-CustomVNIC validates VLAN range 1-4094
+    Write-TestResult "09-SET: Add-CustomVNIC validates VLAN range" ($setContent -match '4094')
+
+    # Add-CustomVNIC supports optional IP configuration
+    Write-TestResult "09-SET: Add-CustomVNIC supports IP config" ($setContent -match 'Add-CustomVNIC[\s\S]*?New-NetIPAddress')
+
+    # Add-CustomVNIC calls Add-SessionChange
+    Write-TestResult "09-SET: Add-CustomVNIC tracks session change" ($setContent -match 'Add-CustomVNIC[\s\S]*?Add-SessionChange')
+
+    # Add-MultipleVNICs function exists
+    Write-TestResult "09-SET: Add-MultipleVNICs function exists" ($setContent -match 'function Add-MultipleVNICs')
+
+    # Add-MultipleVNICs calls Add-CustomVNIC in a loop
+    Write-TestResult "09-SET: Add-MultipleVNICs calls Add-CustomVNIC" ($setContent -match 'Add-MultipleVNICs[\s\S]*?Add-CustomVNIC')
+
+    # Add-MultipleVNICs shows summary
+    Write-TestResult "09-SET: Add-MultipleVNICs shows summary" ($setContent -match 'Add-MultipleVNICs[\s\S]*?SUMMARY')
+
+    # Add-BackupNIC still exists as wrapper
+    Write-TestResult "09-SET: Add-BackupNIC wrapper exists" ($setContent -match 'function Add-BackupNIC')
+
+    # Add-BackupNIC calls Add-CustomVNIC
+    Write-TestResult "09-SET: Add-BackupNIC delegates to Add-CustomVNIC" ($setContent -match 'Add-BackupNIC[\s\S]*?Add-CustomVNIC -PresetName')
+
+    # Menu renamed to "Add Virtual NIC to SET"
+    $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+    Write-TestResult "48-MenuDisplay: menu says 'Add Virtual NIC to SET'" ($menuContent -match 'Add Virtual NIC to SET')
+    Write-TestResult "48-MenuDisplay: no 'Add Backup NIC to SET' label" (-not ($menuContent -match 'Add Backup NIC to SET'))
+
+    # Menu runner calls Add-CustomVNIC
+    $runnerContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
+    Write-TestResult "49-MenuRunner: case 2 calls Add-CustomVNIC" ($runnerContent -match '"2"[\s\S]*?Add-CustomVNIC')
+
+    # Batch mode supports CustomVNICs
+    $batchContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: batch has CustomVNICs step" ($batchContent -match 'CustomVNICs')
+    Write-TestResult "50-EntryPoint: batch step creates vNICs on SET" ($batchContent -match 'Custom vNICs[\s\S]*?Add-VMNetworkAdapter -ManagementOS')
+    Write-TestResult "50-EntryPoint: totalSteps is 20" ($batchContent -match '\$totalSteps = 20')
+
+    # Batch template has CustomVNICs
+    $templateContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+    Write-TestResult "36-BatchConfig: template has CustomVNICs key" ($templateContent -match '"CustomVNICs"')
+    Write-TestResult "36-BatchConfig: template has CustomVNICs help" ($templateContent -match '_CustomVNICs_Help')
+    Write-TestResult "36-BatchConfig: state export detects vNICs" ($templateContent -match 'Export-BatchConfigFromState[\s\S]*?CustomVNICs')
+
+    # FavoriteDispatch has Add Virtual NIC entry
+    $qolContent = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
+    Write-TestResult "55-QoLFeatures: FavoriteDispatch has Add Virtual NIC" ($qolContent -match '"Add Virtual NIC"')
+
+    # defaults.example.json has CustomVNICs
+    $defaultsExamplePath = Join-Path (Join-Path $PSScriptRoot "..") "defaults.example.json"
+    $defaultsContent = Get-Content $defaultsExamplePath -Raw
+    Write-TestResult "defaults.example.json: has CustomVNICs section" ($defaultsContent -match '"CustomVNICs"')
+
+} catch {
+    Write-TestResult "Custom vNIC Feature Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 109: iSCSI CABLING CHECK FEATURE (v1.2.0)
+# ============================================================================
+
+Write-SectionHeader "SECTION 109: iSCSI CABLING CHECK FEATURE"
+
+try {
+    $iscsiContent = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
+
+    # Test-iSCSIAdapterSide function exists
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide function exists" ($iscsiContent -match 'function Test-iSCSIAdapterSide')
+
+    # Test-iSCSIAdapterSide has AdapterName and TempIP parameters
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide has AdapterName param" ($iscsiContent -match 'Test-iSCSIAdapterSide[\s\S]*?\$AdapterName')
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide has TempIP param" ($iscsiContent -match 'Test-iSCSIAdapterSide[\s\S]*?\$TempIP')
+
+    # Test-iSCSIAdapterSide uses SANTargetMappings to categorize A/B
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide uses SANTargetMappings" ($iscsiContent -match 'Test-iSCSIAdapterSide[\s\S]*?SANTargetMappings')
+
+    # Test-iSCSIAdapterSide assigns temporary IP
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide assigns temp IP" ($iscsiContent -match 'Test-iSCSIAdapterSide[\s\S]*?New-NetIPAddress[\s\S]*?TempIP')
+
+    # Test-iSCSIAdapterSide pings targets
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide pings targets" ($iscsiContent -match 'Test-iSCSIAdapterSide[\s\S]*?Test-Connection')
+
+    # Test-iSCSIAdapterSide removes temporary IP after test
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide cleans up temp IP" ($iscsiContent -match 'Test-iSCSIAdapterSide[\s\S]*?Remove-NetIPAddress')
+
+    # Test-iSCSIAdapterSide returns Side (A/B/Both/None)
+    Write-TestResult "10-iSCSI: Test-iSCSIAdapterSide returns Side values" ($iscsiContent -match 'Test-iSCSIAdapterSide[\s\S]*?\$result\.Side\s*=\s*"Both"')
+
+    # Test-iSCSICabling function exists
+    Write-TestResult "10-iSCSI: Test-iSCSICabling function exists" ($iscsiContent -match 'function Test-iSCSICabling')
+
+    # Test-iSCSICabling calls Test-iSCSIAdapterSide
+    Write-TestResult "10-iSCSI: Test-iSCSICabling calls Test-iSCSIAdapterSide" ($iscsiContent -match 'Test-iSCSICabling[\s\S]*?Test-iSCSIAdapterSide')
+
+    # Test-iSCSICabling uses temp IPs .253 and .254
+    Write-TestResult "10-iSCSI: Test-iSCSICabling uses .253/.254 temp IPs" ($iscsiContent -match '\.253.*\.254')
+
+    # Test-iSCSICabling displays results table
+    Write-TestResult "10-iSCSI: Test-iSCSICabling shows results table" ($iscsiContent -match 'Test-iSCSICabling[\s\S]*?Adapter.*A-Side.*B-Side.*Result')
+
+    # Test-iSCSICabling warns on same-side cabling
+    Write-TestResult "10-iSCSI: Test-iSCSICabling warns same-side" ($iscsiContent -match 'Both adapters reach the same side')
+
+    # Test-iSCSICabling warns on both-sides-reachable
+    Write-TestResult "10-iSCSI: Test-iSCSICabling warns both sides reachable" ($iscsiContent -match 'reaches both A and B side')
+
+    # Test-iSCSICabling warns on no connectivity
+    Write-TestResult "10-iSCSI: Test-iSCSICabling warns no connectivity" ($iscsiContent -match 'No SAN targets reachable')
+
+    # Test-iSCSICabling returns Valid and adapter assignments
+    Write-TestResult "10-iSCSI: Test-iSCSICabling returns Valid flag" ($iscsiContent -match 'Test-iSCSICabling[\s\S]*?\$returnResult\.Valid\s*=\s*\$true')
+
+    # Set-iSCSIAutoConfiguration integrates ping check
+    Write-TestResult "10-iSCSI: auto-config calls Test-iSCSICabling" ($iscsiContent -match 'Set-iSCSIAutoConfiguration[\s\S]*?Test-iSCSICabling')
+
+    # Set-iSCSIAutoConfiguration has skipManualSelection logic
+    Write-TestResult "10-iSCSI: auto-config has skipManualSelection" ($iscsiContent -match 'skipManualSelection')
+
+    # iSCSI menu has cabling test option [3]
+    Write-TestResult "10-iSCSI: menu has Test iSCSI Cabling option" ($iscsiContent -match '\[3\].*Test iSCSI Cabling')
+
+    # iSCSI menu renumbered to 8 options
+    Write-TestResult "10-iSCSI: menu has 8 options" ($iscsiContent -match '\[8\].*Disconnect iSCSI')
+
+    # Menu runner handles case "3" for cabling test
+    Write-TestResult "10-iSCSI: runner handles case 3 for cabling" ($iscsiContent -match '"3"[\s\S]*?Test-iSCSICabling')
+
+    # Menu runner handles case "8" for disconnect
+    Write-TestResult "10-iSCSI: runner handles case 8 for disconnect" ($iscsiContent -match '"8"[\s\S]*?Disconnect-iSCSITargets')
+
+    # FavoriteDispatch has Test iSCSI Cabling entry
+    $qolContent = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
+    Write-TestResult "55-QoLFeatures: FavoriteDispatch has Test iSCSI Cabling" ($qolContent -match '"Test iSCSI Cabling"')
+
+    # Batch mode iSCSI step uses Test-iSCSICabling
+    $batchContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: iSCSI batch step uses Test-iSCSICabling" ($batchContent -match 'ConfigureiSCSI[\s\S]*?Test-iSCSICabling')
+
+} catch {
+    Write-TestResult "iSCSI Cabling Check Feature Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

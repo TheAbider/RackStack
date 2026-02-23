@@ -75,7 +75,7 @@ sudo dnf install -y nginx                        # RHEL/Rocky/Alma
 Create the directory structure:
 
 ```bash
-sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,KaseyaAgents}
+sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,Agents}
 sudo chown -R www-data:www-data /srv/files    # nginx:nginx on RHEL
 ```
 
@@ -184,7 +184,7 @@ Use the Tailscale IP or MagicDNS hostname. No auth headers needed -- Tailscale h
         "BaseURL": "http://100.64.0.5/server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -197,7 +197,7 @@ Or with MagicDNS:
         "BaseURL": "http://fileserver.tail1234.ts.net/server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -270,7 +270,7 @@ Then point `defaults.json` at the WireGuard IP:
         "BaseURL": "http://10.0.0.1/server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -289,9 +289,9 @@ Then point `defaults.json` at the WireGuard IP:
         Server2019-Std-Sysprepped.vhdx
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents/
-        Kaseya_0451_AcmeHealth.exe
-        Kaseya_0452_AcmeClinic.exe
+    Agents/
+        Agent_0451_AcmeHealth.exe
+        Agent_0452_AcmeClinic.exe
     version.json
 ```
 

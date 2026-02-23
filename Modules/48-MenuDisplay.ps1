@@ -502,7 +502,7 @@ function Show-HostNetworkMenu {
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-MenuItem "[1]  Configure Switch Embedded Team (SET)"
-    Write-MenuItem "[2]  Add Backup NIC to SET"
+    Write-MenuItem "[2]  Add Virtual NIC to SET"
     Write-MenuItem "[3]  Configure IP Address"
     Write-MenuItem "[4]  iSCSI & SAN Management ►"
     Write-MenuItem "[5]  Rename Network Adapter"

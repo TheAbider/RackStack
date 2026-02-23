@@ -57,7 +57,7 @@ Blob storage uses virtual directories (flat namespace with `/` separators):
 server-tools/
     ISOs/en-us_windows_server_2025_x64.iso
     VirtualHardDrives/Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents/Kaseya_0451_AcmeHealth.exe
+    Agents/Agent_0451_AcmeHealth.exe
 ```
 
 ### Generate a SAS token
@@ -111,7 +111,7 @@ Same virtual directory convention:
 server-tools/
     ISOs/en-us_windows_server_2025_x64.iso
     VirtualHardDrives/Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents/Kaseya_0451_AcmeHealth.exe
+    Agents/Agent_0451_AcmeHealth.exe
 ```
 
 ### Access pattern: Presigned URLs
@@ -186,7 +186,7 @@ $downloadUrl = Get-S3PresignedUrl -Bucket $Bucket -Key "$folder/$filename"
         "AzureSasToken": "sv=2022-11-02&ss=b&...",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -202,7 +202,7 @@ Or for S3:
         "S3Prefix": "server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```

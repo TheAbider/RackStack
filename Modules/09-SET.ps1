@@ -290,14 +290,14 @@ function New-SwitchEmbeddedTeam {
     }
 }
 
-# Function to add a backup NIC to an existing SET
-function Add-BackupNIC {
+# Function to add a custom virtual NIC to an existing SET
+function Add-CustomVNIC {
     param (
-        [string]$BackupName = "Backup"
+        [string]$PresetName = ""
     )
 
     Clear-Host
-    Write-CenteredOutput "Add Backup NIC to SET" -color "Info"
+    Write-CenteredOutput "Add Virtual NIC to SET" -color "Info"
 
     # Find existing SET
     $existingSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" -and $_.EmbeddedTeamingEnabled }
@@ -313,42 +313,166 @@ function Add-BackupNIC {
     # Show existing management adapters
     $existingAdapters = Get-VMNetworkAdapter -ManagementOS -SwitchName $existingSwitch.Name -ErrorAction SilentlyContinue
     if ($existingAdapters) {
-        Write-OutputColor "`nExisting management adapters:" -color "Info"
+        Write-OutputColor "`nExisting virtual NICs on SET:" -color "Info"
         foreach ($adapter in $existingAdapters) {
-            Write-OutputColor "  - $($adapter.Name)" -color "Info"
+            $vlanInfo = Get-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $adapter.Name -ErrorAction SilentlyContinue
+            $vlanStr = if ($null -ne $vlanInfo -and $vlanInfo.AccessVlanId -gt 0) { " (VLAN $($vlanInfo.AccessVlanId))" } else { "" }
+            Write-OutputColor "  - $($adapter.Name)$vlanStr" -color "Info"
         }
     }
 
-    # Check if backup already exists
-    $backupExists = $existingAdapters | Where-Object { $_.Name -eq $BackupName }
-    if ($backupExists) {
-        Write-OutputColor "`nBackup NIC '$BackupName' already exists on this SET." -color "Warning"
+    # Determine vNIC name
+    $vnicName = $PresetName
+    if (-not $vnicName) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  SELECT VNIC TYPE".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem "[1]  Backup         — backup/replication traffic"
+        Write-MenuItem "[2]  Cluster        — cluster heartbeat"
+        Write-MenuItem "[3]  Live Migration — VM live migration"
+        Write-MenuItem "[4]  Storage        — storage traffic"
+        Write-MenuItem "[5]  Custom...      — enter any name"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        switch ($choice) {
+            "1" { $vnicName = "Backup" }
+            "2" { $vnicName = "Cluster" }
+            "3" { $vnicName = "Live Migration" }
+            "4" { $vnicName = "Storage" }
+            "5" {
+                Write-OutputColor "  Enter vNIC name:" -color "Info"
+                $vnicName = Read-Host "  "
+                if ([string]::IsNullOrWhiteSpace($vnicName)) {
+                    Write-OutputColor "  Name cannot be empty." -color "Error"
+                    return
+                }
+            }
+            default {
+                Write-OutputColor "  Invalid selection." -color "Error"
+                return
+            }
+        }
+    }
+
+    # Check if vNIC with that name already exists
+    $vnicExists = $existingAdapters | Where-Object { $_.Name -eq $vnicName }
+    if ($vnicExists) {
+        Write-OutputColor "`nVirtual NIC '$vnicName' already exists on this SET." -color "Warning"
         if (-not (Confirm-UserAction -Message "Remove and recreate it?")) {
             return
         }
 
-        Write-OutputColor "Removing existing Backup NIC..." -color "Info"
-        Remove-VMNetworkAdapter -ManagementOS -Name $BackupName -ErrorAction SilentlyContinue
+        Write-OutputColor "Removing existing vNIC '$vnicName'..." -color "Info"
+        Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
     }
 
-    Write-OutputColor "`nThis will create a new management adapter named '$BackupName' on the SET." -color "Info"
-    Write-OutputColor "Use this adapter for backup network traffic or redundancy." -color "Info"
-
-    if (-not (Confirm-UserAction -Message "Create Backup NIC?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+    # Create the vNIC
+    try {
+        Write-OutputColor "`nCreating virtual NIC '$vnicName'..." -color "Info"
+        Add-VMNetworkAdapter -ManagementOS -SwitchName $existingSwitch.Name -Name $vnicName -ErrorAction Stop
+        Write-OutputColor "  vNIC created: vEthernet ($vnicName)" -color "Success"
+    }
+    catch {
+        Write-OutputColor "Failed to create virtual NIC: $_" -color "Error"
         return
     }
 
-    try {
-        Add-VMNetworkAdapter -ManagementOS -SwitchName $existingSwitch.Name -Name $BackupName -ErrorAction Stop
-        Write-OutputColor "`nBackup NIC created successfully!" -color "Success"
-        Write-OutputColor "Adapter Name: vEthernet ($BackupName)" -color "Info"
-        Write-OutputColor "`nNote: You'll need to configure IP settings for this adapter." -color "Warning"
-        Add-SessionChange -Category "Network" -Description "Added Backup NIC to SET '$($existingSwitch.Name)'"
+    # Optional: Configure VLAN
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Set a VLAN ID? (Enter to skip, or 1-4094):" -color "Info"
+    $vlanInput = Read-Host "  "
+    if ($vlanInput -match '^\d+$') {
+        $vlanId = [int]$vlanInput
+        if ($vlanId -ge 1 -and $vlanId -le 4094) {
+            try {
+                Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vnicName -Access -VlanId $vlanId -ErrorAction Stop
+                Write-OutputColor "  VLAN $vlanId set on '$vnicName'." -color "Success"
+            }
+            catch {
+                Write-OutputColor "  Failed to set VLAN: $_" -color "Warning"
+            }
+        }
+        else {
+            Write-OutputColor "  Invalid VLAN ID (must be 1-4094). Skipping." -color "Warning"
+        }
     }
-    catch {
-        Write-OutputColor "Failed to create Backup NIC: $_" -color "Error"
+
+    # Optional: Configure IP
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Configure IP address now? (Y/N, default N):" -color "Info"
+    $ipChoice = Read-Host "  "
+    if ($ipChoice -match '^[Yy]') {
+        $ipResult = Get-IPAddressAndSubnet -Prompt "Enter IP address (e.g., 10.0.100.1/24)"
+        if ($null -ne $ipResult) {
+            $ipAddress = $ipResult[0]
+            $cidr = $ipResult[1]
+            $adapterAlias = "vEthernet ($vnicName)"
+            try {
+                Remove-NetIPAddress -InterfaceAlias $adapterAlias -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-NetRoute -InterfaceAlias $adapterAlias -Confirm:$false -ErrorAction SilentlyContinue
+                New-NetIPAddress -InterfaceAlias $adapterAlias -IPAddress $ipAddress -PrefixLength $cidr -ErrorAction Stop
+                Write-OutputColor "  IP $ipAddress/$cidr set on '$vnicName'." -color "Success"
+            }
+            catch {
+                Write-OutputColor "  Failed to set IP: $_" -color "Warning"
+            }
+        }
     }
+
+    $vlanMsg = if ($vlanInput -match '^\d+$' -and [int]$vlanInput -ge 1 -and [int]$vlanInput -le 4094) { " VLAN $vlanInput" } else { "" }
+    Add-SessionChange -Category "Network" -Description "Added vNIC '$vnicName'$vlanMsg to SET '$($existingSwitch.Name)'"
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Virtual NIC '$vnicName' created successfully!" -color "Success"
+}
+
+# Function to add multiple vNICs in one session
+function Add-MultipleVNICs {
+    $createdVNICs = @()
+
+    while ($true) {
+        Add-CustomVNIC
+
+        # Check what was just created (by looking at session changes)
+        $lastChange = $script:SessionChanges | Select-Object -Last 1
+        if ($null -ne $lastChange -and $lastChange.Description -match "Added vNIC '([^']+)'") {
+            $createdVNICs += $matches[1]
+        }
+
+        Write-OutputColor "" -color "Info"
+        if (-not (Confirm-UserAction -Message "Add another virtual NIC?")) {
+            break
+        }
+    }
+
+    if ($createdVNICs.Count -gt 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  SUMMARY: Created $($createdVNICs.Count) virtual NIC(s)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        foreach ($name in $createdVNICs) {
+            Write-OutputColor "  │$("  - $name".PadRight(72))│" -color "Success"
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    }
+}
+
+# Function to add a backup NIC to an existing SET (backward-compatible wrapper)
+function Add-BackupNIC {
+    param (
+        [string]$BackupName = "Backup"
+    )
+
+    Add-CustomVNIC -PresetName $BackupName
 }
 #endregion

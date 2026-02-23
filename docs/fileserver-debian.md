@@ -19,14 +19,14 @@ sudo apt update && sudo apt install -y nginx
 ## Step 2: Create the file directory structure
 
 ```bash
-sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,KaseyaAgents}
+sudo mkdir -p /srv/files/server-tools/{ISOs,VirtualHardDrives,Agents}
 sudo chown -R www-data:www-data /srv/files
 ```
 
 Upload your files into the appropriate folders:
 - `/srv/files/server-tools/ISOs/` -- Windows Server installation ISOs (e.g., `en-us_windows_server_2025_x64.iso`)
 - `/srv/files/server-tools/VirtualHardDrives/` -- Sysprepped VHDX files (e.g., `Server2025-Std-Sysprepped.vhdx`)
-- `/srv/files/server-tools/KaseyaAgents/` -- Kaseya agent installers (e.g., `Kaseya_0451_AcmeHealth.exe`)
+- `/srv/files/server-tools/Agents/` -- agent installer files (e.g., `Agent_0451_AcmeHealth.exe`)
 
 ## Step 3: Configure nginx
 
@@ -167,7 +167,7 @@ Add the credentials to your `defaults.json`:
         "ClientSecret": "your-client-secret-hex-here",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```
@@ -200,9 +200,9 @@ You should see a JSON directory listing of your ISOs.
         Server2019-Std-Sysprepped.vhdx
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents/
-        Kaseya_0451_AcmeHealth.exe
-        Kaseya_0452_AcmeClinic.exe
+    Agents/
+        Agent_0451_AcmeHealth.exe
+        Agent_0452_AcmeClinic.exe
     version.json
 ```
 

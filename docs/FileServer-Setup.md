@@ -28,9 +28,9 @@ All setups use the same layout. The `BaseURL` in `defaults.json` points to the r
         Server2019-Std-Sysprepped.vhdx
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
-    KaseyaAgents/
-        Kaseya_0451_AcmeHealth.exe
-        Kaseya_0452_AcmeClinic.exe
+    Agents/
+        Agent_0451_AcmeHealth.exe
+        Agent_0452_AcmeClinic.exe
     version.json
 ```
 
@@ -39,7 +39,7 @@ All setups use the same layout. The `BaseURL` in `defaults.json` points to the r
 C:\FileServer\server-tools\
     ISOs\
     VirtualHardDrives\
-    KaseyaAgents\
+    Agents\
     version.json
 ```
 
@@ -86,7 +86,7 @@ All setups end with the same `defaults.json` configuration:
         "ClientSecret": "your-client-secret-hex-here",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
-        "KaseyaFolder": "KaseyaAgents"
+        "AgentFolder": "Agents"
     }
 }
 ```

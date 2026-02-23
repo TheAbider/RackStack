@@ -354,7 +354,7 @@ function Import-Defaults {
             ClientSecret = ""
             ISOsFolder   = "ISOs"
             VHDsFolder   = "VirtualHardDrives"
-            KaseyaFolder = "KaseyaAgents"
+            AgentFolder  = "Agents"
         }
         iSCSISubnet        = "172.16.1"
     }
@@ -507,6 +507,11 @@ function Import-Defaults {
                 $script:FileServer[$key] = $acCloud[$key]
             }
         }
+        # Backward compat: remap old KaseyaFolder key to AgentFolder
+        if ($script:FileServer.ContainsKey("KaseyaFolder") -and -not $script:FileServer.ContainsKey("AgentFolder")) {
+            $script:FileServer["AgentFolder"] = $script:FileServer["KaseyaFolder"]
+        }
+        $script:FileServer.Remove("KaseyaFolder") 2>$null
     }
 
     # Import custom license keys from defaults.json
@@ -851,9 +856,9 @@ function Show-EditDefaults {
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.VHDsFolder = $val }
 
-                Write-OutputColor "Enter agent installer subfolder name (default: KaseyaAgents):" -color "Info"
+                Write-OutputColor "Enter agent installer subfolder name (default: Agents):" -color "Info"
                 $val = Read-Host
-                if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.KaseyaFolder = $val }
+                if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.AgentFolder = $val }
             }
             "7" {
                 Write-OutputColor "Enter iSCSI subnet (first 3 octets, e.g., 172.16.1):" -color "Info"
@@ -886,7 +891,7 @@ function Show-EditDefaults {
                     }
                     foreach ($key in $toRemove) { $script:DNSPresets.Remove($key) }
 
-                    $script:FileServer = @{ BaseURL = ""; ClientId = ""; ClientSecret = ""; ISOsFolder = "ISOs"; VHDsFolder = "VirtualHardDrives"; KaseyaFolder = "KaseyaAgents" }
+                    $script:FileServer = @{ BaseURL = ""; ClientId = ""; ClientSecret = ""; ISOsFolder = "ISOs"; VHDsFolder = "VirtualHardDrives"; AgentFolder = "Agents" }
                     Initialize-SANTargetPairs
 
                     Write-OutputColor "Defaults reset to generic values." -color "Success"
@@ -1153,9 +1158,9 @@ function Show-FirstRunWizard {
         $val = Read-Host "  VHDs"
         if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.VHDsFolder = $val }
 
-        Write-OutputColor "  Enter agent installer subfolder name (default: KaseyaAgents):" -color "Info"
+        Write-OutputColor "  Enter agent installer subfolder name (default: Agents):" -color "Info"
         $val = Read-Host "  Agents"
-        if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.KaseyaFolder = $val }
+        if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.AgentFolder = $val }
     }
 
     # iSCSI Subnet
