@@ -84,9 +84,11 @@ function Get-WindowsVersionInfo {
     }
     catch {
         return @{
+            WindowsVersion = "Unknown"
+            WindowsEdition = "Unknown"
+            IsServer       = $false
+            BuildNumber    = "Unknown"
             DisplayVersion = "Unknown"
-            BuildNumber = "Unknown"
-            Edition = "Unknown"
         }
     }
 }

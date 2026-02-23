@@ -192,13 +192,14 @@ function Start-Show-SystemConfigMenu {
         switch ($choice) {
             "1" { Set-HostName; Write-PressEnter }
             "2" { Join-Domain; Write-PressEnter }
-            "3" { Set-ServerTimeZone; Write-PressEnter }
-            "4" { Install-WindowsUpdates; Write-PressEnter }
-            "5" { Register-ServerLicense; Write-PressEnter }
-            "6" { Set-ServerPowerPlan; Write-PressEnter }
+            "3" { Show-ADDSPromotionMenu }
+            "4" { Set-ServerTimeZone; Write-PressEnter }
+            "5" { Install-WindowsUpdates; Write-PressEnter }
+            "6" { Register-ServerLicense; Write-PressEnter }
+            "7" { Set-ServerPowerPlan; Write-PressEnter }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-6 or B." -color "Error"
+                Write-OutputColor "Invalid choice. Please enter 1-7 or B." -color "Error"
                 Start-Sleep -Seconds 2
             }
         }
@@ -277,7 +278,7 @@ function Start-Show-ToolsUtilitiesMenu {
             "5" { Show-ServiceManager }
             "6" { Show-NetworkDiagnostics }
             "7" { Show-ServerReadiness; Write-PressEnter }
-            "8" { Show-RoleTemplates; Write-PressEnter }
+            "8" { Show-RoleTemplateSelector }
             "9" { Set-PagefileConfiguration }
             "10" { Set-SNMPConfiguration }
             "11" { Install-WindowsServerBackup; Write-PressEnter }
@@ -308,9 +309,10 @@ function Start-Show-StorageClusteringMenu {
             "3" { Show-DeduplicationManagement; Write-PressEnter }
             "4" { Show-StorageReplicaManagement; Write-PressEnter }
             "5" { Show-ClusterManagementMenu; Write-PressEnter }
+            "6" { Show-HyperVReplicaMenu }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-5 or B." -color "Error"
+                Write-OutputColor "Invalid choice. Please enter 1-6 or B." -color "Error"
                 Start-Sleep -Seconds 2
             }
         }

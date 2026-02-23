@@ -278,6 +278,21 @@
         }
     },
 
+    "_section_roletemplates": "========== SERVER ROLE TEMPLATES ==========",
+
+    "CustomRoleTemplates": {
+        "_comment": "Custom server role templates that install Windows features as a group. These are ADDED to the 10 built-in templates (DC, FS, WEB, DHCP, DNS, PRINT, WSUS, NPS, HV, RDS). Each template needs: FullName, Description, Features (array of Windows feature names), PostInstall (function name or null), RequiresReboot, ServerOnly.",
+
+        "MYAPP": {
+            "FullName": "Custom App Server",
+            "Description": "Features for a custom application stack",
+            "Features": ["Web-Server", "NET-Framework-45-Core", "MSMQ"],
+            "PostInstall": null,
+            "RequiresReboot": false,
+            "ServerOnly": true
+        }
+    },
+
     "CustomVMDefaults": {
         "_comment": "Default specs used when deploying a 'custom' VM (one that doesn't use a template). These are the starting values shown in the deployment wizard -- you can still change them during deployment.",
         "vCPU": 4,

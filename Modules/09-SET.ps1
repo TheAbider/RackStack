@@ -22,12 +22,18 @@ function Test-AdapterInternetConnectivity {
         if ($ip) {
             # Test connectivity using this adapter's IP as source
             try {
-                $canPing = Test-Connection -Source $ip -ComputerName $Target -Count 1 -Quiet -ErrorAction SilentlyContinue
+                if ($PSVersionTable.PSVersion.Major -ge 6) {
+                    # PowerShell 6+ supports -Source
+                    $canPing = Test-Connection -Source $ip -ComputerName $Target -Count 1 -Quiet -ErrorAction Stop
+                } else {
+                    # PowerShell 5.x: -Source may not exist (Server 2012 R2 / PS 4.0)
+                    # Fall back to basic connectivity test
+                    $canPing = Test-Connection -ComputerName $Target -Count 1 -Quiet -ErrorAction SilentlyContinue
+                }
             }
             catch {
-                # Test-Connection -Source may not be available on all systems
-                # Fall back to basic test
-                $canPing = $false
+                # Fall back to basic test on any error
+                $canPing = Test-Connection -ComputerName $Target -Count 1 -Quiet -ErrorAction SilentlyContinue
             }
 
             $results += @{

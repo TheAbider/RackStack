@@ -178,7 +178,7 @@ function Show-ConfigureServerMenu {
     Write-OutputColor "  │$("        IP, SET Teaming, Storage/SAN, VLAN".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[2]  System Configuration â–º" -Status $sysSummary -StatusColor $sysColor
-    Write-OutputColor "  │$("        Hostname, Domain, Timezone, Updates, License, Power".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("        Hostname, Domain, DCPromo, Timezone, Updates, License".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[3]  Roles & Features ►" -Status $rolesSummary -StatusColor $rolesColor
     Write-OutputColor "  │$(("        Hyper-V, MPIO, Failover Clustering, $($script:AgentInstaller.ToolName)").PadRight(72))│" -color "Info"
@@ -263,14 +263,15 @@ function Show-SystemConfigMenu {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-MenuItem "[1]  Set Hostname" -Status $hostdisplay -StatusColor "Info"
     Write-MenuItem "[2]  Join a Domain" -Status $domaindisplay -StatusColor "Info"
-    Write-MenuItem "[3]  Set Timezone" -Status $timezonedisplay -StatusColor "Info"
-    Write-MenuItem "[4]  Install Windows Updates"
+    Write-MenuItem "[3]  Promote to Domain Controller ►"
+    Write-MenuItem "[4]  Set Timezone" -Status $timezonedisplay -StatusColor "Info"
+    Write-MenuItem "[5]  Install Windows Updates"
     $licStatus = Get-CachedValue -Key "LicenseActivated" -FetchScript {
         if (Test-WindowsActivated) { "Activated" } else { "Not Activated" }
     }
     $licColor = if ($licStatus -eq "Activated") { "Success" } else { "Warning" }
-    Write-MenuItem "[5]  License Server" -Status $licStatus -StatusColor $licColor
-    Write-MenuItem "[6]  Set Power Plan" -Status $powerPlan -StatusColor $powerColor
+    Write-MenuItem "[6]  License Server" -Status $licStatus -StatusColor $licColor
+    Write-MenuItem "[7]  Set Power Plan" -Status $powerPlan -StatusColor $powerColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"
@@ -406,7 +407,7 @@ function Show-ToolsUtilitiesMenu {
     Write-MenuItem "[6]  Network Diagnostics ►"
 
     Write-MenuItem "[7]  Server Readiness"
-    Write-MenuItem "[8]  Role Templates"
+    Write-MenuItem "[8]  Install Server Role Template ►"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -452,9 +453,10 @@ function Show-StorageClusteringMenu {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  CLUSTER".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  CLUSTER & REPLICATION".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[5]  Cluster Management ►" -Status $clusterStatus -StatusColor $clusterColor
+    Write-MenuItem "[6]  Hyper-V Replica Management ►"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

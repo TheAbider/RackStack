@@ -186,7 +186,6 @@ function Add-HyperVDefenderExclusions {
         "vmwp.exe"
         "vmsp.exe"
         "vmcompute.exe"
-        "Vmwp.exe"
     )
 
     foreach ($proc in $processesToExclude) {

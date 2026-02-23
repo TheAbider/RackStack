@@ -223,7 +223,16 @@ function Undo-LastChange {
         Write-OutputColor "Change undone successfully!" -color "Success"
 
         # Remove from undo stack
-        $script:UndoStack = $script:UndoStack[0..($script:UndoStack.Count - 2)]
+        if ($script:UndoStack.Count -le 1) {
+            $script:UndoStack = [System.Collections.Generic.List[object]]::new()
+        } else {
+            $lastIdx = $script:UndoStack.Count - 2
+            $newStack = [System.Collections.Generic.List[object]]::new()
+            for ($i = 0; $i -le $lastIdx; $i++) {
+                $newStack.Add($script:UndoStack[$i])
+            }
+            $script:UndoStack = $newStack
+        }
 
         # Add to session changes
         Add-SessionChange -Category "Undo" -Description "Undid: $($lastAction.Description)"

@@ -67,7 +67,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\RackStack.ps1
 ```
 
-> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 60 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
+> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 63 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
 
 ### Single-File Deployment (Production)
 
@@ -78,9 +78,9 @@ For production use, generate a monolithic single-file script (~26K lines) that y
 .\sync-to-monolithic.ps1
 ```
 
-The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 60 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
+The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 63 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
-> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.3.0.ps1` = monolithic build for deployment/compilation.
+> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.4.0.ps1` = monolithic build for deployment/compilation.
 
 ## Requirements
 
@@ -223,14 +223,14 @@ Automate full server builds with a JSON config file:
 }
 ```
 
-Place `batch_config.json` next to the script and it runs automatically on launch. Set fields to `null` to skip steps. Use `ConfigType: "HOST"` for Hyper-V hosts -- adds 6 extra steps (SET switch, custom vNICs, iSCSI with A/B auto-detect, MPIO, host storage, Defender exclusions) for a total of 20 automated steps.
+Place `batch_config.json` next to the script and it runs automatically on launch. Set fields to `null` to skip steps. Use `ConfigType: "HOST"` for Hyper-V hosts -- adds 6 extra steps (SET switch, custom vNICs, iSCSI with A/B auto-detect, MPIO, host storage, Defender exclusions) for a total of 22 automated steps.
 
 ## Project Structure
 
 ```
 RackStack/
-├── RackStack.ps1               # Modular loader -- dot-sources 60 modules (dev use)
-├── RackStack v1.3.0.ps1        # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack.ps1               # Modular loader -- dot-sources 63 modules (dev use)
+├── RackStack v1.4.0.ps1        # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
 ├── defaults.example.json       # Config template with examples
@@ -238,8 +238,8 @@ RackStack/
 ├── Modules/
 │   ├── 00-Initialization.ps1   # Constants, variables, config loading
 │   ├── 01-Console.ps1          # Console window management
-│   ├── ...                     # 58 more modules
-│   └── 59-StorageBackends.ps1
+│   ├── ...                     # 61 more modules
+│   └── 62-HyperVReplica.ps1
 ├── Tests/
 │   ├── Run-Tests.ps1           # 1312 automated tests (109 sections)
 │   ├── Validate-Release.ps1    # Pre-release validation suite
@@ -250,7 +250,7 @@ RackStack/
 
 ### Module Architecture
 
-60 modules numbered for load order. Dependencies flow downward.
+63 modules numbered for load order. Dependencies flow downward.
 
 | Range | Category | Highlights |
 |---|---|---|
@@ -262,6 +262,7 @@ RackStack/
 | 40-44 | **VM Pipeline** | Host storage, VHD management, ISO downloads, offline VHD, VM deployment |
 | 45-50 | **Session** | Config export, session summary, cleanup, menus, entry point |
 | 51-59 | **Extended** | Cluster dashboard, checkpoints, export/import, HTML reports, QoL, operations, remote, diagnostics, storage backends |
+| 60-62 | **Server Roles** | Role templates, AD DS promotion, Hyper-V Replica management |
 
 ## Testing
 
@@ -269,7 +270,7 @@ RackStack/
 # Full test suite (1312 tests, ~2 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
-# PSScriptAnalyzer (0 errors on all 60 modules + monolithic)
+# PSScriptAnalyzer (0 errors on all 63 modules + monolithic)
 powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 # Pre-release validation (parse + PSSA + structure + sync + version + tests)

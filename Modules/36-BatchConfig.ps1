@@ -143,7 +143,31 @@ function New-BatchConfigTemplate {
     "_HostStorageDrive_Help": "Drive letter for VM storage (e.g., 'D'). null = auto-select first available non-C fixed NTFS drive.",
 
     "ConfigureDefenderExclusions": false,
-    "_ConfigureDefenderExclusions_Help": "Add Defender exclusions for Hyper-V and VM storage paths."
+    "_ConfigureDefenderExclusions_Help": "Add Defender exclusions for Hyper-V and VM storage paths.",
+
+    "_ROLE_TEMPLATES_SECTION": "========== SERVER ROLE TEMPLATES ==========",
+
+    "ServerRoleTemplate": null,
+    "_ServerRoleTemplate_Help": "Role template to apply: DC, FS, WEB, DHCP, DNS, PRINT, WSUS, NPS, HV, RDS, or null to skip.",
+
+    "_DCPROMO_SECTION": "========== DOMAIN CONTROLLER PROMOTION ==========",
+
+    "PromoteToDC": false,
+    "_PromoteToDC_Help": "Promote server to Domain Controller after domain join (true/false).",
+
+    "DCPromoType": "NewForest",
+    "_DCPromoType_Help": "'NewForest', 'AdditionalDC', or 'RODC'. Only used when PromoteToDC is true.",
+
+    "ForestName": null,
+    "_ForestName_Help": "Domain name for new forest (e.g., 'corp.contoso.com'). Only used with DCPromoType=NewForest.",
+
+    "ForestMode": "WinThreshold",
+    "_ForestMode_Help": "Forest functional level: 'Win2012R2', 'WinThreshold' (2016, default), 'Win2019', 'Win2022', 'Win2025'.",
+
+    "DomainMode": "WinThreshold",
+    "_DomainMode_Help": "Domain functional level (same options as ForestMode). Usually matches ForestMode.",
+
+    "_DCPromo_Note": "Safe Mode (DSRM) password will be prompted at runtime for security. Cannot be stored in config."
 }
 "@
 

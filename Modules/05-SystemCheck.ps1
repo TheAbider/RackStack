@@ -370,10 +370,16 @@ function Install-WindowsFeatureWithTimeout {
     }
     Write-Host ""
 
-    $result = Receive-Job $installJob
+    $result = Receive-Job $installJob -ErrorAction SilentlyContinue
+    $jobFailed = $installJob.State -eq "Failed"
     Remove-Job $installJob -Force -ErrorAction SilentlyContinue
 
-    if ($result.Success) {
+    # Install-WindowsFeature returns a CimInstance with ExitCode, not a hashtable with .Success
+    $succeeded = (-not $jobFailed) -and ($null -ne $result) -and
+        ($result.ExitCode -eq 'Success' -or $result.ExitCode -eq 'NoChangeNeeded' -or
+         $null -ne $result.RestartNeeded)
+
+    if ($succeeded) {
         Complete-ProgressMessage -Activity "$DisplayName installation" -Status "Complete" -Success
         return @{ Success = $true; TimedOut = $false; Result = $result }
     }

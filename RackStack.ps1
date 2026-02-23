@@ -1,9 +1,9 @@
-<#
+﻿<#
 .SYNOPSIS
     RackStack - Modular Loader (Development)
 
 .DESCRIPTION
-    This is the MODULAR LOADER -- it dot-sources all 60 modules from the Modules/
+    This is the MODULAR LOADER -- it dot-sources all 63 modules from the Modules/
     subfolder and starts RackStack. Use this file for development and testing.
 
     This is NOT the monolithic build. The monolithic single-file version is:
@@ -13,7 +13,7 @@
     Environment-specific settings are configured via defaults.json.
 
 .VERSION
-    1.3.0
+    1.4.0
 
 .NOTES
     - Requires Windows Server 2012 R2 or later (or Windows 10/11 for testing)
@@ -97,6 +97,9 @@ $moduleFiles = @(
     "57-KaseyaInstaller.ps1"
     "58-NetworkDiagnostics.ps1"
     "59-StorageBackends.ps1"
+    "60-ServerRoleTemplates.ps1"
+    "61-ActiveDirectory.ps1"
+    "62-HyperVReplica.ps1"
 )
 
 # Load all modules

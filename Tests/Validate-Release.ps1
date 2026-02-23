@@ -1,9 +1,9 @@
-<#
+﻿<#
 .SYNOPSIS
     Automated pre-release validation for RackStack
 .DESCRIPTION
     Runs all validation checks required before releasing a new version:
-    1. Parse check (all 60 modules + monolithic)
+    1. Parse check (all 63 modules + monolithic)
     2. PSScriptAnalyzer (0 errors required)
     3. Module count verification
     4. Region count verification (monolithic)
@@ -144,7 +144,7 @@ if ($pssaAvailable) {
 Write-Section "3. MODULE STRUCTURE"
 # ============================================================================
 
-$expectedModuleCount = 59
+$expectedModuleCount = 63
 Write-Check "Module count: $($moduleFiles.Count) files (expected $expectedModuleCount)" ($moduleFiles.Count -eq $expectedModuleCount)
 
 # Verify loader lists all modules

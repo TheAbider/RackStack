@@ -269,7 +269,7 @@ function Start-BatchMode {
     Write-OutputColor "" -color "Info"
 
     $stepNum = 0
-    $totalSteps = 20
+    $totalSteps = 22
     $changesApplied = 0
     $errors = 0
 
@@ -528,7 +528,7 @@ function Start-BatchMode {
     # Step 11: Create local admin account
     $stepNum++
     if ($Config.CreateLocalAdmin) {
-        $adminName = if ($Config.LocalAdminName) { $Config.LocalAdminName } else { $localadminaccountname }
+        $adminName = if ($Config.LocalAdminName) { $Config.LocalAdminName } else { $script:localadminaccountname }
         Write-OutputColor "  [$stepNum/$totalSteps] Creating local admin '$adminName'..." -color "Info"
         try {
             $existingUser = Get-LocalUser -Name $adminName -ErrorAction SilentlyContinue
@@ -601,7 +601,121 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Domain join: skipped ($reason)" -color "Debug"
     }
 
-    # Step 14: Install updates (long running - always last)
+    # Step 14: Install Server Role Template
+    $stepNum++
+    if ($Config.ServerRoleTemplate) {
+        $templateKey = $Config.ServerRoleTemplate.ToUpper()
+        $allTemplates = if ($script:ServerRoleTemplates) { $script:ServerRoleTemplates } else { @{} }
+        if ($script:CustomRoleTemplates) {
+            foreach ($k in $script:CustomRoleTemplates.Keys) { $allTemplates[$k] = $script:CustomRoleTemplates[$k] }
+        }
+        if ($allTemplates.ContainsKey($templateKey)) {
+            $template = $allTemplates[$templateKey]
+            Write-OutputColor "  [$stepNum/$totalSteps] Installing role template: $($template.FullName)..." -color "Info"
+            try {
+                $installCount = 0
+                foreach ($featureName in $template.Features) {
+                    $wf = Get-WindowsFeature -Name $featureName -ErrorAction SilentlyContinue
+                    if ($null -eq $wf -or -not $wf.Installed) {
+                        $null = Install-WindowsFeature -Name $featureName -IncludeManagementTools -ErrorAction Stop
+                        $installCount++
+                    }
+                }
+                Write-OutputColor "           Installed $installCount feature(s) for $($template.FullName)." -color "Success"
+                if ($template.RequiresReboot -and $installCount -gt 0) {
+                    $global:RebootNeeded = $true
+                }
+                $changesApplied++
+                Add-SessionChange -Category "Roles" -Description "Installed role template: $($template.FullName)"
+            }
+            catch {
+                Write-OutputColor "           Failed: $_" -color "Error"
+                $errors++
+            }
+        } else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Role template '$templateKey' not found. Available: $($allTemplates.Keys -join ', ')" -color "Warning"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] Server role template: skipped" -color "Debug"
+    }
+
+    # Step 15: Promote to Domain Controller
+    $stepNum++
+    if ($Config.PromoteToDC) {
+        $promoType = if ($Config.DCPromoType) { $Config.DCPromoType } else { "NewForest" }
+        Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion ($promoType)..." -color "Info"
+        try {
+            # Ensure AD DS role is installed
+            $addsFeature = Get-WindowsFeature -Name AD-Domain-Services -ErrorAction SilentlyContinue
+            if ($null -eq $addsFeature -or -not $addsFeature.Installed) {
+                Write-OutputColor "           Installing AD DS role first..." -color "Info"
+                $null = Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools -ErrorAction Stop
+            }
+            Import-Module ADDSDeployment -ErrorAction Stop
+            # Prompt for DSRM password (cannot be stored in config for security)
+            $dsrmPassword = Read-Host -Prompt "           Enter Safe Mode (DSRM) password" -AsSecureString
+            $forestMode = if ($Config.ForestMode) { $Config.ForestMode } else { "WinThreshold" }
+            $domainMode = if ($Config.DomainMode) { $Config.DomainMode } else { "WinThreshold" }
+            switch ($promoType) {
+                "NewForest" {
+                    if (-not $Config.ForestName) {
+                        Write-OutputColor "           ForestName is required for NewForest promotion." -color "Error"
+                        $errors++
+                    } else {
+                        $netbios = ($Config.ForestName -split '\.')[0].ToUpper()
+                        $null = Install-ADDSForest -DomainName $Config.ForestName -ForestMode $forestMode -DomainMode $domainMode -DomainNetbiosName $netbios -SafeModeAdministratorPassword $dsrmPassword -InstallDns:$true -CreateDnsDelegation:$false -NoRebootOnCompletion:$true -Force:$true -ErrorAction Stop
+                        Write-OutputColor "           New forest '$($Config.ForestName)' configured. Reboot required." -color "Success"
+                        $global:RebootNeeded = $true
+                        $changesApplied++
+                        Add-SessionChange -Category "AD DS" -Description "Promoted to DC: New forest $($Config.ForestName)"
+                    }
+                }
+                "AdditionalDC" {
+                    $domainName = if ($Config.ForestName) { $Config.ForestName } elseif ($Config.DomainName) { $Config.DomainName } else { $null }
+                    if (-not $domainName) {
+                        Write-OutputColor "           ForestName or DomainName required for AdditionalDC." -color "Error"
+                        $errors++
+                    } else {
+                        $domainCred = Get-Credential -Message "Enter domain admin credentials for $domainName"
+                        $null = Install-ADDSDomainController -DomainName $domainName -Credential $domainCred -SafeModeAdministratorPassword $dsrmPassword -InstallDns:$true -NoRebootOnCompletion:$true -Force:$true -ErrorAction Stop
+                        Write-OutputColor "           Additional DC for '$domainName' configured. Reboot required." -color "Success"
+                        $global:RebootNeeded = $true
+                        $changesApplied++
+                        Add-SessionChange -Category "AD DS" -Description "Promoted to additional DC: $domainName"
+                    }
+                }
+                "RODC" {
+                    $domainName = if ($Config.ForestName) { $Config.ForestName } elseif ($Config.DomainName) { $Config.DomainName } else { $null }
+                    if (-not $domainName) {
+                        Write-OutputColor "           ForestName or DomainName required for RODC." -color "Error"
+                        $errors++
+                    } else {
+                        $domainCred = Get-Credential -Message "Enter domain admin credentials for $domainName"
+                        $null = Install-ADDSDomainController -DomainName $domainName -Credential $domainCred -ReadOnlyReplica:$true -SafeModeAdministratorPassword $dsrmPassword -InstallDns:$true -NoRebootOnCompletion:$true -Force:$true -ErrorAction Stop
+                        Write-OutputColor "           RODC for '$domainName' configured. Reboot required." -color "Success"
+                        $global:RebootNeeded = $true
+                        $changesApplied++
+                        Add-SessionChange -Category "AD DS" -Description "Promoted to RODC: $domainName"
+                    }
+                }
+                default {
+                    Write-OutputColor "           Unknown DCPromoType: $promoType" -color "Error"
+                    $errors++
+                }
+            }
+        }
+        catch {
+            Write-OutputColor "           Failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion: skipped" -color "Debug"
+    }
+
+    # Step 16: Install updates (long running - always last)
     $stepNum++
     if ($Config.InstallUpdates) {
         Write-OutputColor "  [$stepNum/$totalSteps] Installing Windows Updates (this may take a while)..." -color "Info"
@@ -618,7 +732,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Windows Updates: skipped" -color "Debug"
     }
 
-    # Step 15: Initialize Host Storage
+    # Step 17: Initialize Host Storage
     $stepNum++
     if ($Config.InitializeHostStorage -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Initializing host storage..." -color "Info"
@@ -665,7 +779,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Host storage: skipped" -color "Debug"
     }
 
-    # Step 16: Create SET Switch
+    # Step 18: Create SET Switch
     $stepNum++
     if ($Config.CreateSETSwitch -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Creating SET switch '$($Config.SETSwitchName)'..." -color "Info"
@@ -703,7 +817,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] SET switch: skipped" -color "Debug"
     }
 
-    # Step 17: Create Custom vNICs on SET
+    # Step 19: Create Custom vNICs on SET
     $stepNum++
     if ($Config.CustomVNICs -and $Config.CustomVNICs.Count -gt 0 -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Creating custom vNICs on SET..." -color "Info"
@@ -747,7 +861,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Custom vNICs: skipped" -color "Debug"
     }
 
-    # Step 18: Configure Shared Storage
+    # Step 20: Configure Shared Storage
     $stepNum++
     # Determine storage backend (new key takes priority, fall back to legacy ConfigureiSCSI)
     $storageBackend = if ($Config.StorageBackendType) { $Config.StorageBackendType } else { "iSCSI" }
@@ -820,7 +934,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Shared storage: skipped" -color "Debug"
     }
 
-    # Step 19: Configure MPIO / Multipath
+    # Step 21: Configure MPIO / Multipath
     $stepNum++
     if ($Config.ConfigureMPIO -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Configuring MPIO for $storageBackend..." -color "Info"
@@ -844,7 +958,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] MPIO config: skipped" -color "Debug"
     }
 
-    # Step 20: Configure Defender Exclusions
+    # Step 22: Configure Defender Exclusions
     $stepNum++
     if ($Config.ConfigureDefenderExclusions -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Configuring Defender exclusions..." -color "Info"

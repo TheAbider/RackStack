@@ -642,6 +642,23 @@ function Import-Defaults {
                 }
             }
 
+            # Import custom role templates (merge with built-in ServerRoleTemplates)
+            $script:CustomRoleTemplates = @{}
+            if ($fileData.CustomRoleTemplates) {
+                foreach ($tplProp in $fileData.CustomRoleTemplates.PSObject.Properties) {
+                    if ($tplProp.Name -like '_*') { continue }
+                    $tplData = @{}
+                    foreach ($fp in $tplProp.Value.PSObject.Properties) {
+                        if ($fp.Name -eq 'Features' -and $fp.Value -is [array]) {
+                            $tplData[$fp.Name] = @($fp.Value)
+                        } else {
+                            $tplData[$fp.Name] = $fp.Value
+                        }
+                    }
+                    $script:CustomRoleTemplates[$tplProp.Name] = $tplData
+                }
+            }
+
             # Import custom VM defaults (for non-template VMs)
             $script:CustomVMDefaults = @{}
             if ($fileData.CustomVMDefaults) {

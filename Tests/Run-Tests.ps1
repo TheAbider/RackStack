@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.0.5
+    Automated Test Runner for RackStack v1.4.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 60 modules)
+    - Parse tests (monolithic + 63 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -108,7 +108,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Split-Path $script:ModuleRoot) "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 60  # 00-59 inclusive
+$expectedModuleCount = 63  # 00-62 inclusive
 
 # ============================================================================
 # BANNER
@@ -258,7 +258,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 60 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 63 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -526,8 +526,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "59-StorageBackends.ps1"
-    Write-TestResult "Module range 00-Initialization to 59-StorageBackends" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "62-HyperVReplica.ps1"
+    Write-TestResult "Module range 00-Initialization to 62-HyperVReplica" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -1865,8 +1865,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 59 #region tags" ($regionStartCount -eq 59) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 59 #endregion tags" ($regionEndCount -eq 59) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 62 #region tags" ($regionStartCount -eq 62) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 62 #endregion tags" ($regionEndCount -eq 62) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -3020,7 +3020,7 @@ Write-SectionHeader "SECTION 43: DEAD CODE REMOVAL VERIFICATION"
 # Removed functions should NOT exist
 $removedFunctions = @(
     "Show-ReportsMenu",
-    "Add-CommandHistory",
+    # "Add-CommandHistory",  # Re-added in v1.4.0 (Bug Fix #5)
     "Send-LogEmail",
     "Write-MenuLine",
     "Write-CenteredMainMenuOutput",
@@ -3792,8 +3792,8 @@ Write-TestResult "Function exists: Show-RoleTemplates" ($null -ne (Get-Command S
 # Verify wired in menu
 try {
     $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
-    $hasMenuItem = $menuContent -match 'Role Templates'
-    Write-TestResult "48-MenuDisplay: Role Templates in Tools menu" $hasMenuItem
+    $hasMenuItem = $menuContent -match 'Server Role Template'
+    Write-TestResult "48-MenuDisplay: Server Role Template in Tools menu" $hasMenuItem
 } catch {
     Write-TestResult "48-MenuDisplay: role templates" $false $_.Exception.Message
 }
@@ -4044,7 +4044,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 60 modules" ($readmeContent -match '60 module')
+    Write-TestResult "README: mentions 63 modules" ($readmeContent -match '63 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -5723,26 +5723,32 @@ try {
     Write-TestResult "36-BatchConfig: Show-BatchConfigMenu exists" ($bcContent -match 'function\s+Show-BatchConfigMenu')
     Write-TestResult "36-BatchConfig: Export-BatchConfigFromState exists" ($bcContent -match 'function\s+Export-BatchConfigFromState')
 
-    # EntryPoint: totalSteps is 20
-    Write-TestResult "50-EntryPoint: totalSteps is 20" ($epContent -match 'totalSteps\s*=\s*20')
+    # EntryPoint: totalSteps is 22
+    Write-TestResult "50-EntryPoint: totalSteps is 22" ($epContent -match 'totalSteps\s*=\s*22')
 
-    # EntryPoint: step 15 mentions Host Storage or Initialize
-    Write-TestResult "50-EntryPoint: step 15 is Host Storage" ($epContent -match '15.*Host\s*Storage|15.*Initialize')
+    # EntryPoint: step 14 mentions Server Role Template
+    Write-TestResult "50-EntryPoint: step 14 is Server Role Template" ($epContent -match '14.*Server Role Template|14.*ServerRoleTemplate')
 
-    # EntryPoint: step 16 mentions SET
-    Write-TestResult "50-EntryPoint: step 16 is SET" ($epContent -match '16.*SET')
+    # EntryPoint: step 15 mentions DC Promotion
+    Write-TestResult "50-EntryPoint: step 15 is DC Promotion" ($epContent -match '15.*Promote.*Domain Controller|15.*PromoteToDC')
 
-    # EntryPoint: step 17 mentions Custom vNICs
-    Write-TestResult "50-EntryPoint: step 17 is Custom vNICs" ($epContent -match '17.*Custom\s*vNIC')
+    # EntryPoint: step 17 mentions Host Storage or Initialize
+    Write-TestResult "50-EntryPoint: step 17 is Host Storage" ($epContent -match '17.*Host\s*Storage|17.*Initialize')
 
-    # EntryPoint: step 18 mentions iSCSI
-    Write-TestResult "50-EntryPoint: step 18 is shared storage" ($epContent -match '18.*Configure Shared Storage')
+    # EntryPoint: step 18 mentions SET
+    Write-TestResult "50-EntryPoint: step 18 is SET" ($epContent -match '18.*SET')
 
-    # EntryPoint: step 19 mentions MPIO
-    Write-TestResult "50-EntryPoint: step 19 is MPIO" ($epContent -match '19.*MPIO')
+    # EntryPoint: step 19 mentions Custom vNICs
+    Write-TestResult "50-EntryPoint: step 19 is Custom vNICs" ($epContent -match '19.*Custom\s*vNIC')
 
-    # EntryPoint: step 20 mentions Defender
-    Write-TestResult "50-EntryPoint: step 20 is Defender" ($epContent -match '20.*Defender')
+    # EntryPoint: step 20 mentions shared storage
+    Write-TestResult "50-EntryPoint: step 20 is shared storage" ($epContent -match '20.*Configure Shared Storage')
+
+    # EntryPoint: step 21 mentions MPIO
+    Write-TestResult "50-EntryPoint: step 21 is MPIO" ($epContent -match '21.*MPIO')
+
+    # EntryPoint: step 22 mentions Defender
+    Write-TestResult "50-EntryPoint: step 22 is Defender" ($epContent -match '22.*Defender')
 
     # Test-BatchConfig validates SETAdapterMode
     Write-TestResult "50-EntryPoint: Test-BatchConfig validates SETAdapterMode" ($epContent -match 'Test-BatchConfig[\s\S]*?SETAdapterMode')
@@ -6007,7 +6013,7 @@ try {
     $batchContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
     Write-TestResult "50-EntryPoint: batch has CustomVNICs step" ($batchContent -match 'CustomVNICs')
     Write-TestResult "50-EntryPoint: batch step creates vNICs on SET" ($batchContent -match 'Custom vNICs[\s\S]*?Add-VMNetworkAdapter -ManagementOS')
-    Write-TestResult "50-EntryPoint: totalSteps is 20" ($batchContent -match '\$totalSteps = 20')
+    Write-TestResult "50-EntryPoint: totalSteps is 22" ($batchContent -match '\$totalSteps = 22')
 
     # Batch template has CustomVNICs
     $templateContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
@@ -6253,21 +6259,21 @@ try {
         Write-TestResult "defaults.example.json: exists" $false "File not found"
     }
 
-    # RackStack.ps1 loader includes 59-StorageBackends.ps1
+    # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
-    Write-TestResult "RackStack.ps1: loads 59-StorageBackends.ps1" ($loaderContent -match '59-StorageBackends\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 60 modules" ($loaderContent -match '60 modules')
+    Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
+    Write-TestResult "RackStack.ps1: mentions 63 modules" ($loaderContent -match '63 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 60" ($moduleCount -eq 60) "Found $moduleCount modules"
+    Write-TestResult "Module count is 63" ($moduleCount -eq 63) "Found $moduleCount modules"
 
-    # Changelog mentions v1.3.0
+    # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
     $changelogContent = Get-Content $changelogPath -Raw
-    Write-TestResult "Changelog: has v1.3.0 entry" ($changelogContent -match '## v1\.3\.0')
-    Write-TestResult "Changelog: mentions StorageBackendType" ($changelogContent -match 'StorageBackendType')
-    Write-TestResult "Changelog: mentions 60 modules" ($changelogContent -match '60 modules')
+    Write-TestResult "Changelog: has v1.4.0 entry" ($changelogContent -match '## v1\.4\.0')
+    Write-TestResult "Changelog: mentions Server Role Templates" ($changelogContent -match 'Server Role Templates')
+    Write-TestResult "Changelog: mentions 63 modules" ($changelogContent -match '63 modules')
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message

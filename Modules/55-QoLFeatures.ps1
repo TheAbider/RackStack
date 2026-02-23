@@ -202,6 +202,24 @@ function Show-Favorites {
     }
 }
 
+# Record a command in the history
+function Add-CommandHistory {
+    param(
+        [string]$Command,
+        [string]$Category = "General"
+    )
+    if ([string]::IsNullOrWhiteSpace($Command)) { return }
+    $script:CommandHistory += @{
+        Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        Command   = $Command
+        Category  = $Category
+    }
+    # Auto-export periodically (every 10 entries)
+    if ($script:CommandHistory.Count % 10 -eq 0) {
+        Export-CommandHistory
+    }
+}
+
 # Load command history from file
 function Import-CommandHistory {
     Initialize-AppConfigDir
