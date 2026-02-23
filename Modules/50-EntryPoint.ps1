@@ -190,6 +190,26 @@ function Test-BatchConfig {
         if ($Config.IPAddress -and -not $Config.AdapterName) {
             $null = $warnings.Add("HOST mode with IP config but no AdapterName. Network config will be skipped.")
         }
+        if ($Config.CreateSETSwitch -and -not $Config.InstallHyperV) {
+            $null = $warnings.Add("CreateSETSwitch requires Hyper-V. SET creation may fail.")
+        }
+    }
+
+    # HOST-specific field validation
+    if ($Config.SETAdapterMode -and $Config.SETAdapterMode -notin @("auto", "manual")) {
+        $null = $errors.Add("SETAdapterMode must be 'auto' or 'manual' (got '$($Config.SETAdapterMode)').")
+    }
+    if ($null -ne $Config.iSCSIHostNumber -and $Config.iSCSIHostNumber -isnot [bool]) {
+        $hostNum = $Config.iSCSIHostNumber -as [int]
+        if ($null -eq $hostNum -or $hostNum -lt 1 -or $hostNum -gt 24) {
+            $null = $errors.Add("iSCSIHostNumber must be 1-24 or null (got '$($Config.iSCSIHostNumber)').")
+        }
+    }
+    if ($Config.HostStorageDrive) {
+        $dl = "$($Config.HostStorageDrive)".ToUpper()
+        if ($dl -notmatch '^[A-Z]$' -or $dl -eq 'C') {
+            $null = $errors.Add("HostStorageDrive must be a single letter A-Z (not C). Got '$($Config.HostStorageDrive)'.")
+        }
     }
 
     # DisableBuiltInAdmin without CreateLocalAdmin
@@ -249,7 +269,7 @@ function Start-BatchMode {
     Write-OutputColor "" -color "Info"
 
     $stepNum = 0
-    $totalSteps = 14
+    $totalSteps = 19
     $changesApplied = 0
     $errors = 0
 
@@ -596,6 +616,201 @@ function Start-BatchMode {
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Windows Updates: skipped" -color "Debug"
+    }
+
+    # Step 15: Initialize Host Storage
+    $stepNum++
+    if ($Config.InitializeHostStorage -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Initializing host storage..." -color "Info"
+        try {
+            $driveLetter = $Config.HostStorageDrive
+            if (-not $driveLetter) {
+                # Auto-select first available non-C fixed NTFS drive
+                $autoVol = Get-Volume -ErrorAction SilentlyContinue | Where-Object {
+                    $_.DriveLetter -and $_.DriveLetter -ne 'C' -and $_.DriveType -eq 'Fixed' -and $_.FileSystem -eq 'NTFS'
+                } | Select-Object -First 1
+                if ($autoVol) { $driveLetter = $autoVol.DriveLetter }
+            }
+            if ($driveLetter) {
+                $script:SelectedHostDrive = "$($driveLetter):"
+                $script:HostVMStoragePath = "$($driveLetter):\Virtual Machines"
+                $script:HostISOPath = "$($driveLetter):\ISOs"
+                $script:VHDCachePath = "$($driveLetter):\Virtual Machines\_BaseImages"
+                foreach ($folder in @($script:HostVMStoragePath, $script:HostISOPath, $script:VHDCachePath)) {
+                    if (-not (Test-Path $folder)) {
+                        New-Item -Path $folder -ItemType Directory -Force | Out-Null
+                    }
+                }
+                # Set Hyper-V defaults if available
+                $vmHost = Get-VMHost -ErrorAction SilentlyContinue
+                if ($vmHost) {
+                    Set-VMHost -VirtualMachinePath $script:HostVMStoragePath -ErrorAction SilentlyContinue
+                    Set-VMHost -VirtualHardDiskPath $script:HostVMStoragePath -ErrorAction SilentlyContinue
+                }
+                Update-DefenderVMPaths
+                $script:StorageInitialized = $true
+                Write-OutputColor "           Storage initialized on $($driveLetter):" -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "Host Storage" -Description "Initialized $($driveLetter): for VM storage"
+            } else {
+                Write-OutputColor "           No suitable data drive found." -color "Warning"
+            }
+        }
+        catch {
+            Write-OutputColor "           Failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] Host storage: skipped" -color "Debug"
+    }
+
+    # Step 16: Create SET Switch
+    $stepNum++
+    if ($Config.CreateSETSwitch -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Creating SET switch '$($Config.SETSwitchName)'..." -color "Info"
+        try {
+            $switchName = if ($Config.SETSwitchName) { $Config.SETSwitchName } else { $SwitchName }
+            $mgmtName = if ($Config.SETManagementName) { $Config.SETManagementName } else { $ManagementName }
+            # Find adapters with internet for SET
+            $internetAdapters = Test-AdapterInternetConnectivity | Where-Object { $_.HasInternet }
+            if ($internetAdapters.Count -ge 1) {
+                $adapterNames = @($internetAdapters | ForEach-Object { $_.Name })
+                New-VMSwitch -Name $switchName -NetAdapterName $adapterNames -EnableEmbeddedTeaming $true -AllowManagementOS $true -ErrorAction Stop
+                Set-VMSwitchTeam -Name $switchName -LoadBalancingAlgorithm Dynamic -ErrorAction SilentlyContinue
+                # Wait for management adapter
+                for ($wait = 0; $wait -lt 15; $wait++) {
+                    $vnic = Get-VMNetworkAdapter -ManagementOS -Name $switchName -ErrorAction SilentlyContinue
+                    if ($vnic) { break }
+                    Start-Sleep -Seconds 1
+                }
+                Rename-VMNetworkAdapter -ManagementOS -Name $switchName -NewName $mgmtName -ErrorAction SilentlyContinue
+                # Store non-internet adapters for iSCSI
+                $script:iSCSICandidateAdapters = Test-AdapterInternetConnectivity | Where-Object { -not $_.HasInternet }
+                Write-OutputColor "           SET '$switchName' created with $($adapterNames.Count) adapter(s)." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "Network" -Description "Created SET '$switchName'"
+            } else {
+                Write-OutputColor "           No adapters with internet found for SET." -color "Warning"
+            }
+        }
+        catch {
+            Write-OutputColor "           Failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] SET switch: skipped" -color "Debug"
+    }
+
+    # Step 17: Configure iSCSI
+    $stepNum++
+    if ($Config.ConfigureiSCSI -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Configuring iSCSI..." -color "Info"
+        try {
+            $hostNum = $Config.iSCSIHostNumber
+            if ($null -eq $hostNum) {
+                $hostNum = Get-HostNumberFromHostname
+            }
+            if ($null -ne $hostNum -and $hostNum -ge 1 -and $hostNum -le 24) {
+                $ip1 = Get-iSCSIAutoIP -HostNumber $hostNum -PortNumber 1
+                $ip2 = Get-iSCSIAutoIP -HostNumber $hostNum -PortNumber 2
+                # Find iSCSI candidate adapters (non-internet, non-virtual)
+                $iscsiAdapters = @()
+                if ($script:iSCSICandidateAdapters) {
+                    $iscsiAdapters = $script:iSCSICandidateAdapters | ForEach-Object { $_.Adapter }
+                } else {
+                    $iscsiAdapters = Get-NetAdapter | Where-Object {
+                        $_.Name -notlike "vEthernet*" -and
+                        $_.InterfaceDescription -notlike "*Hyper-V*" -and
+                        $_.InterfaceDescription -notlike "*Virtual*"
+                    }
+                }
+                if ($iscsiAdapters.Count -ge 2) {
+                    $aSide = $iscsiAdapters[0]
+                    $bSide = $iscsiAdapters[1]
+                    # Configure A-side
+                    Remove-NetIPAddress -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                    Remove-NetRoute -InterfaceAlias $aSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                    New-NetIPAddress -InterfaceAlias $aSide.Name -IPAddress $ip1 -PrefixLength 24 -ErrorAction Stop
+                    Disable-NetAdapterBinding -Name $aSide.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+                    # Configure B-side
+                    Remove-NetIPAddress -InterfaceAlias $bSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                    Remove-NetRoute -InterfaceAlias $bSide.Name -Confirm:$false -ErrorAction SilentlyContinue
+                    New-NetIPAddress -InterfaceAlias $bSide.Name -IPAddress $ip2 -PrefixLength 24 -ErrorAction Stop
+                    Disable-NetAdapterBinding -Name $bSide.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+                    Write-OutputColor "           iSCSI configured: A=$ip1, B=$ip2" -color "Success"
+                    $changesApplied++
+                    Add-SessionChange -Category "Network" -Description "Configured iSCSI: A-side $ip1, B-side $ip2"
+                } else {
+                    Write-OutputColor "           Not enough iSCSI adapters found (need 2, found $($iscsiAdapters.Count))." -color "Warning"
+                }
+            } else {
+                Write-OutputColor "           Could not determine host number for iSCSI." -color "Warning"
+            }
+        }
+        catch {
+            Write-OutputColor "           Failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] iSCSI: skipped" -color "Debug"
+    }
+
+    # Step 18: Configure MPIO
+    $stepNum++
+    if ($Config.ConfigureMPIO -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Configuring MPIO for iSCSI..." -color "Info"
+        try {
+            if (Test-MPIOInstalled) {
+                Enable-MSDSMAutomaticClaim -BusType iSCSI -ErrorAction Stop
+                Set-MSDSMGlobalDefaultLoadBalancePolicy -Policy RR -ErrorAction Stop
+                Write-OutputColor "           MPIO configured (Round Robin)." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "System" -Description "Configured MPIO for iSCSI"
+            } else {
+                Write-OutputColor "           MPIO not installed. Install it first (step 9)." -color "Warning"
+            }
+        }
+        catch {
+            Write-OutputColor "           Failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] MPIO config: skipped" -color "Debug"
+    }
+
+    # Step 19: Configure Defender Exclusions
+    $stepNum++
+    if ($Config.ConfigureDefenderExclusions -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Configuring Defender exclusions..." -color "Info"
+        try {
+            $allPaths = @($script:DefenderExclusionPaths) + @($script:DefenderCommonVMPaths)
+            $addedCount = 0
+            foreach ($path in $allPaths) {
+                if ($path) {
+                    Add-MpPreference -ExclusionPath $path -ErrorAction SilentlyContinue
+                    $addedCount++
+                }
+            }
+            # Add process exclusions
+            $defenderProcesses = @("vmms.exe", "vmwp.exe", "vmcompute.exe")
+            foreach ($proc in $defenderProcesses) {
+                Add-MpPreference -ExclusionProcess $proc -ErrorAction SilentlyContinue
+            }
+            Write-OutputColor "           Added $addedCount path exclusions and $($defenderProcesses.Count) process exclusions." -color "Success"
+            $changesApplied++
+            Add-SessionChange -Category "Security" -Description "Configured Defender exclusions for Hyper-V"
+        }
+        catch {
+            Write-OutputColor "           Failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] Defender exclusions: skipped" -color "Debug"
     }
 
     # Summary

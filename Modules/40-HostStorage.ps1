@@ -1,4 +1,22 @@
 ﻿#region ===== HOST STORAGE SETUP =====
+# Generate Defender VM exclusion paths based on current host drive
+function Update-DefenderVMPaths {
+    $drive = $script:SelectedHostDrive  # e.g. "D:"
+    $script:DefenderCommonVMPaths = @(
+        "$drive\Virtual Machines"
+        "$drive\Hyper-V"
+        "$drive\ISOs"
+        "$drive\Virtual Machines\_BaseImages"
+    )
+    # Also add cluster paths if they exist
+    if (Test-Path "C:\ClusterStorage") {
+        $csvVolumes = Get-ChildItem "C:\ClusterStorage" -Directory -ErrorAction SilentlyContinue
+        foreach ($vol in $csvVolumes) {
+            $script:DefenderCommonVMPaths += "$($vol.FullName)\Virtual Machines"
+        }
+    }
+}
+
 # Function to check if a drive letter is a CD/DVD/ISO mounted drive
 function Test-OpticalDrive {
     param (
@@ -362,6 +380,9 @@ function Initialize-HostStorage {
     Write-OutputColor "  │  Base Images:  $basePathDisplay│" -color "Info"
     Write-OutputColor "  │  ISOs:         $isoPathDisplay│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    # Update Defender exclusion paths to match the selected drive
+    Update-DefenderVMPaths
 
     Add-SessionChange -Category "Host Storage" -Description "Initialized $($driveLetter): drive for VM storage"
     $script:StorageInitialized = $true

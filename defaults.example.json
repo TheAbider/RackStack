@@ -89,11 +89,9 @@
 
     "DefenderCommonVMPaths": [
         "D:\\Virtual Machines",
-        "E:\\Virtual Machines",
-        "D:\\Hyper-V",
-        "E:\\Hyper-V"
+        "D:\\Hyper-V"
     ],
-    "_DefenderCommonVMPaths_help": "Additional paths to exclude from Defender -- these are where your VMs actually live on disk. RackStack shows these as checkboxes so you can pick which ones apply to each host. Add paths for every drive letter you might store VMs on. Example: if you use F:\\ for VMs, add 'F:\\Virtual Machines' here.",
+    "_DefenderCommonVMPaths_help": "Auto-generated from your selected host drive when not specified here. Override only if you need specific custom paths beyond what Host Storage Setup configures. Example: if you store VMs on multiple drives, list all paths here.",
 
     "_section_storage": "========== HYPER-V STORAGE PATHS ==========",
 

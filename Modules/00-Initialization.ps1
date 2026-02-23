@@ -83,7 +83,7 @@ $script:DefenderExclusionPaths = @(
     "C:\Users\Public\Documents\Hyper-V\Virtual Hard Disks"
     "C:\ClusterStorage"
 )
-$script:DefenderCommonVMPaths = @("D:\Virtual Machines", "E:\Virtual Machines", "D:\Hyper-V", "E:\Hyper-V")
+$script:DefenderCommonVMPaths = @()  # Populated dynamically by Update-DefenderVMPaths or Import-Defaults
 
 # Windows Software Licensing application ID (centralized - used by HealthCheck, MenuDisplay, ConfigExport, HTMLReports)
 $script:WindowsLicensingAppId = "55c92734-d682-4d71-983e-d6ec3f16059f"
@@ -121,7 +121,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.0.18"
+$script:ScriptVersion = "1.1.0"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

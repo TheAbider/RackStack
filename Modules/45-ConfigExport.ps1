@@ -817,4 +817,256 @@ function Import-ConfigurationProfile {
         Write-OutputColor "Make sure the file is valid JSON." -color "Info"
     }
 }
+# Compare current server state against a saved configuration profile
+function Compare-ConfigurationDrift {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ProfilePath
+    )
+
+    if (-not (Test-Path $ProfilePath)) {
+        Write-OutputColor "  Profile not found: $ProfilePath" -color "Error"
+        return $null
+    }
+
+    $savedProfile = Get-Content $ProfilePath -Raw | ConvertFrom-Json
+    $results = [ordered]@{}
+
+    # Hostname
+    if ($null -ne $savedProfile.Hostname -and $savedProfile.Hostname -ne "") {
+        $results["Hostname"] = @{
+            Expected = $savedProfile.Hostname
+            Current  = $env:COMPUTERNAME
+            Match    = ($savedProfile.Hostname -eq $env:COMPUTERNAME)
+        }
+    }
+
+    # Network
+    $primaryAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    if ($primaryAdapter) {
+        $currentIP = (Get-NetIPAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
+        $currentDNS = (Get-DnsClientServerAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
+        $currentGW = (Get-NetRoute -InterfaceAlias $primaryAdapter.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue).NextHop
+
+        if ($savedProfile.Network) {
+            if ($null -ne $savedProfile.Network.IPAddress -and $savedProfile.Network.IPAddress -ne "") {
+                $results["IPAddress"] = @{
+                    Expected = $savedProfile.Network.IPAddress
+                    Current  = $currentIP
+                    Match    = ($savedProfile.Network.IPAddress -eq $currentIP)
+                }
+            }
+            if ($null -ne $savedProfile.Network.Gateway -and $savedProfile.Network.Gateway -ne "") {
+                $results["Gateway"] = @{
+                    Expected = $savedProfile.Network.Gateway
+                    Current  = $currentGW
+                    Match    = ($savedProfile.Network.Gateway -eq $currentGW)
+                }
+            }
+            if ($savedProfile.Network.DNS1) {
+                $expectedDNS = @($savedProfile.Network.DNS1)
+                if ($savedProfile.Network.DNS2) { $expectedDNS += $savedProfile.Network.DNS2 }
+                $results["DNS"] = @{
+                    Expected = ($expectedDNS -join ", ")
+                    Current  = ($currentDNS -join ", ")
+                    Match    = (($expectedDNS -join ",") -eq ($currentDNS -join ","))
+                }
+            }
+        }
+    }
+
+    # Domain membership
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    if ($savedProfile.Domain -and $savedProfile.Domain.DomainName) {
+        $currentDomain = if ($cs.PartOfDomain) { $cs.Domain } else { "(workgroup)" }
+        $results["Domain"] = @{
+            Expected = $savedProfile.Domain.DomainName
+            Current  = $currentDomain
+            Match    = ($cs.PartOfDomain -and $cs.Domain -eq $savedProfile.Domain.DomainName)
+        }
+    }
+
+    # Timezone
+    if ($savedProfile.Timezone) {
+        $currentTZ = (Get-TimeZone).Id
+        $results["Timezone"] = @{
+            Expected = $savedProfile.Timezone
+            Current  = $currentTZ
+            Match    = ($savedProfile.Timezone -eq $currentTZ)
+        }
+    }
+
+    # RDP
+    if ($savedProfile.RDP) {
+        $currentRDP = Get-RDPState
+        $expectedRDP = if ($savedProfile.RDP.Enable) { "Enabled" } else { "Disabled" }
+        $results["RDP"] = @{
+            Expected = $expectedRDP
+            Current  = $currentRDP
+            Match    = ($expectedRDP -eq $currentRDP)
+        }
+    }
+
+    # WinRM
+    if ($savedProfile.WinRM) {
+        $currentWinRM = Get-WinRMState
+        $expectedWinRM = if ($savedProfile.WinRM.Enable) { "Enabled" } else { "Disabled" }
+        $results["WinRM"] = @{
+            Expected = $expectedWinRM
+            Current  = $currentWinRM
+            Match    = ($expectedWinRM -eq $currentWinRM)
+        }
+    }
+
+    # Power Plan
+    if ($savedProfile.PowerPlan) {
+        $currentPlan = (Get-CurrentPowerPlan).Name
+        $results["PowerPlan"] = @{
+            Expected = $savedProfile.PowerPlan
+            Current  = $currentPlan
+            Match    = ($savedProfile.PowerPlan -eq $currentPlan)
+        }
+    }
+
+    # Hyper-V
+    if ($savedProfile.InstallHyperV -and $savedProfile.InstallHyperV.Install) {
+        $hvInstalled = Test-HyperVInstalled
+        $results["Hyper-V"] = @{
+            Expected = "Installed"
+            Current  = if ($hvInstalled) { "Installed" } else { "Not Installed" }
+            Match    = $hvInstalled
+        }
+    }
+
+    # MPIO
+    if ($savedProfile.InstallMPIO -and $savedProfile.InstallMPIO.Install) {
+        $mpioInstalled = Test-MPIOInstalled
+        $results["MPIO"] = @{
+            Expected = "Installed"
+            Current  = if ($mpioInstalled) { "Installed" } else { "Not Installed" }
+            Match    = $mpioInstalled
+        }
+    }
+
+    # Failover Clustering
+    if ($savedProfile.InstallFailoverClustering -and $savedProfile.InstallFailoverClustering.Install) {
+        $fcInstalled = Test-FailoverClusteringInstalled
+        $results["FailoverClustering"] = @{
+            Expected = "Installed"
+            Current  = if ($fcInstalled) { "Installed" } else { "Not Installed" }
+            Match    = $fcInstalled
+        }
+    }
+
+    return $results
+}
+
+# Display drift detection results in a formatted report
+function Show-DriftReport {
+    param(
+        [Parameter(Mandatory=$true)]
+        [System.Collections.Specialized.OrderedDictionary]$DriftResults
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                     CONFIGURATION DRIFT REPORT").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    Write-OutputColor "  ┌──────────────────────┬────────────────────────┬────────────────────────┬────────┐" -color "Info"
+    Write-OutputColor "  │ Setting              │ Expected               │ Current                │ Status │" -color "Info"
+    Write-OutputColor "  ├──────────────────────┼────────────────────────┼────────────────────────┼────────┤" -color "Info"
+
+    $matchCount = 0
+    $driftCount = 0
+    $totalCount = 0
+
+    foreach ($key in $DriftResults.Keys) {
+        $item = $DriftResults[$key]
+        $totalCount++
+
+        $expected = if ($item.Expected) { "$($item.Expected)" } else { "(not set)" }
+        $current = if ($item.Current) { "$($item.Current)" } else { "(not set)" }
+        $settingName = $key.PadRight(20).Substring(0, 20)
+        $expectedStr = $expected.PadRight(22)
+        if ($expectedStr.Length -gt 22) { $expectedStr = $expectedStr.Substring(0, 19) + "..." }
+        $currentStr = $current.PadRight(22)
+        if ($currentStr.Length -gt 22) { $currentStr = $currentStr.Substring(0, 19) + "..." }
+
+        if ($item.Match) {
+            $status = " OK   "
+            $color = "Success"
+            $matchCount++
+        } else {
+            $status = " DRIFT"
+            $color = "Error"
+            $driftCount++
+        }
+
+        Write-OutputColor "  │ $settingName │ $expectedStr │ $currentStr │$status│" -color $color
+    }
+
+    Write-OutputColor "  └──────────────────────┴────────────────────────┴────────────────────────┴────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $summaryColor = if ($driftCount -eq 0) { "Success" } else { "Warning" }
+    Write-OutputColor "  Summary: $totalCount checked, $matchCount match, $driftCount drifted" -color $summaryColor
+}
+
+# Interactive drift check — prompts for profile, shows report, offers to apply fixes
+function Start-DriftCheck {
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                    CONFIGURATION DRIFT CHECK").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    Write-OutputColor "  This compares the current server state against a saved profile" -color "Info"
+    Write-OutputColor "  and highlights any settings that have drifted from the expected values." -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Enter the path to a configuration profile JSON file:" -color "Info"
+    $profilePath = Read-Host "  "
+
+    $navResult = Test-NavigationCommand -UserInput $profilePath
+    if ($navResult.ShouldReturn) { return }
+
+    if ([string]::IsNullOrWhiteSpace($profilePath)) {
+        Write-OutputColor "  No path entered." -color "Warning"
+        return
+    }
+
+    if (-not (Test-Path $profilePath)) {
+        Write-OutputColor "  File not found: $profilePath" -color "Error"
+        return
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Analyzing configuration drift..." -color "Info"
+
+    $driftResults = Compare-ConfigurationDrift -ProfilePath $profilePath
+    if ($null -eq $driftResults) { return }
+
+    Show-DriftReport -DriftResults $driftResults
+
+    # Check if there are any drifted settings
+    $drifted = @()
+    foreach ($key in $driftResults.Keys) {
+        if (-not $driftResults[$key].Match) {
+            $drifted += $key
+        }
+    }
+
+    if ($drifted.Count -gt 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Drifted settings: $($drifted -join ', ')" -color "Warning"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  To fix drift, re-apply the profile using Load Configuration Profile" -color "Info"
+        Write-OutputColor "  from the Settings menu." -color "Info"
+    } else {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  No drift detected — server matches the saved profile." -color "Success"
+    }
+}
 #endregion

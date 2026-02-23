@@ -34,8 +34,26 @@ function Start-Show-Mainmenu {
                 Write-PressEnter
             }
             "6" {
-                New-BatchConfigTemplate
-                Write-PressEnter
+                $batchChoice = Show-BatchConfigMenu
+                switch ($batchChoice) {
+                    "1" {
+                        New-BatchConfigTemplate
+                        Write-PressEnter
+                    }
+                    "2" {
+                        Export-BatchConfigFromState
+                        Write-PressEnter
+                    }
+                    { $_ -eq "B" -or $_ -eq "b" -or $_ -eq "back" } {
+                        # Back to main menu
+                    }
+                    default {
+                        if ($batchChoice) {
+                            Write-OutputColor "Invalid choice. Please enter 1, 2, or B." -color "Error"
+                            Start-Sleep -Seconds 2
+                        }
+                    }
+                }
             }
             "7" {
                 Start-Show-SettingsMenu

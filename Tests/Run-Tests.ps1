@@ -5667,6 +5667,271 @@ try {
 }
 
 # ============================================================================
+# SECTION 102: DYNAMIC DEFENDER PATHS
+# ============================================================================
+
+Write-SectionHeader "SECTION 102: DYNAMIC DEFENDER PATHS"
+
+try {
+    $hsContent = Get-Content (Join-Path $modulesPath "40-HostStorage.ps1") -Raw
+    $initContent = Get-Content (Join-Path $modulesPath "00-Initialization.ps1") -Raw
+
+    # Update-DefenderVMPaths function exists
+    Write-TestResult "40-HostStorage: Update-DefenderVMPaths exists" ($hsContent -match 'function\s+Update-DefenderVMPaths')
+
+    # Function references $script:SelectedHostDrive
+    Write-TestResult "Update-DefenderVMPaths: references SelectedHostDrive" ($hsContent -match 'Update-DefenderVMPaths[\s\S]*?script:SelectedHostDrive')
+
+    # Function sets $script:DefenderCommonVMPaths
+    Write-TestResult "Update-DefenderVMPaths: sets DefenderCommonVMPaths" ($hsContent -match 'Update-DefenderVMPaths[\s\S]*?script:DefenderCommonVMPaths')
+
+    # Function checks for C:\ClusterStorage
+    Write-TestResult "Update-DefenderVMPaths: checks ClusterStorage" ($hsContent -match 'Update-DefenderVMPaths[\s\S]*?C:\\ClusterStorage')
+
+    # Initialize-HostStorage calls Update-DefenderVMPaths
+    Write-TestResult "Initialize-HostStorage: calls Update-DefenderVMPaths" ($hsContent -match 'Initialize-HostStorage[\s\S]*?Update-DefenderVMPaths')
+
+    # Initialization: DefenderCommonVMPaths initialized as empty array
+    Write-TestResult "00-Initialization: DefenderCommonVMPaths initialized as empty array" ($initContent -match 'DefenderCommonVMPaths\s*=\s*@\(\)')
+
+} catch {
+    Write-TestResult "Dynamic Defender Paths Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 103: BATCH MODE HOST EXTENSIONS
+# ============================================================================
+
+Write-SectionHeader "SECTION 103: BATCH MODE HOST EXTENSIONS"
+
+try {
+    $bcContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+    $epContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+
+    # Template contains host extension keys
+    Write-TestResult "36-BatchConfig: template has CreateSETSwitch" ($bcContent -match '"CreateSETSwitch"')
+    Write-TestResult "36-BatchConfig: template has ConfigureiSCSI" ($bcContent -match '"ConfigureiSCSI"')
+    Write-TestResult "36-BatchConfig: template has ConfigureMPIO" ($bcContent -match '"ConfigureMPIO"')
+    Write-TestResult "36-BatchConfig: template has InitializeHostStorage" ($bcContent -match '"InitializeHostStorage"')
+    Write-TestResult "36-BatchConfig: template has HostStorageDrive" ($bcContent -match '"HostStorageDrive"')
+    Write-TestResult "36-BatchConfig: template has ConfigureDefenderExclusions" ($bcContent -match '"ConfigureDefenderExclusions"')
+    Write-TestResult "36-BatchConfig: template has SETSwitchName" ($bcContent -match '"SETSwitchName"')
+    Write-TestResult "36-BatchConfig: template has SETAdapterMode" ($bcContent -match '"SETAdapterMode"')
+    Write-TestResult "36-BatchConfig: template has iSCSIHostNumber" ($bcContent -match '"iSCSIHostNumber"')
+
+    # Functions exist
+    Write-TestResult "36-BatchConfig: Show-BatchConfigMenu exists" ($bcContent -match 'function\s+Show-BatchConfigMenu')
+    Write-TestResult "36-BatchConfig: Export-BatchConfigFromState exists" ($bcContent -match 'function\s+Export-BatchConfigFromState')
+
+    # EntryPoint: totalSteps is 19
+    Write-TestResult "50-EntryPoint: totalSteps is 19" ($epContent -match 'totalSteps\s*=\s*19')
+
+    # EntryPoint: step 15 mentions Host Storage or Initialize
+    Write-TestResult "50-EntryPoint: step 15 is Host Storage" ($epContent -match '15.*Host\s*Storage|15.*Initialize')
+
+    # EntryPoint: step 16 mentions SET
+    Write-TestResult "50-EntryPoint: step 16 is SET" ($epContent -match '16.*SET')
+
+    # EntryPoint: step 17 mentions iSCSI
+    Write-TestResult "50-EntryPoint: step 17 is iSCSI" ($epContent -match '17.*iSCSI')
+
+    # EntryPoint: step 18 mentions MPIO
+    Write-TestResult "50-EntryPoint: step 18 is MPIO" ($epContent -match '18.*MPIO')
+
+    # EntryPoint: step 19 mentions Defender
+    Write-TestResult "50-EntryPoint: step 19 is Defender" ($epContent -match '19.*Defender')
+
+    # Test-BatchConfig validates SETAdapterMode
+    Write-TestResult "50-EntryPoint: Test-BatchConfig validates SETAdapterMode" ($epContent -match 'Test-BatchConfig[\s\S]*?SETAdapterMode')
+
+    # Test-BatchConfig validates iSCSIHostNumber
+    Write-TestResult "50-EntryPoint: Test-BatchConfig validates iSCSIHostNumber" ($epContent -match 'Test-BatchConfig[\s\S]*?iSCSIHostNumber')
+
+    # Test-BatchConfig validates HostStorageDrive
+    Write-TestResult "50-EntryPoint: Test-BatchConfig validates HostStorageDrive" ($epContent -match 'Test-BatchConfig[\s\S]*?HostStorageDrive')
+
+} catch {
+    Write-TestResult "Batch Mode Host Extensions Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 104: BATCH CONFIG FROM STATE
+# ============================================================================
+
+Write-SectionHeader "SECTION 104: BATCH CONFIG FROM STATE"
+
+try {
+    $bcContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+    $mrContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
+
+    # Export-BatchConfigFromState function exists
+    Write-TestResult "36-BatchConfig: Export-BatchConfigFromState exists" ($bcContent -match 'function\s+Export-BatchConfigFromState')
+
+    # Function detects ConfigType via Test-HyperVInstalled
+    Write-TestResult "Export-BatchConfigFromState: detects ConfigType via Test-HyperVInstalled" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Test-HyperVInstalled')
+
+    # Function queries Get-NetAdapter
+    Write-TestResult "Export-BatchConfigFromState: queries Get-NetAdapter" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Get-NetAdapter')
+
+    # Function queries Get-CimInstance Win32_ComputerSystem
+    Write-TestResult "Export-BatchConfigFromState: queries Win32_ComputerSystem" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Win32_ComputerSystem')
+
+    # Function queries Get-TimeZone
+    Write-TestResult "Export-BatchConfigFromState: queries Get-TimeZone" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Get-TimeZone')
+
+    # Function queries Get-RDPState
+    Write-TestResult "Export-BatchConfigFromState: queries Get-RDPState" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Get-RDPState')
+
+    # Function queries Get-WinRMState
+    Write-TestResult "Export-BatchConfigFromState: queries Get-WinRMState" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Get-WinRMState')
+
+    # Function queries Get-CurrentPowerPlan
+    Write-TestResult "Export-BatchConfigFromState: queries Get-CurrentPowerPlan" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Get-CurrentPowerPlan')
+
+    # Function detects SET switch via Get-VMSwitch
+    Write-TestResult "Export-BatchConfigFromState: detects SET switch via Get-VMSwitch" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Get-VMSwitch')
+
+    # Function detects iSCSI sessions via Get-IscsiSession
+    Write-TestResult "Export-BatchConfigFromState: detects iSCSI via Get-IscsiSession" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Get-IscsiSession')
+
+    # Function outputs JSON via ConvertTo-Json
+    Write-TestResult "Export-BatchConfigFromState: outputs JSON via ConvertTo-Json" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?ConvertTo-Json')
+
+    # Function calls Add-SessionChange
+    Write-TestResult "Export-BatchConfigFromState: calls Add-SessionChange" ($bcContent -match 'Export-BatchConfigFromState[\s\S]*?Add-SessionChange')
+
+    # Menu runner case "6" calls Show-BatchConfigMenu
+    Write-TestResult "49-MenuRunner: case 6 calls Show-BatchConfigMenu" ($mrContent -match '"6"[\s\S]*?Show-BatchConfigMenu')
+
+    # Menu runner handles option "2" calling Export-BatchConfigFromState
+    Write-TestResult "49-MenuRunner: batch menu option 2 calls Export-BatchConfigFromState" ($mrContent -match '"2"[\s\S]*?Export-BatchConfigFromState')
+
+} catch {
+    Write-TestResult "Batch Config From State Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 105: EXECUTABLE FAVORITES
+# ============================================================================
+
+Write-SectionHeader "SECTION 105: EXECUTABLE FAVORITES"
+
+try {
+    $qolContent = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
+
+    # $script:FavoriteDispatch variable exists
+    Write-TestResult "55-QoLFeatures: FavoriteDispatch variable exists" ($qolContent -match 'script:FavoriteDispatch')
+
+    # Dispatch map contains expected entries
+    Write-TestResult "55-QoLFeatures: dispatch has Configure SET" ($qolContent -match 'Configure SET')
+    Write-TestResult "55-QoLFeatures: dispatch has Host Storage Setup" ($qolContent -match 'Host Storage Setup')
+    Write-TestResult "55-QoLFeatures: dispatch has VM Deployment" ($qolContent -match 'VM Deployment')
+    Write-TestResult "55-QoLFeatures: dispatch has Network Diagnostics" ($qolContent -match 'Network Diagnostics')
+    Write-TestResult "55-QoLFeatures: dispatch has Configuration Drift Check" ($qolContent -match 'Configuration Drift Check')
+
+    # Add-Favorite accepts FunctionName parameter
+    Write-TestResult "55-QoLFeatures: Add-Favorite accepts FunctionName param" ($qolContent -match 'Add-Favorite[\s\S]*?\$FunctionName')
+
+    # Add-Favorite auto-populates from dispatch map
+    Write-TestResult "55-QoLFeatures: Add-Favorite uses dispatch map" ($qolContent -match 'FavoriteDispatch\.ContainsKey|FavoriteDispatch\[')
+
+    # Show-Favorites invokes function when selected
+    Write-TestResult "55-QoLFeatures: Show-Favorites invokes function" ($qolContent -match 'Show-Favorites[\s\S]*?(&\s+\$|Invoke-Command|FunctionName)')
+
+} catch {
+    Write-TestResult "Executable Favorites Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 106: CONFIGURATION DRIFT DETECTION
+# ============================================================================
+
+Write-SectionHeader "SECTION 106: CONFIGURATION DRIFT DETECTION"
+
+try {
+    $ceContent = Get-Content (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw
+
+    # Compare-ConfigurationDrift function exists
+    Write-TestResult "45-ConfigExport: Compare-ConfigurationDrift exists" ($ceContent -match 'function\s+Compare-ConfigurationDrift')
+
+    # Function accepts ProfilePath parameter
+    Write-TestResult "Compare-ConfigurationDrift: accepts ProfilePath param" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?\$ProfilePath')
+
+    # Function checks hostname drift
+    Write-TestResult "Compare-ConfigurationDrift: checks hostname drift" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?Hostname')
+
+    # Function checks IP drift
+    Write-TestResult "Compare-ConfigurationDrift: checks IP drift" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?IPAddress')
+
+    # Function checks DNS drift
+    Write-TestResult "Compare-ConfigurationDrift: checks DNS drift" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?DNS')
+
+    # Function checks domain drift
+    Write-TestResult "Compare-ConfigurationDrift: checks domain drift" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?Domain')
+
+    # Function checks timezone drift
+    Write-TestResult "Compare-ConfigurationDrift: checks timezone drift" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?TimeZone')
+
+    # Function checks RDP state
+    Write-TestResult "Compare-ConfigurationDrift: checks RDP state" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?RDP')
+
+    # Function checks WinRM state
+    Write-TestResult "Compare-ConfigurationDrift: checks WinRM state" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?WinRM')
+
+    # Function checks power plan
+    Write-TestResult "Compare-ConfigurationDrift: checks power plan" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?PowerPlan|Compare-ConfigurationDrift[\s\S]*?Power\s*Plan')
+
+    # Function checks Hyper-V installation
+    Write-TestResult "Compare-ConfigurationDrift: checks Hyper-V" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?Hyper-V|Compare-ConfigurationDrift[\s\S]*?HyperV')
+
+    # Function checks MPIO installation
+    Write-TestResult "Compare-ConfigurationDrift: checks MPIO" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?MPIO')
+
+    # Function checks Failover Clustering
+    Write-TestResult "Compare-ConfigurationDrift: checks Failover Clustering" ($ceContent -match 'Compare-ConfigurationDrift[\s\S]*?FailoverClustering|Compare-ConfigurationDrift[\s\S]*?Failover')
+
+    # Show-DriftReport function exists
+    Write-TestResult "45-ConfigExport: Show-DriftReport exists" ($ceContent -match 'function\s+Show-DriftReport')
+
+    # Show-DriftReport shows match count and drift count
+    Write-TestResult "Show-DriftReport: shows match and drift counts" ($ceContent -match 'Show-DriftReport[\s\S]*?match' -and $ceContent -match 'Show-DriftReport[\s\S]*?drift')
+
+    # Start-DriftCheck function exists
+    Write-TestResult "45-ConfigExport: Start-DriftCheck exists" ($ceContent -match 'function\s+Start-DriftCheck')
+
+    # Start-DriftCheck calls Compare-ConfigurationDrift
+    Write-TestResult "Start-DriftCheck: calls Compare-ConfigurationDrift" ($ceContent -match 'Start-DriftCheck[\s\S]*?Compare-ConfigurationDrift')
+
+    # Start-DriftCheck calls Show-DriftReport
+    Write-TestResult "Start-DriftCheck: calls Show-DriftReport" ($ceContent -match 'Start-DriftCheck[\s\S]*?Show-DriftReport')
+
+} catch {
+    Write-TestResult "Configuration Drift Detection Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 107: OPERATIONS MENU DRIFT CHECK
+# ============================================================================
+
+Write-SectionHeader "SECTION 107: OPERATIONS MENU DRIFT CHECK"
+
+try {
+    $omContent = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+
+    # Menu displays option 12 for drift check
+    Write-TestResult "56-OperationsMenu: menu has option 12 for Drift" ($omContent -match '\[12\].*Drift|Configuration Drift')
+
+    # Switch handles case "12"
+    Write-TestResult "56-OperationsMenu: switch handles case 12" ($omContent -match '"12"')
+
+    # Case "12" calls Start-DriftCheck
+    Write-TestResult "56-OperationsMenu: case 12 calls Start-DriftCheck" ($omContent -match '"12"[\s\S]*?Start-DriftCheck')
+
+} catch {
+    Write-TestResult "Operations Menu Drift Check Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 

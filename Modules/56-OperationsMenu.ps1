@@ -47,6 +47,7 @@ function Show-OperationsMenu {
         Write-MenuItem "[9]  Generate HTML Readiness Report"
         Write-MenuItem "[10] Export Profile Comparison (HTML)"
         Write-MenuItem "[11] Network Diagnostics ►"
+        Write-MenuItem "[12] Configuration Drift Check"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -94,6 +95,10 @@ function Show-OperationsMenu {
             }
             "11" {
                 Show-NetworkDiagnostics
+            }
+            "12" {
+                Start-DriftCheck
+                Write-PressEnter
             }
             "b" { return }
             "B" { return }
@@ -434,6 +439,9 @@ function Import-Defaults {
     }
     if ($merged.DefenderCommonVMPaths -and $merged.DefenderCommonVMPaths -is [array]) {
         $script:DefenderCommonVMPaths = @($merged.DefenderCommonVMPaths)
+    } else {
+        # Auto-generate from current host drive if not overridden
+        Update-DefenderVMPaths
     }
 
     # Override storage paths

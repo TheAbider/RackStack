@@ -31,19 +31,62 @@ function Export-Favorites {
     }
 }
 
+# Dispatch map: maps favorite names to executable function names
+$script:FavoriteDispatch = @{
+    "Configure SET"              = "New-SwitchEmbeddedTeam"
+    "Set IP Address"             = "Set-StaticIP"
+    "Set DNS"                    = "Set-DNSServers"
+    "Set Hostname"               = "Set-Hostname"
+    "Join Domain"                = "Join-Domain"
+    "Install Hyper-V"            = "Install-HyperVRole"
+    "Install MPIO"               = "Install-MPIOFeature"
+    "Enable RDP"                 = "Enable-RDP"
+    "Enable WinRM"               = "Enable-WinRM"
+    "Configure Firewall"         = "Configure-Firewall"
+    "Defender Exclusions"        = "Set-DefenderExclusions"
+    "Add Local Admin"            = "Add-LocalAdmin"
+    "Host Storage Setup"         = "Initialize-HostStorage"
+    "iSCSI Configuration"        = "Set-iSCSIConfiguration"
+    "VM Deployment"              = "Show-VMDeploymentMenu"
+    "Pagefile Configuration"     = "Set-PagefileConfiguration"
+    "SNMP Configuration"         = "Set-SNMPConfiguration"
+    "Performance Dashboard"      = "Show-PerformanceDashboard"
+    "Cluster Dashboard"          = "Show-ClusterDashboard"
+    "NTP Configuration"          = "Set-NTPConfiguration"
+    "Windows Updates"            = "Install-WindowsUpdates"
+    "License Server"             = "Show-LicenseMenu"
+    "Set Power Plan"             = "Set-PowerPlan"
+    "Storage Manager"            = "Show-StorageMenu"
+    "BitLocker Management"       = "Show-BitLockerMenu"
+    "Certificate Management"     = "Show-CertificateMenu"
+    "Network Diagnostics"        = "Show-NetworkDiagnostics"
+    "HTML Health Report"         = "Export-HTMLHealthReport"
+    "HTML Readiness Report"      = "Export-HTMLReadinessReport"
+    "Windows Server Backup"      = "Install-WindowsServerBackup"
+    "VHD Management"             = "Show-VHDManagementMenu"
+    "Configuration Drift Check"  = "Start-DriftCheck"
+}
+
 # Add a favorite
 function Add-Favorite {
     param(
         [string]$Name,
         [string]$MenuPath,
-        [string]$Description = ""
+        [string]$Description = "",
+        [string]$FunctionName = ""
     )
 
     Import-Favorites
 
+    # Auto-detect function name from dispatch map if not provided
+    if (-not $FunctionName -and $script:FavoriteDispatch.ContainsKey($Name)) {
+        $FunctionName = $script:FavoriteDispatch[$Name]
+    }
+
     $favorite = @{
         Name = $Name
         MenuPath = $MenuPath
+        FunctionName = $FunctionName
         Description = $Description
         AddedDate = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
     }
@@ -96,8 +139,8 @@ function Show-Favorites {
     $navResult = Test-NavigationCommand -UserInput $choice
     if ($navResult.ShouldReturn) { return }
 
-    switch ("$choice".ToUpper()) {
-        "A" {
+    switch -Regex ($choice) {
+        '^[Aa]$' {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  Enter favorite name:" -color "Info"
             $name = Read-Host "  "
@@ -111,7 +154,7 @@ function Show-Favorites {
             Write-OutputColor "  Favorite added!" -color "Success"
             Start-Sleep -Seconds 1
         }
-        "D" {
+        '^[Dd]$' {
             if ($script:Favorites.Count -eq 0) { return }
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  Enter number to delete:" -color "Info"
@@ -125,7 +168,7 @@ function Show-Favorites {
                 Start-Sleep -Seconds 1
             }
         }
-        "C" {
+        '^[Cc]$' {
             if (Confirm-UserAction -Message "Clear all favorites?") {
                 $script:Favorites = @()
                 Export-Favorites
@@ -133,7 +176,23 @@ function Show-Favorites {
                 Start-Sleep -Seconds 1
             }
         }
-        "B" { return }
+        '^[Bb]$' { return }
+        '^\d+$' {
+            $favIndex = [int]$choice - 1
+            if ($favIndex -ge 0 -and $favIndex -lt $script:Favorites.Count) {
+                $selectedFav = $script:Favorites[$favIndex]
+                $funcName = $selectedFav.FunctionName
+                if ($funcName -and (Get-Command $funcName -ErrorAction SilentlyContinue)) {
+                    & $funcName
+                } else {
+                    Write-OutputColor "  Navigate to: $($selectedFav.MenuPath)" -color "Info"
+                    Write-PressEnter
+                }
+            } else {
+                Write-OutputColor "  Invalid selection." -color "Error"
+                Start-Sleep -Seconds 1
+            }
+        }
     }
 }
 
