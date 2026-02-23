@@ -1,0 +1,28 @@
+# Credentials (org-specific URLs, keys, passwords)
+defaults.json
+!defaults.example.json
+
+# Build artifacts
+*.exe
+
+# Local development files (not for public repo)
+local/
+
+# Transcripts and logs
+*.transcript
+*.log
+
+# IDE and editor files
+.vscode/
+*.code-workspace
+.idea/
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~

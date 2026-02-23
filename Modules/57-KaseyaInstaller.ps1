@@ -1,0 +1,794 @@
+﻿#region ===== AGENT INSTALLER =====
+# Function to check if the configured agent is installed
+function Test-AgentInstalled {
+    # Check for agent service
+    $agentService = Get-Service -Name $script:AgentInstaller.ServiceName -ErrorAction SilentlyContinue
+    if ($agentService) {
+        return @{ Installed = $true; Status = $agentService.Status; ServiceName = $agentService.Name }
+    }
+
+    # Check configured installation paths
+    foreach ($path in $script:AgentInstaller.InstallPaths) {
+        $expandedPath = [Environment]::ExpandEnvironmentVariables($path)
+        if (Test-Path $expandedPath) {
+            return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
+        }
+    }
+
+    return @{ Installed = $false }
+}
+
+# Function to get agent installers from FileServer (with caching)
+function Get-AgentInstallerList {
+    param([switch]$ForceRefresh)
+
+    # Check cache
+    if (-not $ForceRefresh -and $script:AgentInstallerCache -and $script:AgentInstallerCacheTime) {
+        $cacheAge = (Get-Date) - $script:AgentInstallerCacheTime
+        if ($cacheAge.TotalMinutes -lt $script:CacheTTLMinutes) {
+            return $script:AgentInstallerCache
+        }
+    }
+
+    Write-OutputColor "  Fetching agent list from FileServer..." -color "Info"
+
+    try {
+        $files = Get-FileServerFiles -FolderPath $script:AgentInstaller.FolderName -ForceRefresh:$ForceRefresh
+        $agents = @()
+
+        foreach ($file in $files) {
+            $fileName = $file.FileName
+
+            if ($fileName -match $script:AgentInstaller.FilePattern) {
+                $parsed = ConvertFrom-AgentFilename -FileName $fileName
+                if ($parsed.Valid -and $parsed.SiteNumbers.Count -gt 0) {
+                    $agents += @{
+                        FilePath = $file.FilePath
+                        FileName = $fileName
+                        SiteNumbers = $parsed.SiteNumbers
+                        SiteName = $parsed.SiteName
+                        DisplayName = $parsed.DisplayName
+                    }
+                }
+            }
+        }
+
+        # Deduplicate agents with same site numbers + name (e.g., .staging variants)
+        $seen = @{}
+        $unique = @()
+        foreach ($a in $agents) {
+            $key = ((@($a.SiteNumbers) -join ',') + '|' + $a.SiteName).ToLower()
+            if (-not $seen.ContainsKey($key)) {
+                $seen[$key] = $true
+                $unique += $a
+            }
+        }
+        $agents = $unique
+
+        # Update cache
+        $script:AgentInstallerCache = $agents
+        $script:AgentInstallerCacheTime = Get-Date
+
+        Write-OutputColor "  Found $($agents.Count) $($script:AgentInstaller.ToolName) agents." -color "Success"
+        return $agents
+    }
+    catch {
+        Write-OutputColor "  Failed to fetch agent list: $($_.Exception.Message)" -color "Error"
+        return @()
+    }
+}
+
+# Parse agent filename to extract site numbers and name
+# Smart parsing for Kaseya naming convention (Kaseya_<org>.{numbers}-{name}.exe)
+# Falls back to raw filename for other agent types
+function ConvertFrom-AgentFilename {
+    param([string]$FileName)
+
+    # Formats handled (Kaseya_<org>.{numbers}-{name}.exe):
+    # Kaseya_acme.1001-mainoffice.exe
+    # Kaseya_acme.2001-2002-2005-westbranch.exe
+    # Kaseya_acme.3001.exe (no site name)
+    # Kaseya_acme.4001-eastsite.staging.exe (has .staging suffix)
+    # Kaseya_acme.5001_5002-north-dc.exe (underscore between numbers)
+    # Kaseya_acme.6001-labsite.workstations.exe (has .workstations suffix)
+    $result = @{ SiteNumbers = @(); SiteName = ""; DisplayName = ""; Valid = $false }
+
+    # Remove any suffix like .staging, .workstations before .exe
+    $cleanName = $FileName -replace '\.(staging|workstations|linac-workstations)\.exe$', '.exe'
+
+    # Try Kaseya naming convention: Kaseya_<org>.{numbers}-{name}.exe
+    # Numbers can be separated by - or _
+    if ($cleanName -match 'Kaseya_[a-zA-Z0-9]+\.([0-9_\-]+)(?:-([a-zA-Z][a-zA-Z0-9\-]*))?\.exe$') {
+        $regexMatches = $matches
+        $numbersPart = $regexMatches[1]
+        $namePart = if ($regexMatches[2]) { $regexMatches[2] } else { "" }
+
+        # Split numbers by - or _ and filter to valid numbers only
+        $numbers = $numbersPart -split '[-_]' | Where-Object { $_ -match '^\d+$' }
+
+        if ($numbers.Count -gt 0) {
+            $result.SiteNumbers = @($numbers)
+            $result.SiteName = $namePart
+            $result.Valid = $true
+
+            # Build display name
+            if ($namePart) {
+                $result.DisplayName = "$namePart (Sites: $($numbers -join ', '))"
+            } else {
+                $result.DisplayName = "Site $($numbers -join ', ')"
+            }
+            return $result
+        }
+    }
+
+    # Fallback: use raw filename for non-Kaseya agents (must be .exe)
+    if ($FileName -notmatch '\.exe$') {
+        return $result
+    }
+
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
+    if ($baseName -match '^(\d+)') {
+        $result.SiteNumbers = @($matches[1])
+        $result.SiteName = $baseName
+        $result.DisplayName = $baseName
+        $result.Valid = $true
+    } elseif ($baseName) {
+        $result.SiteNumbers = @("0")
+        $result.SiteName = $baseName
+        $result.DisplayName = $baseName
+        $result.Valid = $true
+    }
+
+    return $result
+}
+
+# Search for agent by site number or name
+function Search-AgentInstaller {
+    param(
+        [string]$SearchTerm,
+        [array]$Agents
+    )
+
+    if (-not $Agents -or $Agents.Count -eq 0) {
+        return @()
+    }
+
+    $results = @()
+
+    # Normalize search term - remove leading zeros for number searches
+    $normalizedSearch = $SearchTerm.TrimStart('0')
+    $isNumeric = $SearchTerm -match '^\d+$'
+
+    foreach ($agent in $Agents) {
+        $matched = $false
+
+        if ($isNumeric) {
+            # Search by site number - match any site number in the list
+            foreach ($siteNum in @($agent.SiteNumbers)) {
+                $normalizedSiteNum = ([string]$siteNum).TrimStart('0')
+                if ($normalizedSiteNum -eq $normalizedSearch -or $siteNum -eq $SearchTerm) {
+                    $matched = $true
+                    break
+                }
+            }
+        }
+        else {
+            # Search by site name (partial match, case insensitive)
+            if ($agent.SiteName -like "*$SearchTerm*") {
+                $matched = $true
+            }
+        }
+
+        if ($matched) {
+            $results += $agent
+        }
+    }
+
+    return $results
+}
+
+# Extract site number from hostname
+function Get-SiteNumberFromHostname {
+    $hostname = $env:COMPUTERNAME
+
+    # Hostname format: 001001-HV1, 001001-FS1, etc. (site number at start, then dash)
+    if ($hostname -match '^(\d{3,6})-') {
+        $regexMatches = $matches
+        return $regexMatches[1]
+    }
+
+    return $null
+}
+
+# Show list of all agents
+function Show-AgentInstallerList {
+    param([array]$Agents)
+
+    if (-not $Agents -or $Agents.Count -eq 0) {
+        Write-OutputColor "  No agents found in FileServer folder." -color "Warning"
+        return $null
+    }
+
+    $toolName = $script:AgentInstaller.ToolName
+
+    # Sort by first site number numerically (smallest to largest)
+    $allAgents = $Agents | Sort-Object { [int](([string]@($_.SiteNumbers)[0]).TrimStart('0') -replace '^$','0') }
+    $displayAgents = $allAgents
+    $searchFilter = $null
+
+    $pageSize = 25
+    $currentPage = 0
+
+    while ($true) {
+        $totalPages = [math]::Max(1, [math]::Ceiling($displayAgents.Count / $pageSize))
+        if ($currentPage -ge $totalPages) { $currentPage = 0 }
+        $startIdx = $currentPage * $pageSize
+        $endIdx = [math]::Min($startIdx + $pageSize - 1, $displayAgents.Count - 1)
+
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        if ($searchFilter) {
+            $header = "  SEARCH: '$searchFilter' ($($displayAgents.Count) results) - Page $($currentPage + 1) of $totalPages"
+        } else {
+            $header = "  AVAILABLE $($toolName.ToUpper()) AGENTS ($($displayAgents.Count) total) - Page $($currentPage + 1) of $totalPages"
+        }
+        Write-OutputColor "  │$($header.PadRight(72))│" -color "Success"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        if ($displayAgents.Count -eq 0) {
+            Write-OutputColor "  │$("  No agents match '$searchFilter'".PadRight(72))│" -color "Warning"
+        } else {
+            for ($i = $startIdx; $i -le $endIdx; $i++) {
+                $agent = $displayAgents[$i]
+                $num = $i + 1
+                $siteNums = ($agent.SiteNumbers -join ',').PadRight(20)
+                $siteName = if ($agent.SiteName) { $agent.SiteName } else { "(unknown)" }
+                $siteName = $siteName.PadRight(30)
+                $display = "  [$num] $siteNums $siteName"
+                Write-OutputColor "  │$($display.PadRight(72))│" -color "Info"
+            }
+        }
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        # Navigation hints
+        $nav = @()
+        if ($currentPage -gt 0) { $nav += "[P] ◄ Prev" }
+        if ($currentPage -lt $totalPages - 1) { $nav += "[N] Next ►" }
+        $nav += "[S] Search"
+        if ($searchFilter) { $nav += "[A] Show All" }
+        $nav += "[B] ◄ Back"
+        Write-OutputColor "  Enter number to select, or: $($nav -join '  ')" -color "Info"
+
+        $selection = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $selection
+        if ($navResult.ShouldReturn) { return $null }
+
+        switch ("$selection".ToUpper()) {
+            'N' { if ($currentPage -lt $totalPages - 1) { $currentPage++ } }
+            'P' { if ($currentPage -gt 0) { $currentPage-- } }
+            'S' {
+                Write-OutputColor "  Enter site number or name to filter:" -color "Info"
+                $searchFilter = Read-Host "  Search"
+                $navResult = Test-NavigationCommand -UserInput $searchFilter
+                if ($navResult.ShouldReturn) { $searchFilter = $null; continue }
+                if ($searchFilter) {
+                    $displayAgents = @(Search-AgentInstaller -SearchTerm $searchFilter -Agents $allAgents)
+                    $currentPage = 0
+                } else {
+                    $searchFilter = $null
+                    $displayAgents = $allAgents
+                }
+            }
+            'A' {
+                $searchFilter = $null
+                $displayAgents = $allAgents
+                $currentPage = 0
+            }
+            'B' { return $null }
+            default {
+                if ($selection -match '^\d+$') {
+                    $idx = [int]$selection - 1
+                    if ($idx -ge 0 -and $idx -lt $displayAgents.Count) {
+                        return $displayAgents[$idx]
+                    }
+                    Write-OutputColor "  Invalid number. Valid range: 1-$($displayAgents.Count)" -color "Warning"
+                    Start-Sleep -Seconds 1
+                }
+            }
+        }
+    }
+}
+
+# Install selected agent
+function Install-SelectedAgent {
+    param([hashtable]$Agent)
+
+    if (-not $Agent) { return }
+
+    $toolName = $script:AgentInstaller.ToolName
+    $tempPath = Join-Path $env:TEMP $Agent.FileName
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  SELECTED AGENT".PadRight(72))│" -color "Success"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    Write-OutputColor "  │$("  Site Name:    $($Agent.SiteName)".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  Site Numbers: $($Agent.SiteNumbers -join ', ')".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  File:         $($Agent.FileName)".PadRight(72))│" -color "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    if (-not (Confirm-UserAction -Message "Download and install this $toolName Agent?")) {
+        Write-OutputColor "  Installation cancelled." -color "Info"
+        return
+    }
+
+    # Download using Get-FileServerFile (from FILESERVER DOWNLOAD region)
+    $dlResult = Get-FileServerFile -FilePath $Agent.FilePath -DestinationPath $env:TEMP -FileName $Agent.FileName
+
+    if (-not $dlResult.Success -or -not (Test-Path $tempPath)) {
+        Write-OutputColor "  Failed to download installer. $($dlResult.Error)" -color "Error"
+        return
+    }
+
+    # Run installer
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Running $toolName Agent installer..." -color "Info"
+    Write-OutputColor "  This may take several minutes." -color "Info"
+
+    $installTimeout = $script:AgentInstaller.TimeoutSeconds
+
+    try {
+        $elapsed = 0
+        $installArgs = $script:AgentInstaller.InstallArgs -split '\s+'
+        $installJob = Start-Job -ScriptBlock {
+            param($installerPath, $argList)
+            try {
+                $process = Start-Process -FilePath $installerPath -ArgumentList $argList -Wait -PassThru -ErrorAction Stop
+                return @{ Success = $true; ExitCode = $process.ExitCode }
+            }
+            catch {
+                return @{ Success = $false; Error = $_.Exception.Message }
+            }
+        } -ArgumentList $tempPath, $installArgs
+
+        while ($installJob.State -eq "Running") {
+            Show-ProgressMessage -Activity "Installing $toolName Agent" -Status "Please wait..." -SecondsElapsed $elapsed
+            Start-Sleep -Seconds 1
+            $elapsed++
+
+            if ($elapsed -gt $installTimeout) {
+                Stop-Job $installJob -ErrorAction SilentlyContinue
+                Remove-Job $installJob -Force -ErrorAction SilentlyContinue
+                Write-Host ""
+                Write-OutputColor "  Installation timed out after $installTimeout seconds." -color "Warning"
+                Add-SessionChange -Category "Software" -Description "$toolName Agent installation timed out after ${installTimeout}s"
+                return
+            }
+        }
+        Write-Host ""
+
+        $result = Receive-Job $installJob
+        Remove-Job $installJob -Force -ErrorAction SilentlyContinue
+
+        if (-not $result.Success) {
+            Write-OutputColor "  Installer failed to launch: $($result.Error)" -color "Error"
+            return
+        }
+
+        $exitCode = $result.ExitCode
+        $exitDesc = switch ($exitCode) {
+            0       { "Success" }
+            1641    { "Reboot initiated by installer" }
+            3010    { "Success (reboot required)" }
+            1602    { "User cancelled" }
+            1603    { "Fatal error during installation" }
+            default { "Error (code $exitCode)" }
+        }
+
+        # Determine if install was successful based on configured success codes
+        $installOK = $exitCode -in $script:AgentInstaller.SuccessExitCodes
+
+        # Post-install service verification
+        $serviceStatus = "Not checked"
+        $serviceColor = "Warning"
+        $overallStatus = "UNKNOWN"
+        $overallColor = "Warning"
+
+        if ($installOK) {
+            # Poll for agent service to appear
+            $verifyElapsed = 0
+            $verifyTimeout = 60
+            $agentResult = $null
+
+            while ($verifyElapsed -lt $verifyTimeout) {
+                Show-ProgressMessage -Activity "Waiting for $toolName Agent service" -Status "Verifying..." -SecondsElapsed $verifyElapsed
+                Start-Sleep -Seconds 2
+                $verifyElapsed += 2
+
+                $agentResult = Test-AgentInstalled
+                if ($agentResult.Installed) {
+                    break
+                }
+            }
+            Write-Host ""
+
+            if ($null -ne $agentResult -and $agentResult.Installed) {
+                if ($agentResult.Status -eq "Running") {
+                    $serviceStatus = "Running"
+                    $serviceColor = "Success"
+                    $overallStatus = "SUCCESS"
+                    $overallColor = "Success"
+                } else {
+                    $serviceStatus = "$($agentResult.Status) (may need time to start)"
+                    $serviceColor = "Warning"
+                    $overallStatus = "INSTALLED"
+                    $overallColor = "Success"
+                }
+            } else {
+                $serviceStatus = "Not detected (may need reboot or manual check)"
+                $serviceColor = "Warning"
+                $overallStatus = "NEEDS VERIFICATION"
+                $overallColor = "Warning"
+            }
+        } else {
+            if ($exitCode -eq 1602) {
+                $overallStatus = "CANCELLED"
+                $overallColor = "Warning"
+            } else {
+                $overallStatus = "FAILED"
+                $overallColor = "Error"
+            }
+            $serviceStatus = "N/A"
+        }
+
+        # Display result box
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  INSTALLATION RESULT".PadRight(72))│" -color $overallColor
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Agent:     $($Agent.DisplayName)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Install:   $exitDesc".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Service:   $serviceStatus".PadRight(72))│" -color $serviceColor
+        Write-OutputColor "  │$("  Status:    $overallStatus".PadRight(72))│" -color $overallColor
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+        if ($installOK) {
+            Add-SessionChange -Category "Software" -Description "Installed $toolName Agent ($($Agent.SiteName))"
+            # Clear menu cache so Roles & Features shows updated status
+            $script:MenuCache["AgentInstalled"] = $null
+            $script:MenuCache["AgentInstalled_LastUpdate"] = $null
+        }
+
+        if ($exitCode -eq 3010 -or $exitCode -eq 1641) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
+            $global:RebootNeeded = $true
+        }
+    }
+    finally {
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Main agent installation menu
+function Install-KaseyaAgent {
+    param(
+        [switch]$ReturnAfterInstall  # Returns after successful install (for domain join flow)
+    )
+
+    $toolName = $script:AgentInstaller.ToolName
+
+    # --- Section: Initialization ---
+    $hostname = $env:COMPUTERNAME
+
+    # --- Section: Step 0 - Pending Hostname Change Check ---
+    # STEP 0: Check for pending hostname change (requires reboot before agent install)
+    $pendingName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName" -ErrorAction SilentlyContinue).ComputerName
+    $activeName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName" -ErrorAction SilentlyContinue).ComputerName
+    if ($pendingName -and $activeName -and $pendingName -ne $activeName) {
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$("                        REBOOT REQUIRED".PadRight(72))║" -color "Warning"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  PENDING HOSTNAME CHANGE".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Current Name:  $activeName".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Pending Name:  $pendingName".PadRight(72))│" -color "Success"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  A hostname change is pending. The server must be rebooted before" -color "Warning"
+        Write-OutputColor "  installing $toolName Agent so the correct hostname is used." -color "Warning"
+        Write-OutputColor "" -color "Info"
+        if (Confirm-UserAction -Message "Reboot now to apply hostname change?") {
+            Add-SessionChange -Category "System" -Description "Rebooting to apply hostname change before $toolName install"
+            Restart-Computer -Force
+        }
+        Write-PressEnter
+        return
+    }
+
+    # --- Section: Step 1 - Validate Hostname Format ---
+    # STEP 1: Check if hostname is a default Windows name
+    if ($hostname -match '^WIN-' -or $hostname -match '^DESKTOP-' -or $hostname -match '^YOURSERVERNAME') {
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$("                    HOSTNAME NOT CONFIGURED".PadRight(72))║" -color "Warning"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  The server hostname appears to be a default Windows name:" -color "Warning"
+        Write-OutputColor "  Current hostname: $hostname" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Please set the hostname before installing $toolName Agent." -color "Info"
+        Write-OutputColor "  The hostname should include your site number (e.g., 001001-HV1)." -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        if (Confirm-UserAction -Message "Would you like to set the hostname now?") {
+            Set-HostName
+            # Hostname change requires reboot - offer it
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Hostname changes require a reboot to take effect." -color "Warning"
+            if (Confirm-UserAction -Message "Reboot now to apply hostname change?") {
+                Add-SessionChange -Category "System" -Description "Set hostname and initiated reboot for $toolName install"
+                Restart-Computer -Force
+            }
+        }
+        return
+    }
+
+    # --- Section: Step 2 - Check Existing Installation ---
+    # STEP 2: Check if agent is already installed
+    $agentStatus = Test-AgentInstalled
+    if ($agentStatus.Installed) {
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$("                    $($toolName.ToUpper()) ALREADY INSTALLED".PadRight(72))║" -color "Success"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  $toolName Agent is already installed on this server." -color "Success"
+        Write-OutputColor "  Status: $($agentStatus.Status)" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-PressEnter
+        return
+    }
+
+    # --- Section: Step 3 - Auto-detect Site and Match Agent ---
+    # STEP 3: Try to match hostname to a site - offer quick install
+    $detectedSite = Get-SiteNumberFromHostname
+    if ($detectedSite) {
+        Write-OutputColor "  Checking for agents matching site $detectedSite..." -color "Info"
+        $agents = Get-AgentInstallerList
+        $matchingAgents = Search-AgentInstaller -SearchTerm $detectedSite -Agents $agents
+
+        if ($matchingAgents.Count -gt 0) {
+            Clear-Host
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+            Write-OutputColor "  ║$("                  $($toolName.ToUpper()) AGENT MATCH FOUND".PadRight(72))║" -color "Success"
+            Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  DETECTED MATCH".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Hostname:       $hostname".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Detected Site:  $detectedSite".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            if ($matchingAgents.Count -eq 1) {
+                $agent = $matchingAgents[0]
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  MATCHING AGENT".PadRight(72))│" -color "Success"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Site Numbers:   $($agent.SiteNumbers -join ', ')".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Site Name:      $($agent.SiteName)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                Write-OutputColor "" -color "Info"
+
+                if (Confirm-UserAction -Message "Install this $toolName Agent now?") {
+                    Install-SelectedAgent -Agent $agent
+                    Write-PressEnter
+                    if ($ReturnAfterInstall) { return }
+                } else {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Continuing to full agent menu..." -color "Info"
+                    Start-Sleep -Seconds 1
+                }
+            } else {
+                Write-OutputColor "  Found $($matchingAgents.Count) agents for site $detectedSite. Please select:" -color "Info"
+                $selected = Show-AgentInstallerList -Agents $matchingAgents
+                if ($selected) {
+                    Install-SelectedAgent -Agent $selected
+                    Write-PressEnter
+                    if ($ReturnAfterInstall) { return }
+                }
+            }
+        } else {
+            # No match found for detected site - offer to change hostname
+            Clear-Host
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+            Write-OutputColor "  ║$("                    NO AGENT MATCH FOR HOSTNAME".PadRight(72))║" -color "Warning"
+            Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  HOSTNAME CHECK".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Current Hostname:  $hostname".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Detected Site#:    $detectedSite".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Agent Match:       Not Found".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  No $toolName agent found for site $detectedSite in FileServer." -color "Info"
+            Write-OutputColor "  This may mean:" -color "Info"
+            Write-OutputColor "    - The hostname needs to be corrected" -color "Info"
+            Write-OutputColor "    - A new agent needs to be added (contact $($script:SupportContact))" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            if (Confirm-UserAction -Message "Would you like to change the hostname?") {
+                Set-HostName
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Hostname changes require a reboot to take effect." -color "Warning"
+                if (Confirm-UserAction -Message "Reboot now to apply hostname change?") {
+                    Add-SessionChange -Category "System" -Description "Changed hostname and initiated reboot for $toolName install"
+                    Restart-Computer -Force
+                }
+                return
+            }
+
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Continuing to full agent menu..." -color "Info"
+            Start-Sleep -Seconds 1
+        }
+    } else {
+        # --- Section: Step 3b - No Site Detection Fallback ---
+        # No site number detected in hostname - offer to set it
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$("                  NO SITE NUMBER IN HOSTNAME".PadRight(72))║" -color "Warning"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  HOSTNAME CHECK".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Current Hostname:  $hostname".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Detected Site#:    None - no 3+ digit number found".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Your hostname does not contain a site number (e.g., 001001-HV1)." -color "Info"
+        Write-OutputColor "  Setting a hostname with your site number enables auto-detection." -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        if (Confirm-UserAction -Message "Would you like to set the hostname now?") {
+            Set-HostName
+            if ($global:RebootNeeded) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Hostname changes require a reboot to take effect." -color "Warning"
+                Write-OutputColor "  $toolName Agent must be installed after reboot." -color "Warning"
+                Write-OutputColor "" -color "Info"
+                if (Confirm-UserAction -Message "Reboot now to apply hostname change?") {
+                    Add-SessionChange -Category "System" -Description "Changed hostname and initiated reboot for $toolName install"
+                    Restart-Computer -Force
+                }
+                return
+            }
+        }
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Continuing to full agent menu..." -color "Info"
+        Start-Sleep -Seconds 1
+    }
+
+    # --- Section: Step 4 - Full Agent Selection Menu ---
+    # STEP 4: Full menu for manual selection
+    while ($true) {
+        Clear-Host
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$("                    $($toolName.ToUpper()) AGENT INSTALLER".PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        # Show current status
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  STATUS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Hostname:     $hostname".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  $($toolName):$((' ' * [math]::Max(1, 14 - $toolName.Length)))Not Installed".PadRight(72))│" -color "Warning"
+        if ($detectedSite) {
+            Write-OutputColor "  │$("  Detected Site: $detectedSite (no agent match)".PadRight(72))│" -color "Warning"
+        } else {
+            Write-OutputColor "  │$("  Detected Site: Unable to detect from hostname".PadRight(72))│" -color "Warning"
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  AGENT SELECTION".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  [L] List All Agents         - Browse and select from full list".PadRight(72))│" -color "Success"
+        Write-OutputColor "  │$("  [S] Search                  - Find by site number or name".PadRight(72))│" -color "Success"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  [R] Refresh Cache           - Re-fetch agent list from FileServer".PadRight(72))│" -color "Success"
+        Write-OutputColor "  │$("  [B] ◄ Back".PadRight(72))│" -color "Success"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        switch ("$choice".ToUpper()) {
+            'L' {
+                $agents = Get-AgentInstallerList
+                $selected = Show-AgentInstallerList -Agents $agents
+                if ($selected) {
+                    Install-SelectedAgent -Agent $selected
+                    Write-PressEnter
+                    if ($ReturnAfterInstall) { return }
+                }
+            }
+            'S' {
+                $agents = Get-AgentInstallerList
+                if ($agents.Count -eq 0) {
+                    Write-OutputColor "  No agents available." -color "Warning"
+                    Write-PressEnter
+                    continue
+                }
+
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Enter site number (e.g., 1001, 2005) or name (e.g., mainoffice, westbranch):" -color "Info"
+                $searchTerm = Read-Host "  Search"
+
+                $navResult = Test-NavigationCommand -UserInput $searchTerm
+                if ($navResult.ShouldReturn) { continue }
+
+                $results = Search-AgentInstaller -SearchTerm $searchTerm -Agents $agents
+
+                if ($results.Count -eq 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                    Write-OutputColor "  │$("  NO MATCHING AGENTS FOUND".PadRight(72))│" -color "Warning"
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  Search term: $searchTerm".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
+                    Write-OutputColor "  │$("  If this is a new site, please contact $($script:SupportContact) to add the agent".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  │$("  to the FileServer $($script:AgentInstaller.FolderName) folder.".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                    Write-PressEnter
+                }
+                elseif ($results.Count -eq 1) {
+                    Install-SelectedAgent -Agent $results[0]
+                    Write-PressEnter
+                    if ($ReturnAfterInstall) { return }
+                }
+                else {
+                    Write-OutputColor "  Found $($results.Count) matching agents:" -color "Success"
+                    $selected = Show-AgentInstallerList -Agents $results
+                    if ($selected) {
+                        Install-SelectedAgent -Agent $selected
+                        Write-PressEnter
+                        if ($ReturnAfterInstall) { return }
+                    }
+                }
+            }
+            'R' {
+                $null = Get-AgentInstallerList -ForceRefresh
+                Write-PressEnter
+            }
+            'B' { return }
+        }
+    }
+}
+#endregion

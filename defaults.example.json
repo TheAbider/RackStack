@@ -1,0 +1,277 @@
+{
+    "_description": "RackStack Configuration File",
+    "_setup": "Copy this file to 'defaults.json' (same folder as RackStack) and fill in YOUR values. RackStack will never overwrite your defaults.json during updates. Lines starting with _ are comments -- RackStack ignores them.",
+
+    "_section_basic": "========== BASIC SERVER SETTINGS ==========",
+
+    "Domain": "corp.acme.com",
+    "_Domain_help": "Your Active Directory domain name. Used when joining servers to the domain. Example: 'corp.contoso.com', 'ad.mycompany.local'. Leave empty string '' if you don't use AD.",
+
+    "LocalAdminName": "localadmin",
+    "_LocalAdminName_help": "Username for the local admin account RackStack creates. Pick something other than 'Administrator' for security. Example: 'sysadmin', 'localadmin', 'svradmin'.",
+
+    "LocalAdminFullName": "Local Administrator",
+    "_LocalAdminFullName_help": "Display name for the local admin account (shows in Windows user list). Example: 'Local Admin', 'IT Admin'.",
+
+    "SwitchName": "LAN-SET",
+    "_SwitchName_help": "Name for the Hyper-V virtual switch created by Switch Embedded Teaming (SET). This bonds multiple NICs into one fast, redundant switch. You only need to change this if you want a different name. Example: 'LAN-SET', 'HyperV-Switch', 'Trunk'.",
+
+    "ManagementName": "Management",
+    "_ManagementName_help": "Name for the management virtual NIC created on the Hyper-V switch. This is the NIC the host uses for its own traffic (RDP, management tools, etc). Example: 'Management', 'HostMgmt'.",
+
+    "BackupName": "Backup",
+    "_BackupName_help": "Name for the backup virtual NIC on the Hyper-V switch (optional, used if you want a separate NIC for backup traffic). Example: 'Backup', 'Veeam'.",
+
+    "AutoUpdate": false,
+    "_AutoUpdate_help": "true = RackStack silently downloads and installs updates from GitHub when it starts up. false = it shows a banner saying an update is available and lets you press [U] to update manually. Default: false.",
+
+    "TempPath": "C:\\Temp",
+    "_TempPath_help": "Folder where RackStack saves transcripts, HTML reports, and exported configs. Created automatically if it doesn't exist. Default: 'C:\\Temp'.",
+
+    "_section_dns": "========== DNS PRESETS ==========",
+
+    "DNSPresets": {
+        "_comment": "Custom DNS server presets that show up in the DNS configuration menu. Each preset is a name and a list of DNS IPs. These are ADDED to the built-in presets (Google, Cloudflare, Quad9, OpenDNS) -- they don't replace them. Add your domain controllers here so you can quickly assign DNS during server setup.",
+        "Acme DC Primary": ["10.0.1.10", "10.0.1.11"],
+        "Acme DC Secondary": ["10.0.2.10", "10.0.2.11"]
+    },
+
+    "_section_fileserver": "========== FILE SERVER (ISO / VHD / AGENT DOWNLOADS) ==========",
+
+    "FileServer": {
+        "_comment": "RackStack can download Windows ISOs, VHD templates, and agent installers from your own file server. This is totally optional -- you can skip this section if you don't host files. See docs/FileServer-Setup.md for setup guides (supports Cloudflare Tunnel, LAN share, Docker, Tailscale, and more).",
+
+        "BaseURL": "https://files.acme.com/server-tools",
+        "_BaseURL_help": "The root URL of your file server. Everything else is relative to this. Examples: 'https://files.acme.com/server-tools', 'http://192.168.1.100/tools', 'https://your-tunnel.cfaccess.com/files'.",
+
+        "ClientId": "your-cloudflare-access-client-id.access",
+        "_ClientId_help": "Only needed if your file server uses Cloudflare Access for authentication. This is the Service Token Client ID from Cloudflare Zero Trust dashboard. Leave as-is or omit if you don't use Cloudflare Access.",
+
+        "ClientSecret": "your-cloudflare-access-client-secret-hex-string",
+        "_ClientSecret_help": "The matching Service Token Client Secret from Cloudflare. Keep this secret! This file (defaults.json) should never be committed to a public repo.",
+
+        "ISOsFolder": "ISOs",
+        "_ISOsFolder_help": "Subfolder under BaseURL where Windows ISO files live. RackStack looks at BaseURL/ISOsFolder for ISOs to download. Example: if BaseURL is 'https://files.acme.com/tools' and ISOsFolder is 'ISOs', it looks at 'https://files.acme.com/tools/ISOs'.",
+
+        "VHDsFolder": "VirtualHardDrives",
+        "_VHDsFolder_help": "Subfolder for VHD/VHDX template files (sysprepped Windows images or cloud-init Linux images). Used by the VHD Management menu to download base images for VM deployment.",
+
+        "KaseyaFolder": "KaseyaAgents",
+        "_KaseyaFolder_help": "Subfolder for your MSP agent installer files. The folder name here should match what's actually on your server. Despite the name 'KaseyaFolder', this works for ANY agent -- the name is just the config key."
+    },
+
+    "_section_iscsi": "========== iSCSI / SAN SETTINGS ==========",
+
+    "iSCSISubnet": "172.16.1",
+    "_iSCSISubnet_help": "The first 3 octets of your iSCSI storage network. RackStack uses this to auto-configure iSCSI initiator connections. Example: if your SAN targets are at 172.16.1.10, 172.16.1.11, etc., put '172.16.1' here. The last octet comes from SANTargetMappings below.",
+
+    "SANTargetMappings": [
+        { "Suffix": 10, "Label": "A0" },
+        { "Suffix": 11, "Label": "B1" },
+        { "Suffix": 12, "Label": "B0" },
+        { "Suffix": 13, "Label": "A1" },
+        { "Suffix": 14, "Label": "A2" },
+        { "Suffix": 15, "Label": "B3" },
+        { "Suffix": 16, "Label": "B2" },
+        { "Suffix": 17, "Label": "A3" }
+    ],
+    "_SANTargetMappings_help": "Maps iSCSI target IP addresses to friendly labels for the iSCSI setup menu. 'Suffix' is the last octet of the target IP (combined with iSCSISubnet above). 'Label' is the display name (typically controller + port, like A0 = controller A port 0). Example: Suffix 10 + iSCSISubnet '172.16.1' = target at 172.16.1.10 labeled 'A0'. Adjust these to match YOUR SAN's IP layout.",
+
+    "_section_defender": "========== WINDOWS DEFENDER EXCLUSIONS ==========",
+
+    "DefenderExclusionPaths": [
+        "C:\\ProgramData\\Microsoft\\Windows\\Hyper-V",
+        "C:\\ProgramData\\Microsoft\\Windows\\Hyper-V\\Snapshots",
+        "C:\\Users\\Public\\Documents\\Hyper-V\\Virtual Hard Disks",
+        "C:\\ClusterStorage"
+    ],
+    "_DefenderExclusionPaths_help": "Paths that are ALWAYS excluded from Defender scanning on Hyper-V hosts. These are system-level Hyper-V paths that Microsoft recommends excluding for performance. You probably don't need to change these unless your Hyper-V config paths are non-standard.",
+
+    "DefenderCommonVMPaths": [
+        "D:\\Virtual Machines",
+        "E:\\Virtual Machines",
+        "D:\\Hyper-V",
+        "E:\\Hyper-V"
+    ],
+    "_DefenderCommonVMPaths_help": "Additional paths to exclude from Defender -- these are where your VMs actually live on disk. RackStack shows these as checkboxes so you can pick which ones apply to each host. Add paths for every drive letter you might store VMs on. Example: if you use F:\\ for VMs, add 'F:\\Virtual Machines' here.",
+
+    "_section_storage": "========== HYPER-V STORAGE PATHS ==========",
+
+    "StoragePaths": {
+        "_comment": "Default folder paths for Hyper-V VM storage. These are used when deploying VMs and downloading ISOs/VHDs. The Host Storage Setup menu can change the drive letter automatically.",
+
+        "HostVMStoragePath": "D:\\Virtual Machines",
+        "_HostVMStoragePath_help": "Where standalone (non-clustered) VMs are stored. Each VM gets a subfolder here.",
+
+        "HostISOPath": "D:\\ISOs",
+        "_HostISOPath_help": "Where downloaded ISO files are stored on standalone hosts.",
+
+        "ClusterISOPath": "C:\\ClusterStorage\\Volume1\\ISOs",
+        "_ClusterISOPath_help": "Where ISOs are stored on clustered hosts (Cluster Shared Volumes).",
+
+        "VHDCachePath": "D:\\Virtual Machines\\_BaseImages",
+        "_VHDCachePath_help": "Where downloaded VHD/VHDX template images are cached on standalone hosts. VMs are deployed by copying from here.",
+
+        "ClusterVHDCachePath": "C:\\ClusterStorage\\Volume1\\_BaseImages",
+        "_ClusterVHDCachePath_help": "Same as VHDCachePath but for clustered hosts using CSVs."
+    },
+
+    "_section_agent": "========== MSP AGENT INSTALLER ==========",
+
+    "AgentInstaller": {
+        "_comment": "Configuration for your MSP/RMM agent installer (Kaseya, ConnectWise, Datto, NinjaRMM, etc). RackStack uses these settings to find, install, and verify the agent. Change every field to match YOUR agent.",
+
+        "ToolName": "Kaseya",
+        "_ToolName_help": "Display name shown in menus and messages. Example: 'Kaseya', 'ConnectWise Automate', 'Datto RMM', 'NinjaRMM'.",
+
+        "FolderName": "KaseyaAgents",
+        "_FolderName_help": "Folder name on your file server (under FileServer.BaseURL) where agent installer EXEs are stored.",
+
+        "FilePattern": "Kaseya.*\\.exe$",
+        "_FilePattern_help": "Regex pattern to match the installer filename. RackStack lists files matching this pattern for you to pick. Example: 'Kaseya.*\\.exe$' matches 'KaseyaAgent_12345.exe'. For ConnectWise: 'Automate.*\\.msi$'. For Datto: 'DattoRMM.*\\.exe$'.",
+
+        "ServiceName": "Kaseya Agent*",
+        "_ServiceName_help": "Windows service name to check if the agent is already installed. Supports wildcards. After install, RackStack waits for this service to appear as confirmation. Example: 'Kaseya Agent*', 'LTService', 'CagService'.",
+
+        "InstallArgs": "/s /norestart",
+        "_InstallArgs_help": "Command-line arguments for silent installation. '/s /norestart' is common for MSI/EXE silent installs. Check your agent's documentation for the right flags.",
+
+        "InstallPaths": [
+            "%ProgramFiles%\\Kaseya",
+            "%ProgramFiles(x86)%\\Kaseya",
+            "C:\\kworking"
+        ],
+        "_InstallPaths_help": "Folders where the agent installs itself. RackStack checks these to verify installation succeeded. Use %ProgramFiles% for environment-variable-aware paths.",
+
+        "SuccessExitCodes": [0, 1641, 3010],
+        "_SuccessExitCodes_help": "Exit codes that mean 'success'. 0 = normal success. 1641 = reboot initiated. 3010 = reboot required. These are standard Windows installer codes. Add any agent-specific success codes your installer uses.",
+
+        "TimeoutSeconds": 300,
+        "_TimeoutSeconds_help": "How long to wait (in seconds) for the installer to finish. 300 = 5 minutes. Increase if your agent takes longer (large downloads, slow networks)."
+    },
+
+    "_section_vmnaming": "========== VM NAMING ==========",
+
+    "VMNaming": {
+        "_comment": "Controls how RackStack names VMs when you deploy them. By default it reads a site ID from the host's computer name and combines it with the VM template prefix to make names like '123456-FS1'. You can customize the pattern, where the site ID comes from, and how the numbering works.",
+
+        "SiteId": "",
+        "_SiteId_help": "A fixed site identifier to use in VM names. If this is set (not empty), RackStack uses it directly instead of trying to figure it out from the hostname. Leave empty to auto-detect from the host's computer name. Examples: '123456', 'NYC', 'CRV', 'ACME'.",
+
+        "Pattern": "{Site}-{Prefix}{Seq}",
+        "_Pattern_help": "The naming pattern for new VMs. Uses tokens that get replaced: {Site} = site identifier, {Prefix} = template prefix (DC, FS, WEB, etc), {Seq} = sequence number (1, 2, 3...). Add {Seq:00} for zero-padded numbers (01, 02, 03). You can rearrange tokens, change separators, or remove tokens entirely.",
+        "_Pattern_examples": {
+            "123456-FS1":  "Pattern: '{Site}-{Prefix}{Seq}'         -- site + dash + prefix + number",
+            "NYC-DC-01":   "Pattern: '{Site}-{Prefix}-{Seq:00}'     -- site + dash + prefix + dash + zero-padded number",
+            "FS1":         "Pattern: '{Prefix}{Seq}'                 -- no site prefix, just prefix + number",
+            "ACMEDC01":    "Pattern: '{Site}{Prefix}{Seq:00}'        -- everything smashed together, zero-padded",
+            "WEB-3":       "Pattern: '{Prefix}-{Seq}'                -- prefix + dash + number, no site"
+        },
+
+        "SiteIdSource": "hostname",
+        "_SiteIdSource_help": "Where to get the site ID from. 'hostname' = extract it from the host's computer name using the regex below. 'static' = always use the SiteId value above (ignores hostname). Default: 'hostname'.",
+
+        "SiteIdRegex": "^(\\d{3,6})-",
+        "_SiteIdRegex_help": "Regular expression used to extract the site ID from the host's computer name. The part in parentheses () is what gets captured as the site ID. Only used when SiteIdSource is 'hostname'.",
+        "_SiteIdRegex_examples": {
+            "^(\\d{6})-":       "Host '123456-HV1' --> site ID '123456' (exactly 6 digits before the first dash)",
+            "^(\\d{3,6})-":     "Host '12345-HV1'  --> site ID '12345'  (3 to 6 digits before the first dash)",
+            "^([A-Z]{2,6})-":   "Host 'CRV-HV1'    --> site ID 'CRV'    (2-6 uppercase letters before the first dash)",
+            "^(\\w+)-HV":       "Host 'ACME-HV1'    --> site ID 'ACME'   (any word characters before '-HV')"
+        }
+    },
+
+    "_section_licensing": "========== WINDOWS LICENSING ==========",
+
+    "CustomKMSKeys": {
+        "_comment": "KMS (Key Management Service) product keys for activating Windows against your org's KMS server. RackStack already has Microsoft's public GVLK keys built in -- these are only needed if your org uses custom/private KMS keys. Keys here are MERGED with the built-in ones (your keys take priority).",
+        "Windows Server 2019": {
+            "Standard": "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX",
+            "Datacenter": "YYYYY-YYYYY-YYYYY-YYYYY-YYYYY"
+        },
+        "Windows Server 2022": {
+            "Standard": "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX",
+            "Datacenter": "YYYYY-YYYYY-YYYYY-YYYYY-YYYYY"
+        },
+        "Windows Server 2025": {
+            "Standard": "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
+        }
+    },
+
+    "CustomAVMAKeys": {
+        "_comment": "AVMA (Automatic VM Activation) keys for activating VMs running on a licensed Hyper-V host. The host must have a Datacenter license for AVMA to work. RackStack has Microsoft's public AVMA keys built in -- only add keys here if you have custom ones. Merged with built-in keys (your keys take priority).",
+        "Windows Server 2022": {
+            "Standard": "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX",
+            "Datacenter": "YYYYY-YYYYY-YYYYY-YYYYY-YYYYY"
+        }
+    },
+
+    "_section_vmtemplates": "========== VM TEMPLATES ==========",
+
+    "CustomVMTemplates": {
+        "_comment": "VM templates define the specs (CPU, RAM, disks) for common server types. RackStack ships with 3 built-in templates: DC (Domain Controller), FS (File Server), WEB (Web Server). Here you can: (1) Override built-in templates by using the same key (e.g. 'FS') -- only specify the fields you want to change, everything else keeps its default. (2) Add brand new templates with a new key (e.g. 'SQL') -- new templates need all required fields.",
+
+        "FS": {
+            "_comment": "This OVERRIDES the built-in File Server template. We only changed MemoryGB and Disks -- everything else (vCPU, NICs, etc) stays at the built-in defaults.",
+            "MemoryGB": 16,
+            "Disks": [
+                { "Name": "OS",   "SizeGB": 150,  "Type": "Fixed" },
+                { "Name": "Data", "SizeGB": 500,  "Type": "Fixed" }
+            ]
+        },
+        "SQL": {
+            "_comment": "This is a BRAND NEW template (SQL doesn't exist in the built-ins). New templates need all these fields.",
+            "FullName": "SQL Server",
+            "Prefix": "SQL",
+            "OSType": "Windows",
+            "SortOrder": 10,
+            "vCPU": 8,
+            "MemoryGB": 32,
+            "MemoryType": "Static",
+            "Disks": [
+                { "Name": "OS",   "SizeGB": 150,  "Type": "Fixed" },
+                { "Name": "Data", "SizeGB": 500,  "Type": "Fixed" },
+                { "Name": "Logs", "SizeGB": 200,  "Type": "Fixed" }
+            ],
+            "NICs": 1,
+            "Notes": "SQL Server - D: data, E: logs"
+        },
+        "APP": {
+            "_comment": "Example Linux template. Set OSType to 'Linux' for UEFI Secure Boot with Microsoft UEFI CA.",
+            "FullName": "Application Server",
+            "Prefix": "APP",
+            "OSType": "Linux",
+            "SortOrder": 11,
+            "vCPU": 4,
+            "MemoryGB": 8,
+            "MemoryType": "Dynamic",
+            "Disks": [{ "Name": "OS", "SizeGB": 100, "Type": "Fixed" }],
+            "NICs": 1,
+            "Notes": "Linux App Server (UEFI CA Secure Boot)"
+        },
+
+        "_template_field_reference": {
+            "FullName":         "Display name shown in menus (e.g. 'SQL Server')",
+            "Prefix":           "Short code used in VM names (e.g. 'SQL' -> VM named '123456-SQL1')",
+            "OSType":           "'Windows' or 'Linux' -- affects Secure Boot settings",
+            "SortOrder":        "Number that controls display order in menus (lower = higher in list)",
+            "vCPU":             "Number of virtual CPUs",
+            "MemoryGB":         "RAM in gigabytes",
+            "MemoryType":       "'Dynamic' (RAM grows/shrinks as needed) or 'Static' (fixed RAM allocation)",
+            "Disks":            "List of virtual hard disks. Name = label, SizeGB = size, Type = 'Fixed' or 'Dynamic'",
+            "NICs":             "Number of virtual network adapters (usually 1)",
+            "GuestServices":    "true/false -- enable Hyper-V Guest Services integration",
+            "TimeSyncWithHost": "true/false -- sync VM clock with host (set false for Domain Controllers!)",
+            "Notes":            "Description text attached to the VM in Hyper-V Manager"
+        }
+    },
+
+    "CustomVMDefaults": {
+        "_comment": "Default specs used when deploying a 'custom' VM (one that doesn't use a template). These are the starting values shown in the deployment wizard -- you can still change them during deployment.",
+        "vCPU": 4,
+        "MemoryGB": 8,
+        "MemoryType": "Dynamic",
+        "DiskSizeGB": 100,
+        "DiskType": "Fixed"
+    }
+}

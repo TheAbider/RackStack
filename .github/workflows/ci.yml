@@ -1,0 +1,34 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    # Push = self-hosted (fast, only repo owner can push). PR = GitHub-hosted (safe from fork attacks).
+    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || 'self-hosted' }}
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        run: |
+          if (-not (Get-Module PSScriptAnalyzer -ListAvailable)) {
+            Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          }
+
+      - name: Generate monolithic
+        run: .\sync-to-monolithic.ps1
+
+      - name: Run tests
+        run: |
+          $result = & .\Tests\Run-Tests.ps1
+          exit $LASTEXITCODE
+
+      - name: PSScriptAnalyzer
+        run: .\Tests\pssa-check.ps1
