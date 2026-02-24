@@ -1,4 +1,4 @@
-$errors = 0
+﻿$errors = 0
 Get-ChildItem (Join-Path $PSScriptRoot '..\Modules\*.ps1') | ForEach-Object {
     $parseErrors = $null
     [System.Management.Automation.PSParser]::Tokenize((Get-Content $_.FullName -Raw), [ref]$parseErrors) | Out-Null

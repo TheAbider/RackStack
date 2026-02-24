@@ -1,4 +1,4 @@
-$settingsPath = Join-Path $PSScriptRoot '..\PSScriptAnalyzerSettings.psd1'
+﻿$settingsPath = Join-Path $PSScriptRoot '..\PSScriptAnalyzerSettings.psd1'
 $errors = 0
 Get-ChildItem (Join-Path $PSScriptRoot '..\Modules\*.ps1') | ForEach-Object {
     $results = Invoke-ScriptAnalyzer -Path $_.FullName -Settings $settingsPath -Severity Error

@@ -1,4 +1,4 @@
-$modulesPath = Join-Path $PSScriptRoot "..\Modules"
+﻿$modulesPath = Join-Path $PSScriptRoot "..\Modules"
 
 $results = Invoke-ScriptAnalyzer -Path $modulesPath -Recurse
 

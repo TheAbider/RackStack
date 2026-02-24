@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     RackStack Prerequisites Installer
 

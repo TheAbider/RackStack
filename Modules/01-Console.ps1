@@ -1,4 +1,4 @@
-#region ===== CONSOLE INITIALIZATION =====
+﻿#region ===== CONSOLE INITIALIZATION =====
 # Function to initialize console window size and title
 function Initialize-ConsoleWindow {
     # Set window title

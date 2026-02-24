@@ -1,259 +1,196 @@
-# Cluster Management Guide
+# Cluster Management
 
-This guide covers RackStack's Failover Clustering features: cluster creation, the cluster dashboard, drain and resume operations, VM checkpoint management, and Cluster Shared Volume management.
-
----
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Cluster Creation Wizard](#cluster-creation-wizard)
-- [Cluster Dashboard](#cluster-dashboard)
-- [Drain and Resume Operations](#drain-and-resume-operations)
-- [VM Checkpoint Management](#vm-checkpoint-management)
-- [CSV Management](#csv-management)
-
----
-
-## Prerequisites
-
-Before using cluster management features:
-
-- **Failover Clustering** must be installed on all participating nodes. Install via **Cluster Management > [I] Install Failover Clustering** or set `InstallFailoverClustering: true` in batch mode.
-- All nodes must be **domain-joined** to the same Active Directory domain.
-- All nodes should have **identical storage connectivity** (iSCSI targets connected, MPIO configured).
-- Your domain account must have **cluster admin permissions** on all nodes.
-- A reboot is required after installing Failover Clustering before cluster operations are available.
-
----
-
-## Cluster Creation Wizard
-
-**Menu path:** Cluster Management > [1] Create New Cluster
-
-The wizard walks through creating a new Hyper-V failover cluster.
-
-### Step 1: Cluster Name
-
-Enter a NetBIOS name for the cluster (max 15 characters). This becomes the cluster's virtual computer object in Active Directory.
-
-### Step 2: Cluster IP Address
-
-Enter a static IP address for the cluster. This IP must be:
-
-- On the same subnet as the management network.
-- Not already assigned to any device.
-- Reachable from all cluster nodes.
-
-### Step 3: Add Nodes
-
-The wizard starts with the local server as the first node. Add additional nodes by hostname. Each node is validated for:
-
-- Reachability (ping test)
-- Failover Clustering feature installed
-- Domain membership
-
-### Step 4: Validation
-
-RackStack offers to run the cluster validation wizard before creation. Validation tests hardware compatibility, network configuration, and storage access across all nodes. The validation report identifies blocking issues that would prevent cluster creation.
-
-> **Recommendation:** Always run validation before creating a production cluster.
-
-### Step 5: Create
-
-After validation passes, RackStack calls `New-Cluster` with the specified name, IP, and node list. The cluster is created and the local node becomes the first member.
-
-### Joining an Existing Cluster
-
-**Menu path:** Cluster Management > [2] Join Existing Cluster
-
-To add the current server to an existing cluster:
-
-1. Enter the cluster name.
-2. RackStack validates that Failover Clustering is installed locally.
-3. The node is added via `Add-ClusterNode`.
+RackStack provides cluster-aware operations for Windows Server Failover Clusters with Hyper-V. These features are accessible from the **Storage & Clustering** menu under **Cluster Operations**, **VM Checkpoints**, and **VM Export/Import**.
 
 ---
 
 ## Cluster Dashboard
 
-**Menu path:** Cluster Management > Cluster Dashboard
-
-The dashboard provides a real-time overview of cluster health. It displays:
+The cluster dashboard provides a real-time overview of your failover cluster. It displays:
 
 ### Node Status
 
-| Column | Description |
-|--------|-------------|
-| Name | Node hostname |
-| State | `Up`, `Down`, `Paused`, or `Joining` |
-| Drain Status | Shows drain progress when a node is being evacuated |
+Each cluster node is shown with its current state and the number of VMs it owns:
 
-### Cluster Shared Volumes
+| Symbol | State | Meaning |
+|--------|-------|---------|
+| `[*]` | Up | Node is online and accepting workloads |
+| `[~]` | Paused | Node is paused (drained), not accepting new VMs |
+| `[o]` | Down | Node is offline or unreachable |
 
-| Column | Description |
-|--------|-------------|
-| Name | CSV friendly name |
-| Path | Mount point (e.g., `C:\ClusterStorage\Volume1`) |
-| State | `Online` or `Offline` |
-| Free Space | Available space in GB |
-| Total Size | Total capacity in GB |
+### Cluster Shared Volumes (CSV)
 
-### Cluster Roles
+For each CSV, the dashboard shows:
 
-Lists all cluster virtual machine roles with their current state and owner node.
+- Volume name and owner node
+- Used/total space with percentage
+- Visual progress bar (color-coded: green < 70%, yellow < 90%, red >= 90%)
+- Redirected I/O warnings (indicates performance degradation)
 
-### Quick Actions
+### Key Resources
 
-From the dashboard, you can jump directly to:
+Critical cluster resources are listed with online/offline status:
 
-- Drain a node
-- Resume a node
-- View detailed CSV health
-- Open the full cluster operations menu
+- Network Name resources
+- IP Address resources
+- File Share Witness / Disk Witness
+
+### Live Migration
+
+Shows whether live migration is enabled and the maximum number of simultaneous migrations configured on the host.
 
 ---
 
 ## Drain and Resume Operations
 
-Draining a cluster node live-migrates all VMs to other available nodes, allowing you to perform maintenance without VM downtime.
+### Drain Node
 
-### Draining a Node
+Draining a node gracefully evacuates all VMs to other cluster nodes, then pauses the node. This is used before maintenance (patching, hardware replacement, etc.).
 
-**Menu path:** Cluster Dashboard > Drain Node
+**What happens:**
+1. Select an online (Up) node from the list
+2. All VMs on that node are live-migrated to other available nodes
+3. The node is paused (will not accept new VM placements)
+4. The operation waits for all migrations to complete before returning
 
-1. Select the node to drain from the list of cluster members.
-2. RackStack confirms the action and checks that other nodes have sufficient capacity.
-3. The node is paused (`Suspend-ClusterNode -Drain`), triggering Live Migration of all hosted VMs.
-4. Progress is displayed as each VM migrates.
-5. The drain completes when all VMs have moved.
+Uses `Suspend-ClusterNode -Drain -Wait` under the hood, which performs live migration for running VMs.
 
-**Expected duration:** 10-60 seconds per VM depending on memory size and network speed. A node with 10 VMs at 2 simultaneous migrations typically takes 5-10 minutes.
+### Resume Node
 
-### Resuming a Node
+Resuming a paused node brings it back into the cluster and optionally fails VMs back to it.
 
-**Menu path:** Cluster Dashboard > Resume Node
-
-After maintenance:
-
-1. Select the paused node.
-2. Choose a failback option:
-   - **Immediate:** VMs migrate back to the resumed node based on preferred owner settings.
-   - **No failback:** Node becomes available for new placements but existing VMs stay where they are.
-3. The node state changes from `Paused` back to `Up`.
-
-### Best Practices
-
-- Always verify cluster health before draining. Do not drain a node if another node is already down or paused.
-- For 2-node clusters, ensure the quorum witness is online before draining.
-- Use "No failback" during business hours to avoid unnecessary VM migrations.
-- See the [Host Migration Runbook](Runbook-Host-Migration.md) for the complete step-by-step procedure.
+**Options:**
+- **Resume without failback:** The node becomes available for new workloads, but existing VMs stay where they are
+- **Resume with failback (Immediate):** The node comes back online and VMs that were originally hosted on it are moved back immediately
 
 ---
 
-## VM Checkpoint Management
+## CSV Health Status
 
-**Menu path:** Storage & Clustering > VM Checkpoint Management
+The CSV Health screen provides detailed information for each Cluster Shared Volume:
 
-RackStack provides a centralized interface for managing VM checkpoints (snapshots) across standalone hosts and clusters.
+| Field | Description |
+|-------|-------------|
+| **State** | Online/Offline status |
+| **Owner Node** | Which node currently owns the CSV |
+| **Space** | Used and total space with percentage |
+| **Free** | Available space in GB |
+| **Redirected I/O** | Warning if I/O is being redirected through another node (performance issue) |
+| **Low Space** | Warning if usage exceeds 90% |
 
-### Viewing Checkpoints
+Space usage is color-coded:
+- **Green:** Less than 70% used
+- **Yellow:** 70-89% used
+- **Red:** 90%+ used
 
-Lists all checkpoints for all VMs with:
+---
 
-- VM name
-- Checkpoint name
-- Creation time
-- Checkpoint type (Standard or Production)
+## VM Checkpoints
 
-For clustered environments, checkpoints are listed across all cluster nodes.
+VM Checkpoint Management provides full lifecycle control over Hyper-V checkpoints (snapshots). Access it from **Storage & Clustering > VM Checkpoints**.
+
+### Operations
+
+| Option | Description |
+|--------|-------------|
+| **List All Checkpoints** | Shows all checkpoints across all VMs with name, creation date, size, and type |
+| **Create Checkpoint** | Create a new checkpoint on a selected VM |
+| **Restore Checkpoint** | Restore a VM to a previous checkpoint state |
+| **Delete Checkpoint** | Delete individual checkpoints or all checkpoints at once |
 
 ### Creating Checkpoints
 
-1. Select one or more VMs from the list.
-2. Enter a checkpoint name (or accept the default timestamped name).
-3. RackStack creates production checkpoints by default (application-consistent via VSS).
-4. Checkpoint creation is confirmed with the resulting checkpoint name and timestamp.
+When creating a checkpoint, you choose:
+
+1. **Target VM** -- Select from running or powered-off VMs
+2. **Checkpoint name** -- Custom name or auto-generated timestamp (e.g., `Checkpoint_20260223_143052`)
+3. **Checkpoint type:**
+
+| Type | Description | Best For |
+|------|-------------|----------|
+| **Production** (Recommended) | Uses VSS for application-consistent state | Production VMs, databases |
+| **Standard** | Saves current memory state (faster) | Dev/test VMs, quick snapshots |
 
 ### Restoring Checkpoints
 
-1. Select a VM.
-2. View its checkpoint tree.
-3. Select the checkpoint to restore.
-4. Confirm the restore operation.
-5. The VM reverts to the selected checkpoint state.
+Restoring a checkpoint reverts a VM to the exact state captured at that point. A warning is displayed because all changes made since the checkpoint will be lost.
 
-> **Warning:** Restoring a checkpoint discards all changes made after that checkpoint was created.
+### Deleting Checkpoints
 
-### Removing Checkpoints
+You can delete checkpoints individually or use the **Delete ALL** option to clean up all checkpoints across all VMs in one operation. Each deletion is confirmed before execution.
 
-1. Select a VM.
-2. View its checkpoint tree.
-3. Select one or more checkpoints to remove.
-4. Confirm deletion.
-5. The checkpoint files are merged back into the parent VHD.
+### Display
 
-Checkpoint removal triggers a merge operation that can take several minutes for large VMs. The VM continues running during the merge.
+Checkpoints are listed in a table showing:
+- VM name
+- Checkpoint name
+- Creation date/time
+- Size (system files)
+- Type indicator (green = Production, cyan = Standard)
 
 ---
 
-## CSV Management
+## VM Export / Import
 
-**Menu path:** Cluster Management > [4] Manage Cluster Shared Volumes
+### Export VM
 
-Cluster Shared Volumes (CSVs) provide shared storage accessible from all cluster nodes simultaneously. VMs stored on CSVs can be live-migrated without storage migration.
+Exports a VM's complete configuration and virtual hard disks to a specified location. This creates a portable copy that can be imported on another host.
 
-### Viewing CSVs
+**Features:**
+- Select from all VMs on the host
+- Shows VM state and disk size for each VM
+- Live export is supported for running VMs (though shutting down first is recommended)
+- Progress tracking with transfer speed and elapsed time
+- Default export path: `{VMStoragePath}\Exports`
 
-The CSV management screen shows all current volumes with:
+**Export contents:**
+- `.vmcx` configuration file
+- Virtual hard disk files
+- Checkpoint files (if any)
 
-| Column | Description |
-|--------|-------------|
-| Name | Volume friendly name |
-| State | `Online` or `Offline` |
-| Path | Mount path (e.g., `C:\ClusterStorage\Volume1`) |
-| Free Space | Available space in GB |
-| Total Size | Total capacity in GB |
-| Used % | Percentage of capacity consumed |
+### Import VM
 
-### Adding a Disk to CSV
+Imports a previously exported VM from a folder or `.vmcx` file.
 
-**Menu option:** [1] Add Disk to CSV
+**Import modes:**
 
-1. RackStack lists available cluster disks (physical disks added as cluster resources but not yet in CSV).
-2. Select a disk to add.
-3. The disk becomes a CSV, accessible at `C:\ClusterStorage\Volume{N}\` on all nodes.
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **Copy** (Recommended) | Creates a new VM with a new unique ID, copies all files to the destination | Cloning VMs, importing from another host |
+| **Register** | Uses existing files in place, keeps the original VM ID | Reattaching a VM after host rebuild |
 
-### Removing a Disk from CSV
+**Features:**
+- Accepts a folder path or direct `.vmcx` file path
+- Drag-and-drop path support
+- Auto-discovers `.vmcx` files in the specified directory
+- If multiple `.vmcx` files exist, prompts for selection
 
-**Menu option:** [2] Remove Disk from CSV
+---
 
-1. Select the CSV to remove.
-2. Confirm the operation.
-3. The disk is removed from CSV but remains a cluster resource.
+## Cluster-Aware Operations
 
-> **Important:** Ensure no VMs are stored on the CSV before removing it. Move or shut down VMs first.
+Several RackStack features are cluster-aware and adapt their behavior when running on a cluster node:
 
-### Showing Available Cluster Disks
+| Feature | Cluster Behavior |
+|---------|-----------------|
+| **VM Deployment** | Can deploy to Cluster Shared Volumes instead of local storage |
+| **VHD Cache** | Uses `ClusterVHDCachePath` (e.g., `C:\ClusterStorage\Volume1\_BaseImages`) |
+| **ISO Storage** | Uses `ClusterISOPath` (e.g., `C:\ClusterStorage\Volume1\ISOs`) |
+| **Defender Exclusions** | Auto-adds CSV volume paths to exclusion list |
+| **Host Storage** | Detects CSV volumes and includes them in path generation |
+| **Config Export** | Includes cluster name, node states, and cluster membership in reports |
 
-**Menu option:** [3] Show Available Cluster Disks
+### Storage Path Configuration
 
-Lists all physical disks that are cluster resources but not yet added to CSV. These are candidates for CSV addition.
+Configure cluster paths in `defaults.json`:
 
-### CSV Health Check
+```json
+"StoragePaths": {
+    "ClusterISOPath": "C:\\ClusterStorage\\Volume1\\ISOs",
+    "ClusterVHDCachePath": "C:\\ClusterStorage\\Volume1\\_BaseImages"
+}
+```
 
-The cluster dashboard includes a CSV health view that shows:
+---
 
-- Volume state and redundancy status
-- Disk I/O statistics
-- Ownership (which node currently coordinates I/O for each CSV)
-- Redirect mode status (direct I/O vs. redirected I/O)
-
-### Troubleshooting CSVs
-
-| Issue | Likely Cause | Resolution |
-|-------|-------------|------------|
-| CSV shows Offline | Underlying iSCSI disk lost | Check iSCSI sessions via iSCSI & SAN Management |
-| CSV not appearing | Disk not added as cluster resource | Add via Failover Cluster Manager, then add to CSV |
-| CSV in redirected mode | Direct I/O path failed | Check storage connectivity on the owner node |
-| Insufficient space | VMs consuming too much storage | Expand the underlying LUN or migrate VMs |
+See also: [Storage Manager](Storage-Manager) | [Configuration Export](Configuration-Export) | [Runbook: Host Migration](Runbook-Host-Migration)

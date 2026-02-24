@@ -53,6 +53,7 @@ Copy `defaults.example.json` to `defaults.json` and customize for your environme
 | `DNSPresets` | Custom DNS server presets, merged with built-in (Google, Cloudflare, Quad9, OpenDNS) |
 | `iSCSISubnet` | First 3 octets of your iSCSI network |
 | `SANTargetMappings` | SAN target IP suffix-to-label mappings for iSCSI auto-detect |
+| `SANTargetPairings` | Advanced: Custom A/B pair definitions and host-to-pair assignments with retry order |
 | `DefenderExclusionPaths` | Windows Defender exclusion paths for Hyper-V hosts |
 | `DefenderCommonVMPaths` | Common VM storage paths added to Defender exclusions (auto-generated if not set) |
 | `StoragePaths` | Default Hyper-V storage paths (VM storage, ISOs, VHD cache, cluster paths) |
@@ -61,7 +62,19 @@ Copy `defaults.example.json` to `defaults.json` and customize for your environme
 | `VMNaming` | VM naming pattern, site ID source, and detection regex |
 | `CustomVMTemplates` | Override built-in VM template specs or add new templates (partial overrides supported) |
 | `CustomVMDefaults` | Default vCPU, RAM, disk size/type for non-template (custom) VMs |
-| `FileServer` | File server credentials for ISO/VHD downloads (see [File Server Setup](FileServer-Setup.md)) |
+| `StorageBackendType` | Storage backend selection: iSCSI, FC, S2D, SMB3, NVMeoF, or Local (see [Storage Backends](Storage-Backends)) |
+| `CustomRoleTemplates` | Custom server role templates, merged with 10 built-in templates (see [Server Role Templates](Server-Role-Templates)) |
+| `FileServer` | File server credentials for ISO/VHD downloads (see [File Server Setup](File-Server-Setup)) |
+
+> **New in v1.2.0:** Custom SET vNICs, iSCSI A/B side auto-detect, `AgentFolder` rename. See sections below.
+
+> **New in v1.3.0:** Storage backend selection and auto-detection. Six backends supported: iSCSI, FC, S2D, SMB3, NVMeoF, Local. See [Storage Backends](Storage-Backends).
+
+> **New in v1.4.0:** Server role templates, AD DS promotion, Hyper-V Replica, batch mode expanded to 22 steps. See [Server Role Templates](Server-Role-Templates), [AD DS Promotion](AD-DS-Promotion), [Hyper-V Replica](Hyper-V-Replica).
+
+> **New in v1.5.0:** Custom SAN target pairings (configurable A/B pair assignments per host), flexible virtual switch management (External, Internal, Private switches in addition to SET). See [SANTargetPairings](#santargetpairings-v150) and [Virtual Switch Management](#virtual-switch-management-v150).
+
+> **New in v1.5.5:** Cloud storage support -- FileServer module natively supports Azure Blob Storage (`StorageType: "azure"`) and static JSON index files (`StorageType: "static"`) for S3/CloudFront. See [FileServer](#fileserver-file-server) and [File Server Setup](File-Server-Setup).
 
 ---
 
@@ -114,6 +127,44 @@ The first 3 octets of your iSCSI network. Used by auto-configuration to calculat
 ```
 
 Maps the last octet of SAN target IPs to labels (A-side/B-side controller ports). Used by the iSCSI auto-detect and discovery features.
+
+### SANTargetPairings (v1.5.0)
+
+```json
+"SANTargetPairings": {
+    "Pairs": [
+        { "Name": "Pair0", "A": 10, "B": 11, "ALabel": "A0", "BLabel": "B0" },
+        { "Name": "Pair1", "A": 12, "B": 13, "ALabel": "A1", "BLabel": "B1" },
+        { "Name": "Pair2", "A": 14, "B": 15, "ALabel": "A2", "BLabel": "B2" },
+        { "Name": "Pair3", "A": 16, "B": 17, "ALabel": "A3", "BLabel": "B3" }
+    ],
+    "HostAssignments": [
+        { "HostMod": 1, "PrimaryPair": "Pair0", "RetryOrder": ["Pair2", "Pair1", "Pair3"] },
+        { "HostMod": 2, "PrimaryPair": "Pair1", "RetryOrder": ["Pair3", "Pair0", "Pair2"] },
+        { "HostMod": 3, "PrimaryPair": "Pair2", "RetryOrder": ["Pair0", "Pair3", "Pair1"] },
+        { "HostMod": 4, "PrimaryPair": "Pair3", "RetryOrder": ["Pair1", "Pair2", "Pair0"] }
+    ],
+    "CycleSize": 4
+}
+```
+
+Advanced SAN target pair configuration. Overrides the default cycling pattern for users with different SAN topologies.
+
+**Convention:** A side = even suffixes, B side = odd suffixes. Each "Pair" represents one port on each controller (e.g., Pair0 = port 0 on controller A + port 0 on controller B).
+
+| Field | Description |
+|-------|-------------|
+| `Pairs[].Name` | Label for the pair, referenced by HostAssignments |
+| `Pairs[].A` / `Pairs[].B` | Last-octet suffixes for A-side (even) and B-side (odd) targets |
+| `Pairs[].ALabel` / `Pairs[].BLabel` | Optional display labels (auto-generated if omitted) |
+| `HostAssignments[].HostMod` | Host number mod CycleSize + 1 (host 1 = HostMod 1, host 5 = HostMod 1) |
+| `HostAssignments[].PrimaryPair` | Which pair to try first for this host group |
+| `HostAssignments[].RetryOrder` | Fallback pairs in order when primary is unreachable |
+| `CycleSize` | Pattern repeats every N hosts (usually matches number of pairs) |
+
+**How host assignment works:** `HostMod = ((HostNumber - 1) % CycleSize) + 1`. With CycleSize 4: host 1 maps to HostMod 1, host 2 to 2, ..., host 5 back to 1.
+
+When omitted (`null`), RackStack uses the default mod-4 cycling pattern derived from `SANTargetMappings`.
 
 ### Storage Paths
 
@@ -170,13 +221,10 @@ Configures the MSP agent installer. Customize for your RMM tool:
 ```
 
 Controls how VM names are generated during deployment:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `SiteId` | string | Static site identifier override. If set (non-empty) with `SiteIdSource: "static"`, skips auto-detection. |
-| `Pattern` | string | Token-based naming pattern. Available tokens: `{Site}`, `{Prefix}`, `{Seq}`. Use `{Seq:00}` for zero-padded sequence numbers. |
-| `SiteIdSource` | string | How to get the site ID: `"hostname"` (extract from `$env:COMPUTERNAME` using regex) or `"static"` (always use `SiteId` value). |
-| `SiteIdRegex` | string | Regex with capture group to extract site ID from hostname. |
+- `SiteId` -- Static site identifier override. If set (non-empty) with `SiteIdSource: "static"`, skips auto-detection.
+- `Pattern` -- Token-based naming pattern. Available tokens: `{Site}`, `{Prefix}`, `{Seq}`. Use `{Seq:00}` for zero-padded sequence numbers.
+- `SiteIdSource` -- How to get the site ID: `"hostname"` (extract from `$env:COMPUTERNAME` using regex) or `"static"` (always use `SiteId` value).
+- `SiteIdRegex` -- Regex with capture group to extract site ID from hostname.
 
 **Examples:**
 
@@ -296,12 +344,11 @@ If Cluster Shared Volumes exist, each CSV volume is also added. This ensures Def
 
 If `DefenderCommonVMPaths` **is** specified in `defaults.json`, those paths are used as-is and dynamic generation is skipped.
 
-See the [Storage Manager Guide](Storage-Manager.md) for full details.
-
 ### FileServer (File Server)
 
 ```json
 "FileServer": {
+    "StorageType": "nginx",
     "BaseURL": "https://files.yourdomain.com/server-tools",
     "ClientId": "your-cloudflare-access-client-id.access",
     "ClientSecret": "your-cloudflare-access-client-secret-hex-string",
@@ -311,11 +358,109 @@ See the [Storage Manager Guide](Storage-Manager.md) for full details.
 }
 ```
 
-File server configuration for downloading ISOs, VHDs, and agent installers. See the [File Server Setup](FileServer-Setup.md) guide for full setup instructions.
+File server configuration for downloading ISOs, VHDs, and agent installers. See the [File Server Setup](File-Server-Setup) guide for full setup instructions.
 
-- `BaseURL` -- Full URL to the root directory. Empty = cloud features disabled.
-- `ClientId` / `ClientSecret` -- Cloudflare Access service token credentials. Omit for LAN/VPN setups.
+- `StorageType` -- `"nginx"` (default, any web server with JSON directory listing), `"azure"` (Azure Blob Storage), `"static"` (JSON index files, works with S3+CloudFront)
+- `BaseURL` -- Full URL to the root directory (for nginx/static types). Empty = cloud features disabled.
+- `ClientId` / `ClientSecret` -- Cloudflare Access service token credentials. Omit for LAN/VPN/Azure setups.
+- For Azure Blob Storage, use these fields instead of BaseURL:
+  - `AzureAccount` -- Storage account name
+  - `AzureContainer` -- Container name
+  - `AzureSasToken` -- SAS token with read/list permissions
 - Folder names must match the actual directories on the file server.
+
+### StorageBackendType (v1.3.0)
+
+```json
+"StorageBackendType": "iSCSI"
+```
+
+Controls which storage backend is active. This determines which management submenu appears under Storage & SAN and which backend is configured during batch mode.
+
+| Value | Description |
+|-------|-------------|
+| `"iSCSI"` | iSCSI SAN with dual-path MPIO (default) |
+| `"FC"` | Fibre Channel SAN with MPIO |
+| `"S2D"` | Storage Spaces Direct (hyperconverged) |
+| `"SMB3"` | SMB 3.0 file share (NAS / Scale-Out File Server) |
+| `"NVMeoF"` | NVMe over Fabrics |
+| `"Local"` | Local disks / Direct-Attached Storage only |
+
+RackStack can also auto-detect the backend from system state. See [Storage Backends](Storage-Backends) for detection logic and backend-specific features.
+
+### Custom Role Templates (v1.4.0)
+
+```json
+"CustomRoleTemplates": {
+    "MYAPP": {
+        "FullName": "Custom App Server",
+        "Description": "Features for a custom application stack",
+        "Features": ["Web-Server", "NET-Framework-45-Core", "MSMQ"],
+        "PostInstall": null,
+        "RequiresReboot": false,
+        "ServerOnly": true
+    }
+}
+```
+
+Define custom server role templates that appear alongside the 10 built-in templates in the role template selector. Each template specifies a set of Windows features to install.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `FullName` | string | Display name in the template selector |
+| `Description` | string | Brief description of the template |
+| `Features` | array | Windows feature names (as used by `Install-WindowsFeature`) |
+| `PostInstall` | string/null | Function to call after install, or `null` |
+| `RequiresReboot` | bool | Whether features require a reboot |
+| `ServerOnly` | bool | Block installation on client OS if `true` |
+
+See [Server Role Templates](Server-Role-Templates) for the full list of built-in templates and usage details.
+
+---
+
+## Virtual Switch Management (v1.5.0)
+
+RackStack supports creating and managing all Hyper-V virtual switch types:
+
+| Type | Description | Physical NIC? | Host Access? |
+|------|-------------|---------------|-------------|
+| **SET** | Switch Embedded Teaming -- bonds multiple NICs | Yes (2+) | Yes |
+| **External** | Standard external switch -- single NIC | Yes (1) | Yes |
+| **Internal** | Host-only networking -- no physical NIC | No | Yes |
+| **Private** | Isolated -- VMs only | No | No |
+
+In interactive mode: **Configure Server > Network > Host Network > Virtual Switch Management**.
+
+In batch mode, use these fields:
+
+```json
+"CreateVirtualSwitch": true,
+"VirtualSwitchType": "SET",
+"VirtualSwitchName": "LAN-SET",
+"VirtualSwitchAdapter": null
+```
+
+`CreateSETSwitch` is still supported as a backward-compatible alias for `CreateVirtualSwitch` + `VirtualSwitchType: "SET"`.
+
+## Custom vNICs (v1.2.0+)
+
+```json
+"CustomVNICs": [
+    { "Name": "Backup", "VLAN": null },
+    { "Name": "Cluster", "VLAN": 100 },
+    { "Name": "Live Migration", "VLAN": 200 },
+    { "Name": "Storage", "VLAN": 300 }
+]
+```
+
+Array of virtual NICs to create on the External or SET switch during batch mode (Step 19). Each entry needs:
+
+- `Name` (required) -- Display name for the vNIC (e.g., "Cluster", "Live Migration")
+- `VLAN` (optional) -- VLAN ID (1-4094), or `null` for no VLAN tagging
+
+In interactive mode, use **Host Network > Add Virtual NIC to Switch** which offers preset names (Backup, Cluster, Live Migration, Storage) or custom names with optional VLAN and inline IP configuration.
+
+> **Note:** Requires an External or SET switch. In batch mode, `CreateVirtualSwitch` must be `true` or an existing external switch must be present.
 
 ---
 
@@ -325,15 +470,28 @@ When using batch mode with `ConfigType: "HOST"`, additional keys control Hyper-V
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `CreateSETSwitch` | bool | Create a Switch Embedded Team virtual switch |
-| `SETSwitchName` | string | Name for the SET switch (default: `"LAN-SET"`) |
+| `CreateVirtualSwitch` | bool | Create a Hyper-V virtual switch (see [Virtual Switch Management](#virtual-switch-management-v150)) |
+| `VirtualSwitchType` | string | `"SET"` (default), `"External"`, `"Internal"`, or `"Private"` |
+| `VirtualSwitchName` | string | Name for the virtual switch (default: `"LAN-SET"`) |
+| `VirtualSwitchAdapter` | string/null | Physical adapter name, or `null` for auto-detect |
 | `SETManagementName` | string | Name for the management vNIC (default: `"Management"`) |
-| `SETAdapterMode` | string | `"auto"` or `"manual"` adapter selection |
-| `ConfigureiSCSI` | bool | Configure iSCSI NICs with auto-calculated IPs |
+| `SETAdapterMode` | string | `"auto"` or `"manual"` adapter selection (SET only) |
+| `CreateSETSwitch` | bool | Deprecated: alias for `CreateVirtualSwitch` + `VirtualSwitchType: "SET"` |
+| `CustomVNICs` | array | Virtual NICs to create on External/SET switch (see [Custom vNICs](#custom-vnics-v120)) |
+| `SANTargetPairings` | object/null | Custom SAN pair definitions (see [SANTargetPairings](#santargetpairings-v150)) |
+| `ServerRoleTemplate` | string/null | Role template to install: DC, FS, WEB, DHCP, DNS, PRINT, WSUS, NPS, HV, RDS, or custom key |
+| `PromoteToDC` | bool | Promote server to Domain Controller (see [AD DS Promotion](AD-DS-Promotion)) |
+| `DCPromoType` | string | DC promotion type: `"NewForest"`, `"AdditionalDC"`, or `"RODC"` |
+| `ForestName` | string/null | Domain FQDN for New Forest promotion |
+| `ForestMode` / `DomainMode` | string | Functional level: `"Win2012R2"`, `"WinThreshold"` (default), `"Win2019"`, `"Win2022"`, `"Win2025"` |
+| `StorageBackendType` | string | Storage backend: `"iSCSI"` (default), `"FC"`, `"S2D"`, `"SMB3"`, `"NVMeoF"`, `"Local"` |
+| `ConfigureSharedStorage` | bool | Configure the shared storage backend based on `StorageBackendType` |
+| `ConfigureiSCSI` | bool | Configure iSCSI NICs with auto-calculated IPs (deprecated -- use `ConfigureSharedStorage`) |
 | `iSCSIHostNumber` | int/null | Host number (1-24) for IP calculation, or `null` for auto-detect |
-| `ConfigureMPIO` | bool | Connect to iSCSI targets and configure MPIO |
+| `ConfigureMPIO` | bool | Configure MPIO multipath for iSCSI or FC backends |
+| `SMB3SharePath` | string/null | UNC path to SMB3 share (only when `StorageBackendType` is `"SMB3"`) |
 | `InitializeHostStorage` | bool | Create VM storage directories and set Hyper-V paths |
 | `HostStorageDrive` | string/null | Drive letter (e.g., `"D"`) or `null` for auto-select |
 | `ConfigureDefenderExclusions` | bool | Add Defender exclusions for Hyper-V and VM paths |
 
-For full details, default values, and examples, see the [Batch Mode Guide](Batch-Mode.md).
+For full details, default values, and examples, see the [Batch Mode Guide](Batch-Mode).

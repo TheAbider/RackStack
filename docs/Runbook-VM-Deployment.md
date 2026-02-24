@@ -206,13 +206,13 @@ RackStack ships with three generic built-in templates:
 | 2 | File Server (FS) | Windows | 4 | 8 GB Dynamic | 100 GB Fixed | 200 GB Fixed | |
 | 3 | Web Server (WEB) | Windows | 4 | 8 GB Dynamic | 100 GB Fixed | -- | IIS |
 
-Add custom templates (SQL, APP, etc.) or override built-in specs via `CustomVMTemplates` in `defaults.json`. See [Configuration Guide](Configuration) for examples.
+Add custom templates (SQL, APP, etc.) or override built-in specs via `CustomVMTemplates` in `defaults.json`. See the [Configuration Guide](Configuration#custom-vm-templates) for details.
 
 ---
 
 ## Naming Conventions
 
-VM names follow a configurable token-based pattern (default: `{Site}-{Prefix}{Seq}`). The pattern, site identifier, and detection regex are all configurable via `VMNaming` in `defaults.json`.
+VM names follow a configurable token-based pattern (default: `{Site}-{Prefix}{Seq}`). The pattern, site identifier, and detection regex are all configurable via `VMNaming` in `defaults.json`. See the [Configuration Guide](Configuration#vm-naming) for details.
 
 Examples:
 - `123456-FS1` — numeric site ID, default pattern
@@ -261,3 +261,5 @@ For remote standalone hosts, RackStack uses WinRM/PowerShell Remoting to:
 | Cluster VM role fails to add | Not a cluster member or insufficient rights | Verify cluster membership |
 | Dynamic memory settings error | Min > Startup or Startup > Max | RackStack auto-calculates: 25% min, 50% startup |
 | Linux VM boot fails | Wrong Secure Boot template | RackStack sets UEFI CA for Linux automatically |
+
+For more detailed troubleshooting, see the [Troubleshooting Guide](Troubleshooting).

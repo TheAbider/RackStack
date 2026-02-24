@@ -2,6 +2,8 @@
 
 This runbook covers the end-to-end setup of dual-path iSCSI SAN connectivity with MPIO (Multipath I/O) for Hyper-V hosts, including integration with Failover Clustering.
 
+> **Note:** As of v1.3.0, RackStack supports six storage backends: iSCSI, Fibre Channel, S2D, SMB3, NVMe-oF, and Local. This runbook covers the iSCSI backend specifically. For other backends, see [Storage Backends](Storage-Backends).
+
 > **Note:** IP addresses, subnet (default `172.16.1`), and target mappings shown in this guide are defaults. Configure yours in `defaults.json` via `iSCSISubnet` and `SANTargetMappings`.
 
 ---
@@ -13,6 +15,7 @@ This runbook covers the end-to-end setup of dual-path iSCSI SAN connectivity wit
 - [Prerequisites](#prerequisites)
 - [Step 1: Install MPIO Feature](#step-1-install-mpio-feature)
 - [Step 2: Configure iSCSI NICs](#step-2-configure-iscsi-nics)
+- [Step 2b: Test iSCSI Cabling](#step-2b-test-iscsi-cabling-v120)
 - [Step 3: Verify SAN Target Connectivity](#step-3-verify-san-target-connectivity)
 - [Step 4: Enable MPIO for iSCSI](#step-4-enable-mpio-for-iscsi)
 - [Step 5: Connect to iSCSI Targets](#step-5-connect-to-iscsi-targets)
@@ -39,28 +42,28 @@ Each Hyper-V host connects to the SAN via two dedicated iSCSI NICs, each on a se
 ## Architecture
 
 ```
-                        ┌──────────────┐
-                        │   SAN Array  │
-                        │              │
-                        │  A-side  B-side
-                        └──┬───────┬───┘
-                           │       │
-                    ┌──────┘       └──────┐
-                    │                     │
-              ┌─────┴─────┐       ┌──────┴────┐
-              │ Switch A  │       │ Switch B   │
-              └─────┬─────┘       └──────┬────┘
-                    │                     │
-         ┌──────────┼─────────────────────┼──────────┐
-         │          │                     │          │
-         │   ┌──────┴─────┐       ┌──────┴────┐    │
-         │   │ iSCSI NIC 1│       │iSCSI NIC 2│    │
-         │   │ (A-side)   │       │(B-side)   │    │
-         │   │ Port 1     │       │Port 2     │    │
-         │   └────────────┘       └───────────┘    │
-         │                                          │
-         │              Hyper-V Host                │
-         └──────────────────────────────────────────┘
+                        +----------------+
+                        |   SAN Array    |
+                        |                |
+                        |  A-side  B-side|
+                        +---+--------+---+
+                            |        |
+                     +------+        +------+
+                     |                      |
+               +-----+-----+       +-------+---+
+               | Switch A  |       | Switch B   |
+               +-----+-----+       +-------+---+
+                     |                      |
+          +----------+----------------------+----------+
+          |          |                      |          |
+          |   +------+------+       +-------+-----+   |
+          |   | iSCSI NIC 1 |       | iSCSI NIC 2 |   |
+          |   | (A-side)    |       | (B-side)     |   |
+          |   | Port 1      |       | Port 2       |   |
+          |   +-------------+       +--------------+   |
+          |                                            |
+          |              Hyper-V Host                   |
+          +--------------------------------------------+
 ```
 
 Each host has:
@@ -82,7 +85,7 @@ Each host has:
 
 ## Step 1: Install MPIO Feature
 
-**Menu path:** iSCSI & SAN Management > [5] Configure MPIO Multipath
+**Menu path:** iSCSI & SAN Management > [6] Configure MPIO Multipath
 
 If MPIO is not installed, the screen shows "PREREQUISITE MISSING" and offers to install.
 
@@ -156,9 +159,37 @@ If you are unsure which physical NIC connects to which switch:
 
 ---
 
+## Step 2b: Test iSCSI Cabling (v1.2.0)
+
+**Menu path:** iSCSI & SAN Management > [3] Test iSCSI Cabling (A/B side check)
+
+Before connecting to SAN targets, you can verify that each physical NIC is cabled to the correct side:
+
+1. RackStack temporarily assigns test IPs (`.253` / `.254`) to each iSCSI adapter.
+2. Pings all known SAN targets from each adapter.
+3. Determines which side each adapter can reach.
+
+```
+  Testing iSCSI adapter connectivity...
+
+  Adapter              A-Side    B-Side    Result
+  ──────────────────   ───────   ───────   ──────
+  Ethernet 3           4/4       0/4       A-SIDE
+  Ethernet 4           0/4       4/4       B-SIDE
+```
+
+**Warnings:**
+- **Both adapters same side:** "Both adapters reach the same side. Check cabling -- they should be on different switches."
+- **Adapter reaches both sides:** May indicate cross-connected switches or lack of iSCSI network isolation.
+- **No connectivity:** Verify adapter is connected and iSCSI subnet is correct.
+
+> **Auto-config integration:** When running auto-configure (Step 2), the cabling check runs automatically. If A/B sides are detected, RackStack offers to skip manual adapter selection.
+
+---
+
 ## Step 3: Verify SAN Target Connectivity
 
-**Menu path:** iSCSI & SAN Management > [3] Discover SAN Targets
+**Menu path:** iSCSI & SAN Management > [4] Discover SAN Targets
 
 This performs a ping test against all known SAN target IPs on the iSCSI subnet:
 
@@ -182,7 +213,7 @@ Testing 172.16.1.13 (A1)... NO RESPONSE
 
 ## Step 4: Enable MPIO for iSCSI
 
-**Menu path:** iSCSI & SAN Management > [5] Configure MPIO Multipath
+**Menu path:** iSCSI & SAN Management > [6] Configure MPIO Multipath
 
 After MPIO is installed and the server has been rebooted:
 
@@ -192,6 +223,7 @@ After MPIO is installed and the server has been rebooted:
 4. Displays supported hardware (may be empty until iSCSI targets are connected).
 
 **Load balance policies available:**
+
 | Policy | Abbreviation | Description |
 |--------|-------------|-------------|
 | Round Robin | RR | Distributes I/O evenly across paths (recommended) |
@@ -204,7 +236,7 @@ After MPIO is installed and the server has been rebooted:
 
 ## Step 5: Connect to iSCSI Targets
 
-**Menu path:** iSCSI & SAN Management > [4] Connect to iSCSI Targets
+**Menu path:** iSCSI & SAN Management > [5] Connect to iSCSI Targets
 
 ### Auto-Detect with Retry
 
@@ -238,7 +270,7 @@ For each target portal:
 
 ## Step 6: Verify Multipath Connectivity
 
-**Menu path:** iSCSI & SAN Management > [6] Show iSCSI/MPIO Status
+**Menu path:** iSCSI & SAN Management > [7] Show iSCSI/MPIO Status
 
 The status screen shows four sections:
 
@@ -354,7 +386,7 @@ When VMs are stored on CSV backed by iSCSI:
 **Symptom:** MPIO shows one path as failed. I/O continues on the remaining path.
 
 **Diagnosis:**
-1. Check iSCSI session status via **[6] Show iSCSI/MPIO Status**. One portal's session will show disconnected.
+1. Check iSCSI session status via **[7] Show iSCSI/MPIO Status**. One portal's session will show disconnected.
 2. Ping the SAN target IP for the failed path:
    - **Network Diagnostics > [1] Ping Host** with the A-side or B-side SAN IP.
 3. Check the physical NIC link state:
@@ -363,7 +395,7 @@ When VMs are stored on CSV backed by iSCSI:
 **Resolution:**
 1. If NIC is DOWN: Check cable connection, switch port, NIC hardware.
 2. If NIC is UP but ping fails: Verify IP configuration via **[1] Configure iSCSI NICs**.
-3. If ping works but iSCSI session is down: The SAN target service may have restarted. Reconnect via **[4] Connect to iSCSI Targets**.
+3. If ping works but iSCSI session is down: The SAN target service may have restarted. Reconnect via **[5] Connect to iSCSI Targets**.
 4. Because sessions are configured as persistent (`-IsPersistent $true`), they should auto-reconnect. If they do not, manually reconnect.
 
 ### Both Paths Down
@@ -401,9 +433,9 @@ When VMs are stored on CSV backed by iSCSI:
 - iSCSI targets were connected before MPIO was configured.
 
 **Resolution:**
-1. Disconnect all iSCSI targets via **[7] Disconnect iSCSI Targets > [A] Disconnect ALL**.
-2. Configure MPIO via **[5] Configure MPIO Multipath**.
-3. Reconnect to iSCSI targets via **[4] Connect to iSCSI Targets**.
+1. Disconnect all iSCSI targets via **[8] Disconnect iSCSI Targets > [A] Disconnect ALL**.
+2. Configure MPIO via **[6] Configure MPIO Multipath**.
+3. Reconnect to iSCSI targets via **[5] Connect to iSCSI Targets**.
 4. Each LUN should now appear as a single disk with two paths.
 
 ---
@@ -462,3 +494,19 @@ If the primary pair is unreachable, RackStack tries alternate pairs:
 | A3/B2 | A1/B0 | A2/B3 | A0/B1 |
 
 The retry pattern places the "opposite" pair second (primary + 2 mod 4), then fills in the remaining two pairs in order.
+
+### Custom SAN Target Pairings (v1.5.0)
+
+The default assignment table above can be fully customized via `SANTargetPairings` in `defaults.json`. This lets you:
+
+- Define custom A/B pairs (different number of controller ports, different IP layouts)
+- Override the host-to-pair assignments and retry order
+- Change the cycle size (e.g., 2 pairs instead of 4)
+
+Convention: **A side = even suffixes, B side = odd suffixes**. Each pair represents one port on each controller (Pair0 = A0/B0, Pair1 = A1/B1, etc.).
+
+See [Configuration > SANTargetPairings](Configuration#santargetpairings-v150) for the full JSON schema.
+
+---
+
+See also: [Storage Backends](Storage-Backends) | [Storage Manager](Storage-Manager) | [Cluster Management](Cluster-Management) | [Troubleshooting](Troubleshooting)

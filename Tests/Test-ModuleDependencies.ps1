@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Module Dependency Validation for RackStack
 

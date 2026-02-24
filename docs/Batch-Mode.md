@@ -1,209 +1,242 @@
-# Batch Mode Guide
+# Batch Mode
 
-Batch mode automates server configuration by reading settings from a JSON file and applying them sequentially without user interaction. Instead of stepping through each menu option manually, you define the desired state in `batch_config.json` and RackStack executes every step in a single run.
+Batch mode allows you to configure a server automatically from a JSON file, with no interactive prompts (except for passwords and domain credentials). Place a `batch_config.json` file next to the executable or script, and RackStack will detect and execute it on launch.
 
----
-
-## Table of Contents
-
-- [When to Use Batch Mode](#when-to-use-batch-mode)
-- [How It Works](#how-it-works)
-- [Config File Detection](#config-file-detection)
-- [Config Key Reference](#config-key-reference)
-- [HOST vs VM Mode](#host-vs-vm-mode)
-- [Step Execution Order](#step-execution-order)
-- [Reboot Behavior](#reboot-behavior)
-- [Generate from Current State](#generate-from-current-state)
-- [Examples](#examples)
-
----
-
-## When to Use Batch Mode
-
-- **New server deployments** -- Configure a freshly installed Windows Server from scratch with a single script run.
-- **Replicating configurations** -- Clone settings from one server to another by generating a config from a known-good host.
-- **Scripted builds** -- Integrate RackStack into deployment pipelines or imaging workflows where interactive prompts are impractical.
-- **Multi-site rollouts** -- Create a template config, change the hostname and IP per site, and deploy consistently across locations.
+This is ideal for deploying multiple servers with identical or similar configurations, or for standardizing builds across sites.
 
 ---
 
 ## How It Works
 
-1. Place a `batch_config.json` file next to the RackStack script or executable.
-2. Launch RackStack as Administrator.
-3. RackStack detects the config file, displays a summary of what will be applied, and asks for confirmation.
-4. Each step executes in order. Steps with `null` or `false` values are skipped.
-5. After completion, RackStack shows a summary of changes applied and errors encountered.
-6. If any step requires a reboot and `AutoReboot` is `true`, the server reboots automatically with a 10-second countdown.
+1. Create a `batch_config.json` file (generate a template or export from a live server)
+2. Edit the file with your target server's settings
+3. Place it in the same folder as `RackStack.exe` or the `.ps1` script
+4. Run RackStack as Administrator -- it auto-detects the file and runs in batch mode
+5. After completion, delete or rename the file to return to interactive mode
+
+RackStack validates the config before executing. If there are errors (invalid IPs, out-of-range values, missing required fields), batch mode aborts with a clear error list. Warnings (e.g., missing hostname) are displayed but don't block execution.
 
 ---
 
-## Config File Detection
+## Generating a Batch Config
 
-RackStack looks for `batch_config.json` in the same directory as the running script or executable. No command-line flags or environment variables are needed.
+From the main menu, navigate to **Settings > Batch Config Generator**. You have two options:
 
+| Option | Description |
+|--------|-------------|
+| **Generate Blank Template** | Creates a template with example values and help text for every field |
+| **Generate from Current Server State** | Scans the running server and pre-fills all values from its live configuration |
+
+The "Generate from Current State" option is particularly useful for cloning -- configure one server interactively, export its state, then edit only the hostname and IP for each additional server.
+
+Both options save to `%USERPROFILE%\Desktop\batch_config.json` by default, with an option to specify a custom path.
+
+---
+
+## ConfigType: HOST vs VM
+
+The `ConfigType` field controls which steps are executed:
+
+| ConfigType | Use Case | Network Behavior | Extra Steps |
+|------------|----------|-------------------|-------------|
+| `VM` | Virtual machines | Configures IP/DNS/gateway on the specified adapter | Steps 1-16 only |
+| `HOST` | Hyper-V hosts | Skips network config unless `AdapterName` is specified (build SET via GUI first) | Steps 1-22, including role templates, DC promotion, SET, storage, MPIO, Defender |
+
+Set `ConfigType` to `HOST` when configuring a bare-metal Hyper-V server. The host-specific steps (17-22) are only executed in HOST mode.
+
+---
+
+## All 22 Batch Steps
+
+Batch mode processes steps sequentially. Set a value to `null` or `false` to skip that step.
+
+| Step | Field | Description |
+|------|-------|-------------|
+| 1 | `Hostname` | Rename the computer (requires reboot) |
+| 2 | `IPAddress`, `Gateway`, `SubnetCIDR`, `DNS1`, `DNS2` | Configure static IP, gateway, and DNS on the adapter |
+| 3 | `Timezone` | Set the system timezone |
+| 4 | `EnableRDP` | Enable Remote Desktop and firewall rule |
+| 5 | `EnableWinRM` | Enable PowerShell Remoting with Kerberos auth |
+| 6 | `ConfigureFirewall` | Set firewall profiles (Domain=Off, Private=Off, Public=On) |
+| 7 | `SetPowerPlan` | Set the active power plan |
+| 8 | `InstallHyperV` | Install Hyper-V role and management tools |
+| 9 | `InstallMPIO` | Install Multipath I/O feature |
+| 10 | `InstallFailoverClustering` | Install Failover Clustering role and tools |
+| 11 | `CreateLocalAdmin` | Create a local admin account (prompts for password) |
+| 12 | `DisableBuiltInAdmin` | Disable the built-in Administrator account |
+| 13 | `DomainName` | Join an Active Directory domain (prompts for credentials) |
+| 14 | `ServerRoleTemplate` | Install a server role template (see [Server Role Templates](Server-Role-Templates)) |
+| 15 | `PromoteToDC` | Promote to Domain Controller (see [AD DS Promotion](AD-DS-Promotion)) |
+| 16 | `InstallUpdates` | Install Windows Updates (can take 10-60+ minutes) |
+| 17 | `InitializeHostStorage` | Create VM storage directories and set Hyper-V default paths (HOST only) |
+| 18 | `CreateVirtualSwitch` | Create a virtual switch: SET, External, Internal, or Private (HOST only) |
+| 19 | `CustomVNICs` | Create custom virtual NICs on the External/SET switch (HOST only) |
+| 20 | `ConfigureSharedStorage` | Configure the storage backend: iSCSI NICs, FC scan, S2D, SMB3, or NVMe (HOST only) |
+| 21 | `ConfigureMPIO` | Configure MPIO multipath for iSCSI or FC backends (HOST only) |
+| 22 | `ConfigureDefenderExclusions` | Add Defender exclusions for Hyper-V paths (HOST only) |
+
+---
+
+## JSON Template Structure
+
+Every field has a corresponding `_Help` field that explains its purpose. Help fields (any key starting with `_`) are ignored by the script.
+
+```json
+{
+    "_README": "RackStack - Batch Config Template v1.1.0",
+    "_INSTRUCTIONS": ["..."],
+
+    "ConfigType": "VM",
+    "_ConfigType_Help": "'VM' for virtual machines, 'HOST' for Hyper-V hosts.",
+
+    "Hostname": "123456-FS1",
+    "AdapterName": "Ethernet",
+    "IPAddress": "10.0.1.100",
+    "SubnetCIDR": 24,
+    "Gateway": "10.0.1.1",
+    "DNS1": "8.8.8.8",
+    "DNS2": "8.8.4.4",
+    "DomainName": "corp.acme.com",
+    "Timezone": "Pacific Standard Time",
+    "EnableRDP": true,
+    "EnableWinRM": true,
+    "ConfigureFirewall": true,
+    "SetPowerPlan": "High Performance",
+    "InstallHyperV": false,
+    "InstallMPIO": false,
+    "InstallFailoverClustering": false,
+    "CreateLocalAdmin": false,
+    "LocalAdminName": "localadmin",
+    "DisableBuiltInAdmin": false,
+    "ServerRoleTemplate": null,
+    "PromoteToDC": false,
+    "DCPromoType": "NewForest",
+    "ForestName": null,
+    "ForestMode": "WinThreshold",
+    "DomainMode": "WinThreshold",
+    "InstallUpdates": false,
+    "AutoReboot": true
+}
 ```
-C:\ServerTools\
-    RackStack.exe
-    batch_config.json    <-- auto-detected on launch
-    defaults.json        <-- optional, loaded first for org settings
+
+### HOST-Specific Fields
+
+These fields are only processed when `ConfigType` is `HOST`:
+
+```json
+{
+    "InitializeHostStorage": false,
+    "HostStorageDrive": null,
+    "CreateSETSwitch": false,
+    "SETSwitchName": "LAN-SET",
+    "SETManagementName": "Management",
+    "SETAdapterMode": "auto",
+    "CustomVNICs": [
+        {"Name": "Backup"},
+        {"Name": "Cluster", "VLAN": 100},
+        {"Name": "Live Migration", "VLAN": 200}
+    ],
+    "StorageBackendType": "iSCSI",
+    "ConfigureSharedStorage": false,
+    "ConfigureiSCSI": false,
+    "iSCSIHostNumber": null,
+    "SMB3SharePath": null,
+    "ConfigureMPIO": false,
+    "ConfigureDefenderExclusions": false
+}
 ```
 
-- If the file exists, RackStack enters batch mode automatically.
-- If the file does not exist, RackStack starts in normal interactive mode.
-- Delete or rename the file after use to return to interactive mode.
+---
+
+## Field Reference
+
+### Common Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `ConfigType` | string | `"VM"` | `"VM"` or `"HOST"` |
+| `Hostname` | string | null | NetBIOS name, max 15 characters |
+| `AdapterName` | string | `"Ethernet"` | Network adapter name. VMs: `"Ethernet"`. Hosts: `"vEthernet (Management)"` |
+| `IPAddress` | string | null | Static IPv4 address. Both `IPAddress` and `Gateway` are required together |
+| `SubnetCIDR` | int | `24` | Subnet prefix length (1-32) |
+| `Gateway` | string | null | Default gateway IPv4 address |
+| `DNS1` / `DNS2` | string | null | Primary and secondary DNS servers |
+| `DomainName` | string | null | AD domain to join. Will prompt for credentials at runtime |
+| `Timezone` | string | null | Timezone ID (e.g., `"Pacific Standard Time"`, `"Eastern Standard Time"`) |
+| `EnableRDP` | bool | false | Enable Remote Desktop |
+| `EnableWinRM` | bool | false | Enable PowerShell Remoting |
+| `ConfigureFirewall` | bool | false | Set recommended firewall profiles |
+| `SetPowerPlan` | string | null | `"High Performance"`, `"Balanced"`, or `"Power Saver"` |
+| `InstallHyperV` | bool | false | Install Hyper-V role (requires reboot) |
+| `InstallMPIO` | bool | false | Install Multipath I/O (requires reboot) |
+| `InstallFailoverClustering` | bool | false | Install Failover Clustering (requires reboot) |
+| `CreateLocalAdmin` | bool | false | Create a local admin account (prompts for password) |
+| `LocalAdminName` | string | from defaults | Username for the local admin account |
+| `DisableBuiltInAdmin` | bool | false | Disable the built-in Administrator account |
+| `ServerRoleTemplate` | string/null | null | Role template key: `DC`, `FS`, `WEB`, `DHCP`, `DNS`, `PRINT`, `WSUS`, `NPS`, `HV`, `RDS`, or custom. `null` to skip |
+| `PromoteToDC` | bool | false | Promote to Domain Controller after domain join |
+| `DCPromoType` | string | `"NewForest"` | `"NewForest"`, `"AdditionalDC"`, or `"RODC"` |
+| `ForestName` | string/null | null | Domain FQDN for New Forest (e.g., `"corp.contoso.com"`) |
+| `ForestMode` | string | `"WinThreshold"` | Forest functional level (New Forest only). See [AD DS Promotion](AD-DS-Promotion) |
+| `DomainMode` | string | `"WinThreshold"` | Domain functional level (New Forest only) |
+| `InstallUpdates` | bool | false | Install Windows Updates (10-60+ minutes) |
+| `AutoReboot` | bool | true | Auto-reboot after changes (10-second countdown) |
+
+### HOST-Only Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `InitializeHostStorage` | bool | false | Create VM directories and set Hyper-V default paths |
+| `HostStorageDrive` | string/null | null | Drive letter (e.g., `"D"`). `null` = auto-select first non-C fixed NTFS drive |
+| `CreateVirtualSwitch` | bool | false | Create a virtual switch (replaces `CreateSETSwitch`) |
+| `VirtualSwitchType` | string | `"SET"` | `"SET"`, `"External"`, `"Internal"`, or `"Private"` |
+| `VirtualSwitchName` | string | `"LAN-SET"` | Name for the virtual switch |
+| `VirtualSwitchAdapter` | string/null | null | Physical adapter name. `null` = auto-detect |
+| `SETManagementName` | string | `"Management"` | Name for the management vNIC (SET/External) |
+| `SETAdapterMode` | string | `"auto"` | `"auto"` detects internet adapters, `"manual"` prompts (SET only) |
+| `CreateSETSwitch` | bool | false | Deprecated: alias for `CreateVirtualSwitch` + `VirtualSwitchType: "SET"` |
+| `CustomVNICs` | array | `[]` | Virtual NICs to create on External/SET. Each needs `Name` (required) and optional `VLAN` (1-4094) |
+| `StorageBackendType` | string | `"iSCSI"` | Storage backend: `"iSCSI"`, `"FC"`, `"S2D"`, `"SMB3"`, `"NVMeoF"`, or `"Local"` |
+| `ConfigureSharedStorage` | bool | false | Configure the storage backend (iSCSI NICs, FC scan, S2D enable, SMB test, NVMe scan) |
+| `ConfigureiSCSI` | bool | false | Configure iSCSI NICs (deprecated -- use `ConfigureSharedStorage` with `StorageBackendType: "iSCSI"`) |
+| `iSCSIHostNumber` | int/null | null | Host number (1-24) for IP calculation. `null` = auto-detect from hostname |
+| `SMB3SharePath` | string/null | null | UNC path to SMB3 share (e.g., `"\\\\server\\share"`). Only used with `StorageBackendType: "SMB3"` |
+| `ConfigureMPIO` | bool | false | Configure MPIO multipath for iSCSI or FC backends |
+| `ConfigureDefenderExclusions` | bool | false | Add Defender exclusions for Hyper-V and VM storage paths |
 
 ---
 
-## Config Key Reference
+## Validation and Error Handling
 
-### Standard Keys (VM and HOST)
+Before executing any steps, batch mode runs a full validation pass:
 
-These keys apply to both `VM` and `HOST` configurations.
+**Errors (block execution):**
+- Invalid `ConfigType` (must be `VM` or `HOST`)
+- Invalid hostname format (must be 1-15 alphanumeric characters, hyphens allowed)
+- Invalid IPv4 addresses in `IPAddress`, `Gateway`, `DNS1`, `DNS2`
+- `SubnetCIDR` out of range (must be 1-32)
+- `IPAddress` set without `Gateway` (or vice versa)
+- Boolean fields with non-boolean values
+- Invalid `SetPowerPlan` value
+- Invalid `SETAdapterMode` (must be `auto` or `manual`)
+- `iSCSIHostNumber` out of range (must be 1-24 or null)
+- `HostStorageDrive` is `C` or not a single letter
+- Invalid `StorageBackendType` (must be one of: iSCSI, FC, S2D, SMB3, NVMeoF, Local)
+- Invalid `DCPromoType` (must be NewForest, AdditionalDC, or RODC)
+- `ForestName` missing when `PromoteToDC` is `true` and `DCPromoType` is `NewForest`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `ConfigType` | string | `"VM"` | `"VM"` for virtual machines, `"HOST"` for Hyper-V hosts. HOST mode adds steps 15-19. |
-| `Hostname` | string | `null` | NetBIOS computer name, max 15 characters. Set to `null` to skip. |
-| `AdapterName` | string | `"Ethernet"` | Network adapter to configure. VMs: usually `"Ethernet"`. Hosts: `"vEthernet (Management)"`. |
-| `IPAddress` | string | `null` | Static IPv4 address for the management NIC. |
-| `SubnetCIDR` | int (1-32) | `24` | Subnet prefix length in CIDR notation. 24 = 255.255.255.0. |
-| `Gateway` | string | `null` | Default gateway IP address. |
-| `DNS1` | string | `null` | Primary DNS server IP address. |
-| `DNS2` | string | `null` | Secondary DNS server IP address. |
-| `DomainName` | string | `null` | Active Directory domain to join. Set to `null` to skip. Prompts for credentials at runtime. |
-| `Timezone` | string | `null` | Windows timezone ID (e.g., `"Pacific Standard Time"`, `"Eastern Standard Time"`). |
-| `EnableRDP` | bool | `true` | Enable Remote Desktop and add the firewall rule. |
-| `EnableWinRM` | bool | `true` | Enable PowerShell Remoting with Kerberos authentication. |
-| `ConfigureFirewall` | bool | `true` | Set firewall profiles: Domain=Off, Private=Off, Public=On. |
-| `SetPowerPlan` | string | `"High Performance"` | Power plan name: `"High Performance"`, `"Balanced"`, `"Power Saver"`, or `null` to skip. |
-| `InstallHyperV` | bool | `false` | Install the Hyper-V role and management tools. Requires reboot. |
-| `InstallMPIO` | bool | `false` | Install Multipath I/O for SAN connectivity. Requires reboot. |
-| `InstallFailoverClustering` | bool | `false` | Install Failover Clustering role and tools. Requires reboot. |
-| `CreateLocalAdmin` | bool | `false` | Create a local administrator account. Prompts for password at runtime. |
-| `LocalAdminName` | string | from defaults.json | Username for the local admin account. Only used when `CreateLocalAdmin` is `true`. |
-| `DisableBuiltInAdmin` | bool | `false` | Disable the built-in Administrator account. Only do this after confirming other admin access works. |
-| `InstallUpdates` | bool | `false` | Install Windows Updates. Takes 10-60+ minutes. Runs last. |
-| `AutoReboot` | bool | `true` | Automatically reboot after changes if needed. 10-second countdown before reboot. |
-
-### HOST-Only Keys
-
-These keys are only used when `ConfigType` is `"HOST"`. They are ignored in VM mode.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `CreateSETSwitch` | bool | `false` | Create a Switch Embedded Team (SET) virtual switch. Requires Hyper-V to be installed. |
-| `SETSwitchName` | string | `"LAN-SET"` | Name for the SET virtual switch. |
-| `SETManagementName` | string | `"Management"` | Name for the management virtual NIC on the SET switch. |
-| `SETAdapterMode` | string | `"auto"` | `"auto"` detects internet-connected adapters for the SET team. `"manual"` prompts for adapter selection. |
-| `ConfigureiSCSI` | bool | `false` | Configure iSCSI NICs with auto-calculated IPs based on host number. |
-| `iSCSIHostNumber` | int (1-24) or null | `null` | Host number for iSCSI IP calculation. `null` auto-detects from hostname (e.g., `123456-HV2` = host 2). |
-| `ConfigureMPIO` | bool | `false` | Connect to iSCSI targets and configure MPIO multipath. Requires iSCSI NICs to be configured first. |
-| `InitializeHostStorage` | bool | `false` | Select a data drive, create the VM storage directory structure, and set Hyper-V default paths. |
-| `HostStorageDrive` | string or null | `null` | Single drive letter for VM storage (e.g., `"D"`). `null` auto-selects the first available non-C fixed NTFS drive. |
-| `ConfigureDefenderExclusions` | bool | `false` | Add Windows Defender exclusions for Hyper-V and VM storage paths. Paths are generated dynamically from the selected storage drive. |
-
-### Help and Metadata Keys
-
-Keys prefixed with `_` (e.g., `_ConfigType_Help`, `_README`, `_HOST_SECTION`) are informational and ignored by the script. They exist only to document the config file for human readers.
+**Warnings (display but continue):**
+- Hostname not set (server keeps its current name)
+- HOST mode without `InstallHyperV`
+- `DisableBuiltInAdmin` without `CreateLocalAdmin`
+- HOST mode with IP config but no `AdapterName`
+- `CreateSETSwitch` without `InstallHyperV`
+- Invalid `ServerRoleTemplate` key (template not found in built-in or custom)
+- `PromoteToDC` without `ServerRoleTemplate: "DC"` (AD DS features may not be installed)
 
 ---
 
-## HOST vs VM Mode
-
-The `ConfigType` field controls which steps are executed.
-
-### VM Mode (`"VM"`)
-
-Runs steps 1-14. Designed for virtual machines where network configuration is straightforward (single adapter, static IP) and no host-level infrastructure is needed.
-
-### HOST Mode (`"HOST"`)
-
-Runs steps 1-19. Adds five host-specific steps after the standard configuration:
-
-- **Step 15:** Initialize host storage (data drive selection, directory creation, Hyper-V default paths)
-- **Step 16:** Create SET switch (Switch Embedded Teaming for NIC redundancy)
-- **Step 17:** Configure iSCSI NICs (auto-calculate IPs from host number)
-- **Step 18:** Configure MPIO (multipath I/O for SAN redundancy)
-- **Step 19:** Configure Defender exclusions (auto-generated paths based on storage drive)
-
-In HOST mode, network configuration (step 2) is skipped if no `AdapterName` is specified, since the SET switch is typically built first and then the management vNIC is configured afterward.
-
----
-
-## Step Execution Order
-
-| Step | Action | Applies To | Notes |
-|------|--------|-----------|-------|
-| 1 | Set hostname | VM, HOST | Requires reboot |
-| 2 | Configure network (IP, subnet, gateway, DNS) | VM, HOST | Skipped in HOST mode if AdapterName is not set |
-| 3 | Set timezone | VM, HOST | |
-| 4 | Enable RDP | VM, HOST | |
-| 5 | Enable WinRM | VM, HOST | |
-| 6 | Configure firewall profiles | VM, HOST | |
-| 7 | Set power plan | VM, HOST | |
-| 8 | Install Hyper-V | VM, HOST | Requires reboot |
-| 9 | Install MPIO | VM, HOST | Requires reboot |
-| 10 | Install Failover Clustering | VM, HOST | Requires reboot |
-| 11 | Create local admin account | VM, HOST | Prompts for password |
-| 12 | Disable built-in Administrator | VM, HOST | |
-| 13 | Join domain | VM, HOST | Prompts for credentials; requires reboot |
-| 14 | Install Windows Updates | VM, HOST | Long-running; always last among standard steps |
-| 15 | Initialize host storage | HOST only | Creates directory structure, sets Hyper-V paths |
-| 16 | Create SET switch | HOST only | Requires Hyper-V installed |
-| 17 | Configure iSCSI NICs | HOST only | Auto-calculates IPs from host number |
-| 18 | Configure MPIO multipath | HOST only | Requires iSCSI NICs configured |
-| 19 | Configure Defender exclusions | HOST only | Dynamic paths based on storage drive |
-
-Each step checks its corresponding config key. If the key is `false`, `null`, or empty, the step is skipped and logged as "skipped."
-
----
-
-## Reboot Behavior
-
-Several steps can trigger a reboot requirement:
-
-- Setting hostname (step 1)
-- Installing Hyper-V (step 8)
-- Installing MPIO (step 9)
-- Installing Failover Clustering (step 10)
-- Joining a domain (step 13)
-
-When `AutoReboot` is `true` and any of these steps executed successfully, RackStack initiates a reboot with a 10-second countdown after all steps complete. When `AutoReboot` is `false`, RackStack displays a warning that a reboot is needed but does not reboot automatically.
-
-Features that require a reboot (Hyper-V, MPIO, Failover Clustering) are not fully functional until after the reboot. If your batch config includes both feature installation and feature configuration (e.g., `InstallHyperV: true` and `CreateSETSwitch: true`), you may need to run the batch config twice: once to install features and reboot, and again to configure them.
-
----
-
-## Generate from Current State
-
-Instead of writing a config file from scratch, you can generate one pre-filled with the current server's live settings.
-
-**Menu path:** Settings > Generate Batch Config > Generate from Current Server State
-
-This detects:
-- System info (hostname, timezone, domain membership)
-- Network configuration (adapter, IP, subnet, gateway, DNS)
-- Remote access state (RDP, WinRM)
-- Installed features (Hyper-V, MPIO, Failover Clustering)
-- Power plan
-- HOST-specific state (SET switch, iSCSI sessions, storage drive)
-
-The generated file includes all detected values. To use it on a different server:
-
-1. Copy the file to the target server.
-2. Edit `Hostname` and `IPAddress` (and `Gateway` if the subnet differs).
-3. Set any unwanted options to `null` or `false`.
-4. Save as `batch_config.json` next to the script.
-5. Run RackStack.
-
----
-
-## Examples
-
-### Minimal VM Config
-
-A basic VM configuration that sets the hostname, IP, DNS, timezone, enables remote access, and joins a domain.
+## Example: Full VM Config
 
 ```json
 {
@@ -224,17 +257,15 @@ A basic VM configuration that sets the hostname, IP, DNS, timezone, enables remo
     "InstallHyperV": false,
     "InstallMPIO": false,
     "InstallFailoverClustering": false,
-    "CreateLocalAdmin": false,
-    "LocalAdminName": null,
+    "CreateLocalAdmin": true,
+    "LocalAdminName": "localadmin",
     "DisableBuiltInAdmin": false,
-    "InstallUpdates": false,
+    "InstallUpdates": true,
     "AutoReboot": true
 }
 ```
 
-### Full Host Build Config
-
-A complete Hyper-V host configuration that installs all features, sets up SET networking, iSCSI, MPIO, host storage, and Defender exclusions.
+## Example: Full HOST Config
 
 ```json
 {
@@ -258,20 +289,39 @@ A complete Hyper-V host configuration that installs all features, sets up SET ne
     "CreateLocalAdmin": true,
     "LocalAdminName": "localadmin",
     "DisableBuiltInAdmin": false,
+    "ServerRoleTemplate": "HV",
+    "PromoteToDC": false,
     "InstallUpdates": false,
     "AutoReboot": true,
-
+    "InitializeHostStorage": true,
+    "HostStorageDrive": "D",
     "CreateSETSwitch": true,
     "SETSwitchName": "LAN-SET",
     "SETManagementName": "Management",
     "SETAdapterMode": "auto",
-    "ConfigureiSCSI": true,
+    "CustomVNICs": [
+        {"Name": "Cluster", "VLAN": 100},
+        {"Name": "Live Migration", "VLAN": 200}
+    ],
+    "StorageBackendType": "iSCSI",
+    "ConfigureSharedStorage": true,
     "iSCSIHostNumber": null,
     "ConfigureMPIO": true,
-    "InitializeHostStorage": true,
-    "HostStorageDrive": "D",
     "ConfigureDefenderExclusions": true
 }
 ```
 
-> **Note:** This config installs Hyper-V, MPIO, and Failover Clustering, all of which require a reboot. The SET switch and iSCSI configuration depend on Hyper-V being functional. You will likely need two runs: the first installs features and reboots, the second configures HOST-specific steps.
+---
+
+## Tips
+
+- **Clone servers fast:** Configure one server interactively, use "Generate from Current State" to export, then change only `Hostname` and `IPAddress` for each clone.
+- **Skip with null:** Set any value to `null` to skip that step entirely.
+- **Order matters:** Steps run in order 1-22. Domain join (step 13) runs before role templates and DC promotion (steps 14-15) so the server is domain-joined first. Updates (step 16) run after role installation.
+- **Credentials:** `CreateLocalAdmin`, `DomainName`, and `PromoteToDC` will pause for interactive password/credential entry even in batch mode. All other steps are fully automated.
+- **Auto-reboot:** When `AutoReboot` is `true` and changes require a reboot, there is a 10-second countdown. Press Ctrl+C to cancel.
+- **Transcript logging:** Batch mode creates a transcript log in the configured temp directory for audit purposes.
+
+---
+
+See also: [Configuration Guide](Configuration) | [Storage Manager](Storage-Manager) | [Storage Backends](Storage-Backends) | [Server Role Templates](Server-Role-Templates) | [AD DS Promotion](AD-DS-Promotion)

@@ -1,6 +1,6 @@
-# RackStack Troubleshooting Guide
+# Troubleshooting Guide
 
-This guide covers common issues encountered during server configuration with RackStack, organized by category. Each section lists symptoms, likely causes, and resolution steps.
+Common issues encountered during server configuration with RackStack, organized by category. Each section lists symptoms, likely causes, and resolution steps.
 
 ---
 
@@ -9,7 +9,11 @@ This guide covers common issues encountered during server configuration with Rac
 - [VM Deployment Failures](#vm-deployment-failures)
 - [iSCSI / SAN Connectivity](#iscsi--san-connectivity)
 - [MPIO Issues](#mpio-issues)
+- [Storage Backends](#storage-backends)
 - [Cluster Problems](#cluster-problems)
+- [Server Role Templates](#server-role-templates)
+- [AD DS Promotion](#ad-ds-promotion)
+- [Hyper-V Replica](#hyper-v-replica)
 - [NIC Auto-Select for SET and iSCSI](#nic-auto-select-for-set-and-iscsi)
 - [Common Errors](#common-errors)
 - [Network Diagnostics Walkthrough](#network-diagnostics-walkthrough)
@@ -90,6 +94,8 @@ This guide covers common issues encountered during server configuration with Rac
 ---
 
 ## iSCSI / SAN Connectivity
+
+> **Note:** As of v1.3.0, iSCSI is one of six supported storage backends. If you are using a different backend (FC, S2D, SMB3, NVMeoF, or Local), see [Storage Backends](#storage-backends) below.
 
 ### SAN Targets Not Found
 
@@ -196,6 +202,69 @@ Hosts 5-24 cycle through the same pattern (host 5 = same as host 1, etc.).
 
 ---
 
+## Storage Backends
+
+> See [Storage Backends](Storage-Backends) for full documentation on all six backends.
+
+### Auto-Detect Mismatch
+
+**Symptom:** "Mismatch warning" -- the detected backend differs from the configured backend.
+
+**Causes:**
+- The configured backend (e.g., iSCSI) does not match the actual storage in use (e.g., FC).
+- Storage was reconfigured outside of RackStack.
+
+**Resolution:**
+1. Navigate to **Storage & SAN > `[3]` Detect Storage Backend** to re-run detection.
+2. Accept the detected backend or manually change via **`[0]` Change Storage Backend**.
+3. The detection order is: iSCSI → S2D → FC → SMB3 → NVMeoF → Local.
+
+### FC HBAs Not Found
+
+**Symptom:** "No Fibre Channel HBA ports found" when selecting the FC backend.
+
+**Causes:**
+- Fibre Channel HBA drivers are not installed.
+- HBAs are not physically present in the server.
+- HBAs are present but not recognized by Windows.
+
+**Resolution:**
+1. Verify HBA hardware is installed and seated properly.
+2. Install the vendor's HBA driver package (e.g., Emulex, QLogic/Marvell).
+3. Check Device Manager for unknown or error-state FC devices.
+4. After driver installation, use **Storage & SAN > FC > `[2]` Rescan FC Storage**.
+
+### S2D Enable Fails
+
+**Symptom:** "Enable Storage Spaces Direct" fails or shows prerequisite errors.
+
+**Causes:**
+- No active Failover Cluster exists on this server.
+- Fewer than 2 eligible physical disks available across cluster nodes.
+- S2D is already enabled on the cluster.
+
+**Resolution:**
+1. Create a Failover Cluster first via **Cluster Management > `[1]` Create New Cluster**.
+2. Ensure each node has local disks available for the S2D pool (not already partitioned or in use).
+3. Check S2D status via **Storage & SAN > S2D > `[3]` Show S2D Status**.
+
+### SMB3 Share Access Denied
+
+**Symptom:** "Test SMB Share Path" fails with access denied or path not found.
+
+**Causes:**
+- UNC path is incorrect or the file server is offline.
+- Share permissions do not allow the current user/computer access.
+- Network firewall blocking SMB (TCP 445).
+
+**Resolution:**
+1. Verify the UNC path format: `\\server\sharename`.
+2. Test from a different machine to confirm the share is accessible.
+3. Check share and NTFS permissions on the file server.
+4. Use **Network Diagnostics > `[2]` Port Test** on port 445 to verify SMB connectivity.
+
+---
+
 ## Cluster Problems
 
 ### Cannot Create Cluster
@@ -280,6 +349,161 @@ Hosts 5-24 cycle through the same pattern (host 5 = same as host 1, etc.).
 
 ---
 
+## Server Role Templates
+
+> See [Server Role Templates](Server-Role-Templates) for full documentation.
+
+### Feature Install Fails
+
+**Symptom:** "Failed to install feature" or `Install-WindowsFeature` returns an error during template installation.
+
+**Causes:**
+- Windows Update is running concurrently, locking the component store.
+- A pending reboot from a previous feature installation is blocking new installations.
+- The feature is not available on this Windows Server edition (e.g., Server Core missing GUI features).
+
+**Resolution:**
+1. Reboot the server and retry the template installation.
+2. Check for pending Windows Updates and complete them first.
+3. Verify the feature is available: run `Get-WindowsFeature <FeatureName>` to check availability.
+4. RackStack installs features incrementally -- already-installed features are skipped, so you can safely retry after a partial failure.
+
+### ServerOnly Template on Client OS
+
+**Symptom:** "This template requires Windows Server" error when attempting to install a role template.
+
+**Causes:**
+- All 10 built-in templates have `ServerOnly: true` and require Windows Server.
+- Running RackStack on Windows 10/11 for testing.
+
+**Resolution:**
+1. Role templates are designed for Windows Server deployments. They cannot be installed on client operating systems.
+2. To test template functionality on a client, create a custom template in `defaults.json` with `ServerOnly: false` and client-compatible features.
+
+---
+
+## AD DS Promotion
+
+> See [AD DS Promotion](AD-DS-Promotion) for full documentation.
+
+### Static IP Required
+
+**Symptom:** "Static IP address not configured" prerequisite check fails.
+
+**Causes:**
+- The server's IP address is assigned via DHCP.
+- Domain Controllers require a static IP for DNS reliability.
+
+**Resolution:**
+1. Configure a static IP before running the promotion wizard.
+2. In RackStack: **Server Config > Network Configuration** or batch mode with `IPAddress` and `Gateway`.
+3. After setting a static IP, re-run the promotion wizard.
+
+### Server Is Already a DC
+
+**Symptom:** "Server is already a Domain Controller" prerequisite check fails.
+
+**Causes:**
+- The promotion wizard has already been run successfully on this server.
+- The server was promoted outside of RackStack.
+
+**Resolution:**
+1. If you want to check the current DC status, use **System Configuration > `[3]` > `[4]` Check AD DS Status**.
+2. To demote a DC, use Server Manager or `Uninstall-ADDSDomainController` in PowerShell.
+
+### DSRM Password Rejected
+
+**Symptom:** DSRM password entry fails validation or the passwords do not match.
+
+**Causes:**
+- Password is shorter than 8 characters.
+- The confirmation entry does not match the first entry.
+
+**Resolution:**
+1. Enter a password with at least 8 characters.
+2. Carefully re-enter the same password when prompted for confirmation.
+3. DSRM passwords are entered as secure/masked input -- ensure Caps Lock is not accidentally enabled.
+
+### Domain Name Validation Fails
+
+**Symptom:** "Invalid domain name" error when entering the forest/domain FQDN.
+
+**Causes:**
+- The name does not contain a dot (e.g., `contoso` instead of `contoso.com`).
+- The name contains invalid characters (spaces, underscores, etc.).
+- A label starts or ends with a hyphen.
+
+**Resolution:**
+1. Use a fully qualified domain name with at least two labels (e.g., `corp.contoso.com`).
+2. Each label must start and end with an alphanumeric character.
+3. Only letters, numbers, and hyphens are allowed (hyphens only in the middle of labels).
+
+---
+
+## Hyper-V Replica
+
+> See [Hyper-V Replica](Hyper-V-Replica) for full documentation.
+
+### Connection Test Failed
+
+**Symptom:** `Test-VMReplicationConnection` fails when setting up VM replication.
+
+**Causes:**
+- The replica server is not configured to accept incoming replication.
+- Authentication type mismatch (Kerberos on one side, Certificate on the other).
+- Firewall blocking the replication port (HTTP 80 for Kerberos, HTTPS 443 for Certificate).
+- Replica server is unreachable (DNS or network issue).
+
+**Resolution:**
+1. Ensure the replica server has been configured via **Hyper-V Replica > `[1]` Enable Replica Server**.
+2. Verify both servers use the same authentication type.
+3. Check firewall rules on the replica server (RackStack configures these automatically during setup).
+4. Test basic connectivity with **Network Diagnostics > `[1]` Ping Host** and **`[2]` Port Test** on port 80 or 443.
+
+### Critical Replication Health
+
+**Symptom:** Replication Status Dashboard shows red/Critical health for a VM.
+
+**Causes:**
+- Network connectivity between primary and replica servers has been lost.
+- The replica server is offline or overloaded.
+- Replication has been suspended or broken for an extended period.
+
+**Resolution:**
+1. Check network connectivity between the two hosts.
+2. Verify the replica server is running and has sufficient disk space.
+3. Check the detailed replication statistics in the dashboard for specific error messages.
+4. If replication is severely out of sync, consider removing and re-enabling replication with a fresh initial copy.
+
+### Test Failover VM Stuck
+
+**Symptom:** A test failover VM remains running and cannot be cleaned up normally.
+
+**Causes:**
+- The test failover was not cleaned up properly.
+- The `Stop-VMFailover` command was not run after testing.
+
+**Resolution:**
+1. Run `Stop-VMFailover -VMName '<vmname>'` in PowerShell to clean up the test VM.
+2. If the test VM is still running, stop it first (`Stop-VM -VMName '<vmname>' -Force`), then run `Stop-VMFailover`.
+3. After cleanup, the test failover option becomes available again for that VM.
+
+### Planned Failover Requires Shutdown
+
+**Symptom:** "VM must be shut down for planned failover" error.
+
+**Causes:**
+- Planned failover requires the VM to be in an Off state to ensure zero data loss.
+- The VM is currently running on the primary server.
+
+**Resolution:**
+1. RackStack offers to shut down the VM automatically when this is detected.
+2. Accept the automatic shutdown, or manually shut down the VM first.
+3. After shutdown, retry the planned failover.
+4. For minimal downtime, use Live Migration (for cluster scenarios) or schedule the planned failover during a maintenance window.
+
+---
+
 ## NIC Auto-Select for SET and iSCSI
 
 When setting up a Hyper-V host, you typically have 4+ physical NICs: some connected to the management/production network (with DHCP) and others connected to the iSCSI/SAN network (a separate VLAN without DHCP). RackStack's auto-detect feature identifies which NICs are which so you don't have to figure it out manually.
@@ -306,7 +530,7 @@ When setting up a Hyper-V host, you typically have 4+ physical NICs: some connec
 
 On a freshly installed server connected to a properly configured network:
 - The management/production switch ports have a DHCP scope, so those NICs get IP addresses automatically.
-- The iSCSI switch ports are on a separate VLAN (e.g., VLAN 16) that has no DHCP scope — those NICs stay unconfigured with no IP.
+- The iSCSI switch ports are on a separate VLAN (e.g., VLAN 16) that has no DHCP scope -- those NICs stay unconfigured with no IP.
 - RackStack uses this difference to cleanly separate the two groups.
 
 ### When Auto-Detect Fails
@@ -318,7 +542,7 @@ On a freshly installed server connected to a properly configured network:
 
 **All NICs show "Has Internet":**
 - All NICs are on the same VLAN (iSCSI NICs are not yet connected to their dedicated switch ports).
-- Fix: Verify cabling — iSCSI NICs should be connected to iSCSI-only switch ports.
+- Fix: Verify cabling -- iSCSI NICs should be connected to iSCSI-only switch ports.
 - Use **Identify NICs** (blink/disable) to confirm which physical port corresponds to which NIC in Windows.
 
 **Wrong NICs selected:**
@@ -330,8 +554,8 @@ On a freshly installed server connected to a properly configured network:
 After SET is created, navigate to **iSCSI & SAN Management > [1] Configure iSCSI NICs**:
 1. RackStack automatically offers the previously identified iSCSI candidate NICs.
 2. Select which NIC connects to the SAN A-side controller and which connects to B-side.
-3. Use **[2] Identify NICs** to temporarily disable a NIC and watch which switch port light goes out — this confirms physical cabling before you assign IPs.
-4. Static IPs are calculated from the hostname (e.g., `123456-HV2` = Host #2 → Port 1 gets `{subnet}.31`, Port 2 gets `{subnet}.32`, where subnet defaults to `172.16.1`).
+3. Use **[2] Identify NICs** to temporarily disable a NIC and watch which switch port light goes out -- this confirms physical cabling before you assign IPs.
+4. Static IPs are calculated from the hostname (e.g., `123456-HV2` = Host #2 -> Port 1 gets `{subnet}.31`, Port 2 gets `{subnet}.32`, where subnet defaults to `172.16.1`).
 
 ---
 
@@ -341,9 +565,6 @@ After SET is created, navigate to **iSCSI & SAN Management > [1] Configure iSCSI
 
 **Symptom:** Operations fail with "Access Denied" or permission errors.
 
-**Causes:**
-- RackStack is not running as Administrator.
-
 **Resolution:**
 1. Right-click the RackStack executable and select "Run as administrator."
 2. For domain operations (cluster, remote deployment), ensure your domain account has appropriate permissions.
@@ -351,9 +572,6 @@ After SET is created, navigate to **iSCSI & SAN Management > [1] Configure iSCSI
 ### WMF 5.1 Missing
 
 **Symptom:** PowerShell cmdlets are not recognized, or module import fails on older servers.
-
-**Causes:**
-- Server 2012 R2 without Windows Management Framework 5.1 update.
 
 **Resolution:**
 1. RackStack detects the OS version at startup and checks for WMF 5.1 compatibility.

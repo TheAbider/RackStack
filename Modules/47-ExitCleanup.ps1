@@ -1,4 +1,4 @@
-#region ===== EXIT AND CLEANUP =====
+﻿#region ===== EXIT AND CLEANUP =====
 # Function to exit the script with optional reboot and file cleanup
 function Exit-Script {
     # Save session state for potential resume (v2.8.0)

@@ -1,10 +1,18 @@
 ﻿# Changelog
 
+## v1.5.8
+
+- **Line Endings Normalized:** All 73 .ps1 files standardized to UTF-8 BOM + CRLF (45 modules had inconsistent LF-only endings)
+- **Docs/Wiki Sync:** 7 file server setup guides (Debian, RHEL, Windows, Docker, LAN, Tailscale, Cloud) added to wiki; diverged pages synced between docs/ and wiki; 4 wiki-only pages (AD DS, Hyper-V Replica, Role Templates, Storage Backends) added to docs/
+- **Git Tags:** Created local tags for all releases v1.4.0 through v1.5.7
+- **Release Script:** Updated to create git tags, upload monolithic .ps1 to releases, include SHA256 for all 3 assets, normalize line endings, force-add monolithic in work repo
+- **Monolithic on GitHub:** `RackStack v{version}.ps1` now included as a release asset alongside the .exe
+- 63 modules, 1659 tests, backward compatible with all existing configs
+
 ## v1.5.7
 
 - **Documentation Audit Fixes:** README updated with correct test count (1659), current version references, accurate region pair count (62), FileServer StorageType in config example, cloud storage mention in config table
 - **CONTRIBUTING.md:** Pull request checklist updated with current test count
-- **.gitignore:** Monolithic build artifact (`RackStack v*.ps1`) now explicitly ignored
 - 63 modules, 1659 tests, backward compatible with all existing configs
 
 ## v1.5.6
