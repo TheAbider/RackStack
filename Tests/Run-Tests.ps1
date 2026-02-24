@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.6.0
+    Automated Test Runner for RackStack v1.6.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7085,6 +7085,55 @@ try {
 
 } catch {
     Write-TestResult "Transaction Rollback Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 132: VM PRE-FLIGHT VALIDATION (44-VMDeployment.ps1 v1.6.1)
+# ============================================================================
+
+Write-SectionHeader "132" "VM PRE-FLIGHT VALIDATION"
+
+try {
+    $vmContent = Get-Content "$modulesPath\44-VMDeployment.ps1" -Raw
+
+    Write-TestResult "44-VM: function Test-VMDeploymentPreFlight exists" ($vmContent -match 'function\s+Test-VMDeploymentPreFlight\b')
+    Write-TestResult "44-VM: function Show-PreFlightTable exists" ($vmContent -match 'function\s+Show-PreFlightTable\b')
+    Write-TestResult "44-VM: pre-flight checks disk space" ($vmContent -match 'Test-DeploymentDiskSpace|diskCheck')
+    Write-TestResult "44-VM: pre-flight checks RAM" ($vmContent -match 'FreePhysicalMemory|freeRAMMB')
+    Write-TestResult "44-VM: pre-flight checks vCPU ratio" ($vmContent -match 'NumberOfLogicalProcessors|vCPU.*ratio')
+    Write-TestResult "44-VM: pre-flight checks VM switches" ($vmContent -match 'Get-VMSwitch.*requestedSwitches|missingSwitches')
+    Write-TestResult "44-VM: pre-flight checks VHD sources" ($vmContent -match 'vhdAccessible|Test-Path.*VHD')
+    Write-TestResult "44-VM: pre-flight returns HasFailure flag" ($vmContent -match 'HasFailure')
+    Write-TestResult "44-VM: Show-PreFlightTable renders table" ($vmContent -match 'PRE-FLIGHT VALIDATION')
+    Write-TestResult "44-VM: pre-flight has OK/WARN/FAIL statuses" ($vmContent -match '"OK"' -and $vmContent -match '"WARN"' -and $vmContent -match '"FAIL"')
+
+} catch {
+    Write-TestResult "VM Pre-Flight Validation Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 133: VM POST-DEPLOY SMOKE TESTS (44-VMDeployment.ps1 v1.6.1)
+# ============================================================================
+
+Write-SectionHeader "133" "VM POST-DEPLOY SMOKE TESTS"
+
+try {
+    $vmContent2 = Get-Content "$modulesPath\44-VMDeployment.ps1" -Raw
+
+    Write-TestResult "44-VM: function Test-VMPostDeployment exists" ($vmContent2 -match 'function\s+Test-VMPostDeployment\b')
+    Write-TestResult "44-VM: function Show-SmokeSummary exists" ($vmContent2 -match 'function\s+Show-SmokeSummary\b')
+    Write-TestResult "44-VM: smoke checks VM state Running" ($vmContent2 -match 'State\s+-eq\s+.Running')
+    Write-TestResult "44-VM: smoke checks heartbeat" ($vmContent2 -match 'Get-VMIntegrationService.*Heartbeat')
+    Write-TestResult "44-VM: smoke checks NIC connected" ($vmContent2 -match 'Get-VMNetworkAdapter')
+    Write-TestResult "44-VM: smoke polls for guest IP" ($vmContent2 -match 'IPTimeoutSeconds|IPAddresses')
+    Write-TestResult "44-VM: smoke checks ping response" ($vmContent2 -match 'Test-Connection.*guestIP')
+    Write-TestResult "44-VM: smoke checks RDP port 3389" ($vmContent2 -match 'BeginConnect.*3389|RDP.*3389')
+    Write-TestResult "44-VM: smoke returns results" ($vmContent2 -match 'Passed|passedChecks')
+    Write-TestResult "44-VM: Show-SmokeSummary renders per-VM" ($vmContent2 -match 'POST-DEPLOYMENT SMOKE|SMOKE TEST')
+    Write-TestResult "44-VM: smoke summary output" ($vmContent2 -match 'SMOKE TEST|SmokeSummary|smokeResults')
+
+} catch {
+    Write-TestResult "VM Post-Deploy Smoke Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

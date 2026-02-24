@@ -2415,29 +2415,24 @@ function Start-BatchDeployment {
 
     Show-DeploymentQueue
 
-    # Check disk space
+    # Pre-flight validation (v1.6.1)
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Checking disk space..." -color "Info"
+    Write-OutputColor "  Running pre-flight validation..." -color "Info"
 
-    $spaceCheck = Test-DeploymentDiskSpace -VMConfigs $script:VMDeploymentQueue
-    if (-not $spaceCheck.HasSpace) {
-        Write-OutputColor "" -color "Info"
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Error"
-        Write-OutputColor "  │$("  INSUFFICIENT DISK SPACE".PadRight(72))│" -color "Error"
-        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │  Required: $("$($spaceCheck.RequiredGB) GB (plus 10% buffer)".PadRight(60))│" -color "Warning"
-        Write-OutputColor "  │  Free:     $("$($spaceCheck.FreeGB) GB on $($spaceCheck.DriveLetter):".PadRight(60))│" -color "Error"
-        Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  Free up space or choose a different storage drive before deploying.".PadRight(72))│" -color "Info"
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-        Write-OutputColor "" -color "Info"
+    $preFlight = Test-VMDeploymentPreFlight -VMConfigs $script:VMDeploymentQueue
+    Show-PreFlightTable -PreFlightResult $preFlight
 
-        if (-not (Confirm-UserAction -Message "Deploy anyway? (NOT RECOMMENDED - may fail mid-way)")) {
+    if ($preFlight.HasFailure) {
+        Write-OutputColor "" -color "Info"
+        if (-not (Confirm-UserAction -Message "Pre-flight FAILED. Deploy anyway? (NOT RECOMMENDED)")) {
             return
         }
     }
-    else {
-        Write-OutputColor "  $($spaceCheck.Message)" -color "Success"
+    elseif ($preFlight.HasWarning) {
+        Write-OutputColor "" -color "Info"
+        if (-not (Confirm-UserAction -Message "Pre-flight has warnings. Continue?")) {
+            return
+        }
     }
 
     Write-OutputColor "" -color "Info"
@@ -2497,6 +2492,7 @@ function Start-BatchDeployment {
     $successCount = 0
     $failCount = 0
     $totalVMs = $script:VMDeploymentQueue.Count
+    $deployedVMs = @()
 
     for ($i = 0; $i -lt $totalVMs; $i++) {
         $config = $script:VMDeploymentQueue[$i]
@@ -2513,6 +2509,7 @@ function Start-BatchDeployment {
 
             if ($result) {
                 $successCount++
+                $deployedVMs += $config
                 Write-OutputColor "  [$vmNum/$totalVMs] $($config.VMName) - SUCCESS" -color "Success"
             }
             else {
@@ -2542,6 +2539,21 @@ function Start-BatchDeployment {
         Write-OutputColor "  Failed:     $failCount" -color "Error"
     }
     Write-OutputColor "" -color "Info"
+
+    # Post-deployment smoke tests (v1.6.1)
+    if ($successCount -gt 0) {
+        Write-OutputColor "" -color "Info"
+        if (Confirm-UserAction -Message "Run post-deployment smoke tests?") {
+            Write-OutputColor "  Running smoke tests on deployed VMs..." -color "Info"
+            $smokeResults = @()
+            foreach ($config in $deployedVMs) {
+                Write-OutputColor "  Testing $($config.VMName)..." -color "Info"
+                $result = Test-VMPostDeployment -VMName $config.VMName
+                $smokeResults += $result
+            }
+            Show-SmokeSummary -SmokeResults $smokeResults
+        }
+    }
 
     # Clear the queue
     $script:VMDeploymentQueue = @()
@@ -2908,6 +2920,275 @@ function Start-VMDeployment {
                 }
             }
         }
+    }
+}
+
+# Pre-flight validation for VM deployments (v1.6.1)
+# Checks disk space, RAM, vCPU ratio, VM switches, and VHD sources
+function Test-VMDeploymentPreFlight {
+    param(
+        [Parameter(Mandatory=$true)]
+        [array]$VMConfigs,
+        [string]$StoragePath = $null
+    )
+
+    $results = @()
+
+    # 1. Disk space check (reuse existing)
+    $spaceCheck = Test-DeploymentDiskSpace -VMConfigs $VMConfigs -StoragePath $StoragePath
+    $results += @{
+        Resource = "Disk Space"
+        Required = "$($spaceCheck.RequiredGB) GB"
+        Available = "$($spaceCheck.FreeGB) GB"
+        Status = if ($spaceCheck.HasSpace) { "OK" } else { "FAIL" }
+    }
+
+    # 2. RAM check
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+    $totalRAMGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+    $freeRAMGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    $requiredRAMGB = 0
+    foreach ($vm in $VMConfigs) {
+        if ($vm.MemoryGB) { $requiredRAMGB += $vm.MemoryGB }
+    }
+    $runningVMs = @()
+    try { $runningVMs = @(Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Running" }) } catch {}
+    $existingRAMGB = 0
+    foreach ($rv in $runningVMs) { $existingRAMGB += [math]::Round($rv.MemoryAssigned / 1GB, 1) }
+    $ramStatus = if (($requiredRAMGB + $existingRAMGB) -gt ($totalRAMGB * 0.95)) { "FAIL" }
+                 elseif (($requiredRAMGB + $existingRAMGB) -gt ($totalRAMGB * 0.8)) { "WARN" }
+                 else { "OK" }
+    $results += @{
+        Resource = "RAM"
+        Required = "$requiredRAMGB GB (new) + $existingRAMGB GB (running)"
+        Available = "$totalRAMGB GB total ($freeRAMGB GB free)"
+        Status = $ramStatus
+    }
+
+    # 3. vCPU ratio check
+    $logicalProcs = (Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+    $newvCPUs = 0
+    foreach ($vm in $VMConfigs) { if ($vm.vCPU) { $newvCPUs += $vm.vCPU } }
+    $existingvCPUs = 0
+    foreach ($rv in $runningVMs) { $existingvCPUs += $rv.ProcessorCount }
+    $totalvCPUs = $newvCPUs + $existingvCPUs
+    $ratio = if ($logicalProcs -gt 0) { [math]::Round($totalvCPUs / $logicalProcs, 1) } else { 0 }
+    $cpuStatus = if ($ratio -gt 8) { "FAIL" } elseif ($ratio -gt 4) { "WARN" } else { "OK" }
+    $results += @{
+        Resource = "vCPU Ratio"
+        Required = "$newvCPUs (new) + $existingvCPUs (running) = $totalvCPUs"
+        Available = "$logicalProcs logical processors (${ratio}:1 ratio)"
+        Status = $cpuStatus
+    }
+
+    # 4. VM switch check
+    $existingSwitches = @()
+    try { $existingSwitches = @((Get-VMSwitch -ErrorAction SilentlyContinue).Name) } catch {}
+    $switchNames = @($VMConfigs | ForEach-Object { $_.SwitchName } | Where-Object { $_ } | Select-Object -Unique)
+    $missingSwitches = @($switchNames | Where-Object { $_ -notin $existingSwitches })
+    $switchStatus = if ($missingSwitches.Count -gt 0) { "FAIL" } else { "OK" }
+    $results += @{
+        Resource = "VM Switches"
+        Required = ($switchNames -join ", ")
+        Available = if ($missingSwitches.Count -gt 0) { "Missing: $($missingSwitches -join ', ')" } else { "All present" }
+        Status = $switchStatus
+    }
+
+    # 5. VHD source check
+    $vhdVMs = @($VMConfigs | Where-Object { $_.UseVHD -and $_.VHDSourcePath })
+    $vhdMissing = @()
+    foreach ($vm in $vhdVMs) {
+        if (-not (Test-Path $vm.VHDSourcePath -ErrorAction SilentlyContinue)) {
+            $vhdMissing += $vm.VHDSourcePath
+        }
+    }
+    $vhdStatus = if ($vhdMissing.Count -gt 0) { "WARN" } else { "OK" }
+    $results += @{
+        Resource = "VHD Sources"
+        Required = "$($vhdVMs.Count) VHD-based VMs"
+        Available = if ($vhdMissing.Count -gt 0) { "$($vhdMissing.Count) VHD(s) not found (will download)" } else { "All accessible" }
+        Status = $vhdStatus
+    }
+
+    $hasFail = ($results | Where-Object { $_.Status -eq "FAIL" }).Count -gt 0
+    $hasWarn = ($results | Where-Object { $_.Status -eq "WARN" }).Count -gt 0
+
+    return @{
+        Results = $results
+        HasFailure = $hasFail
+        HasWarning = $hasWarn
+        PassedAll = (-not $hasFail -and -not $hasWarn)
+    }
+}
+
+# Display pre-flight results as a formatted table
+function Show-PreFlightTable {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$PreFlightResult
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  PRE-FLIGHT VALIDATION".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├──────────────┬───────────────────────────┬───────────────────────┬──────┤" -color "Info"
+    Write-OutputColor "  │ Resource     │ Required                  │ Available             │ Stat │" -color "Info"
+    Write-OutputColor "  ├──────────────┼───────────────────────────┼───────────────────────┼──────┤" -color "Info"
+
+    foreach ($r in $PreFlightResult.Results) {
+        $color = switch ($r.Status) { "OK" { "Success" }; "WARN" { "Warning" }; "FAIL" { "Error" }; default { "Info" } }
+        $resCol = $r.Resource.PadRight(12).Substring(0, 12)
+        $reqCol = $r.Required
+        if ($reqCol.Length -gt 25) { $reqCol = $reqCol.Substring(0, 22) + "..." }
+        $reqCol = $reqCol.PadRight(25)
+        $availCol = $r.Available
+        if ($availCol.Length -gt 21) { $availCol = $availCol.Substring(0, 18) + "..." }
+        $availCol = $availCol.PadRight(21)
+        $statCol = $r.Status.PadRight(4)
+        Write-OutputColor "  │ $resCol │ $reqCol │ $availCol │ $statCol │" -color $color
+    }
+
+    Write-OutputColor "  └──────────────┴───────────────────────────┴───────────────────────┴──────┘" -color "Info"
+
+    if ($PreFlightResult.HasFailure) {
+        Write-OutputColor "  FAIL: One or more checks failed. Deployment may not succeed." -color "Error"
+    }
+    elseif ($PreFlightResult.HasWarning) {
+        Write-OutputColor "  WARNING: Review warnings above before proceeding." -color "Warning"
+    }
+    else {
+        Write-OutputColor "  All pre-flight checks passed." -color "Success"
+    }
+}
+
+# Post-deployment smoke tests for a single VM (v1.6.1)
+function Test-VMPostDeployment {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$VMName,
+        [int]$IPTimeoutSeconds = 120
+    )
+
+    $results = @()
+
+    # 1. VM state check
+    $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+    $stateOK = $null -ne $vm -and $vm.State -eq "Running"
+    $results += @{ Check = "VM Running"; Status = if ($stateOK) { "PASS" } else { "FAIL" }; Detail = if ($vm) { "$($vm.State)" } else { "VM not found" } }
+
+    if (-not $vm) { return @{ VMName = $VMName; Results = $results; Passed = 0; Failed = $results.Count } }
+
+    # 2. Heartbeat integration service
+    $hb = Get-VMIntegrationService -VM $vm -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "Heartbeat" }
+    $hbOK = $null -ne $hb -and $hb.PrimaryStatusDescription -eq "OK"
+    $results += @{ Check = "Heartbeat"; Status = if ($hbOK) { "PASS" } elseif ($hb) { "WARN" } else { "FAIL" }; Detail = if ($hb) { $hb.PrimaryStatusDescription } else { "Not available" } }
+
+    # 3. NIC connected
+    $nics = Get-VMNetworkAdapter -VM $vm -ErrorAction SilentlyContinue
+    $nicConnected = $null -ne $nics -and ($nics | Where-Object { $_.Status -eq "Ok" -or $_.Connected })
+    $results += @{ Check = "NIC Connected"; Status = if ($nicConnected) { "PASS" } else { "WARN" }; Detail = if ($nics) { "$($nics.Count) NIC(s)" } else { "No NICs" } }
+
+    # 4. Guest IP acquired (poll)
+    $guestIP = $null
+    $elapsed = 0
+    $pollInterval = 5
+    while ($elapsed -lt $IPTimeoutSeconds) {
+        $vmNics = Get-VMNetworkAdapter -VM $vm -ErrorAction SilentlyContinue
+        $ips = @($vmNics | ForEach-Object { $_.IPAddresses } | Where-Object { $_ -and $_ -notmatch ':' -and $_ -ne '127.0.0.1' })
+        if ($ips.Count -gt 0) {
+            $guestIP = $ips[0]
+            break
+        }
+        Start-Sleep -Seconds $pollInterval
+        $elapsed += $pollInterval
+    }
+    $results += @{ Check = "Guest IP"; Status = if ($guestIP) { "PASS" } else { "WARN" }; Detail = if ($guestIP) { $guestIP } else { "No IP after ${IPTimeoutSeconds}s" } }
+
+    # 5. Ping response
+    if ($guestIP) {
+        $ping = Test-Connection -ComputerName $guestIP -Count 2 -Quiet -ErrorAction SilentlyContinue
+        $results += @{ Check = "Ping"; Status = if ($ping) { "PASS" } else { "WARN" }; Detail = if ($ping) { "Responding" } else { "No response (firewall?)" } }
+    }
+    else {
+        $results += @{ Check = "Ping"; Status = "SKIP"; Detail = "No IP available" }
+    }
+
+    # 6. RDP port 3389
+    if ($guestIP) {
+        $rdp = $false
+        try {
+            $tcp = New-Object System.Net.Sockets.TcpClient
+            $connect = $tcp.BeginConnect($guestIP, 3389, $null, $null)
+            $rdp = $connect.AsyncWaitHandle.WaitOne(3000, $false)
+            $tcp.Close()
+        } catch {}
+        $results += @{ Check = "RDP (3389)"; Status = if ($rdp) { "PASS" } else { "WARN" }; Detail = if ($rdp) { "Port open" } else { "Port closed/filtered" } }
+    }
+    else {
+        $results += @{ Check = "RDP (3389)"; Status = "SKIP"; Detail = "No IP available" }
+    }
+
+    $passed = ($results | Where-Object { $_.Status -eq "PASS" }).Count
+    $failed = ($results | Where-Object { $_.Status -eq "FAIL" }).Count
+
+    return @{
+        VMName = $VMName
+        Results = $results
+        Passed = $passed
+        Failed = $failed
+        Total = $results.Count
+    }
+}
+
+# Display smoke test summary for batch deployments
+function Show-SmokeSummary {
+    param(
+        [Parameter(Mandatory=$true)]
+        [array]$SmokeResults
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  POST-DEPLOYMENT SMOKE TEST RESULTS".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├──────────────────────┬──────────┬──────────┬──────────┬────────────────┤" -color "Info"
+    Write-OutputColor "  │ VM Name              │ Running  │ Heart    │ NIC      │ IP / RDP       │" -color "Info"
+    Write-OutputColor "  ├──────────────────────┼──────────┼──────────┼──────────┼────────────────┤" -color "Info"
+
+    foreach ($sr in $SmokeResults) {
+        $vmCol = $sr.VMName
+        if ($vmCol.Length -gt 20) { $vmCol = $vmCol.Substring(0, 17) + "..." }
+        $vmCol = $vmCol.PadRight(20)
+
+        $getCheck = { param($name) $sr.Results | Where-Object { $_.Check -eq $name } | Select-Object -First 1 }
+        $running = & $getCheck "VM Running"
+        $heartbeat = & $getCheck "Heartbeat"
+        $nic = & $getCheck "NIC Connected"
+        $rdp = & $getCheck "RDP (3389)"
+
+        $fmtStatus = { param($r) if (-not $r) { "N/A".PadRight(8) } else { $r.Status.PadRight(8) } }
+        $fmtColor = { param($r) if (-not $r) { "Debug" } elseif ($r.Status -eq "PASS") { "Success" } elseif ($r.Status -eq "FAIL") { "Error" } else { "Warning" } }
+
+        $runStr = & $fmtStatus $running
+        $hbStr = & $fmtStatus $heartbeat
+        $nicStr = & $fmtStatus $nic
+        $ipCheck = $sr.Results | Where-Object { $_.Check -eq "Guest IP" } | Select-Object -First 1
+        $rdpStr = if ($ipCheck -and $ipCheck.Status -eq "PASS" -and $rdp) { "$($ipCheck.Detail)" } else { "No IP" }
+        if ($rdpStr.Length -gt 14) { $rdpStr = $rdpStr.Substring(0, 11) + "..." }
+        $rdpStr = $rdpStr.PadRight(14)
+
+        $lineColor = if ($sr.Failed -gt 0) { "Error" } elseif ($sr.Passed -eq $sr.Total) { "Success" } else { "Warning" }
+        Write-OutputColor "  │ $vmCol │ $runStr │ $hbStr │ $nicStr │ $rdpStr │" -color $lineColor
+    }
+
+    Write-OutputColor "  └──────────────────────┴──────────┴──────────┴──────────┴────────────────┘" -color "Info"
+
+    $allPassed = ($SmokeResults | Where-Object { $_.Failed -gt 0 }).Count -eq 0
+    if ($allPassed) {
+        Write-OutputColor "  All VMs passed smoke tests." -color "Success"
+    }
+    else {
+        $failCount = ($SmokeResults | Where-Object { $_.Failed -gt 0 }).Count
+        Write-OutputColor "  $failCount VM(s) have failed checks. Review above." -color "Warning"
     }
 }
 #endregion
