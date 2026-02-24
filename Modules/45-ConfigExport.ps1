@@ -1069,4 +1069,318 @@ function Start-DriftCheck {
         Write-OutputColor "  No drift detected — server matches the saved profile." -color "Success"
     }
 }
+
+# ============================================================================
+# DRIFT BASELINE PERSISTENCE (v1.7.1)
+# ============================================================================
+
+# Save current server state as a drift baseline JSON file
+function Save-DriftBaseline {
+    param(
+        [string]$Description = ""
+    )
+
+    $baselineDir = "$script:AppConfigDir\baselines"
+    if (-not (Test-Path $baselineDir)) {
+        $null = New-Item -Path $baselineDir -ItemType Directory -Force -ErrorAction SilentlyContinue
+    }
+
+    $hostname = $env:COMPUTERNAME
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $baselinePath = Join-Path $baselineDir "${hostname}_${timestamp}.json"
+
+    try {
+        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $tz = Get-TimeZone
+        $powerPlan = Get-CurrentPowerPlan
+        $fwState = Get-FirewallState
+        $rdpState = Get-RDPState
+        $winrmState = Get-WinRMState
+
+        # Network adapters
+        $adapters = @()
+        foreach ($adapter in (Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })) {
+            $ip = Get-NetIPAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+            $dns = (Get-DnsClientServerAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
+            $adapters += @{
+                Name = $adapter.Name
+                IP = if ($ip) { $ip.IPAddress } else { $null }
+                Prefix = if ($ip) { $ip.PrefixLength } else { $null }
+                DNS = $dns
+            }
+        }
+
+        # Installed features
+        $features = @()
+        if (Test-HyperVInstalled) { $features += "Hyper-V" }
+        if (Test-MPIOInstalled) { $features += "MPIO" }
+        if (Test-FailoverClusteringInstalled) { $features += "FailoverClustering" }
+
+        # VM switches
+        $switches = @()
+        $vmSwitches = Get-VMSwitch -ErrorAction SilentlyContinue
+        if ($vmSwitches) {
+            foreach ($sw in $vmSwitches) {
+                $switches += @{ Name = $sw.Name; Type = $sw.SwitchType.ToString() }
+            }
+        }
+
+        $baseline = [ordered]@{
+            _BaselineInfo = [ordered]@{
+                Hostname = $hostname
+                CapturedAt = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+                ScriptVersion = $script:ScriptVersion
+                Description = $Description
+            }
+            Hostname = $hostname
+            Domain = $cs.Domain
+            PartOfDomain = $cs.PartOfDomain
+            Timezone = $tz.Id
+            PowerPlan = $powerPlan.Name
+            RDP = $rdpState
+            WinRM = $winrmState
+            FirewallDomain = $fwState.Domain
+            FirewallPrivate = $fwState.Private
+            FirewallPublic = $fwState.Public
+            NetworkAdapters = $adapters
+            InstalledFeatures = $features
+            VMSwitches = $switches
+        }
+
+        $baseline | ConvertTo-Json -Depth 5 | Out-File -FilePath $baselinePath -Encoding UTF8 -Force
+        Add-SessionChange -Category "Drift" -Description "Saved drift baseline to $baselinePath"
+        return $baselinePath
+    }
+    catch {
+        Write-OutputColor "  Failed to save baseline: $_" -color "Error"
+        return $null
+    }
+}
+
+# List saved drift baselines
+function Get-DriftBaselines {
+    $baselineDir = "$script:AppConfigDir\baselines"
+    if (-not (Test-Path $baselineDir)) { return @() }
+
+    $files = Get-ChildItem -Path $baselineDir -Filter "*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+    $baselines = @()
+
+    foreach ($file in $files) {
+        try {
+            $data = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            $baselines += @{
+                Path = $file.FullName
+                FileName = $file.Name
+                Hostname = $data._BaselineInfo.Hostname
+                CapturedAt = $data._BaselineInfo.CapturedAt
+                Description = $data._BaselineInfo.Description
+                Size = $file.Length
+            }
+        }
+        catch {
+            $baselines += @{ Path = $file.FullName; FileName = $file.Name; Hostname = "?"; CapturedAt = "?"; Description = "Parse error" }
+        }
+    }
+    return $baselines
+}
+
+# Compare two baseline files
+function Compare-DriftHistory {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Baseline1Path,
+        [Parameter(Mandatory=$true)]
+        [string]$Baseline2Path
+    )
+
+    if (-not (Test-Path $Baseline1Path) -or -not (Test-Path $Baseline2Path)) {
+        Write-OutputColor "  One or both baseline files not found." -color "Error"
+        return $null
+    }
+
+    try {
+        $b1 = Get-Content $Baseline1Path -Raw | ConvertFrom-Json
+        $b2 = Get-Content $Baseline2Path -Raw | ConvertFrom-Json
+
+        $changes = @()
+        $skipKeys = @("_BaselineInfo", "NetworkAdapters", "VMSwitches", "InstalledFeatures")
+        $allProps = @()
+        $b1.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys } | ForEach-Object { $allProps += $_.Name }
+        $b2.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys -and $_.Name -notin $allProps } | ForEach-Object { $allProps += $_.Name }
+
+        foreach ($prop in $allProps) {
+            $val1 = "$($b1.$prop)"
+            $val2 = "$($b2.$prop)"
+            if ($val1 -ne $val2) {
+                $changes += @{ Setting = $prop; Before = $val1; After = $val2 }
+            }
+        }
+
+        # Compare features
+        $feat1 = @($b1.InstalledFeatures)
+        $feat2 = @($b2.InstalledFeatures)
+        $addedFeats = @($feat2 | Where-Object { $_ -notin $feat1 })
+        $removedFeats = @($feat1 | Where-Object { $_ -notin $feat2 })
+        if ($addedFeats.Count -gt 0) { $changes += @{ Setting = "Features Added"; Before = ""; After = $addedFeats -join ", " } }
+        if ($removedFeats.Count -gt 0) { $changes += @{ Setting = "Features Removed"; Before = $removedFeats -join ", "; After = "" } }
+
+        return @{
+            Baseline1 = $b1._BaselineInfo
+            Baseline2 = $b2._BaselineInfo
+            Changes = $changes
+            HasChanges = ($changes.Count -gt 0)
+        }
+    }
+    catch {
+        Write-OutputColor "  Error comparing baselines: $_" -color "Error"
+        return $null
+    }
+}
+
+# Show drift trend — timeline of setting changes across baselines
+function Show-DriftTrend {
+    $baselines = Get-DriftBaselines
+    if ($baselines.Count -lt 2) {
+        Write-OutputColor "  Need at least 2 baselines to show trends. Currently have $($baselines.Count)." -color "Warning"
+        return
+    }
+
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                       DRIFT TREND TIMELINE").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Compare each consecutive pair
+    $sortedBaselines = $baselines | Sort-Object { $_.CapturedAt }
+
+    for ($i = 1; $i -lt $sortedBaselines.Count; $i++) {
+        $prev = $sortedBaselines[$i - 1]
+        $curr = $sortedBaselines[$i]
+
+        $comparison = Compare-DriftHistory -Baseline1Path $prev.Path -Baseline2Path $curr.Path
+        if ($null -eq $comparison) { continue }
+
+        $timeLabel = "$($prev.CapturedAt) -> $($curr.CapturedAt)"
+        if ($comparison.HasChanges) {
+            Write-OutputColor "  $timeLabel  [$($comparison.Changes.Count) change(s)]" -color "Warning"
+            foreach ($change in $comparison.Changes) {
+                Write-OutputColor "    $($change.Setting): '$($change.Before)' -> '$($change.After)'" -color "Info"
+            }
+        }
+        else {
+            Write-OutputColor "  $timeLabel  [no changes]" -color "Success"
+        }
+        Write-OutputColor "" -color "Info"
+    }
+
+    Add-SessionChange -Category "Drift" -Description "Viewed drift trend ($($sortedBaselines.Count) baselines)"
+}
+
+# Interactive drift detection submenu (v1.7.1)
+function Show-DriftDetectionMenu {
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                       DRIFT DETECTION").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        Write-OutputColor "  [1] Check drift against profile" -color "Info"
+        Write-OutputColor "  [2] Save baseline snapshot" -color "Info"
+        Write-OutputColor "  [3] View saved baselines" -color "Info"
+        Write-OutputColor "  [4] Compare two baselines" -color "Info"
+        Write-OutputColor "  [5] Show drift trend timeline" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [B] Back" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        switch ($choice) {
+            "1" {
+                Start-DriftCheck
+                Write-PressEnter
+            }
+            "2" {
+                Write-OutputColor "  Enter description (optional):" -color "Info"
+                $desc = Read-Host "  "
+                $path = Save-DriftBaseline -Description $desc
+                if ($path) {
+                    Write-OutputColor "  Baseline saved: $path" -color "Success"
+                }
+                Write-PressEnter
+            }
+            "3" {
+                $baselines = Get-DriftBaselines
+                if ($baselines.Count -eq 0) {
+                    Write-OutputColor "  No baselines found." -color "Warning"
+                }
+                else {
+                    Write-OutputColor "  Saved baselines ($($baselines.Count)):" -color "Info"
+                    Write-OutputColor "" -color "Info"
+                    $idx = 1
+                    foreach ($bl in $baselines) {
+                        Write-OutputColor "  [$idx] $($bl.Hostname)  $($bl.CapturedAt)  $($bl.Description)" -color "Info"
+                        $idx++
+                    }
+                }
+                Write-PressEnter
+            }
+            "4" {
+                $baselines = Get-DriftBaselines
+                if ($baselines.Count -lt 2) {
+                    Write-OutputColor "  Need at least 2 baselines to compare." -color "Warning"
+                    Write-PressEnter
+                    continue
+                }
+                Write-OutputColor "  Available baselines:" -color "Info"
+                $idx = 1
+                foreach ($bl in $baselines) {
+                    Write-OutputColor "  [$idx] $($bl.Hostname) $($bl.CapturedAt)" -color "Info"
+                    $idx++
+                }
+                Write-OutputColor "" -color "Info"
+                $first = Read-Host "  First baseline number"
+                $second = Read-Host "  Second baseline number"
+                $fi = ($first -as [int]) - 1
+                $si = ($second -as [int]) - 1
+                if ($fi -ge 0 -and $fi -lt $baselines.Count -and $si -ge 0 -and $si -lt $baselines.Count) {
+                    $comparison = Compare-DriftHistory -Baseline1Path $baselines[$fi].Path -Baseline2Path $baselines[$si].Path
+                    if ($comparison) {
+                        if ($comparison.HasChanges) {
+                            Write-OutputColor "  $($comparison.Changes.Count) difference(s) found:" -color "Warning"
+                            foreach ($c in $comparison.Changes) {
+                                Write-OutputColor "    $($c.Setting): '$($c.Before)' -> '$($c.After)'" -color "Info"
+                            }
+                        }
+                        else {
+                            Write-OutputColor "  No differences found." -color "Success"
+                        }
+                    }
+                }
+                else {
+                    Write-OutputColor "  Invalid selection." -color "Error"
+                }
+                Write-PressEnter
+            }
+            "5" {
+                Show-DriftTrend
+                Write-PressEnter
+            }
+            "b" { return }
+            "B" { return }
+            default {
+                Write-OutputColor "  Invalid choice." -color "Error"
+                Start-Sleep -Seconds 1
+            }
+        }
+    }
+}
 #endregion

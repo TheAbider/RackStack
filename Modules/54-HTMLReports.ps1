@@ -678,4 +678,253 @@ function Export-HTMLReadinessReport {
     }
 }
 
+# ============================================================================
+# PERFORMANCE TREND REPORTS (v1.7.1)
+# ============================================================================
+
+# Save a performance snapshot to JSON
+function Save-PerformanceSnapshot {
+    $metricsDir = "$script:AppConfigDir\metrics"
+    if (-not (Test-Path $metricsDir)) {
+        $null = New-Item -Path $metricsDir -ItemType Directory -Force -ErrorAction SilentlyContinue
+    }
+
+    $hostname = $env:COMPUTERNAME
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $snapshotPath = Join-Path $metricsDir "${hostname}_${timestamp}.json"
+
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        $cpuAll = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+        $cpuLoad = ($cpuAll | Measure-Object -Property LoadPercentage -Average).Average
+        $totalMemMB = [math]::Round($os.TotalVisibleMemorySize / 1024, 0)
+        $freeMemMB = [math]::Round($os.FreePhysicalMemory / 1024, 0)
+
+        # Disk info
+        $diskInfo = @()
+        $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+        foreach ($disk in $disks) {
+            $totalGB = [math]::Round($disk.Size / 1GB, 2)
+            $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+            $diskInfo += @{ Drive = $disk.DeviceID; TotalGB = $totalGB; FreeGB = $freeGB; UsedPercent = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) }
+        }
+
+        # Network bytes
+        $netInfo = @()
+        try {
+            $netStats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
+            foreach ($ns in $netStats) {
+                $netInfo += @{ Name = $ns.Name; BytesSent = $ns.SentBytes; BytesReceived = $ns.ReceivedBytes; InErrors = $ns.InErrors; OutErrors = $ns.OutErrors }
+            }
+        } catch {}
+
+        $snapshot = [ordered]@{
+            Hostname = $hostname
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+            CPUPercent = [math]::Round($cpuLoad, 1)
+            MemoryTotalMB = $totalMemMB
+            MemoryFreeMB = $freeMemMB
+            MemoryUsedPercent = [math]::Round((($totalMemMB - $freeMemMB) / $totalMemMB) * 100, 1)
+            Disks = $diskInfo
+            Network = $netInfo
+        }
+
+        $snapshot | ConvertTo-Json -Depth 5 | Out-File -FilePath $snapshotPath -Encoding UTF8 -Force
+        Add-SessionChange -Category "Metrics" -Description "Saved performance snapshot"
+        return $snapshotPath
+    }
+    catch {
+        Write-OutputColor "  Failed to save snapshot: $_" -color "Error"
+        return $null
+    }
+}
+
+# Generate a self-contained HTML trend report with CSS-based bar charts
+function Export-HTMLTrendReport {
+    param(
+        [string]$OutputPath = "$env:USERPROFILE\Desktop\TrendReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
+    )
+
+    $metricsDir = "$script:AppConfigDir\metrics"
+    if (-not (Test-Path $metricsDir)) {
+        Write-OutputColor "  No metrics found. Save snapshots first." -color "Warning"
+        return
+    }
+
+    $files = Get-ChildItem -Path $metricsDir -Filter "*.json" -ErrorAction SilentlyContinue | Sort-Object Name
+    if ($files.Count -eq 0) {
+        Write-OutputColor "  No snapshot files found." -color "Warning"
+        return
+    }
+
+    Write-OutputColor "  Loading $($files.Count) snapshot(s)..." -color "Info"
+
+    $snapshots = @()
+    foreach ($file in $files) {
+        try {
+            $data = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            $snapshots += $data
+        } catch {}
+    }
+
+    if ($snapshots.Count -eq 0) {
+        Write-OutputColor "  No valid snapshots." -color "Warning"
+        return
+    }
+
+    # Build CSS bar chart rows for CPU and memory
+    $cpuRows = ""
+    $memRows = ""
+    foreach ($snap in $snapshots) {
+        $ts = if ($snap.Timestamp) { $snap.Timestamp } else { "?" }
+        $shortTs = $ts -replace 'T', ' '
+
+        $cpuPct = $snap.CPUPercent
+        $cpuColor = if ($cpuPct -gt 80) { "#dc3545" } elseif ($cpuPct -gt 50) { "#ffc107" } else { "#28a745" }
+        $cpuRows += "<tr><td style='width:160px;font-size:11px'>$shortTs</td><td><div style='background:$cpuColor;width:$($cpuPct)%;height:18px;border-radius:3px;min-width:2px'></div></td><td style='width:50px'>$cpuPct%</td></tr>`n"
+
+        $memPct = $snap.MemoryUsedPercent
+        $memColor = if ($memPct -gt 90) { "#dc3545" } elseif ($memPct -gt 75) { "#ffc107" } else { "#28a745" }
+        $memRows += "<tr><td style='width:160px;font-size:11px'>$shortTs</td><td><div style='background:$memColor;width:$($memPct)%;height:18px;border-radius:3px;min-width:2px'></div></td><td style='width:50px'>$memPct%</td></tr>`n"
+    }
+
+    # Disk trend — estimate days until full
+    $diskSection = ""
+    $latestSnap = $snapshots[-1]
+    if ($latestSnap.Disks) {
+        $diskSection = "<h2>Disk Usage (Latest)</h2><table>"
+        foreach ($disk in $latestSnap.Disks) {
+            $daysUntilFull = ""
+            if ($snapshots.Count -ge 2) {
+                $firstSnap = $snapshots[0]
+                $firstDisk = $firstSnap.Disks | Where-Object { $_.Drive -eq $disk.Drive }
+                if ($firstDisk -and $firstDisk.FreeGB -gt $disk.FreeGB) {
+                    $consumedGB = $firstDisk.FreeGB - $disk.FreeGB
+                    try {
+                        $firstDate = [datetime]::Parse($firstSnap.Timestamp)
+                        $lastDate = [datetime]::Parse($latestSnap.Timestamp)
+                        $daysBetween = ($lastDate - $firstDate).TotalDays
+                        if ($daysBetween -gt 0 -and $consumedGB -gt 0) {
+                            $ratePerDay = $consumedGB / $daysBetween
+                            $daysLeft = [math]::Round($disk.FreeGB / $ratePerDay, 0)
+                            $daysUntilFull = " (~$daysLeft days until full)"
+                        }
+                    } catch {}
+                }
+            }
+            $diskColor = if ($disk.UsedPercent -gt 90) { "status-bad" } elseif ($disk.UsedPercent -gt 75) { "status-warn" } else { "status-good" }
+            $diskSection += "<tr><td>$($disk.Drive)</td><td>$($disk.TotalGB) GB</td><td>$($disk.FreeGB) GB free</td><td class='$diskColor'>$($disk.UsedPercent)%$daysUntilFull</td></tr>"
+        }
+        $diskSection += "</table>"
+    }
+
+    $html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Performance Trend Report - $($latestSnap.Hostname)</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 3px solid #0078d4; padding-bottom: 10px; }
+        h2 { color: #0078d4; margin-top: 30px; }
+        .status-good { color: #28a745; font-weight: bold; }
+        .status-warn { color: #ffc107; font-weight: bold; }
+        .status-bad { color: #dc3545; font-weight: bold; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+        th { background: #343a40; color: white; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #666; font-size: 12px; }
+        .metric-info { color: #666; font-size: 13px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Performance Trend Report</h1>
+        <p>Server: $($latestSnap.Hostname) | Snapshots: $($snapshots.Count) | Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
+
+        <h2>CPU Usage Over Time</h2>
+        <p class="metric-info">Bar width = CPU utilization percentage</p>
+        <table>
+            <tr><th>Timestamp</th><th>Usage</th><th>%</th></tr>
+            $cpuRows
+        </table>
+
+        <h2>Memory Usage Over Time</h2>
+        <p class="metric-info">Bar width = memory utilization percentage</p>
+        <table>
+            <tr><th>Timestamp</th><th>Usage</th><th>%</th></tr>
+            $memRows
+        </table>
+
+        $diskSection
+
+        <div class="footer">
+            Report generated by $($script:ToolFullName) v$($script:ScriptVersion)
+        </div>
+    </div>
+</body>
+</html>
+"@
+
+    try {
+        $html | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+        Write-OutputColor "  Trend report saved to: $OutputPath" -color "Success"
+        Add-SessionChange -Category "Report" -Description "Generated performance trend report ($($snapshots.Count) snapshots)"
+
+        if (Confirm-UserAction -Message "Open report in browser?") {
+            Start-Process $OutputPath
+        }
+    }
+    catch {
+        Write-OutputColor "  Error saving report: $_" -color "Error"
+    }
+}
+
+# Interval-based metric collection
+function Start-MetricCollection {
+    param(
+        [int]$IntervalMinutes = 5,
+        [int]$DurationMinutes = 60
+    )
+
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                     METRIC COLLECTION").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $totalSnapshots = [math]::Ceiling($DurationMinutes / $IntervalMinutes)
+    Write-OutputColor "  Collecting $totalSnapshots snapshots every $IntervalMinutes minute(s) for $DurationMinutes minutes." -color "Info"
+    Write-OutputColor "  Press Ctrl+C to stop early." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $collected = 0
+    $endTime = (Get-Date).AddMinutes($DurationMinutes)
+
+    while ((Get-Date) -lt $endTime) {
+        $collected++
+        $path = Save-PerformanceSnapshot
+        if ($path) {
+            Write-OutputColor "  [$collected/$totalSnapshots] Snapshot saved ($(Get-Date -Format 'HH:mm:ss'))" -color "Success"
+        }
+        else {
+            Write-OutputColor "  [$collected/$totalSnapshots] Snapshot failed" -color "Error"
+        }
+
+        if ((Get-Date).AddMinutes($IntervalMinutes) -lt $endTime) {
+            Start-Sleep -Seconds ($IntervalMinutes * 60)
+        }
+        else {
+            break
+        }
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Collection complete: $collected snapshot(s) saved." -color "Success"
+    Add-SessionChange -Category "Metrics" -Description "Collected $collected performance snapshots over $DurationMinutes minutes"
+}
 #endregion

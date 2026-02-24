@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.7.0
+    Automated Test Runner for RackStack v1.7.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -6086,8 +6086,8 @@ try {
     # Switch handles case "12"
     Write-TestResult "56-OperationsMenu: switch handles case 12" ($omContent -match '"12"')
 
-    # Case "12" calls Start-DriftCheck
-    Write-TestResult "56-OperationsMenu: case 12 calls Start-DriftCheck" ($omContent -match '"12"[\s\S]*?Start-DriftCheck')
+    # Case "12" calls Show-DriftDetectionMenu (v1.7.1 upgrade from Start-DriftCheck)
+    Write-TestResult "56-OperationsMenu: case 12 calls Show-DriftDetectionMenu" ($omContent -match '"12"[\s\S]*?Show-DriftDetectionMenu')
 
 } catch {
     Write-TestResult "Operations Menu Drift Check Tests" $false $_.Exception.Message
@@ -7183,6 +7183,67 @@ try {
 
 } catch {
     Write-TestResult "Expanded Health Dashboard Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 136: DRIFT DETECTION PERSISTENCE (45-ConfigExport.ps1 v1.7.1)
+# ============================================================================
+
+Write-SectionHeader "136" "DRIFT DETECTION PERSISTENCE"
+
+try {
+    $driftContent = Get-Content "$modulesPath\45-ConfigExport.ps1" -Raw
+
+    Write-TestResult "45-Drift: function Save-DriftBaseline exists" ($driftContent -match 'function\s+Save-DriftBaseline\b')
+    Write-TestResult "45-Drift: function Get-DriftBaselines exists" ($driftContent -match 'function\s+Get-DriftBaselines\b')
+    Write-TestResult "45-Drift: function Compare-DriftHistory exists" ($driftContent -match 'function\s+Compare-DriftHistory\b')
+    Write-TestResult "45-Drift: function Show-DriftTrend exists" ($driftContent -match 'function\s+Show-DriftTrend\b')
+    Write-TestResult "45-Drift: function Show-DriftDetectionMenu exists" ($driftContent -match 'function\s+Show-DriftDetectionMenu\b')
+    Write-TestResult "45-Drift: saves baselines to AppConfigDir" ($driftContent -match 'AppConfigDir.*baselines')
+    Write-TestResult "45-Drift: baseline captures hostname" ($driftContent -match 'Hostname.*env:COMPUTERNAME')
+    Write-TestResult "45-Drift: baseline captures timezone" ($driftContent -match 'Get-TimeZone')
+    Write-TestResult "45-Drift: baseline captures firewall state" ($driftContent -match 'Get-FirewallState')
+    Write-TestResult "45-Drift: baseline captures installed features" ($driftContent -match 'Test-HyperVInstalled|Test-MPIOInstalled')
+    Write-TestResult "45-Drift: Compare-DriftHistory detects changes" ($driftContent -match 'HasChanges|changes\.Count')
+    Write-TestResult "45-Drift: Show-DriftTrend shows timeline" ($driftContent -match 'DRIFT TREND|drift trend')
+    Write-TestResult "45-Drift: drift menu has multiple options" ($driftContent -match '\[1\].*drift|\[2\].*baseline')
+    Write-TestResult "45-Drift: logs session changes" ($driftContent -match 'Add-SessionChange.*[Dd]rift')
+
+} catch {
+    Write-TestResult "Drift Detection Persistence Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 137: PERFORMANCE TREND REPORTS (54-HTMLReports.ps1 v1.7.1)
+# ============================================================================
+
+Write-SectionHeader "137" "PERFORMANCE TREND REPORTS"
+
+try {
+    $trendContent = Get-Content "$modulesPath\54-HTMLReports.ps1" -Raw
+    $opsContent = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+
+    Write-TestResult "54-HTML: function Save-PerformanceSnapshot exists" ($trendContent -match 'function\s+Save-PerformanceSnapshot\b')
+    Write-TestResult "54-HTML: function Export-HTMLTrendReport exists" ($trendContent -match 'function\s+Export-HTMLTrendReport\b')
+    Write-TestResult "54-HTML: function Start-MetricCollection exists" ($trendContent -match 'function\s+Start-MetricCollection\b')
+    Write-TestResult "54-HTML: snapshots save to metrics dir" ($trendContent -match 'AppConfigDir.*metrics')
+    Write-TestResult "54-HTML: snapshot captures CPU%" ($trendContent -match 'CPUPercent')
+    Write-TestResult "54-HTML: snapshot captures memory" ($trendContent -match 'MemoryUsedPercent')
+    Write-TestResult "54-HTML: snapshot captures disk info" ($trendContent -match 'diskInfo.*FreeGB|FreeGB')
+    Write-TestResult "54-HTML: trend report uses CSS bar charts" ($trendContent -match 'border-radius.*min-width')
+    Write-TestResult "54-HTML: trend report estimates days until full" ($trendContent -match 'days until full|daysLeft')
+    Write-TestResult "54-HTML: metric collection supports interval" ($trendContent -match 'IntervalMinutes.*DurationMinutes')
+    Write-TestResult "56-Ops: drift detection menu wired" ($opsContent -match 'Show-DriftDetectionMenu')
+    Write-TestResult "56-Ops: save snapshot menu item" ($opsContent -match 'Save-PerformanceSnapshot')
+    Write-TestResult "56-Ops: trend report menu item" ($opsContent -match 'Export-HTMLTrendReport')
+    Write-TestResult "56-Ops: metric collection menu item" ($opsContent -match 'Start-MetricCollection')
+
+    # Auto-baseline test (depends on drift functions)
+    $entryContent3 = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-Batch: auto-save drift baseline" ($entryContent3 -match 'Save-DriftBaseline.*Auto-saved after batch')
+
+} catch {
+    Write-TestResult "Performance Trend Report Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

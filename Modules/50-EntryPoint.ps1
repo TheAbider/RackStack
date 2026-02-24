@@ -1253,6 +1253,19 @@ function Start-BatchMode {
     Write-OutputColor ("=" * 65) -color "Info"
     Write-OutputColor "" -color "Info"
 
+    # Auto-save drift baseline after batch mode (v1.7.1)
+    if ($changesApplied -gt 0) {
+        try {
+            $baselinePath = Save-DriftBaseline -Description "Auto-saved after batch mode ($changesApplied changes)"
+            if ($baselinePath) {
+                Write-OutputColor "  Drift baseline saved: $(Split-Path $baselinePath -Leaf)" -color "Debug"
+            }
+        }
+        catch {
+            Write-OutputColor "  Baseline auto-save skipped: $_" -color "Debug"
+        }
+    }
+
     # Show session summary
     Show-SessionSummary
 

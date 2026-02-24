@@ -47,7 +47,10 @@ function Show-OperationsMenu {
         Write-MenuItem "[9]  Generate HTML Readiness Report"
         Write-MenuItem "[10] Export Profile Comparison (HTML)"
         Write-MenuItem "[11] Network Diagnostics ►"
-        Write-MenuItem "[12] Configuration Drift Check"
+        Write-MenuItem "[12] Drift Detection ►"
+        Write-MenuItem "[13] Save Performance Snapshot"
+        Write-MenuItem "[14] Generate Trend Report"
+        Write-MenuItem "[15] Collect Metrics (Interval)"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -97,7 +100,27 @@ function Show-OperationsMenu {
                 Show-NetworkDiagnostics
             }
             "12" {
-                Start-DriftCheck
+                Show-DriftDetectionMenu
+            }
+            "13" {
+                $path = Save-PerformanceSnapshot
+                if ($path) {
+                    Write-OutputColor "  Snapshot saved: $path" -color "Success"
+                }
+                Write-PressEnter
+            }
+            "14" {
+                Export-HTMLTrendReport
+                Write-PressEnter
+            }
+            "15" {
+                Write-OutputColor "  Interval (minutes, default 5):" -color "Info"
+                $interval = Read-Host "  "
+                if ([string]::IsNullOrWhiteSpace($interval)) { $interval = "5" }
+                Write-OutputColor "  Duration (minutes, default 60):" -color "Info"
+                $duration = Read-Host "  "
+                if ([string]::IsNullOrWhiteSpace($duration)) { $duration = "60" }
+                Start-MetricCollection -IntervalMinutes ([int]$interval) -DurationMinutes ([int]$duration)
                 Write-PressEnter
             }
             "b" { return }
