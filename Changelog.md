@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## v1.5.9
+## v1.5.10
 
 - **Test Fixture Cleanup:** Refactored test values that triggered false-positive secret detection in security scanners (no actual secrets — test fixtures use dummy values)
 - 63 modules, 1659 tests, backward compatible with all existing configs

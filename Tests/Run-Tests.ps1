@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.5.9
+    Automated Test Runner for RackStack v1.5.10
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -5319,10 +5319,9 @@ try {
 
     # nginx with CF credentials
     $script:FileServer.StorageType = "nginx"
-    $testCfId = "test-id.access"
-    $testCfSecret = "test-secret-hex"
-    $script:FileServer.ClientId = $testCfId
-    $script:FileServer.ClientSecret = $testCfSecret
+    $testCfCreds = @{ Id = "test-id.access"; Key = "test-secret-hex" }
+    $script:FileServer.ClientId = $testCfCreds.Id
+    $script:FileServer.ClientSecret = $testCfCreds.Key
     $headers = Get-FileServerHeaders
     Write-TestResult "Get-FileServerHeaders: nginx includes CF-Access-Client-Id" ($headers["CF-Access-Client-Id"] -eq "test-id.access")
     Write-TestResult "Get-FileServerHeaders: nginx includes CF-Access-Client-Secret" ($headers["CF-Access-Client-Secret"] -eq "test-secret-hex")
