@@ -107,7 +107,7 @@ function Install-WindowsUpdates {
         Write-Host ""  # New line after progress
 
         if ($installJob.State -eq "Running") {
-            Write-OutputColor "Installation is taking longer than expected but continuing in background." -color "Warning"
+            Write-OutputColor "Installation timed out after $([math]::Floor($maxInstallTime / 60)) minutes. Stopping job." -color "Warning"
         }
         else {
             Complete-ProgressMessage -Activity "Update installation" -Status "Complete" -Success

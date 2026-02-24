@@ -13,7 +13,7 @@
     Environment-specific settings are configured via defaults.json.
 
 .VERSION
-    1.5.3
+    1.5.4
 
 .NOTES
     - Requires Windows Server 2012 R2 or later (or Windows 10/11 for testing)

@@ -201,6 +201,17 @@ function New-SwitchEmbeddedTeam {
             }
         }
 
+        # Check for VMs connected to this switch
+        $connectedVMs = @(Get-VM -ErrorAction SilentlyContinue | Where-Object {
+            $_ | Get-VMNetworkAdapter -ErrorAction SilentlyContinue | Where-Object { $_.SwitchName -eq $existingSwitch.Name }
+        })
+        if ($connectedVMs.Count -gt 0) {
+            Write-OutputColor "WARNING: $($connectedVMs.Count) VM(s) are connected to this switch:" -color "Warning"
+            foreach ($vm in $connectedVMs) {
+                Write-OutputColor "  - $($vm.Name) ($($vm.State))" -color "Warning"
+            }
+        }
+
         if (-not (Confirm-UserAction -Message "`nRemove existing switch and create new SET?")) {
             Write-OutputColor "Keeping existing configuration." -color "Info"
             return
@@ -403,6 +414,12 @@ function Add-CustomVNIC {
         Write-OutputColor "Removing existing vNIC '$vnicName'..." -color "Info"
         Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
+        # Verify removal succeeded
+        $stillExists = Get-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
+        if ($stillExists) {
+            Write-OutputColor "Could not remove existing vNIC '$vnicName' (may be in use). Aborting." -color "Error"
+            return
+        }
     }
 
     # Create the vNIC

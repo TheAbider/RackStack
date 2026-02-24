@@ -397,7 +397,14 @@ function Initialize-NewDisk {
                 try {
                     Set-Disk -Number $offDisk.Number -IsOffline $false -ErrorAction Stop
                     Set-Disk -Number $offDisk.Number -IsReadOnly $false -ErrorAction SilentlyContinue
-                    Write-OutputColor "  Disk $($offDisk.Number) ($($offDisk.FriendlyName)) brought online." -color "Success"
+                    # Verify read-only was cleared
+                    $diskState = Get-Disk -Number $offDisk.Number
+                    if ($diskState.IsReadOnly) {
+                        Write-OutputColor "  Disk $($offDisk.Number) is online but still read-only (may need firmware/driver update)." -color "Warning"
+                    }
+                    else {
+                        Write-OutputColor "  Disk $($offDisk.Number) ($($offDisk.FriendlyName)) brought online." -color "Success"
+                    }
                 }
                 catch {
                     Write-OutputColor "  Failed to bring Disk $($offDisk.Number) online: $_" -color "Error"
@@ -952,7 +959,14 @@ function Format-DiskVolume {
         # Assign drive letter first if needed
         if ($newDriveLetter) {
             Set-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber -NewDriveLetter $newDriveLetter -ErrorAction SilentlyContinue
-            $driveLetter = "$newDriveLetter`:"
+            # Verify drive letter was actually assigned
+            $verifyPartition = Get-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber
+            if ($verifyPartition.DriveLetter -eq $newDriveLetter) {
+                $driveLetter = "$newDriveLetter`:"
+            }
+            else {
+                Write-OutputColor "  Warning: Drive letter $newDriveLetter could not be assigned (may be in use)." -color "Warning"
+            }
         }
 
         # Get the partition again to get any updated drive letter

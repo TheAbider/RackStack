@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## v1.5.4
+
+- **Bug Fixes:**
+  - Fixed: SET switch creation now warns about connected VMs before removing an existing switch
+  - Fixed: Drive letter assignment verified after applying — warns if letter is unavailable
+  - Fixed: Disk bring-online verifies read-only flag was cleared — warns about firmware/driver issues
+  - Fixed: vNIC removal verified before recreation — aborts cleanly if old adapter is locked
+  - Fixed: Windows Update timeout message corrected (said "continuing in background" when job was actually stopped)
+- 63 modules, 1628 tests, backward compatible with all existing configs
+
 ## v1.5.3
 
 - **SHA256 Update Verification:** Auto-update now verifies downloaded files against SHA256 hashes published in GitHub release notes — rejects corrupted or tampered downloads with a clear error
