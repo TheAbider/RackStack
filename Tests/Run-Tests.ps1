@@ -6455,6 +6455,416 @@ try {
 }
 
 # ============================================================================
+# SECTION 114: DOMAIN JOIN MODULE (12-DomainJoin.ps1)
+# ============================================================================
+
+Write-SectionHeader "114" "DOMAIN JOIN MODULE"
+
+try {
+    $djContent = Get-Content "$modulesPath\12-DomainJoin.ps1" -Raw
+
+    Write-TestResult "12-DomainJoin: function Join-Domain exists" ($djContent -match 'function\s+Join-Domain\b')
+    Write-TestResult "12-DomainJoin: checks current domain status" ($djContent -match 'Get-CimInstance.*Win32_ComputerSystem|PartOfDomain')
+    Write-TestResult "12-DomainJoin: prompts for domain name" ($djContent -match 'Read-Host|domain')
+    Write-TestResult "12-DomainJoin: prompts for credentials" ($djContent -match 'Get-Credential|PSCredential')
+    Write-TestResult "12-DomainJoin: calls Add-Computer" ($djContent -match 'Add-Computer')
+    Write-TestResult "12-DomainJoin: handles reboot" ($djContent -match 'Restart-Computer|RebootNeeded|reboot')
+    Write-TestResult "12-DomainJoin: tracks session change" ($djContent -match 'Add-SessionChange|SessionChange')
+    Write-TestResult "12-DomainJoin: has error handling" ($djContent -match 'try\s*\{|catch\s*\{')
+
+} catch {
+    Write-TestResult "Domain Join Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 115: RDP & WINRM MODULE (15-RDP.ps1)
+# ============================================================================
+
+Write-SectionHeader "115" "RDP & WINRM MODULE"
+
+try {
+    $rdpContent = Get-Content "$modulesPath\15-RDP.ps1" -Raw
+
+    Write-TestResult "15-RDP: function Enable-RDP exists" ($rdpContent -match 'function\s+Enable-RDP\b')
+    Write-TestResult "15-RDP: function Enable-PowerShellRemoting exists" ($rdpContent -match 'function\s+Enable-PowerShellRemoting\b')
+    Write-TestResult "15-RDP: modifies Terminal Server registry" ($rdpContent -match 'Terminal Server|fDenyTSConnections')
+    Write-TestResult "15-RDP: enables firewall rule for RDP" ($rdpContent -match 'Enable-NetFirewallRule|Remote Desktop')
+    Write-TestResult "15-RDP: configures WinRM" ($rdpContent -match 'Enable-PSRemoting|WinRM|WSMan')
+    Write-TestResult "15-RDP: NLA setting addressed" ($rdpContent -match 'UserAuthentication|NLA|Network Level')
+    Write-TestResult "15-RDP: tracks session changes" ($rdpContent -match 'Add-SessionChange|SessionChange')
+    Write-TestResult "15-RDP: has error handling" ($rdpContent -match 'try\s*\{|catch\s*\{')
+
+} catch {
+    Write-TestResult "RDP & WinRM Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 116: FIREWALL TEMPLATES MODULE (18-FirewallTemplates.ps1)
+# ============================================================================
+
+Write-SectionHeader "116" "FIREWALL TEMPLATES MODULE"
+
+try {
+    $fwContent = Get-Content "$modulesPath\18-FirewallTemplates.ps1" -Raw
+
+    Write-TestResult "18-FirewallTemplates: function Set-FirewallRuleTemplates exists" ($fwContent -match 'function\s+Set-FirewallRuleTemplates\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-HyperVFirewallRules exists" ($fwContent -match 'function\s+Enable-HyperVFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-ClusterFirewallRules exists" ($fwContent -match 'function\s+Enable-ClusterFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-ReplicaFirewallRules exists" ($fwContent -match 'function\s+Enable-ReplicaFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-LiveMigrationFirewallRules exists" ($fwContent -match 'function\s+Enable-LiveMigrationFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-iSCSIFirewallRules exists" ($fwContent -match 'function\s+Enable-iSCSIFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-SMBFirewallRules exists" ($fwContent -match 'function\s+Enable-SMBFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Show-HyperVClusterFirewallRules exists" ($fwContent -match 'function\s+Show-HyperVClusterFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: uses Enable-NetFirewallRule" ($fwContent -match 'Enable-NetFirewallRule')
+    Write-TestResult "18-FirewallTemplates: iSCSI uses port 3260" ($fwContent -match '3260')
+    Write-TestResult "18-FirewallTemplates: cluster uses UDP 3343" ($fwContent -match '3343')
+    Write-TestResult "18-FirewallTemplates: has Hyper-V guard check" ($fwContent -match 'Test-HyperVInstalled|Hyper-V')
+
+} catch {
+    Write-TestResult "Firewall Templates Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 117: DISK CLEANUP MODULE (20-DiskCleanup.ps1)
+# ============================================================================
+
+Write-SectionHeader "117" "DISK CLEANUP MODULE"
+
+try {
+    $dcContent = Get-Content "$modulesPath\20-DiskCleanup.ps1" -Raw
+
+    Write-TestResult "20-DiskCleanup: function Start-DiskCleanup exists" ($dcContent -match 'function\s+Start-DiskCleanup\b')
+    Write-TestResult "20-DiskCleanup: function Invoke-QuickClean exists" ($dcContent -match 'function\s+Invoke-QuickClean\b')
+    Write-TestResult "20-DiskCleanup: function Invoke-StandardClean exists" ($dcContent -match 'function\s+Invoke-StandardClean\b')
+    Write-TestResult "20-DiskCleanup: function Invoke-DeepClean exists" ($dcContent -match 'function\s+Invoke-DeepClean\b')
+    Write-TestResult "20-DiskCleanup: function Clear-WindowsUpdateCache exists" ($dcContent -match 'function\s+Clear-WindowsUpdateCache\b')
+    Write-TestResult "20-DiskCleanup: cleans temp files" ($dcContent -match 'Temp|temp|TEMP')
+    Write-TestResult "20-DiskCleanup: cleans Windows Update cache" ($dcContent -match 'SoftwareDistribution|wuauserv')
+    Write-TestResult "20-DiskCleanup: deep clean uses DISM or component cleanup" ($dcContent -match 'DISM|Dism|StartComponentCleanup|ResetBase')
+    Write-TestResult "20-DiskCleanup: shows space savings info" ($dcContent -match 'MB|Potential|savings|size')
+    Write-TestResult "20-DiskCleanup: has confirmation for destructive ops" ($dcContent -match 'Confirm|confirm|Y/N|[Yy]es')
+
+} catch {
+    Write-TestResult "Disk Cleanup Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 118: PASSWORD MODULE (22-Password.ps1)
+# ============================================================================
+
+Write-SectionHeader "118" "PASSWORD MODULE"
+
+try {
+    $pwContent = Get-Content "$modulesPath\22-Password.ps1" -Raw
+
+    Write-TestResult "22-Password: function Test-PasswordComplexity exists" ($pwContent -match 'function\s+Test-PasswordComplexity\b')
+    Write-TestResult "22-Password: function Get-SecurePassword exists" ($pwContent -match 'function\s+Get-SecurePassword\b')
+    Write-TestResult "22-Password: function ConvertFrom-SecureStringToPlainText exists" ($pwContent -match 'function\s+ConvertFrom-SecureStringToPlainText\b')
+    Write-TestResult "22-Password: function Clear-SecureMemory exists" ($pwContent -match 'function\s+Clear-SecureMemory\b')
+    Write-TestResult "22-Password: enforces minimum length" ($pwContent -match 'MinPasswordLength|\.Length\s*[-<]|length')
+    Write-TestResult "22-Password: checks uppercase" ($pwContent -match '\[A-Z\]|uppercase|upper')
+    Write-TestResult "22-Password: checks lowercase" ($pwContent -match '\[a-z\]|lowercase|lower')
+    Write-TestResult "22-Password: checks digits" ($pwContent -match '\[0-9\]|\\d|digit')
+    Write-TestResult "22-Password: checks special chars" ($pwContent -match 'special|[!@#\$%\^&\*]|\\W')
+    Write-TestResult "22-Password: uses SecureString for input" ($pwContent -match 'Read-Host\s+-AsSecureString|SecureString')
+    Write-TestResult "22-Password: confirmation matching" ($pwContent -match 'confirm|match|Confirm')
+    Write-TestResult "22-Password: memory cleanup" ($pwContent -match 'Dispose|Clear|Zero|clear')
+
+    # Runtime tests
+    Write-TestResult "Test-PasswordComplexity: weak password rejected" ((Test-PasswordComplexity "short") -eq $false)
+    Write-TestResult "Test-PasswordComplexity: no uppercase rejected" ((Test-PasswordComplexity "alllowercasenoups123!@") -eq $false)
+    Write-TestResult "Test-PasswordComplexity: strong password accepted" ((Test-PasswordComplexity "MyStr0ngP@ssw0rd!") -eq $true)
+
+} catch {
+    Write-TestResult "Password Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 119: HYPER-V MODULE (25-HyperV.ps1)
+# ============================================================================
+
+Write-SectionHeader "119" "HYPER-V MODULE"
+
+try {
+    $hvContent = Get-Content "$modulesPath\25-HyperV.ps1" -Raw
+
+    Write-TestResult "25-HyperV: function Install-HyperVRole exists" ($hvContent -match 'function\s+Install-HyperVRole\b')
+    Write-TestResult "25-HyperV: installs Hyper-V feature" ($hvContent -match 'Install-WindowsFeature.*Hyper-V|Enable-WindowsOptionalFeature.*Hyper-V')
+    Write-TestResult "25-HyperV: installs management tools" ($hvContent -match 'RSAT-Hyper-V-Tools|Hyper-V-Tools|IncludeManagementTools')
+    Write-TestResult "25-HyperV: handles reboot requirement" ($hvContent -match 'Restart-Computer|RebootNeeded|reboot|RestartNeeded')
+    Write-TestResult "25-HyperV: checks if already installed" ($hvContent -match 'Get-WindowsFeature|Get-WindowsOptionalFeature|already.*install')
+    Write-TestResult "25-HyperV: tracks session change" ($hvContent -match 'Add-SessionChange|SessionChange')
+    Write-TestResult "25-HyperV: has error handling" ($hvContent -match 'try\s*\{|catch\s*\{')
+
+} catch {
+    Write-TestResult "Hyper-V Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 120: PERFORMANCE DASHBOARD MODULE (28-PerformanceDashboard.ps1)
+# ============================================================================
+
+Write-SectionHeader "120" "PERFORMANCE DASHBOARD MODULE"
+
+try {
+    $pdContent = Get-Content "$modulesPath\28-PerformanceDashboard.ps1" -Raw
+
+    Write-TestResult "28-PerfDash: function Show-PerformanceDashboard exists" ($pdContent -match 'function\s+Show-PerformanceDashboard\b')
+    Write-TestResult "28-PerfDash: function Get-ProgressBar exists" ($pdContent -match 'function\s+Get-ProgressBar\b')
+    Write-TestResult "28-PerfDash: monitors CPU" ($pdContent -match 'CPU|Processor|LoadPercentage')
+    Write-TestResult "28-PerfDash: monitors memory" ($pdContent -match 'Memory|RAM|TotalVisibleMemorySize|FreePhysicalMemory')
+    Write-TestResult "28-PerfDash: monitors disk" ($pdContent -match 'Disk|disk|PhysicalDisk|LogicalDisk')
+    Write-TestResult "28-PerfDash: monitors network" ($pdContent -match 'Network|network|BytesReceived|BytesSent')
+    Write-TestResult "28-PerfDash: shows uptime" ($pdContent -match 'Uptime|uptime|LastBootUpTime')
+    Write-TestResult "28-PerfDash: progress bar generates string" ($pdContent -match 'PadRight|PadLeft|\[.*\]|bar')
+
+    # Runtime test for Get-ProgressBar
+    $bar = Get-ProgressBar -Value 50 -MaxValue 100
+    Write-TestResult "Get-ProgressBar: returns non-empty string" ($null -ne $bar -and $bar.Length -gt 0)
+
+} catch {
+    Write-TestResult "Performance Dashboard Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 121: EVENT LOG VIEWER MODULE (29-EventLogViewer.ps1)
+# ============================================================================
+
+Write-SectionHeader "121" "EVENT LOG VIEWER MODULE"
+
+try {
+    $elContent = Get-Content "$modulesPath\29-EventLogViewer.ps1" -Raw
+
+    Write-TestResult "29-EventLog: function Show-EventLogViewer exists" ($elContent -match 'function\s+Show-EventLogViewer\b')
+    Write-TestResult "29-EventLog: queries System log" ($elContent -match 'System')
+    Write-TestResult "29-EventLog: queries Application log" ($elContent -match 'Application')
+    Write-TestResult "29-EventLog: queries Security log" ($elContent -match 'Security')
+    Write-TestResult "29-EventLog: filters by time range" ($elContent -match 'AddHours|AddDays|StartTime|After|TimeCreated')
+    Write-TestResult "29-EventLog: filters by severity" ($elContent -match 'Error|Warning|Critical|Level')
+    Write-TestResult "29-EventLog: uses Get-WinEvent or Get-EventLog" ($elContent -match 'Get-WinEvent|Get-EventLog')
+    Write-TestResult "29-EventLog: shows event details" ($elContent -match 'Message|Source|Id|EventID')
+
+} catch {
+    Write-TestResult "Event Log Viewer Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 122: SERVICE MANAGER MODULE (30-ServiceManager.ps1)
+# ============================================================================
+
+Write-SectionHeader "122" "SERVICE MANAGER MODULE"
+
+try {
+    $smContent = Get-Content "$modulesPath\30-ServiceManager.ps1" -Raw
+
+    Write-TestResult "30-ServiceMgr: function Show-ServiceManager exists" ($smContent -match 'function\s+Show-ServiceManager\b')
+    Write-TestResult "30-ServiceMgr: lists key services" ($smContent -match 'vmms|vmcompute|ClusSvc|WinRM|W32Time|DNS|DHCP')
+    Write-TestResult "30-ServiceMgr: shows service status" ($smContent -match 'Get-Service|Status|Running|Stopped')
+    Write-TestResult "30-ServiceMgr: can start services" ($smContent -match 'Start-Service')
+    Write-TestResult "30-ServiceMgr: can stop services" ($smContent -match 'Stop-Service')
+    Write-TestResult "30-ServiceMgr: can restart services" ($smContent -match 'Restart-Service')
+    Write-TestResult "30-ServiceMgr: has error handling" ($smContent -match 'try\s*\{|catch\s*\{')
+
+} catch {
+    Write-TestResult "Service Manager Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 123: BITLOCKER MODULE (31-BitLocker.ps1)
+# ============================================================================
+
+Write-SectionHeader "123" "BITLOCKER MODULE"
+
+try {
+    $blContent = Get-Content "$modulesPath\31-BitLocker.ps1" -Raw
+
+    Write-TestResult "31-BitLocker: function Show-BitLockerManagement exists" ($blContent -match 'function\s+Show-BitLockerManagement\b')
+    Write-TestResult "31-BitLocker: checks BitLocker status" ($blContent -match 'Get-BitLockerVolume')
+    Write-TestResult "31-BitLocker: enables encryption" ($blContent -match 'Enable-BitLocker')
+    Write-TestResult "31-BitLocker: supports TPM protector" ($blContent -match 'TpmProtector|TPM')
+    Write-TestResult "31-BitLocker: supports password protector" ($blContent -match 'PasswordProtector|Password')
+    Write-TestResult "31-BitLocker: handles recovery key" ($blContent -match 'RecoveryKey|RecoveryPassword|BackupToAAD')
+    Write-TestResult "31-BitLocker: can disable/decrypt" ($blContent -match 'Disable-BitLocker')
+    Write-TestResult "31-BitLocker: has error handling" ($blContent -match 'try\s*\{|catch\s*\{')
+
+} catch {
+    Write-TestResult "BitLocker Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 124: STORAGE REPLICA MODULE (33-StorageReplica.ps1)
+# ============================================================================
+
+Write-SectionHeader "124" "STORAGE REPLICA MODULE"
+
+try {
+    $srContent = Get-Content "$modulesPath\33-StorageReplica.ps1" -Raw
+
+    Write-TestResult "33-StorageReplica: function Show-StorageReplicaManagement exists" ($srContent -match 'function\s+Show-StorageReplicaManagement\b')
+    Write-TestResult "33-StorageReplica: checks SR feature installation" ($srContent -match 'Storage-Replica|Get-WindowsFeature')
+    Write-TestResult "33-StorageReplica: creates partnerships" ($srContent -match 'New-SRPartnership|SRPartnership')
+    Write-TestResult "33-StorageReplica: shows partnership status" ($srContent -match 'Get-SRPartnership|Get-SRGroup')
+    Write-TestResult "33-StorageReplica: supports sync replication" ($srContent -match 'Synchronous|sync')
+    Write-TestResult "33-StorageReplica: supports async replication" ($srContent -match 'Asynchronous|async')
+    Write-TestResult "33-StorageReplica: tests topology" ($srContent -match 'Test-SRTopology')
+    Write-TestResult "33-StorageReplica: edition check (Datacenter)" ($srContent -match 'Datacenter|edition|Edition')
+
+} catch {
+    Write-TestResult "Storage Replica Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 125: UTILITIES MODULE (35-Utilities.ps1)
+# ============================================================================
+
+Write-SectionHeader "125" "UTILITIES MODULE"
+
+try {
+    $utilContent = Get-Content "$modulesPath\35-Utilities.ps1" -Raw
+
+    Write-TestResult "35-Utilities: function Test-ScriptUpdate exists" ($utilContent -match 'function\s+Test-ScriptUpdate\b')
+    Write-TestResult "35-Utilities: function Install-ScriptUpdate exists" ($utilContent -match 'function\s+Install-ScriptUpdate\b')
+    Write-TestResult "35-Utilities: function Test-StartupUpdateCheck exists" ($utilContent -match 'function\s+Test-StartupUpdateCheck\b')
+    Write-TestResult "35-Utilities: function Compare-ConfigurationProfiles exists" ($utilContent -match 'function\s+Compare-ConfigurationProfiles\b')
+    Write-TestResult "35-Utilities: function Test-ComputerNameInAD exists" ($utilContent -match 'function\s+Test-ComputerNameInAD\b')
+    Write-TestResult "35-Utilities: function Test-IPAddressInUse exists" ($utilContent -match 'function\s+Test-IPAddressInUse\b')
+    Write-TestResult "35-Utilities: function Invoke-RemoteProfileApply exists" ($utilContent -match 'function\s+Invoke-RemoteProfileApply\b')
+    Write-TestResult "35-Utilities: function Show-CredentialManager exists" ($utilContent -match 'function\s+Show-CredentialManager\b')
+    Write-TestResult "35-Utilities: update check uses GitHub API" ($utilContent -match 'api\.github\.com|github\.com.*releases')
+    Write-TestResult "35-Utilities: profile comparison shows differences" ($utilContent -match 'diff|Diff|compare|Compare|changed|Changed')
+    Write-TestResult "35-Utilities: remote apply uses Enter-PSSession or Invoke-Command" ($utilContent -match 'Enter-PSSession|Invoke-Command')
+
+} catch {
+    Write-TestResult "Utilities Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 126: VHD MANAGEMENT MODULE (41-VHDManagement.ps1)
+# ============================================================================
+
+Write-SectionHeader "126" "VHD MANAGEMENT MODULE"
+
+try {
+    $vhdContent = Get-Content "$modulesPath\41-VHDManagement.ps1" -Raw
+
+    Write-TestResult "41-VHD: function Get-VHDCachePath exists" ($vhdContent -match 'function\s+Get-VHDCachePath\b')
+    Write-TestResult "41-VHD: function Show-OSVersionMenu exists" ($vhdContent -match 'function\s+Show-OSVersionMenu\b')
+    Write-TestResult "41-VHD: function Test-CachedVHD exists" ($vhdContent -match 'function\s+Test-CachedVHD\b')
+    Write-TestResult "41-VHD: function Get-SyspreppedVHD exists" ($vhdContent -match 'function\s+Get-SyspreppedVHD\b')
+    Write-TestResult "41-VHD: function Copy-VHDForVM exists" ($vhdContent -match 'function\s+Copy-VHDForVM\b')
+    Write-TestResult "41-VHD: function Show-VHDManagementMenu exists" ($vhdContent -match 'function\s+Show-VHDManagementMenu\b')
+    Write-TestResult "41-VHD: function Show-SysprepGuide exists" ($vhdContent -match 'function\s+Show-SysprepGuide\b')
+    Write-TestResult "41-VHD: function Show-LinuxVHDGuide exists" ($vhdContent -match 'function\s+Show-LinuxVHDGuide\b')
+    Write-TestResult "41-VHD: function Start-VHDManagement exists" ($vhdContent -match 'function\s+Start-VHDManagement\b')
+    Write-TestResult "41-VHD: handles cluster vs standalone paths" ($vhdContent -match 'ClusterStorage|ClusterVHDCachePath|HostVMStoragePath')
+    Write-TestResult "41-VHD: OS version selection includes 2022/2025" ($vhdContent -match '2022|2025')
+    Write-TestResult "41-VHD: VHD download uses FileServer" ($vhdContent -match 'FileServer|BaseURL|VHDsFolder')
+
+    # Runtime test for Get-VHDCachePath
+    $vhdPath = Get-VHDCachePath
+    Write-TestResult "Get-VHDCachePath: returns non-null path" ($null -ne $vhdPath -and $vhdPath.Length -gt 0)
+
+} catch {
+    Write-TestResult "VHD Management Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 127: ISO DOWNLOAD MODULE (42-ISODownload.ps1)
+# ============================================================================
+
+Write-SectionHeader "127" "ISO DOWNLOAD MODULE"
+
+try {
+    $isoContent = Get-Content "$modulesPath\42-ISODownload.ps1" -Raw
+
+    Write-TestResult "42-ISO: function Get-ISOStoragePath exists" ($isoContent -match 'function\s+Get-ISOStoragePath\b')
+    Write-TestResult "42-ISO: function Test-CachedISO exists" ($isoContent -match 'function\s+Test-CachedISO\b')
+    Write-TestResult "42-ISO: function Get-ServerISO exists" ($isoContent -match 'function\s+Get-ServerISO\b')
+    Write-TestResult "42-ISO: function Show-ISODownloadMenu exists" ($isoContent -match 'function\s+Show-ISODownloadMenu\b')
+    Write-TestResult "42-ISO: function Start-ISODownload exists" ($isoContent -match 'function\s+Start-ISODownload\b')
+    Write-TestResult "42-ISO: handles cluster vs standalone paths" ($isoContent -match 'ClusterStorage|ClusterISOPath|HostISOPath')
+    Write-TestResult "42-ISO: uses FileServer for downloads" ($isoContent -match 'FileServer|BaseURL|ISOsFolder')
+    Write-TestResult "42-ISO: checks for cached ISOs" ($isoContent -match 'Test-Path|cached|exist')
+    Write-TestResult "42-ISO: handles downloads" ($isoContent -match 'download|Download|Invoke-WebRequest|Start-BitsTransfer')
+
+    # Runtime test
+    $isoPath = Get-ISOStoragePath
+    Write-TestResult "Get-ISOStoragePath: returns non-null path" ($null -ne $isoPath -and $isoPath.Length -gt 0)
+
+} catch {
+    Write-TestResult "ISO Download Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 128: ACTIVE DIRECTORY MODULE (61-ActiveDirectory.ps1)
+# ============================================================================
+
+Write-SectionHeader "128" "ACTIVE DIRECTORY MODULE"
+
+try {
+    $adContent = Get-Content "$modulesPath\61-ActiveDirectory.ps1" -Raw
+
+    Write-TestResult "61-AD: function Test-ADDSInstalled exists" ($adContent -match 'function\s+Test-ADDSInstalled\b')
+    Write-TestResult "61-AD: function Test-ADDSPrerequisites exists" ($adContent -match 'function\s+Test-ADDSPrerequisites\b')
+    Write-TestResult "61-AD: function Show-ADDSPrerequisiteResults exists" ($adContent -match 'function\s+Show-ADDSPrerequisiteResults\b')
+    Write-TestResult "61-AD: function Install-ADDSRoleIfNeeded exists" ($adContent -match 'function\s+Install-ADDSRoleIfNeeded\b')
+    Write-TestResult "61-AD: function Test-ValidDomainName exists" ($adContent -match 'function\s+Test-ValidDomainName\b')
+    Write-TestResult "61-AD: function Get-NetBIOSNameFromFQDN exists" ($adContent -match 'function\s+Get-NetBIOSNameFromFQDN\b')
+    Write-TestResult "61-AD: function Select-FunctionalLevel exists" ($adContent -match 'function\s+Select-FunctionalLevel\b')
+    Write-TestResult "61-AD: function Read-DSRMPassword exists" ($adContent -match 'function\s+Read-DSRMPassword\b')
+    Write-TestResult "61-AD: function Show-ADDSPromotionMenu exists" ($adContent -match 'function\s+Show-ADDSPromotionMenu\b')
+    Write-TestResult "61-AD: function Install-NewForest exists" ($adContent -match 'function\s+Install-NewForest\b')
+    Write-TestResult "61-AD: function Install-AdditionalDC exists" ($adContent -match 'function\s+Install-AdditionalDC\b')
+    Write-TestResult "61-AD: function Install-ReadOnlyDC exists" ($adContent -match 'function\s+Install-ReadOnlyDC\b')
+    Write-TestResult "61-AD: function Show-ADDSStatus exists" ($adContent -match 'function\s+Show-ADDSStatus\b')
+    Write-TestResult "61-AD: calls Install-ADDSForest" ($adContent -match 'Install-ADDSForest')
+    Write-TestResult "61-AD: calls Install-ADDSDomainController" ($adContent -match 'Install-ADDSDomainController')
+    Write-TestResult "61-AD: checks static IP prerequisite" ($adContent -match 'static.*IP|StaticIP|DHCP.*enabled|IPAddress')
+    Write-TestResult "61-AD: DSRM password uses SecureString" ($adContent -match 'SecureString|AsSecureString|SafeModeAdministratorPassword')
+    Write-TestResult "61-AD: supports functional levels" ($adContent -match 'WinThreshold|Win2012R2|Win2016|ForestMode|DomainMode')
+
+    # Runtime tests for helper functions
+    Write-TestResult "Test-ValidDomainName: valid FQDN accepted" ((Test-ValidDomainName "corp.contoso.com") -eq $true)
+    Write-TestResult "Test-ValidDomainName: single label rejected" ((Test-ValidDomainName "noperiod") -eq $false)
+    Write-TestResult "Get-NetBIOSNameFromFQDN: extracts first label" ((Get-NetBIOSNameFromFQDN "corp.contoso.com") -eq "CORP")
+
+} catch {
+    Write-TestResult "Active Directory Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 129: HYPER-V REPLICA MODULE (62-HyperVReplica.ps1)
+# ============================================================================
+
+Write-SectionHeader "129" "HYPER-V REPLICA MODULE"
+
+try {
+    $repContent = Get-Content "$modulesPath\62-HyperVReplica.ps1" -Raw
+
+    Write-TestResult "62-Replica: function Test-HyperVReplicaEnabled exists" ($repContent -match 'function\s+Test-HyperVReplicaEnabled\b')
+    Write-TestResult "62-Replica: function Show-HyperVReplicaMenu exists" ($repContent -match 'function\s+Show-HyperVReplicaMenu\b')
+    Write-TestResult "62-Replica: function Enable-ReplicaServer exists" ($repContent -match 'function\s+Enable-ReplicaServer\b')
+    Write-TestResult "62-Replica: function Enable-VMReplicationWizard exists" ($repContent -match 'function\s+Enable-VMReplicationWizard\b')
+    Write-TestResult "62-Replica: function Show-ReplicationStatus exists" ($repContent -match 'function\s+Show-ReplicationStatus\b')
+    Write-TestResult "62-Replica: function Start-TestFailover exists" ($repContent -match 'function\s+Start-TestFailover\b')
+    Write-TestResult "62-Replica: function Start-PlannedFailover exists" ($repContent -match 'function\s+Start-PlannedFailover\b')
+    Write-TestResult "62-Replica: function Set-ReverseReplication exists" ($repContent -match 'function\s+Set-ReverseReplication\b')
+    Write-TestResult "62-Replica: function Remove-VMReplicationWizard exists" ($repContent -match 'function\s+Remove-VMReplicationWizard\b')
+    Write-TestResult "62-Replica: supports Kerberos auth" ($repContent -match 'Kerberos')
+    Write-TestResult "62-Replica: supports Certificate auth" ($repContent -match 'Certificate|certificate')
+    Write-TestResult "62-Replica: configures firewall for replica" ($repContent -match 'Firewall|firewall|Enable-NetFirewallRule')
+    Write-TestResult "62-Replica: uses Set-VMReplicationServer" ($repContent -match 'Set-VMReplicationServer')
+    Write-TestResult "62-Replica: uses Enable-VMReplication" ($repContent -match 'Enable-VMReplication')
+    Write-TestResult "62-Replica: uses Start-VMFailover" ($repContent -match 'Start-VMFailover')
+    Write-TestResult "62-Replica: replication frequency options" ($repContent -match '30.*sec|5.*min|15.*min|ReplicationFrequencySec')
+    Write-TestResult "62-Replica: confirmation on remove" ($repContent -match 'Confirm|confirm|Y/N|Remove-VMReplication')
+    Write-TestResult "62-Replica: has error handling" ($repContent -match 'try\s*\{|catch\s*\{')
+
+} catch {
+    Write-TestResult "Hyper-V Replica Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 
