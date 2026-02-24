@@ -29,8 +29,8 @@ All setups use the same layout. The `BaseURL` in `defaults.json` points to the r
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
     Agents/
-        Agent_0451_AcmeHealth.exe
-        Agent_0452_AcmeClinic.exe
+        KaseyaAgent_Site101.exe
+        KaseyaAgent_Site202.exe
     version.json
 ```
 
@@ -72,7 +72,7 @@ C:\FileServer\server-tools\
 - **Want it running in 5 minutes** -- [Docker Compose](fileserver-docker.md) on any machine with Docker.
 - **Windows-only environment** -- [Windows Server + IIS](fileserver-windows.md).
 - **Enterprise Linux policy** -- [Rocky/Alma/RHEL](fileserver-rhel.md).
-- **Already in Azure/AWS** -- [Cloud Storage](fileserver-cloud.md) (future enhancement, requires tool changes).
+- **Already in Azure/AWS** -- [Cloud Storage](fileserver-cloud.md) (Azure Blob native, S3 via CloudFront + index.json).
 
 ## defaults.json Reference
 
@@ -81,6 +81,7 @@ All setups end with the same `defaults.json` configuration:
 ```json
 {
     "FileServer": {
+        "StorageType": "nginx",
         "BaseURL": "https://files.yourdomain.com/server-tools",
         "ClientId": "your-client-id-here.access",
         "ClientSecret": "your-client-secret-hex-here",
@@ -91,8 +92,10 @@ All setups end with the same `defaults.json` configuration:
 }
 ```
 
-- `BaseURL` -- Full URL to the `server-tools` directory (HTTPS for internet, HTTP for LAN)
-- `ClientId` / `ClientSecret` -- Cloudflare Access service token credentials (omit for LAN/Tailscale setups)
+- `StorageType` -- `nginx` (default, any web server), `azure` (Azure Blob Storage), `static` (JSON index files, works with S3+CloudFront)
+- `BaseURL` -- Full URL to the `server-tools` directory (for nginx/static types; not used for azure)
+- `ClientId` / `ClientSecret` -- Cloudflare Access service token credentials (omit for LAN/Tailscale/azure setups)
+- For Azure: set `AzureAccount`, `AzureContainer`, `AzureSasToken` instead of BaseURL
 - Folder names must match the actual directories on the file server
 
 ## Maintenance

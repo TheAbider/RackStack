@@ -1,6 +1,72 @@
 ﻿#region ===== FILESERVER DOWNLOAD =====
-# Browse an FileServer folder via HTTP GET and parse nginx autoindex HTML
-# Results are cached per folder path with a 10-minute TTL
+# Build the download URL for a file based on the FileServer storage type
+# Returns the full URL with authentication tokens/parameters included
+function Get-FileServerUrl {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$FilePath
+    )
+
+    $storageType = if ($script:FileServer.StorageType) { $script:FileServer.StorageType } else { "nginx" }
+
+    switch ($storageType) {
+        "azure" {
+            $account = $script:FileServer.AzureAccount
+            $container = $script:FileServer.AzureContainer
+            $sas = $script:FileServer.AzureSasToken
+            $encodedPath = ($FilePath -split '/' | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
+            return "https://${account}.blob.core.windows.net/${container}/${encodedPath}?${sas}"
+        }
+        default {
+            # nginx / static — use BaseURL + path
+            $encodedPath = ($FilePath -split '/' | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
+            return "$($script:FileServer.BaseURL)/$encodedPath"
+        }
+    }
+}
+
+# Get auth headers for the configured storage type
+# Returns empty hashtable for token-based auth (Azure SAS, S3 presigned)
+function Get-FileServerHeaders {
+    $storageType = if ($script:FileServer.StorageType) { $script:FileServer.StorageType } else { "nginx" }
+
+    switch ($storageType) {
+        "azure" {
+            # Azure SAS uses query parameters, no special headers
+            return @{}
+        }
+        default {
+            # nginx — Cloudflare Access headers
+            $headers = @{}
+            if ($script:FileServer.ClientId) {
+                $headers["CF-Access-Client-Id"] = $script:FileServer.ClientId
+            }
+            if ($script:FileServer.ClientSecret) {
+                $headers["CF-Access-Client-Secret"] = $script:FileServer.ClientSecret
+            }
+            return $headers
+        }
+    }
+}
+
+# Check if the FileServer has a valid configuration for its storage type
+function Test-FileServerConfigured {
+    $storageType = if ($script:FileServer.StorageType) { $script:FileServer.StorageType } else { "nginx" }
+
+    switch ($storageType) {
+        "azure" {
+            return (-not [string]::IsNullOrWhiteSpace($script:FileServer.AzureAccount) -and
+                    -not [string]::IsNullOrWhiteSpace($script:FileServer.AzureContainer))
+        }
+        default {
+            return (-not [string]::IsNullOrWhiteSpace($script:FileServer.BaseURL))
+        }
+    }
+}
+
+# Browse a FileServer folder via HTTP GET and parse the listing response
+# Supports nginx autoindex HTML, Azure Blob XML, and static index.json
+# Results are cached per folder path with a configurable TTL
 function Get-FileServerFiles {
     param(
         [Parameter(Mandatory=$true)]
@@ -19,49 +85,111 @@ function Get-FileServerFiles {
     }
 
     # Validate FileServer is configured
-    if ([string]::IsNullOrWhiteSpace($script:FileServer.BaseURL)) {
+    if (-not (Test-FileServerConfigured)) {
         Write-OutputColor "  FileServer not configured. Update settings in defaults.json." -color "Error"
         return @()
     }
 
+    $storageType = if ($script:FileServer.StorageType) { $script:FileServer.StorageType } else { "nginx" }
+
     try {
-        # Build URL - encode folder path for URL safety
-        $encodedFolder = [System.Uri]::EscapeDataString($FolderPath)
-        $url = "$($script:FileServer.BaseURL)/$encodedFolder/"
-
-        # CF-Access headers
-        $headers = @{
-            "CF-Access-Client-Id"     = $script:FileServer.ClientId
-            "CF-Access-Client-Secret" = $script:FileServer.ClientSecret
-        }
-
-        $response = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -ErrorAction Stop
-        $html = $response.Content
-
-        # Parse nginx autoindex HTML: <a href="filename">display</a>  date  size
-        # nginx truncates long display names with "..>" - always use href for the real filename
         $files = @()
-        $regexMatches = [regex]::Matches($html, '<a href="([^"]+)">([^<]+)</a>\s+(\d{2}-\w{3}-\d{4}\s+\d{2}:\d{2})\s+(\d+|-)')
+        $headers = Get-FileServerHeaders
 
-        foreach ($m in $regexMatches) {
-            $href = $m.Groups[1].Value
-            $sizeStr = $m.Groups[4].Value
+        switch ($storageType) {
+            "azure" {
+                # Azure Blob Storage — list blobs with prefix and delimiter
+                $account = $script:FileServer.AzureAccount
+                $container = $script:FileServer.AzureContainer
+                $sas = $script:FileServer.AzureSasToken
+                $encodedFolder = [System.Uri]::EscapeDataString("$FolderPath/")
+                $url = "https://${account}.blob.core.windows.net/${container}?restype=container&comp=list&prefix=${encodedFolder}&delimiter=/&${sas}"
 
-            # Skip parent directory link and directory entries
-            if ($href -eq '../' -or $href.EndsWith('/')) { continue }
+                $response = Invoke-WebRequest -Uri $url -UseBasicParsing -ErrorAction Stop
+                [xml]$xml = $response.Content
 
-            # Use href for filename (display text may be truncated by nginx autoindex)
-            $fileName = [System.Uri]::UnescapeDataString($href)
+                $blobs = $xml.EnumerationResults.Blobs.Blob
+                if ($blobs) {
+                    foreach ($blob in $blobs) {
+                        $blobName = $blob.Name
+                        # Extract filename from full path (remove prefix)
+                        $fileName = $blobName
+                        if ($blobName.Contains('/')) {
+                            $fileName = $blobName.Substring($blobName.LastIndexOf('/') + 1)
+                        }
+                        if ([string]::IsNullOrWhiteSpace($fileName)) { continue }
 
-            $fileSize = 0
-            if ($sizeStr -ne '-' -and $sizeStr -match '^\d+$') {
-                $fileSize = [long]$sizeStr
+                        $fileSize = 0
+                        if ($blob.Properties.'Content-Length') {
+                            $fileSize = [long]$blob.Properties.'Content-Length'
+                        }
+
+                        $files += @{
+                            FileName = $fileName
+                            FilePath = "$FolderPath/$fileName"
+                            Size     = $fileSize
+                        }
+                    }
+                }
             }
+            "static" {
+                # Static index.json — fetch index.json from the folder
+                $encodedFolder = [System.Uri]::EscapeDataString($FolderPath)
+                $url = "$($script:FileServer.BaseURL)/$encodedFolder/index.json"
 
-            $files += @{
-                FileName = $fileName
-                FilePath = "$FolderPath/$fileName"
-                Size     = $fileSize
+                $requestParams = @{ Uri = $url; UseBasicParsing = $true; ErrorAction = "Stop" }
+                if ($headers.Count -gt 0) { $requestParams.Headers = $headers }
+
+                $response = Invoke-WebRequest @requestParams
+                $entries = $response.Content | ConvertFrom-Json
+
+                foreach ($entry in $entries) {
+                    $fileName = $entry.name
+                    if ([string]::IsNullOrWhiteSpace($fileName)) { continue }
+                    if ($entry.type -eq 'directory') { continue }
+
+                    $fileSize = 0
+                    if ($entry.size) { $fileSize = [long]$entry.size }
+
+                    $files += @{
+                        FileName = $fileName
+                        FilePath = "$FolderPath/$fileName"
+                        Size     = $fileSize
+                    }
+                }
+            }
+            default {
+                # nginx — parse HTML autoindex response
+                $encodedFolder = [System.Uri]::EscapeDataString($FolderPath)
+                $url = "$($script:FileServer.BaseURL)/$encodedFolder/"
+
+                $requestParams = @{ Uri = $url; UseBasicParsing = $true; ErrorAction = "Stop" }
+                if ($headers.Count -gt 0) { $requestParams.Headers = $headers }
+
+                $response = Invoke-WebRequest @requestParams
+                $html = $response.Content
+
+                # Parse nginx autoindex HTML: <a href="filename">display</a>  date  size
+                $regexMatches = [regex]::Matches($html, '<a href="([^"]+)">([^<]+)</a>\s+(\d{2}-\w{3}-\d{4}\s+\d{2}:\d{2})\s+(\d+|-)')
+
+                foreach ($m in $regexMatches) {
+                    $href = $m.Groups[1].Value
+                    $sizeStr = $m.Groups[4].Value
+
+                    if ($href -eq '../' -or $href.EndsWith('/')) { continue }
+
+                    $fileName = [System.Uri]::UnescapeDataString($href)
+                    $fileSize = 0
+                    if ($sizeStr -ne '-' -and $sizeStr -match '^\d+$') {
+                        $fileSize = [long]$sizeStr
+                    }
+
+                    $files += @{
+                        FileName = $fileName
+                        FilePath = "$FolderPath/$fileName"
+                        Size     = $fileSize
+                    }
+                }
             }
         }
 
@@ -130,7 +258,7 @@ function Get-FileServerFile {
     if ($TimeoutSeconds -eq 0) { $TimeoutSeconds = $script:DefaultDownloadTimeoutSeconds }
 
     # Check if FileServer is configured
-    if ([string]::IsNullOrWhiteSpace($script:FileServer.BaseURL)) {
+    if (-not (Test-FileServerConfigured)) {
         return @{
             Success = $false
             Error = "FileServer not configured. Update the settings in defaults.json."
@@ -155,11 +283,9 @@ function Get-FileServerFile {
     }
 
     try {
-        # Build download URL - encode path components
-        $encodedPath = ($FilePath -split '/' | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
-        $downloadUrl = "$($script:FileServer.BaseURL)/$encodedPath"
-        $clientId = $script:FileServer.ClientId
-        $clientSecret = $script:FileServer.ClientSecret
+        # Build download URL and auth headers based on storage type
+        $downloadUrl = Get-FileServerUrl -FilePath $FilePath
+        $downloadHeaders = Get-FileServerHeaders
 
         # Get expected size via HEAD request before download
         $expectedSize = Get-FileServerFileSize -FilePath $FilePath
@@ -206,11 +332,15 @@ function Get-FileServerFile {
 
             # Background job using WebClient (closes connection immediately, no hang)
             $downloadJob = Start-Job -ScriptBlock {
-                param($url, $cfId, $cfSecret, $destPath)
+                param($url, $headersJson, $destPath)
                 try {
                     $webClient = New-Object System.Net.WebClient
-                    $webClient.Headers.Add("CF-Access-Client-Id", $cfId)
-                    $webClient.Headers.Add("CF-Access-Client-Secret", $cfSecret)
+                    if ($headersJson) {
+                        $hdrs = $headersJson | ConvertFrom-Json
+                        foreach ($prop in $hdrs.PSObject.Properties) {
+                            $webClient.Headers.Add($prop.Name, $prop.Value)
+                        }
+                    }
                     $webClient.DownloadFile($url, $destPath)
                     $webClient.Dispose()
                     return @{ Success = $true; Error = $null }
@@ -218,7 +348,7 @@ function Get-FileServerFile {
                 catch {
                     return @{ Success = $false; Error = $_.Exception.Message }
                 }
-            } -ArgumentList $downloadUrl, $clientId, $clientSecret, $destFile
+            } -ArgumentList $downloadUrl, ($downloadHeaders | ConvertTo-Json -Compress), $destFile
 
             # Monitor with progress bar and speed tracking
             $elapsed = 0
@@ -374,17 +504,19 @@ function Get-FileServerFileSize {
         [string]$FilePath
     )
 
-    if ([string]::IsNullOrWhiteSpace($script:FileServer.BaseURL)) { return -1 }
+    if (-not (Test-FileServerConfigured)) { return -1 }
 
     try {
-        $encodedPath = ($FilePath -split '/' | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
-        $url = "$($script:FileServer.BaseURL)/$encodedPath"
+        $url = Get-FileServerUrl -FilePath $FilePath
 
         $request = [System.Net.WebRequest]::Create($url)
         $request.Method = "HEAD"
-        $request.Headers.Add("CF-Access-Client-Id", $script:FileServer.ClientId)
-        $request.Headers.Add("CF-Access-Client-Secret", $script:FileServer.ClientSecret)
         $request.Timeout = 15000
+
+        $headers = Get-FileServerHeaders
+        foreach ($key in $headers.Keys) {
+            $request.Headers.Add($key, $headers[$key])
+        }
 
         $response = $request.GetResponse()
         $size = $response.ContentLength
@@ -404,18 +536,20 @@ function Get-FileServerHashFile {
         [string]$FilePath
     )
 
-    if ([string]::IsNullOrWhiteSpace($script:FileServer.BaseURL)) { return $null }
+    if (-not (Test-FileServerConfigured)) { return $null }
 
     try {
         $hashFilePath = "$FilePath.sha256"
-        $encodedPath = ($hashFilePath -split '/' | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
-        $url = "$($script:FileServer.BaseURL)/$encodedPath"
+        $url = Get-FileServerUrl -FilePath $hashFilePath
 
         $request = [System.Net.WebRequest]::Create($url)
         $request.Method = "GET"
-        $request.Headers.Add("CF-Access-Client-Id", $script:FileServer.ClientId)
-        $request.Headers.Add("CF-Access-Client-Secret", $script:FileServer.ClientSecret)
         $request.Timeout = 10000
+
+        $headers = Get-FileServerHeaders
+        foreach ($key in $headers.Keys) {
+            $request.Headers.Add($key, $headers[$key])
+        }
 
         $response = $request.GetResponse()
         $reader = New-Object System.IO.StreamReader($response.GetResponseStream())

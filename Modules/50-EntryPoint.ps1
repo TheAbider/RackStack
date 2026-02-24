@@ -167,7 +167,10 @@ function Test-BatchConfig {
     # Boolean fields validation
     $boolFields = @("EnableRDP", "EnableWinRM", "ConfigureFirewall", "InstallHyperV",
                     "InstallMPIO", "InstallFailoverClustering", "CreateLocalAdmin",
-                    "DisableBuiltInAdmin", "InstallUpdates", "AutoReboot")
+                    "DisableBuiltInAdmin", "InstallUpdates", "AutoReboot",
+                    "CreateVirtualSwitch", "CreateSETSwitch", "ConfigureSharedStorage",
+                    "ConfigureMPIO", "InitializeHostStorage", "ConfigureDefenderExclusions",
+                    "PromoteToDC")
     foreach ($field in $boolFields) {
         if ($null -ne $Config[$field] -and $Config[$field] -isnot [bool]) {
             $null = $errors.Add("$field must be true or false (got '$($Config[$field])').")
@@ -182,6 +185,57 @@ function Test-BatchConfig {
         }
     }
 
+    # StorageBackendType validation
+    if ($Config.StorageBackendType) {
+        if ($script:ValidStorageBackends -and $Config.StorageBackendType -notin $script:ValidStorageBackends) {
+            $validBackends = $script:ValidStorageBackends -join "', '"
+            $null = $errors.Add("StorageBackendType '$($Config.StorageBackendType)' is invalid. Valid options: '$validBackends'.")
+        }
+    }
+
+    # VirtualSwitchType validation
+    if ($Config.VirtualSwitchType) {
+        $validSwitchTypes = @("SET", "External", "Internal", "Private")
+        if ($Config.VirtualSwitchType -notin $validSwitchTypes) {
+            $null = $errors.Add("VirtualSwitchType '$($Config.VirtualSwitchType)' is invalid. Valid options: '$($validSwitchTypes -join "', '")'.")
+        }
+    }
+
+    # CustomVNICs validation
+    if ($Config.CustomVNICs) {
+        if ($Config.CustomVNICs -isnot [array]) {
+            $null = $errors.Add("CustomVNICs must be an array of objects with Name and optional VLAN.")
+        } else {
+            for ($i = 0; $i -lt $Config.CustomVNICs.Count; $i++) {
+                $vnic = $Config.CustomVNICs[$i]
+                if (-not $vnic.Name) {
+                    $null = $errors.Add("CustomVNICs[$i] is missing required 'Name' field.")
+                }
+                if ($null -ne $vnic.VLAN) {
+                    $vlan = $vnic.VLAN -as [int]
+                    if ($null -eq $vlan -or $vlan -lt 1 -or $vlan -gt 4094) {
+                        $null = $errors.Add("CustomVNICs[$i] VLAN must be 1-4094 (got '$($vnic.VLAN)').")
+                    }
+                }
+            }
+        }
+    }
+
+    # DC Promotion pre-flight validation
+    if ($Config.PromoteToDC) {
+        $promoType = if ($Config.DCPromoType) { $Config.DCPromoType } else { "NewForest" }
+        $validPromoTypes = @("NewForest", "AdditionalDC", "RODC")
+        if ($promoType -notin $validPromoTypes) {
+            $null = $errors.Add("DCPromoType '$promoType' is invalid. Valid options: '$($validPromoTypes -join "', '")'.")
+        }
+        if ($promoType -eq "NewForest" -and -not $Config.ForestName) {
+            $null = $errors.Add("ForestName is required for NewForest DC promotion.")
+        }
+        if ($promoType -in @("AdditionalDC", "RODC") -and -not $Config.ForestName -and -not $Config.DomainName) {
+            $null = $errors.Add("ForestName or DomainName is required for $promoType DC promotion.")
+        }
+    }
+
     # HOST mode warnings
     if ($Config.ConfigType -and $Config.ConfigType.ToUpper() -eq "HOST") {
         if (-not $Config.InstallHyperV) {
@@ -192,6 +246,9 @@ function Test-BatchConfig {
         }
         if ($Config.CreateSETSwitch -and -not $Config.InstallHyperV) {
             $null = $warnings.Add("CreateSETSwitch requires Hyper-V. SET creation may fail.")
+        }
+        if ($Config.CustomVNICs -and -not $Config.CreateVirtualSwitch -and -not $Config.CreateSETSwitch) {
+            $null = $warnings.Add("CustomVNICs requires a virtual switch. Set CreateVirtualSwitch or CreateSETSwitch to true.")
         }
     }
 
@@ -209,6 +266,13 @@ function Test-BatchConfig {
         $dl = "$($Config.HostStorageDrive)".ToUpper()
         if ($dl -notmatch '^[A-Z]$' -or $dl -eq 'C') {
             $null = $errors.Add("HostStorageDrive must be a single letter A-Z (not C). Got '$($Config.HostStorageDrive)'.")
+        }
+    }
+
+    # SMB3 path validation
+    if ($Config.StorageBackendType -eq "SMB3" -and $Config.SMB3SharePath) {
+        if ($Config.SMB3SharePath -notmatch '^\\\\[^\\]+\\[^\\]+') {
+            $null = $errors.Add("SMB3SharePath must be a valid UNC path (e.g., \\\\server\\share). Got '$($Config.SMB3SharePath)'.")
         }
     }
 

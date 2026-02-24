@@ -91,6 +91,7 @@ $script:CustomRoleTemplates = @{}
 # Interactive menu for selecting and installing server role templates
 function Show-RoleTemplateSelector {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"

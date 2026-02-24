@@ -109,10 +109,28 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
         "Corp DC Secondary": ["10.0.2.10", "10.0.2.11"]
     },
 
+    "StorageBackendType": "iSCSI",
+
     "iSCSISubnet": "172.16.1",
     "SANTargetMappings": [
         { "Suffix": 10, "Label": "A0" },
         { "Suffix": 11, "Label": "B1" }
+    ],
+    "SANTargetPairings": {
+        "Pairs": [
+            { "Name": "Pair0", "A": 10, "B": 11 },
+            { "Name": "Pair1", "A": 12, "B": 13 }
+        ],
+        "HostAssignments": [
+            { "HostMod": 1, "PrimaryPair": "Pair0", "RetryOrder": ["Pair1"] },
+            { "HostMod": 2, "PrimaryPair": "Pair1", "RetryOrder": ["Pair0"] }
+        ],
+        "CycleSize": 2
+    },
+
+    "CustomVNICs": [
+        { "Name": "Cluster", "VLAN": 100 },
+        { "Name": "Live Migration", "VLAN": 200 }
     ],
 
     "StoragePaths": {
@@ -178,6 +196,16 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
     },
     "CustomVMDefaults": {
         "vCPU": 4, "MemoryGB": 8, "DiskSizeGB": 100
+    },
+
+    "CustomRoleTemplates": {
+        "MYAPP": {
+            "FullName": "Custom App Server",
+            "Description": "Features for a custom application stack",
+            "Features": ["Web-Server", "NET-Framework-45-Core"],
+            "RequiresReboot": false,
+            "ServerOnly": true
+        }
     }
 }
 ```
@@ -190,8 +218,11 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
 | `AutoUpdate` | Auto-download and install updates on startup without prompting (default: `false`) |
 | `TempPath` | Directory for transcripts, reports, and exports (default: `C:\Temp`) |
 | `DNSPresets` | Custom DNS server presets, merged with built-in (Google, Cloudflare, Quad9, OpenDNS) |
+| `StorageBackendType` | Shared storage backend: `iSCSI`, `FC`, `S2D`, `SMB3`, `NVMeoF`, or `Local` (default: `iSCSI`) |
 | `iSCSISubnet` | First 3 octets of your iSCSI network |
 | `SANTargetMappings` | SAN target IP suffix-to-label mappings for iSCSI auto-detect |
+| `SANTargetPairings` | Advanced: custom A/B pair definitions, host-to-pair assignments, and retry order for multi-controller SANs |
+| `CustomVNICs` | Virtual NICs to create on the virtual switch during batch mode (`Name` + optional `VLAN`) |
 | `StoragePaths` | Default Hyper-V storage paths (VM storage, ISOs, VHD cache, cluster paths) |
 | `VMNaming` | VM naming pattern with tokens (`{Site}`, `{Prefix}`, `{Seq}`), site ID source and regex |
 | `AgentInstaller` | MSP agent installer config: tool name, service name, file pattern, install args, paths, exit codes |
@@ -200,6 +231,7 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
 | `CustomKMSKeys` / `CustomAVMAKeys` | Org-specific license keys, merged with built-in Microsoft GVLK/AVMA tables |
 | `CustomVMTemplates` | Override built-in VM template specs or add new templates (partial overrides supported) |
 | `CustomVMDefaults` | Default vCPU, RAM, disk size/type for non-template (custom) VMs |
+| `CustomRoleTemplates` | Add custom server role templates with Windows features, merged with 10 built-in templates |
 
 > `defaults.json` is gitignored -- your secrets never leave your machine.
 

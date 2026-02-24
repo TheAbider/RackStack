@@ -4,7 +4,7 @@ Use cloud object storage instead of a self-hosted file server. This approach eli
 
 See [FileServer-Setup.md](FileServer-Setup.md) for architecture overview and alternatives.
 
-> **Status: Future Enhancement.** RackStack currently expects nginx-style JSON directory listings and standard HTTP file downloads. Cloud storage APIs use different listing formats and authentication mechanisms. This guide documents the concept and what would need to change in the tool to support it.
+> **Status: Supported.** RackStack natively supports Azure Blob Storage with SAS tokens (`StorageType: "azure"`) and any CDN/static host via JSON index files (`StorageType: "static"`). See the configuration examples below.
 
 ## Architecture
 
@@ -57,7 +57,7 @@ Blob storage uses virtual directories (flat namespace with `/` separators):
 server-tools/
     ISOs/en-us_windows_server_2025_x64.iso
     VirtualHardDrives/Server2025-Std-Sysprepped.vhdx
-    Agents/Agent_0451_AcmeHealth.exe
+    Agents/KaseyaAgent_Site101.exe
 ```
 
 ### Generate a SAS token
@@ -89,7 +89,25 @@ Directory listing uses the Azure Blob REST API:
 GET https://rackstackfiles.blob.core.windows.net/server-tools?restype=container&comp=list&prefix=ISOs/&delimiter=/&<SAS_TOKEN>
 ```
 
-This returns XML, not JSON.
+RackStack handles the XML parsing natively with `StorageType: "azure"`.
+
+### defaults.json configuration
+
+```json
+{
+    "FileServer": {
+        "StorageType": "azure",
+        "AzureAccount": "rackstackfiles",
+        "AzureContainer": "server-tools",
+        "AzureSasToken": "sv=2022-11-02&ss=b&srt=sco&sp=rl&se=2027-01-01...",
+        "ISOsFolder": "ISOs",
+        "VHDsFolder": "VirtualHardDrives",
+        "AgentFolder": "Agents"
+    }
+}
+```
+
+That's it. RackStack will list blobs via the Azure REST API and download files with the SAS token appended as a query parameter.
 
 ---
 
@@ -111,7 +129,7 @@ Same virtual directory convention:
 server-tools/
     ISOs/en-us_windows_server_2025_x64.iso
     VirtualHardDrives/Server2025-Std-Sysprepped.vhdx
-    Agents/Agent_0451_AcmeHealth.exe
+    Agents/KaseyaAgent_Site101.exe
 ```
 
 ### Access pattern: Presigned URLs
@@ -134,56 +152,15 @@ For production, put a CloudFront distribution in front of the S3 bucket:
 2. Use Origin Access Control (OAC) to restrict direct S3 access
 3. Optionally add signed URLs or signed cookies for authentication
 
----
+### defaults.json configuration
 
-## What Needs to Change in RackStack
-
-The tool's FileServer module currently assumes:
-
-1. **JSON directory listings** from nginx autoindex (`autoindex_format json`)
-2. **Direct HTTP file downloads** with optional Cloudflare Access headers
-3. **Static base URL** with folder paths appended
-
-To support cloud storage, the following changes would be needed:
-
-### 1. Directory listing adapter
-
-The file listing logic (in the FileServer module) would need an abstraction layer:
-
-```powershell
-# Current: expects nginx JSON autoindex response
-$files = Invoke-RestMethod -Uri "$BaseURL/$folder/" -Headers $headers
-
-# Needed: adapter per storage backend
-switch ($StorageType) {
-    "nginx"   { $files = Get-NginxListing -Url "$BaseURL/$folder/" -Headers $headers }
-    "azure"   { $files = Get-AzureBlobListing -Account $Account -Container $Container -Prefix $folder -SasToken $SasToken }
-    "s3"      { $files = Get-S3Listing -Bucket $Bucket -Prefix $folder -Region $Region }
-}
-```
-
-### 2. Download URL construction
-
-```powershell
-# Current: simple URL append
-$downloadUrl = "$BaseURL/$folder/$filename"
-
-# Azure: append SAS token
-$downloadUrl = "https://$Account.blob.core.windows.net/$Container/$folder/$filename?$SasToken"
-
-# S3 presigned: generate per-file
-$downloadUrl = Get-S3PresignedUrl -Bucket $Bucket -Key "$folder/$filename"
-```
-
-### 3. defaults.json schema extension
+For S3 with CloudFront, use the `static` storage type with JSON index files:
 
 ```json
 {
     "FileServer": {
-        "StorageType": "azure",
-        "AzureAccount": "rackstackfiles",
-        "AzureContainer": "server-tools",
-        "AzureSasToken": "sv=2022-11-02&ss=b&...",
+        "StorageType": "static",
+        "BaseURL": "https://d123abc.cloudfront.net/server-tools",
         "ISOsFolder": "ISOs",
         "VHDsFolder": "VirtualHardDrives",
         "AgentFolder": "Agents"
@@ -191,75 +168,58 @@ $downloadUrl = Get-S3PresignedUrl -Bucket $Bucket -Key "$folder/$filename"
 }
 ```
 
-Or for S3:
+RackStack fetches `index.json` from each folder to get the file listing, then downloads files via standard HTTPS.
 
-```json
-{
-    "FileServer": {
-        "StorageType": "s3",
-        "S3Bucket": "rackstack-files",
-        "S3Region": "us-east-1",
-        "S3Prefix": "server-tools",
-        "ISOsFolder": "ISOs",
-        "VHDsFolder": "VirtualHardDrives",
-        "AgentFolder": "Agents"
-    }
-}
-```
+### Generating index.json files
 
-### 4. Authentication changes
-
-- Azure: SAS token appended as query parameter (no headers)
-- S3: AWS Signature V4 headers, or presigned URLs (no custom headers)
-- Neither uses `CF-Access-Client-Id` / `CF-Access-Client-Secret`
-
-### 5. Caching considerations
-
-Cloud API calls may have rate limits or costs. The existing 10-minute cache (`$script:CacheTTLMinutes`) helps, but cloud-specific optimizations may be beneficial (e.g., ETags, conditional requests).
-
----
-
-## Workaround: Cloud + nginx Proxy
-
-Until the tool natively supports cloud storage, you can put nginx in front of cloud storage to provide the expected JSON directory listing format:
-
-### Azure Blob + nginx proxy
-
-```nginx
-server {
-    listen 80;
-
-    location / {
-        proxy_pass https://rackstackfiles.blob.core.windows.net/server-tools/;
-        proxy_set_header Host rackstackfiles.blob.core.windows.net;
-    }
-}
-```
-
-This doesn't solve the directory listing problem (blobs don't return nginx-format JSON), but it does let you use a Cloudflare Tunnel for auth. You'd still need a script that generates index files.
-
-### Static index file approach
-
-Generate JSON index files and upload them alongside your blobs:
+Each folder needs an `index.json` file listing its contents. Generate and upload them alongside your files:
 
 ```powershell
 # Generate index.json for each folder
-$isos = Get-ChildItem "C:\FileServer\server-tools\ISOs" | ForEach-Object {
-    @{ name = $_.Name; type = "file"; mtime = $_.LastWriteTimeUtc.ToString("o"); size = $_.Length }
+function New-IndexJson {
+    param([string]$LocalPath, [string]$S3Prefix)
+    $entries = Get-ChildItem $LocalPath -File | ForEach-Object {
+        @{ name = $_.Name; type = "file"; mtime = $_.LastWriteTimeUtc.ToString("o"); size = $_.Length }
+    }
+    $indexPath = Join-Path $LocalPath "index.json"
+    $entries | ConvertTo-Json | Set-Content $indexPath -Encoding UTF8
+    aws s3 cp $indexPath "s3://rackstack-files/${S3Prefix}/index.json"
 }
-$isos | ConvertTo-Json | Set-Content "C:\FileServer\server-tools\ISOs\index.json"
+
+New-IndexJson -LocalPath "C:\FileServer\server-tools\ISOs" -S3Prefix "server-tools/ISOs"
+New-IndexJson -LocalPath "C:\FileServer\server-tools\VirtualHardDrives" -S3Prefix "server-tools/VirtualHardDrives"
+New-IndexJson -LocalPath "C:\FileServer\server-tools\Agents" -S3Prefix "server-tools/Agents"
 ```
 
-Upload `index.json` to each folder in blob storage. Then modify `defaults.json` to point to a static hosting URL and adjust the tool to request `index.json` instead of relying on autoindex.
+Re-run this whenever you add or remove files.
 
-This is the most practical cloud approach without modifying the tool's core download logic.
+---
+
+## Caching
+
+Cloud API calls may have rate limits or costs. RackStack caches file listings for 10 minutes (`$script:CacheTTLMinutes` in `defaults.json`), which limits API calls. Azure Blob list operations are cheap (~$0.004 per 10,000 requests).
+
+---
 
 ## Verify
 
-Until native support is added, verification depends on the workaround used. With the static index approach:
+### Azure
 
 ```powershell
-Invoke-RestMethod -Uri "https://rackstackfiles.blob.core.windows.net/server-tools/ISOs/index.json?<SAS_TOKEN>"
+# Test listing (should return XML with your blobs)
+$sas = "sv=2022-11-02&ss=b&..."
+Invoke-WebRequest -Uri "https://rackstackfiles.blob.core.windows.net/server-tools?restype=container&comp=list&prefix=ISOs/&delimiter=/&$sas" -UseBasicParsing
+
+# Test download (should download the file)
+Invoke-WebRequest -Uri "https://rackstackfiles.blob.core.windows.net/server-tools/ISOs/en-us_windows_server_2025_x64.iso?$sas" -OutFile test.iso
 ```
 
-You should see a JSON array of file metadata matching the nginx autoindex format.
+### S3 + CloudFront (static)
+
+```powershell
+# Test index listing (should return JSON array)
+Invoke-RestMethod -Uri "https://d123abc.cloudfront.net/server-tools/ISOs/index.json"
+
+# Test download
+Invoke-WebRequest -Uri "https://d123abc.cloudfront.net/server-tools/ISOs/en-us_windows_server_2025_x64.iso" -OutFile test.iso
+```

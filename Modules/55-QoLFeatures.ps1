@@ -1058,6 +1058,7 @@ function Install-WindowsServerBackup {
 # Certificate management submenu
 function Show-CertificateMenu {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"

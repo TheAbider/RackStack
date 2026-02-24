@@ -97,12 +97,16 @@ $script:WindowsLicensingAppId = "55c92734-d682-4d71-983e-d6ec3f16059f"
 # FileServer - Cloudflare Access-protected file server
 # Override via defaults.json - empty BaseURL = cloud features disabled
 $script:FileServer = @{
-    BaseURL      = ""
-    ClientId     = ""
-    ClientSecret = ""
-    ISOsFolder   = "ISOs"
-    VHDsFolder   = "VirtualHardDrives"
-    AgentFolder  = "Agents"
+    StorageType    = "nginx"  # nginx (default), azure, static
+    BaseURL        = ""
+    ClientId       = ""
+    ClientSecret   = ""
+    AzureAccount   = ""
+    AzureContainer = ""
+    AzureSasToken  = ""
+    ISOsFolder     = "ISOs"
+    VHDsFolder     = "VirtualHardDrives"
+    AgentFolder    = "Agents"
 }
 
 # Folder file cache - keyed by folder path, each entry has Files array and CacheTime
@@ -130,7 +134,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.5.4"
+$script:ScriptVersion = "1.5.5"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

@@ -279,8 +279,8 @@ You should see a JSON directory listing of your ISOs.
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
     Agents/
-        Agent_0451_AcmeHealth.exe
-        Agent_0452_AcmeClinic.exe
+        KaseyaAgent_Site101.exe
+        KaseyaAgent_Site202.exe
     version.json
 ```
 

@@ -752,17 +752,37 @@ function Export-Defaults {
         Domain               = if ($script:domain) { $script:domain } else { $domain }
         LocalAdminName       = if ($script:localadminaccountname) { $script:localadminaccountname } else { $localadminaccountname }
         LocalAdminFullName   = if ($script:FullName) { $script:FullName } else { $FullName }
+        AutoUpdate           = $script:AutoUpdate
+        TempPath             = $script:TempPath
         SwitchName           = if ($script:SwitchName) { $script:SwitchName } else { $SwitchName }
         ManagementName       = if ($script:ManagementName) { $script:ManagementName } else { $ManagementName }
         BackupName           = if ($script:BackupName) { $script:BackupName } else { $BackupName }
         DNSPresets           = $customDNS
         FileServer          = $script:FileServer
         iSCSISubnet          = $script:iSCSISubnet
+        SANTargetMappings    = $script:SANTargetMappings
         StorageBackendType   = $script:StorageBackendType
+        StoragePaths         = [ordered]@{
+            HostVMStoragePath   = $script:HostVMStoragePath
+            HostISOPath         = $script:HostISOPath
+            ClusterISOPath      = $script:ClusterISOPath
+            VHDCachePath        = $script:VHDCachePath
+            ClusterVHDCachePath = $script:ClusterVHDCachePath
+        }
+        AgentInstaller       = $script:AgentInstaller
+        VMNaming             = $script:VMNaming
+        DefenderExclusionPaths  = $script:DefenderExclusionPaths
+        DefenderCommonVMPaths   = $script:DefenderCommonVMPaths
         CustomKMSKeys        = $script:CustomKMSKeys
         CustomAVMAKeys       = $script:CustomAVMAKeys
         CustomVMTemplates    = $script:CustomVMTemplates
         CustomVMDefaults     = $script:CustomVMDefaults
+        CustomRoleTemplates  = $script:CustomRoleTemplates
+    }
+
+    # Include SANTargetPairings only if custom pairings are configured
+    if ($script:SANTargetPairings) {
+        $defaults["SANTargetPairings"] = $script:SANTargetPairings
     }
 
     try {

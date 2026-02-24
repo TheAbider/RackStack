@@ -39,25 +39,37 @@
     "_section_fileserver": "========== FILE SERVER (ISO / VHD / AGENT DOWNLOADS) ==========",
 
     "FileServer": {
-        "_comment": "RackStack can download Windows ISOs, VHD templates, and agent installers from your own file server. This is totally optional -- you can skip this section if you don't host files. See docs/FileServer-Setup.md for setup guides (supports Cloudflare Tunnel, LAN share, Docker, Tailscale, and more).",
+        "_comment": "RackStack can download Windows ISOs, VHD templates, and agent installers from a file server or cloud storage. This is totally optional -- skip if you don't host files. See docs/FileServer-Setup.md for setup guides.",
+
+        "StorageType": "nginx",
+        "_StorageType_help": "How your files are hosted. Options: 'nginx' (default, any web server with HTML directory listing), 'azure' (Azure Blob Storage with SAS token), 'static' (any HTTP server with index.json files per folder -- works with S3+CloudFront, GitHub Pages, etc).",
 
         "BaseURL": "https://files.acme.com/server-tools",
-        "_BaseURL_help": "The root URL of your file server. Everything else is relative to this. Examples: 'https://files.acme.com/server-tools', 'http://192.168.1.100/tools', 'https://your-tunnel.cfaccess.com/files'.",
+        "_BaseURL_help": "Root URL for nginx or static storage types. Everything else is relative to this. Examples: 'https://files.acme.com/server-tools', 'http://192.168.1.100/tools'. Not used for Azure storage type.",
 
         "ClientId": "your-cloudflare-access-client-id.access",
-        "_ClientId_help": "Only needed if your file server uses Cloudflare Access for authentication. This is the Service Token Client ID from Cloudflare Zero Trust dashboard. Leave as-is or omit if you don't use Cloudflare Access.",
+        "_ClientId_help": "Only for nginx StorageType with Cloudflare Access. Service Token Client ID from Cloudflare Zero Trust dashboard. Omit for Azure, static, or LAN setups.",
 
         "ClientSecret": "your-cloudflare-access-client-secret-hex-string",
-        "_ClientSecret_help": "The matching Service Token Client Secret from Cloudflare. Keep this secret! This file (defaults.json) should never be committed to a public repo.",
+        "_ClientSecret_help": "Matching Cloudflare Access Service Token Client Secret. Keep this secret!",
+
+        "AzureAccount": "",
+        "_AzureAccount_help": "Only for azure StorageType. Your Azure Storage account name (e.g., 'rackstackfiles'). The blob endpoint becomes https://{AzureAccount}.blob.core.windows.net.",
+
+        "AzureContainer": "",
+        "_AzureContainer_help": "Only for azure StorageType. The blob container name (e.g., 'server-tools'). Files are stored as {container}/{folder}/{file}.",
+
+        "AzureSasToken": "",
+        "_AzureSasToken_help": "Only for azure StorageType. A Shared Access Signature token with read+list permissions on the container. Generate with: az storage container generate-sas --permissions rl --expiry {date}. Token looks like 'sv=2022-11-02&ss=b&srt=sco&sp=rl&se=...'",
 
         "ISOsFolder": "ISOs",
-        "_ISOsFolder_help": "Subfolder under BaseURL where Windows ISO files live. RackStack looks at BaseURL/ISOsFolder for ISOs to download. Example: if BaseURL is 'https://files.acme.com/tools' and ISOsFolder is 'ISOs', it looks at 'https://files.acme.com/tools/ISOs'.",
+        "_ISOsFolder_help": "Subfolder where Windows ISO files live. For nginx/static: BaseURL/ISOsFolder. For Azure: container/ISOsFolder.",
 
         "VHDsFolder": "VirtualHardDrives",
-        "_VHDsFolder_help": "Subfolder for VHD/VHDX template files (sysprepped Windows images or cloud-init Linux images). Used by the VHD Management menu to download base images for VM deployment.",
+        "_VHDsFolder_help": "Subfolder for VHD/VHDX template files (sysprepped Windows images or cloud-init Linux images).",
 
         "AgentFolder": "Agents",
-        "_AgentFolder_help": "Subfolder on your file server for agent installer files. The folder name here should match the actual directory on your server. Works with any MSP agent (Kaseya, ConnectWise, Datto, etc.)."
+        "_AgentFolder_help": "Subfolder for agent installer files. Works with any MSP agent (Kaseya, ConnectWise, Datto, etc.)."
     },
 
     "_section_virtual_switches": "========== VIRTUAL SWITCH & vNICs ==========",
