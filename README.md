@@ -80,7 +80,7 @@ For production use, generate a monolithic single-file script (~32K lines) that y
 
 The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 63 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
-> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.5.4.ps1` = monolithic build for deployment/compilation.
+> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.5.6.ps1` = monolithic build for deployment/compilation.
 
 ## Requirements
 
@@ -160,6 +160,7 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
     },
 
     "FileServer": {
+        "StorageType": "nginx",
         "BaseURL": "https://files.acme.com/server-tools",
         "ClientId": "your-cloudflare-access-client-id.access",
         "ClientSecret": "your-cloudflare-access-client-secret",
@@ -226,7 +227,7 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
 | `StoragePaths` | Default Hyper-V storage paths (VM storage, ISOs, VHD cache, cluster paths) |
 | `VMNaming` | VM naming pattern with tokens (`{Site}`, `{Prefix}`, `{Seq}`), site ID source and regex |
 | `AgentInstaller` | MSP agent installer config: tool name, service name, file pattern, install args, paths, exit codes |
-| `FileServer` | File server credentials for ISO/VHD downloads (see [File Server Setup](docs/FileServer-Setup.md)) |
+| `FileServer` | File server / cloud storage for ISO/VHD downloads: nginx, Azure Blob, or static JSON (see [File Server Setup](docs/FileServer-Setup.md)) |
 | `DefenderExclusionPaths` / `DefenderCommonVMPaths` | Windows Defender exclusion paths for Hyper-V hosts and VM storage |
 | `CustomKMSKeys` / `CustomAVMAKeys` | Org-specific license keys, merged with built-in Microsoft GVLK/AVMA tables |
 | `CustomVMTemplates` | Override built-in VM template specs or add new templates (partial overrides supported) |
@@ -262,7 +263,7 @@ Place `batch_config.json` next to the script and it runs automatically on launch
 ```
 RackStack/
 ├── RackStack.ps1               # Modular loader -- dot-sources 63 modules (dev use)
-├── RackStack v1.5.4.ps1        # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack v1.5.6.ps1        # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
 ├── defaults.example.json       # Config template with examples
@@ -273,7 +274,7 @@ RackStack/
 │   ├── ...                     # 61 more modules
 │   └── 62-HyperVReplica.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 1628 automated tests (129 sections)
+│   ├── Run-Tests.ps1           # 1659 automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -299,7 +300,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (1628 tests, ~2 minutes)
+# Full test suite (1659 tests, ~2 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 63 modules + monolithic)
@@ -319,7 +320,7 @@ Tests cover parsing, module loading, function existence (300+), version consiste
 4. Test: `.\Tests\Run-Tests.ps1`
 5. Compile: `Invoke-PS2EXE -InputFile 'RackStack v{ver}.ps1' -OutputFile 'RackStack.exe'`
 
-The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 59 region pairs are flat (non-nested). Use `-DryRun` to preview.
+The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 62 region pairs are flat (non-nested). Use `-DryRun` to preview.
 
 > **File summary:** `RackStack.ps1` = modular loader (for dev). `RackStack v{version}.ps1` = monolithic build (for deployment). `RackStack.exe` = compiled from monolithic (for end users).
 

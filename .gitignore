@@ -4,6 +4,7 @@ defaults.json
 
 # Build artifacts
 *.exe
+RackStack v*.ps1
 
 # Local development files (not for public repo)
 local/

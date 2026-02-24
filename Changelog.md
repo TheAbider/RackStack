@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.5.7
+
+- **Documentation Audit Fixes:** README updated with correct test count (1659), current version references, accurate region pair count (62), FileServer StorageType in config example, cloud storage mention in config table
+- **CONTRIBUTING.md:** Pull request checklist updated with current test count
+- **.gitignore:** Monolithic build artifact (`RackStack v*.ps1`) now explicitly ignored
+- 63 modules, 1659 tests, backward compatible with all existing configs
+
 ## v1.5.6
 
 - **Cloud Storage Test Coverage:** 31 new tests for Azure Blob, static index, and cloud storage helper functions (Get-FileServerUrl, Get-FileServerHeaders, Test-FileServerConfigured) — tests cover URL construction, header generation, configuration detection across all 3 storage types
