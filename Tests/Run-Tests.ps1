@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.5.5
+    Automated Test Runner for RackStack v1.5.6
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -192,12 +192,16 @@ $script:AgentInstaller = @{
     TimeoutSeconds  = 300
 }
 $script:FileServer = @{
-    BaseURL      = ""
-    ClientId     = ""
-    ClientSecret = ""
-    ISOsFolder   = "ISOs"
-    VHDsFolder   = "VirtualHardDrives"
-    AgentFolder  = "Agents"
+    StorageType    = "nginx"
+    BaseURL        = ""
+    ClientId       = ""
+    ClientSecret   = ""
+    AzureAccount   = ""
+    AzureContainer = ""
+    AzureSasToken  = ""
+    ISOsFolder     = "ISOs"
+    VHDsFolder     = "VirtualHardDrives"
+    AgentFolder    = "Agents"
 }
 $script:FileCache = @{}
 $script:AgentInstallerCache = $null
@@ -2420,7 +2424,7 @@ try {
     Write-TestResult "Monolithic region name check" $false $_.Exception.Message
 }
 
-# --- 35d: defaults.json FileServer structure (all 6 keys) ---
+# --- 35d: defaults.json FileServer structure ---
 $defaultsFilePath2 = Join-Path (Split-Path $PSScriptRoot) 'defaults.json'
 if (Test-Path $defaultsFilePath2) {
     try {
@@ -2432,7 +2436,7 @@ if (Test-Path $defaultsFilePath2) {
         $hasAll = $hasAll -and ($ac.ISOsFolder -eq "ISOs")
         $hasAll = $hasAll -and ($ac.VHDsFolder -eq "VirtualHardDrives")
         $hasAll = $hasAll -and (($ac.AgentFolder -eq "Agents") -or ($ac.KaseyaFolder -eq "KaseyaAgents"))
-        Write-TestResult "defaults.json: FileServer has all 6 keys" $hasAll
+        Write-TestResult "defaults.json: FileServer has required keys" $hasAll
     } catch {
         Write-TestResult "defaults.json: FileServer structure" $false $_.Exception.Message
     }
@@ -2486,13 +2490,13 @@ try {
 
 # --- 35e: FileServer variable structure at init ---
 try {
-    $keys = @("BaseURL", "ClientId", "ClientSecret", "ISOsFolder", "VHDsFolder", "AgentFolder")
+    $keys = @("StorageType", "BaseURL", "ClientId", "ClientSecret", "AzureAccount", "AzureContainer", "AzureSasToken", "ISOsFolder", "VHDsFolder", "AgentFolder")
     $missing = @()
     foreach ($k in $keys) {
         if (-not $script:FileServer.ContainsKey($k)) { $missing += $k }
     }
     $pass = $missing.Count -eq 0
-    Write-TestResult "FileServer hashtable has all 6 keys" $pass $(if (-not $pass) { "Missing: $($missing -join ', ')" } else { "" })
+    Write-TestResult "FileServer hashtable has all 10 keys" $pass $(if (-not $pass) { "Missing: $($missing -join ', ')" } else { "" })
 } catch {
     Write-TestResult "FileServer hashtable keys" $false $_.Exception.Message
 }
@@ -5241,17 +5245,164 @@ try {
     Write-TestResult "39-FileServer: uses FileCache hashtable" ($acContent -match 'FileCache')
 
     # FileServer variable structure
-    $acKeys = @("BaseURL", "ClientId", "ClientSecret", "ISOsFolder", "VHDsFolder", "AgentFolder")
+    $acKeys = @("StorageType", "BaseURL", "ClientId", "ClientSecret", "AzureAccount", "AzureContainer", "AzureSasToken", "ISOsFolder", "VHDsFolder", "AgentFolder")
     foreach ($key in $acKeys) {
-        Write-TestResult "FileServer variable has '$key' key" ($null -ne $script:FileServer.$key -or $script:FileServer.Contains($key))
+        Write-TestResult "FileServer variable has '$key' key" ($null -ne $script:FileServer.$key -or $script:FileServer.ContainsKey($key))
     }
 
     # Security: CF-Access headers used
     Write-TestResult "39-FileServer: uses CF-Access-Client-Id header" ($acContent -match 'CF-Access-Client-Id')
     Write-TestResult "39-FileServer: uses CF-Access-Client-Secret header" ($acContent -match 'CF-Access-Client-Secret')
 
+    # Cloud storage helper functions exist
+    Write-TestResult "39-FileServer: Get-FileServerUrl exists" ($acContent -match 'function\s+Get-FileServerUrl')
+    Write-TestResult "39-FileServer: Get-FileServerHeaders exists" ($acContent -match 'function\s+Get-FileServerHeaders')
+    Write-TestResult "39-FileServer: Test-FileServerConfigured exists" ($acContent -match 'function\s+Test-FileServerConfigured')
+
+    # StorageType handling
+    Write-TestResult "39-FileServer: handles StorageType switch" ($acContent -match 'switch\s*\(\$storageType\)')
+    Write-TestResult "39-FileServer: supports azure storage type" ($acContent -match '"azure"')
+    Write-TestResult "39-FileServer: supports static storage type" ($acContent -match '"static"')
+    Write-TestResult "39-FileServer: Azure uses blob.core.windows.net" ($acContent -match 'blob\.core\.windows\.net')
+    Write-TestResult "39-FileServer: static fetches index.json" ($acContent -match 'index\.json')
+
 } catch {
     Write-TestResult "FileServer Function Coverage Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 92b: CLOUD STORAGE HELPER FUNCTION TESTS
+# ============================================================================
+
+Write-SectionHeader "SECTION 92b: CLOUD STORAGE HELPERS"
+
+try {
+    # --- Test Get-FileServerUrl ---
+    # nginx mode
+    $origFS = $script:FileServer.Clone()
+    $script:FileServer.StorageType = "nginx"
+    $script:FileServer.BaseURL = "https://files.example.com/server-tools"
+    $url = Get-FileServerUrl -FilePath "ISOs/test.iso"
+    Write-TestResult "Get-FileServerUrl: nginx returns BaseURL/path" ($url -eq "https://files.example.com/server-tools/ISOs/test.iso")
+
+    # azure mode
+    $script:FileServer.StorageType = "azure"
+    $script:FileServer.AzureAccount = "teststorage"
+    $script:FileServer.AzureContainer = "server-tools"
+    $script:FileServer.AzureSasToken = "sv=2022&sp=rl"
+    $url = Get-FileServerUrl -FilePath "ISOs/test.iso"
+    $pass = ($url -match "^https://teststorage\.blob\.core\.windows\.net/server-tools/ISOs/test\.iso\?sv=2022&sp=rl$")
+    Write-TestResult "Get-FileServerUrl: azure returns blob URL with SAS" $pass "Got: $url"
+
+    # static mode (same as nginx)
+    $script:FileServer.StorageType = "static"
+    $script:FileServer.BaseURL = "https://cdn.example.com/files"
+    $url = Get-FileServerUrl -FilePath "VHDs/disk.vhdx"
+    Write-TestResult "Get-FileServerUrl: static returns BaseURL/path" ($url -eq "https://cdn.example.com/files/VHDs/disk.vhdx")
+
+    # URL encoding (spaces in path)
+    $script:FileServer.StorageType = "nginx"
+    $script:FileServer.BaseURL = "https://files.example.com/tools"
+    $url = Get-FileServerUrl -FilePath "Agents/My Agent.exe"
+    Write-TestResult "Get-FileServerUrl: encodes spaces in path" ($url -match 'My%20Agent\.exe')
+
+    $script:FileServer = $origFS
+} catch {
+    Write-TestResult "Get-FileServerUrl tests" $false $_.Exception.Message
+    $script:FileServer = $origFS
+}
+
+try {
+    # --- Test Get-FileServerHeaders ---
+    $origFS = $script:FileServer.Clone()
+
+    # nginx with CF credentials
+    $script:FileServer.StorageType = "nginx"
+    $script:FileServer.ClientId = "test-id.access"
+    $script:FileServer.ClientSecret = "test-secret-hex"
+    $headers = Get-FileServerHeaders
+    Write-TestResult "Get-FileServerHeaders: nginx includes CF-Access-Client-Id" ($headers["CF-Access-Client-Id"] -eq "test-id.access")
+    Write-TestResult "Get-FileServerHeaders: nginx includes CF-Access-Client-Secret" ($headers["CF-Access-Client-Secret"] -eq "test-secret-hex")
+
+    # nginx without credentials
+    $script:FileServer.ClientId = ""
+    $script:FileServer.ClientSecret = ""
+    $headers = Get-FileServerHeaders
+    Write-TestResult "Get-FileServerHeaders: no creds returns empty headers" ($headers.Count -eq 0)
+
+    # azure mode returns empty headers (auth is in SAS token)
+    $script:FileServer.StorageType = "azure"
+    $script:FileServer.ClientId = "should-be-ignored"
+    $headers = Get-FileServerHeaders
+    Write-TestResult "Get-FileServerHeaders: azure returns empty headers" ($headers.Count -eq 0)
+
+    $script:FileServer = $origFS
+} catch {
+    Write-TestResult "Get-FileServerHeaders tests" $false $_.Exception.Message
+    $script:FileServer = $origFS
+}
+
+try {
+    # --- Test Test-FileServerConfigured ---
+    $origFS = $script:FileServer.Clone()
+
+    # nginx: configured when BaseURL set
+    $script:FileServer.StorageType = "nginx"
+    $script:FileServer.BaseURL = "https://files.example.com"
+    Write-TestResult "Test-FileServerConfigured: nginx with BaseURL = true" (Test-FileServerConfigured)
+
+    # nginx: not configured when BaseURL empty
+    $script:FileServer.BaseURL = ""
+    Write-TestResult "Test-FileServerConfigured: nginx without BaseURL = false" (-not (Test-FileServerConfigured))
+
+    # azure: configured when AzureAccount + AzureContainer set
+    $script:FileServer.StorageType = "azure"
+    $script:FileServer.AzureAccount = "teststorage"
+    $script:FileServer.AzureContainer = "server-tools"
+    Write-TestResult "Test-FileServerConfigured: azure with account+container = true" (Test-FileServerConfigured)
+
+    # azure: not configured when AzureAccount missing
+    $script:FileServer.AzureAccount = ""
+    Write-TestResult "Test-FileServerConfigured: azure without account = false" (-not (Test-FileServerConfigured))
+
+    # static: uses BaseURL like nginx
+    $script:FileServer.StorageType = "static"
+    $script:FileServer.BaseURL = "https://cdn.example.com"
+    Write-TestResult "Test-FileServerConfigured: static with BaseURL = true" (Test-FileServerConfigured)
+
+    $script:FileServer = $origFS
+} catch {
+    Write-TestResult "Test-FileServerConfigured tests" $false $_.Exception.Message
+    $script:FileServer = $origFS
+}
+
+try {
+    # --- Test StorageType defaults ---
+    $origFS = $script:FileServer.Clone()
+
+    # Default storage type should be nginx
+    Write-TestResult "FileServer: StorageType defaults to 'nginx'" ($script:FileServer.StorageType -eq "nginx")
+    Write-TestResult "FileServer: AzureAccount is empty at init" ($script:FileServer.AzureAccount -eq "")
+    Write-TestResult "FileServer: AzureContainer is empty at init" ($script:FileServer.AzureContainer -eq "")
+    Write-TestResult "FileServer: AzureSasToken is empty at init" ($script:FileServer.AzureSasToken -eq "")
+
+    # Get-FileServerFiles unconfigured with azure type returns empty
+    $script:FileServer.StorageType = "azure"
+    $script:FileServer.AzureAccount = ""
+    $script:FileServer.AzureContainer = ""
+    $result = Get-FileServerFiles -FolderPath "ISOs"
+    Write-TestResult "Get-FileServerFiles: unconfigured azure returns empty" ($null -eq $result -or $result.Count -eq 0)
+
+    # Get-FileServerFiles unconfigured with static type returns empty
+    $script:FileServer.StorageType = "static"
+    $script:FileServer.BaseURL = ""
+    $result = Get-FileServerFiles -FolderPath "ISOs"
+    Write-TestResult "Get-FileServerFiles: unconfigured static returns empty" ($null -eq $result -or $result.Count -eq 0)
+
+    $script:FileServer = $origFS
+} catch {
+    Write-TestResult "Cloud storage defaults tests" $false $_.Exception.Message
+    $script:FileServer = $origFS
 }
 
 # ============================================================================
