@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.5.3
+
+- **SHA256 Update Verification:** Auto-update now verifies downloaded files against SHA256 hashes published in GitHub release notes — rejects corrupted or tampered downloads with a clear error
+- **Pre-release Validation Expanded:** `Validate-Release.ps1` adds content integrity checks on git-tracked files
+- **Stale Reference Fixes:** README monolithic line count corrected, CONTRIBUTING.md test count updated, Run-Tests.ps1 header version corrected
+- 63 modules, 1628 tests, backward compatible with all existing configs
+
 ## v1.5.1
 
 - **Test Coverage:** 173 new tests across 16 sections (114-129) covering DomainJoin, RDP/WinRM, FirewallTemplates, DiskCleanup, Password, HyperV, PerformanceDashboard, EventLogViewer, ServiceManager, BitLocker, StorageReplica, Utilities, VHDManagement, ISODownload, ActiveDirectory, HyperVReplica — all 63 modules now have dedicated test coverage

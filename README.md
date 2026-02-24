@@ -71,7 +71,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 
 ### Single-File Deployment (Production)
 
-For production use, generate a monolithic single-file script (~26K lines) that you can drop on any server:
+For production use, generate a monolithic single-file script (~32K lines) that you can drop on any server:
 
 ```powershell
 # Build the monolithic from all modules
@@ -80,7 +80,7 @@ For production use, generate a monolithic single-file script (~26K lines) that y
 
 The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 63 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
-> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.5.1.ps1` = monolithic build for deployment/compilation.
+> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.5.3.ps1` = monolithic build for deployment/compilation.
 
 ## Requirements
 
@@ -230,7 +230,7 @@ Place `batch_config.json` next to the script and it runs automatically on launch
 ```
 RackStack/
 ├── RackStack.ps1               # Modular loader -- dot-sources 63 modules (dev use)
-├── RackStack v1.5.1.ps1        # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack v1.5.3.ps1        # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
 ├── defaults.example.json       # Config template with examples

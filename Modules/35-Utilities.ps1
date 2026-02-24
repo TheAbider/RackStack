@@ -249,6 +249,50 @@ function Install-ScriptUpdate {
         return
     }
 
+    # SHA256 integrity verification
+    $expectedHash = $null
+    if ($Release.body) {
+        # Parse SHA256 hash from release notes (format: "abcdef123...  filename")
+        $hashPattern = '([0-9a-fA-F]{64})\s+' + [regex]::Escape($asset.name)
+        if ($Release.body -match $hashPattern) {
+            $expectedHash = $Matches[1].ToUpper()
+        }
+    }
+
+    if ($expectedHash) {
+        Write-OutputColor "  Verifying SHA256 integrity..." -color "Info"
+        try {
+            $actualHash = (Get-FileHash -Path $tempPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToUpper()
+        }
+        catch {
+            # Fallback for environments where Get-FileHash is unavailable
+            $sha256 = [System.Security.Cryptography.SHA256]::Create()
+            $stream = [System.IO.File]::OpenRead($tempPath)
+            try {
+                $hashBytes = $sha256.ComputeHash($stream)
+                $actualHash = ($hashBytes | ForEach-Object { $_.ToString("X2") }) -join ""
+            }
+            finally {
+                $stream.Close()
+                $sha256.Dispose()
+            }
+        }
+
+        if ($actualHash -eq $expectedHash) {
+            Write-OutputColor "  SHA256 verified: $($actualHash.Substring(0,16))..." -color "Success"
+        }
+        else {
+            Write-OutputColor "  SHA256 MISMATCH - download may be corrupted or tampered with!" -color "Error"
+            Write-OutputColor "  Expected: $expectedHash" -color "Error"
+            Write-OutputColor "  Actual:   $actualHash" -color "Error"
+            Remove-Item $tempPath -ErrorAction SilentlyContinue
+            return
+        }
+    }
+    else {
+        Write-OutputColor "  SHA256 hash not found in release notes — skipping verification." -color "Warning"
+    }
+
     if ($isExe) {
         # EXE self-update: write a helper batch script that replaces the exe after we exit
         $targetPath = $script:ScriptPath

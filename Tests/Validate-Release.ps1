@@ -291,7 +291,50 @@ foreach ($check in $constantChecks) {
 }
 
 # ============================================================================
-Write-Section "9. AUTOMATED TEST SUITE"
+Write-Section "9. CONTENT INTEGRITY"
+# ============================================================================
+
+# Only scan git-tracked files (excludes defaults.json, local/, etc.)
+$scanDir = $_vrRepoRoot
+$trackedFiles = & git -C $scanDir ls-files --cached -- "*.ps1" "*.md" "*.json" "*.yml" 2>$null
+$scanFiles = $trackedFiles | ForEach-Object { Join-Path $scanDir $_ } | Where-Object { Test-Path $_ }
+
+# Blocked-term scan A (patterns split to avoid self-match)
+$blockedA = @("clau" + "de", "anthro" + "pic", "copi" + "lot", "Co-Authored" + "-By")
+$hitsA = 0
+foreach ($f in $scanFiles) {
+    $fc = Get-Content $f -Raw -ErrorAction SilentlyContinue
+    if ($fc) {
+        foreach ($pat in $blockedA) {
+            if ($fc -match $pat) {
+                $hitsA++
+                if ($Verbose) { Write-Host "         Hit: $(Split-Path $f -Leaf)" -ForegroundColor DarkGray }
+                break
+            }
+        }
+    }
+}
+Write-Check "Content scan A: 0 blocked terms ($($scanFiles.Count) files)" ($hitsA -eq 0) "$hitsA file(s) matched"
+
+# Blocked-term scan B (case-sensitive, word boundaries to avoid false positives)
+$blockedB = @("Eth" + "os", "\bNV" + "A\b", "anab" + "ider")
+$hitsB = 0
+foreach ($f in $scanFiles) {
+    $fc = Get-Content $f -Raw -ErrorAction SilentlyContinue
+    if ($fc) {
+        foreach ($pat in $blockedB) {
+            if ($fc -cmatch $pat) {
+                $hitsB++
+                if ($Verbose) { Write-Host "         Hit: $(Split-Path $f -Leaf)" -ForegroundColor DarkGray }
+                break
+            }
+        }
+    }
+}
+Write-Check "Content scan B: 0 blocked terms ($($scanFiles.Count) files)" ($hitsB -eq 0) "$hitsB file(s) matched"
+
+# ============================================================================
+Write-Section "10. AUTOMATED TEST SUITE"
 # ============================================================================
 
 if ($SkipTests) {

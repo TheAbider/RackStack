@@ -1,4 +1,4 @@
-# Contributing to RackStack
+﻿# Contributing to RackStack
 
 Thanks for your interest in contributing! Here's how to get started.
 
@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 ## Pull Request Checklist
 
-- [ ] All 1058+ tests pass (`Run-Tests.ps1` exits with code 0)
+- [ ] All 1628+ tests pass (`Run-Tests.ps1` exits with code 0)
 - [ ] PSScriptAnalyzer reports 0 errors (`pssa-check.ps1`)
 - [ ] Monolithic synced (`sync-to-monolithic.ps1` shows 0 parse errors)
 - [ ] New functions follow PowerShell verb-noun naming (`Get-`, `Set-`, `Test-`, `Show-`)

@@ -30,10 +30,10 @@
     7h3 4b1d3r
 
 .VERSION
-    1.5.1
+    1.5.3
 
 .LAST UPDATED
-    02/23/2026
+    02/24/2026
 
 .CHANGELOG v1.4.1
     BUG FIXES:
