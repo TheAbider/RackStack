@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.5.9
+
+- **Test Fixture Cleanup:** Refactored test values that triggered false-positive secret detection in security scanners (no actual secrets — test fixtures use dummy values)
+- 63 modules, 1659 tests, backward compatible with all existing configs
+
 ## v1.5.8
 
 - **Line Endings Normalized:** All 73 .ps1 files standardized to UTF-8 BOM + CRLF (45 modules had inconsistent LF-only endings)

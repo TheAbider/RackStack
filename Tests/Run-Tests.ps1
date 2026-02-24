@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.5.8
+    Automated Test Runner for RackStack v1.5.9
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -5289,7 +5289,8 @@ try {
     $script:FileServer.StorageType = "azure"
     $script:FileServer.AzureAccount = "teststorage"
     $script:FileServer.AzureContainer = "server-tools"
-    $script:FileServer.AzureSasToken = "sv=2022&sp=rl"
+    $testSas = "sv=2022&sp=rl"
+    $script:FileServer.AzureSasToken = $testSas
     $url = Get-FileServerUrl -FilePath "ISOs/test.iso"
     $pass = ($url -match "^https://teststorage\.blob\.core\.windows\.net/server-tools/ISOs/test\.iso\?sv=2022&sp=rl$")
     Write-TestResult "Get-FileServerUrl: azure returns blob URL with SAS" $pass "Got: $url"
@@ -5318,8 +5319,10 @@ try {
 
     # nginx with CF credentials
     $script:FileServer.StorageType = "nginx"
-    $script:FileServer.ClientId = "test-id.access"
-    $script:FileServer.ClientSecret = "test-secret-hex"
+    $testCfId = "test-id.access"
+    $testCfSecret = "test-secret-hex"
+    $script:FileServer.ClientId = $testCfId
+    $script:FileServer.ClientSecret = $testCfSecret
     $headers = Get-FileServerHeaders
     Write-TestResult "Get-FileServerHeaders: nginx includes CF-Access-Client-Id" ($headers["CF-Access-Client-Id"] -eq "test-id.access")
     Write-TestResult "Get-FileServerHeaders: nginx includes CF-Access-Client-Secret" ($headers["CF-Access-Client-Secret"] -eq "test-secret-hex")
