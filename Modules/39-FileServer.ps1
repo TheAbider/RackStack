@@ -318,7 +318,7 @@ function Get-FileServerFile {
         }
 
         # Consolidated download loop with retry
-        $maxAttempts = 2
+        $maxAttempts = if ($expectedSize -gt 500MB -and $script:MaxDownloadRetries) { $script:MaxDownloadRetries } else { 2 }
         $attempt = 0
         $downloadSuccess = $false
         $totalElapsed = 0

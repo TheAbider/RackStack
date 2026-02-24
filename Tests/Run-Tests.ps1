@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.6.1
+    Automated Test Runner for RackStack v1.7.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7134,6 +7134,55 @@ try {
 
 } catch {
     Write-TestResult "VM Post-Deploy Smoke Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 134: DOWNLOAD RESUME/RETRY (39-FileServer.ps1 v1.7.0)
+# ============================================================================
+
+Write-SectionHeader "134" "DOWNLOAD RESUME/RETRY"
+
+try {
+    $fsContent = Get-Content "$modulesPath\39-FileServer.ps1" -Raw
+    $initContent = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+
+    Write-TestResult "39-FS: dynamic retry count for large files" ($fsContent -match 'MaxDownloadRetries|maxAttempts')
+    Write-TestResult "39-FS: function Get-FileServerFile exists" ($fsContent -match 'function\s+Get-FileServerFile\b')
+    Write-TestResult "39-FS: function Test-FileIntegrity exists" ($fsContent -match 'function\s+Test-FileIntegrity\b')
+    Write-TestResult "39-FS: hash verification with SHA256" ($fsContent -match 'Get-FileHashBackground|SHA256')
+    Write-TestResult "39-FS: disk space check before download" ($fsContent -match 'SizeRemaining|requiredSpace|Insufficient disk')
+    Write-TestResult "39-FS: progress bar with speed/ETA" ($fsContent -match 'Write-ProgressBar|SpeedBytesPerSec')
+    Write-TestResult "00-Init: MaxDownloadRetries constant" ($initContent -match '\$script:MaxDownloadRetries\s*=\s*3')
+    Write-TestResult "00-Init: BITSPreferred constant" ($initContent -match '\$script:BITSPreferred\s*=\s*\$true')
+
+} catch {
+    Write-TestResult "Download Resume/Retry Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 135: EXPANDED HEALTH DASHBOARD (37-HealthCheck.ps1 v1.7.0)
+# ============================================================================
+
+Write-SectionHeader "135" "EXPANDED HEALTH DASHBOARD"
+
+try {
+    $healthContent = Get-Content "$modulesPath\37-HealthCheck.ps1" -Raw
+
+    Write-TestResult "37-Health: disk I/O latency section" ($healthContent -match 'DISK I/O LATENCY')
+    Write-TestResult "37-Health: uses Get-Counter for disk latency" ($healthContent -match "Get-Counter.*PhysicalDisk.*Avg.*Disk sec")
+    Write-TestResult "37-Health: NIC error counters section" ($healthContent -match 'NIC ERROR COUNTERS')
+    Write-TestResult "37-Health: uses Get-NetAdapterStatistics" ($healthContent -match 'Get-NetAdapterStatistics')
+    Write-TestResult "37-Health: memory pressure section" ($healthContent -match 'MEMORY PRESSURE')
+    Write-TestResult "37-Health: uses Pages/sec counter" ($healthContent -match 'Pages/sec|Available MBytes')
+    Write-TestResult "37-Health: Hyper-V guest health section" ($healthContent -match 'HYPER-V GUEST HEALTH')
+    Write-TestResult "37-Health: guest heartbeat per VM" ($healthContent -match 'Get-VMIntegrationService.*Heartbeat')
+    Write-TestResult "37-Health: top 5 CPU processes section" ($healthContent -match 'TOP 5 CPU PROCESSES')
+    Write-TestResult "37-Health: sorts processes by CPU" ($healthContent -match 'Sort-Object CPU -Descending')
+    Write-TestResult "37-Health: disk latency thresholds" ($healthContent -match 'latencyMs.*-gt\s+20|20.*Error')
+    Write-TestResult "37-Health: NIC error threshold" ($healthContent -match 'totalErrors.*-gt\s*0')
+
+} catch {
+    Write-TestResult "Expanded Health Dashboard Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

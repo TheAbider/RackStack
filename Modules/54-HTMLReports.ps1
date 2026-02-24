@@ -91,6 +91,82 @@ function Export-HTMLHealthReport {
         }
     }
 
+    # Disk I/O Latency (v1.7.0)
+    $diskIOHtml = "<table><tr><th>Disk</th><th>Metric</th><th>Latency</th><th>Status</th></tr>"
+    try {
+        $diskCounters = Get-Counter '\PhysicalDisk(*)\Avg. Disk sec/Read', '\PhysicalDisk(*)\Avg. Disk sec/Write' -ErrorAction SilentlyContinue
+        if ($diskCounters) {
+            foreach ($sample in $diskCounters.CounterSamples) {
+                if ($sample.InstanceName -eq '_total') { continue }
+                $latMs = [math]::Round($sample.CookedValue * 1000, 2)
+                $metricName = if ($sample.Path -match 'Read') { "Read" } else { "Write" }
+                $latStat = if ($latMs -gt 20) { "bad" } elseif ($latMs -gt 10) { "warn" } else { "good" }
+                $diskIOHtml += "<tr><td>$($sample.InstanceName)</td><td>$metricName</td><td>${latMs}ms</td><td class='status-$latStat'>$($latStat.ToUpper())</td></tr>"
+            }
+        } else { $diskIOHtml += "<tr><td colspan='4'>Performance counters unavailable</td></tr>" }
+    } catch { $diskIOHtml += "<tr><td colspan='4'>Unable to read disk I/O counters</td></tr>" }
+    $diskIOHtml += "</table>"
+
+    # NIC Error Counters (v1.7.0)
+    $nicErrorHtml = "<table><tr><th>Adapter</th><th>InErrors</th><th>OutErrors</th><th>InDiscards</th><th>Status</th></tr>"
+    try {
+        $nicStats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
+        foreach ($nic in $nicStats) {
+            $totalErr = $nic.InErrors + $nic.OutErrors + $nic.InDiscards
+            $nicStat = if ($totalErr -gt 0) { "warn" } else { "good" }
+            $nicErrorHtml += "<tr><td>$($nic.Name)</td><td>$($nic.InErrors)</td><td>$($nic.OutErrors)</td><td>$($nic.InDiscards)</td><td class='status-$nicStat'>$($nicStat.ToUpper())</td></tr>"
+        }
+    } catch { $nicErrorHtml += "<tr><td colspan='5'>NIC statistics unavailable</td></tr>" }
+    $nicErrorHtml += "</table>"
+
+    # Memory Pressure (v1.7.0)
+    $memPressureHtml = "<table><tr><th>Metric</th><th>Value</th><th>Status</th></tr>"
+    try {
+        $memCounters = Get-Counter '\Memory\Pages/sec', '\Memory\Available MBytes' -ErrorAction SilentlyContinue
+        if ($memCounters) {
+            foreach ($sample in $memCounters.CounterSamples) {
+                $cName = if ($sample.Path -match 'Pages') { "Pages/sec" } else { "Available MB" }
+                $cVal = [math]::Round($sample.CookedValue, 1)
+                $mStat = "good"
+                if ($cName -eq "Pages/sec" -and $cVal -gt 1000) { $mStat = "warn" }
+                if ($cName -eq "Available MB" -and $cVal -lt 500) { $mStat = "bad" } elseif ($cName -eq "Available MB" -and $cVal -lt 2000) { $mStat = "warn" }
+                $memPressureHtml += "<tr><td>$cName</td><td>$cVal</td><td class='status-$mStat'>$($mStat.ToUpper())</td></tr>"
+            }
+        }
+    } catch { $memPressureHtml += "<tr><td colspan='3'>Memory pressure counters unavailable</td></tr>" }
+    $memPressureHtml += "</table>"
+
+    # Hyper-V Guest Health (v1.7.0)
+    $hvGuestHtml = ""
+    if (Test-HyperVInstalled) {
+        $hvGuestHtml = "<h2>Hyper-V Guest Health</h2><table><tr><th>VM</th><th>Heartbeat</th><th>vCPU</th><th>RAM (GB)</th></tr>"
+        try {
+            $hvVMs = Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Running" }
+            if ($hvVMs) {
+                foreach ($hvm in $hvVMs) {
+                    $hvHb = Get-VMIntegrationService -VM $hvm -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "Heartbeat" }
+                    $hvHbSt = if ($hvHb -and $hvHb.PrimaryStatusDescription -eq "OK") { "good" } else { "warn" }
+                    $hvHbTxt = if ($hvHb) { $hvHb.PrimaryStatusDescription } else { "N/A" }
+                    $hvRAM = [math]::Round($hvm.MemoryAssigned / 1GB, 1)
+                    $hvGuestHtml += "<tr><td>$($hvm.Name)</td><td class='status-$hvHbSt'>$hvHbTxt</td><td>$($hvm.ProcessorCount)</td><td>$hvRAM</td></tr>"
+                }
+            } else { $hvGuestHtml += "<tr><td colspan='4'>No running VMs</td></tr>" }
+        } catch { $hvGuestHtml += "<tr><td colspan='4'>Guest health unavailable</td></tr>" }
+        $hvGuestHtml += "</table>"
+    }
+
+    # Top 5 CPU Processes (v1.7.0)
+    $topProcsHtml = "<table><tr><th>Process</th><th>CPU (sec)</th><th>RAM (MB)</th></tr>"
+    try {
+        $topP = Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 5
+        foreach ($p in $topP) {
+            $pCPU = [math]::Round($p.CPU, 1)
+            $pMem = [math]::Round($p.WorkingSet64 / 1MB, 0)
+            $topProcsHtml += "<tr><td>$($p.ProcessName)</td><td>$pCPU</td><td>$pMem</td></tr>"
+        }
+    } catch { $topProcsHtml += "<tr><td colspan='3'>Process information unavailable</td></tr>" }
+    $topProcsHtml += "</table>"
+
     # Issues summary
     $issues = @()
     if ($cpuLoad -gt 80) { $issues += "High CPU usage ($([math]::Round($cpuLoad, 1))%)" }
@@ -189,6 +265,20 @@ function Export-HTMLHealthReport {
             <tr><th>Service</th><th>Status</th></tr>
             $servicesHtml
         </table>
+
+        <h2>Disk I/O Latency</h2>
+        $diskIOHtml
+
+        <h2>NIC Error Counters</h2>
+        $nicErrorHtml
+
+        <h2>Memory Pressure</h2>
+        $memPressureHtml
+
+        $hvGuestHtml
+
+        <h2>Top 5 CPU Processes</h2>
+        $topProcsHtml
 
         <div class="footer">
             Report generated by $($script:ToolFullName) v$($script:ScriptVersion)
@@ -587,4 +677,5 @@ function Export-HTMLReadinessReport {
         Write-OutputColor "  Error saving report: $_" -color "Error"
     }
 }
+
 #endregion

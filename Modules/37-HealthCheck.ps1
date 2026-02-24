@@ -135,6 +135,106 @@ function Show-SystemHealthCheck {
         }
     }
 
+    # Disk I/O Latency (v1.7.0)
+    Write-OutputColor "=== DISK I/O LATENCY ===" -color "Success"
+    try {
+        $diskCounters = Get-Counter '\PhysicalDisk(*)\Avg. Disk sec/Read', '\PhysicalDisk(*)\Avg. Disk sec/Write' -ErrorAction SilentlyContinue
+        if ($diskCounters) {
+            foreach ($sample in $diskCounters.CounterSamples) {
+                $instanceName = $sample.InstanceName
+                if ($instanceName -eq '_total') { continue }
+                $latencyMs = [math]::Round($sample.CookedValue * 1000, 2)
+                $metricName = if ($sample.Path -match 'Read') { "Read" } else { "Write" }
+                $latColor = if ($latencyMs -gt 20) { "Error" } elseif ($latencyMs -gt 10) { "Warning" } else { "Success" }
+                Write-OutputColor "  Disk $instanceName $metricName Latency: ${latencyMs}ms" -color $latColor
+            }
+        }
+        else {
+            Write-OutputColor "  Unable to read disk performance counters." -color "Debug"
+        }
+    }
+    catch {
+        Write-OutputColor "  Disk I/O check unavailable: $_" -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+
+    # NIC Error Counters (v1.7.0)
+    Write-OutputColor "=== NIC ERROR COUNTERS ===" -color "Success"
+    try {
+        $nicStats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
+        foreach ($nic in $nicStats) {
+            $inErrors = $nic.InErrors
+            $outErrors = $nic.OutErrors
+            $inDiscards = $nic.InDiscards
+            $totalErrors = $inErrors + $outErrors + $inDiscards
+            $nicColor = if ($totalErrors -gt 0) { "Warning" } else { "Success" }
+            Write-OutputColor "  $($nic.Name): InErrors=$inErrors OutErrors=$outErrors InDiscards=$inDiscards" -color $nicColor
+        }
+    }
+    catch {
+        Write-OutputColor "  NIC statistics unavailable." -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+
+    # Memory Pressure (v1.7.0)
+    Write-OutputColor "=== MEMORY PRESSURE ===" -color "Success"
+    try {
+        $memCounters = Get-Counter '\Memory\Pages/sec', '\Memory\Available MBytes' -ErrorAction SilentlyContinue
+        if ($memCounters) {
+            foreach ($sample in $memCounters.CounterSamples) {
+                $counterName = if ($sample.Path -match 'Pages') { "Pages/sec" } else { "Available MB" }
+                $value = [math]::Round($sample.CookedValue, 1)
+                $pressureColor = "Success"
+                if ($counterName -eq "Pages/sec" -and $value -gt 1000) { $pressureColor = "Warning" }
+                if ($counterName -eq "Available MB" -and $value -lt 500) { $pressureColor = "Error" }
+                elseif ($counterName -eq "Available MB" -and $value -lt 2000) { $pressureColor = "Warning" }
+                Write-OutputColor "  $counterName`: $value" -color $pressureColor
+            }
+        }
+    }
+    catch {
+        Write-OutputColor "  Memory pressure counters unavailable." -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+
+    # Hyper-V Guest Health (v1.7.0)
+    if (Test-HyperVInstalled) {
+        Write-OutputColor "=== HYPER-V GUEST HEALTH ===" -color "Success"
+        try {
+            $runningVMs = Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Running" }
+            if ($runningVMs) {
+                foreach ($vm in $runningVMs) {
+                    $hb = Get-VMIntegrationService -VM $vm -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "Heartbeat" }
+                    $hbStatus = if ($hb -and $hb.PrimaryStatusDescription -eq "OK") { "OK" } elseif ($hb) { $hb.PrimaryStatusDescription } else { "N/A" }
+                    $vmColor = if ($hbStatus -eq "OK") { "Success" } else { "Warning" }
+                    Write-OutputColor "  $($vm.Name): Heartbeat=$hbStatus  CPU=$($vm.ProcessorCount)  RAM=$([math]::Round($vm.MemoryAssigned/1GB,1))GB" -color $vmColor
+                }
+            }
+            else {
+                Write-OutputColor "  No running VMs." -color "Info"
+            }
+        }
+        catch {
+            Write-OutputColor "  Hyper-V guest health unavailable." -color "Debug"
+        }
+        Write-OutputColor "" -color "Info"
+    }
+
+    # Top 5 CPU Processes (v1.7.0)
+    Write-OutputColor "=== TOP 5 CPU PROCESSES ===" -color "Success"
+    try {
+        $topProcs = Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 5
+        foreach ($proc in $topProcs) {
+            $cpuSec = [math]::Round($proc.CPU, 1)
+            $memMB = [math]::Round($proc.WorkingSet64 / 1MB, 0)
+            Write-OutputColor "  $($proc.ProcessName.PadRight(30)) CPU: ${cpuSec}s  RAM: ${memMB}MB" -color "Info"
+        }
+    }
+    catch {
+        Write-OutputColor "  Process information unavailable." -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+
     Add-SessionChange -Category "System" -Description "Ran system health check"
 }
 
