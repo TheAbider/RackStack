@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src=".github/assets/banner.png" alt="RackStack" width="100%">
 </p>
 <p align="center">
@@ -80,7 +80,7 @@ For production use, generate a monolithic single-file script (~26K lines) that y
 
 The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 63 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
-> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.5.0.ps1` = monolithic build for deployment/compilation.
+> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.5.1.ps1` = monolithic build for deployment/compilation.
 
 ## Requirements
 
@@ -230,7 +230,7 @@ Place `batch_config.json` next to the script and it runs automatically on launch
 ```
 RackStack/
 ├── RackStack.ps1               # Modular loader -- dot-sources 63 modules (dev use)
-├── RackStack v1.5.0.ps1        # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack v1.5.1.ps1        # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
 ├── defaults.example.json       # Config template with examples
@@ -241,7 +241,7 @@ RackStack/
 │   ├── ...                     # 61 more modules
 │   └── 62-HyperVReplica.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 1312 automated tests (109 sections)
+│   ├── Run-Tests.ps1           # 1628 automated tests (129 sections)
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -267,7 +267,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (1312 tests, ~2 minutes)
+# Full test suite (1628 tests, ~2 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 63 modules + monolithic)

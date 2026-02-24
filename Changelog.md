@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.5.1
+
+- **Test Coverage:** 173 new tests across 16 sections (114-129) covering DomainJoin, RDP/WinRM, FirewallTemplates, DiskCleanup, Password, HyperV, PerformanceDashboard, EventLogViewer, ServiceManager, BitLocker, StorageReplica, Utilities, VHDManagement, ISODownload, ActiveDirectory, HyperVReplica — all 63 modules now have dedicated test coverage
+- **Generalized SupportContact:** Default `$script:SupportContact` emptied (was `support@abider.org`) — set your own value via `defaults.json`
+- **Release Integrity:** SHA256 hashes included in GitHub release notes for all downloadable assets
+- 63 modules, 1628 tests (was 1455), backward compatible with all existing configs
+
 ## v1.5.0
 
 - **Custom SAN Target Pairings:** New `SANTargetPairings` config key in `defaults.json` — define custom A/B controller pairs with explicit labels (A0/B0, A1/B1, etc.), host-to-pair assignments with retry order, and configurable CycleSize for modulo cycling; A side = even suffixes, B side = odd by convention; when unset, existing mod-4 behavior is unchanged
@@ -10,7 +17,7 @@
 - **Batch Mode Custom Pairings:** `SANTargetPairings` available in batch config template for host builds
 - **Bug Fixes:**
   - Fixed: Host Network menu option [2] label updated from "Add Virtual NIC to SET" to "Add Virtual NIC to Switch" to reflect expanded compatibility
-- 63 modules, 1455 tests (was 1388), backward compatible with all existing configs
+- 63 modules, 1628 tests (was 1388), backward compatible with all existing configs
 
 ## v1.4.1
 
