@@ -1,4 +1,4 @@
-# Security Policy
+﻿# Security Policy
 
 ## Reporting a Vulnerability
 
@@ -34,5 +34,5 @@ The `defaults.json` file may contain sensitive data (Cloudflare Access credentia
 
 | Version | Supported |
 |---------|-----------|
-| 1.0.x   | Yes       |
+| 1.x     | Yes       |
 | < 1.0   | No        |

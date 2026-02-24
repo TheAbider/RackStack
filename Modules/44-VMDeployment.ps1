@@ -1366,8 +1366,30 @@ function Set-VMConfigNICs {
         Write-OutputColor "  No virtual switches found." -color "Warning"
         Write-OutputColor "  A virtual switch is required for VM network connectivity." -color "Info"
         Write-OutputColor "" -color "Info"
-        if (Confirm-UserAction -Message "Create a virtual switch (SET) now?") {
-            New-SwitchEmbeddedTeam -SwitchName $script:SwitchName -ManagementName $script:ManagementName
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  CREATE A VIRTUAL SWITCH".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem "[1]  Switch Embedded Team (SET)" -Status "Multi-NIC, recommended" -StatusColor "Success"
+        Write-MenuItem "[2]  External Virtual Switch" -Status "Single NIC" -StatusColor "Info"
+        Write-MenuItem "[3]  Skip (no network)"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $swCreateChoice = Read-Host "  Select"
+        switch ($swCreateChoice) {
+            "1" {
+                New-SwitchEmbeddedTeam -SwitchName $script:SwitchName -ManagementName $script:ManagementName
+            }
+            "2" {
+                New-StandardVSwitch -SwitchType "External"
+            }
+            default {
+                Write-OutputColor "  Continuing without network configuration." -color "Warning"
+                Write-PressEnter
+            }
+        }
+
+        if ($swCreateChoice -eq "1" -or $swCreateChoice -eq "2") {
             # Re-check switches after creation
             $switches = Get-AvailableVirtualSwitches -ComputerName $(if ($script:VMDeploymentMode -eq "Standalone") { $script:VMDeploymentTarget } else { $null }) `
                                                       -Credential $script:VMDeploymentCredential
@@ -1375,9 +1397,6 @@ function Set-VMConfigNICs {
                 Write-OutputColor "  Still no virtual switches available. A reboot may be required." -color "Warning"
                 Write-PressEnter
             }
-        } else {
-            Write-OutputColor "  Continuing without network configuration." -color "Warning"
-            Write-PressEnter
         }
     }
 
@@ -1400,7 +1419,9 @@ function Set-VMConfigNICs {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Available Virtual Switches:" -color "Info"
         foreach ($sw in $switches) {
-            Write-OutputColor "  - $($sw.Name) ($($sw.SwitchType))" -color "Success"
+            $typeLabel = $sw.SwitchType.ToString()
+            if ($sw.SwitchType -eq "External" -and $sw.EmbeddedTeamingEnabled) { $typeLabel = "SET" }
+            Write-OutputColor "  - $($sw.Name) ($typeLabel)" -color "Success"
         }
 
         Write-OutputColor "" -color "Info"

@@ -422,8 +422,8 @@ function Start-Show-HostNetworkMenu {
 
         switch ($hostNetworkChoice) {
             "1" {
-                New-SwitchEmbeddedTeam -SwitchName $SwitchName -ManagementName $ManagementName
-                Write-PressEnter
+                Start-Show-VirtualSwitchMenu
+                if ($global:ReturnToMainMenu) { return }
             }
             "2" {
                 Add-CustomVNIC
@@ -431,17 +431,11 @@ function Start-Show-HostNetworkMenu {
             }
             "3" {
                 Start-Show-HostNetworkIPMenu
-                # Check if we need to bubble up to main menu
-                if ($global:ReturnToMainMenu) {
-                    return
-                }
+                if ($global:ReturnToMainMenu) { return }
             }
             "4" {
                 Start-StorageSANMenu
-                # Check if we need to bubble up to main menu
-                if ($global:ReturnToMainMenu) {
-                    return
-                }
+                if ($global:ReturnToMainMenu) { return }
             }
             "5" {
                 Rename-NetworkAdapter
@@ -452,12 +446,38 @@ function Start-Show-HostNetworkMenu {
                 Write-PressEnter
             }
             "M" {
-                # Set flag to return all the way to main menu
                 $global:ReturnToMainMenu = $true
                 return
             }
             default {
                 Write-OutputColor "Invalid choice. Please enter 1-6, B, or M." -color "Error"
+                Start-Sleep -Seconds 2
+            }
+        }
+    }
+}
+
+# Function to run the Virtual Switch Management submenu
+function Start-Show-VirtualSwitchMenu {
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+
+        $choice = Show-VirtualSwitchMenu
+
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.Action -eq "exit") { Exit-Script; return }
+        if ($navResult.Action -eq "back") { return }
+
+        switch ($choice) {
+            "1" { New-SwitchEmbeddedTeam -SwitchName $SwitchName -ManagementName $ManagementName; Write-PressEnter }
+            "2" { New-StandardVSwitch -SwitchType "External"; Write-PressEnter }
+            "3" { New-StandardVSwitch -SwitchType "Internal"; Write-PressEnter }
+            "4" { New-StandardVSwitch -SwitchType "Private"; Write-PressEnter }
+            "5" { Show-VirtualSwitches; Write-PressEnter }
+            "6" { Remove-VirtualSwitch; Write-PressEnter }
+            "back" { return }
+            default {
+                Write-OutputColor "Invalid choice. Please enter 1-6 or B." -color "Error"
                 Start-Sleep -Seconds 2
             }
         }

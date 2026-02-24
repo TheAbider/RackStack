@@ -650,10 +650,13 @@ $script:SANTargetPairs = @(
 )
 
 # Function to get SAN target pairs in retry order for a specific host
-# Host 1 (A0/B1): → A2/B3 → A1/B0 → A3/B2
-# Host 2 (A1/B0): → A3/B2 → A0/B1 → A2/B3
-# Host 3 (A2/B3): → A0/B1 → A3/B2 → A1/B0
-# Host 4 (A3/B2): → A1/B0 → A2/B3 → A0/B1
+# Default behavior (no custom pairings):
+#   Host 1 (A0/B1): → A2/B3 → A1/B0 → A3/B2
+#   Host 2 (A1/B0): → A3/B2 → A0/B1 → A2/B3
+#   Host 3 (A2/B3): → A0/B1 → A3/B2 → A1/B0
+#   Host 4 (A3/B2): → A1/B0 → A2/B3 → A0/B1
+# With custom SANTargetPairings: uses HostAssignments to determine primary pair and retry order.
+# CycleSize controls the repeat: host 5 maps to host 1, host 6 to host 2, etc.
 function Get-SANTargetsForHost {
     param (
         [Parameter(Mandatory=$true)]
@@ -662,28 +665,62 @@ function Get-SANTargetsForHost {
         [switch]$AllPairsInRetryOrder
     )
 
-    # Primary pair index based on host number (1-4 cycles)
-    $primaryIndex = ($HostNumber - 1) % 4
+    # Custom pairings path: use HostAssignments from SANTargetPairings config
+    if ($null -ne $script:SANTargetPairings -and $script:SANTargetPairings.HostAssignments) {
+        $cycleSize = if ($script:SANTargetPairings.CycleSize) { $script:SANTargetPairings.CycleSize } else { 4 }
+        $hostMod = (($HostNumber - 1) % $cycleSize) + 1
+
+        # Find the assignment for this host mod value
+        $assignment = $script:SANTargetPairings.HostAssignments | Where-Object { [int]$_.HostMod -eq $hostMod }
+        if (-not $assignment) {
+            # Fallback: use first assignment
+            $assignment = $script:SANTargetPairings.HostAssignments[0]
+        }
+
+        # Find primary pair by name
+        $primaryPair = $script:SANTargetPairs | Where-Object { $_.Name -eq $assignment.PrimaryPair }
+        if (-not $primaryPair) {
+            $primaryPair = $script:SANTargetPairs[0]
+        }
+
+        if (-not $AllPairsInRetryOrder) {
+            return $primaryPair
+        }
+
+        # Build retry order from assignment
+        $retryOrder = @()
+        $retryOrder += $primaryPair
+        foreach ($retryName in $assignment.RetryOrder) {
+            $retryPair = $script:SANTargetPairs | Where-Object { $_.Name -eq $retryName }
+            if ($retryPair) {
+                $retryOrder += $retryPair
+            }
+        }
+        return $retryOrder
+    }
+
+    # Default behavior: hardcoded mod-4 cycling with +2 retry pattern
+    $pairCount = $script:SANTargetPairs.Count
+    if ($pairCount -eq 0) { return @() }
+
+    $primaryIndex = ($HostNumber - 1) % $pairCount
 
     if (-not $AllPairsInRetryOrder) {
-        # Just return primary pair
         return $script:SANTargetPairs[$primaryIndex]
     }
 
-    # Return all pairs in retry order:
-    # Primary → Primary+2 → remaining two in order
     $retryOrder = @()
 
     # 1. Primary pair
     $retryOrder += $script:SANTargetPairs[$primaryIndex]
 
-    # 2. Primary + 2 (mod 4)
-    $secondIndex = ($primaryIndex + 2) % 4
+    # 2. Primary + 2 (mod pairCount)
+    $secondIndex = ($primaryIndex + 2) % $pairCount
     $retryOrder += $script:SANTargetPairs[$secondIndex]
 
-    # 3. Remaining two pairs (the ones not yet added)
+    # 3. Remaining pairs in order
     $usedIndices = @($primaryIndex, $secondIndex)
-    for ($i = 0; $i -lt 4; $i++) {
+    for ($i = 0; $i -lt $pairCount; $i++) {
         if ($i -notin $usedIndices) {
             $retryOrder += $script:SANTargetPairs[$i]
         }

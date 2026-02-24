@@ -60,7 +60,7 @@
         "_AgentFolder_help": "Subfolder on your file server for agent installer files. The folder name here should match the actual directory on your server. Works with any MSP agent (Kaseya, ConnectWise, Datto, etc.)."
     },
 
-    "_section_set_vnics": "========== SET VIRTUAL NICs ==========",
+    "_section_virtual_switches": "========== VIRTUAL SWITCH & vNICs ==========",
 
     "CustomVNICs": [
         { "Name": "Backup", "VLAN": null },
@@ -90,6 +90,32 @@
         { "Suffix": 17, "Label": "A3" }
     ],
     "_SANTargetMappings_help": "Maps iSCSI target IP addresses to friendly labels for the iSCSI setup menu. 'Suffix' is the last octet of the target IP (combined with iSCSISubnet above). 'Label' is the display name (typically controller + port, like A0 = controller A port 0). Example: Suffix 10 + iSCSISubnet '172.16.1' = target at 172.16.1.10 labeled 'A0'. Adjust these to match YOUR SAN's IP layout.",
+
+    "_section_san_pairings": "========== SAN TARGET PAIRINGS (advanced, optional) ==========",
+
+    "SANTargetPairings": {
+        "_comment": "Advanced: Defines how SAN targets are paired (A/B sides) and assigned to hosts. By convention, A side = even suffixes, B side = odd suffixes. When omitted (or null), RackStack uses the default cycling pattern from SANTargetMappings above. Set this to customize which pair each host gets as primary, and the retry order when the primary pair is unreachable.",
+        "_how_it_works": "Each 'Pair' groups two SAN targets (A side and B side) by their last-octet suffix. HostAssignments maps host numbers (mod CycleSize) to their primary pair and retry order. Host 5 maps to HostMod 1, host 6 to HostMod 2, etc. This repeats every CycleSize hosts.",
+
+        "Pairs": [
+            { "Name": "Pair0", "A": 10, "B": 11, "ALabel": "A0", "BLabel": "B0", "_comment": "Controller A port 0 (.10) + Controller B port 0 (.11)" },
+            { "Name": "Pair1", "A": 12, "B": 13, "ALabel": "A1", "BLabel": "B1", "_comment": "Controller A port 1 (.12) + Controller B port 1 (.13)" },
+            { "Name": "Pair2", "A": 14, "B": 15, "ALabel": "A2", "BLabel": "B2", "_comment": "Controller A port 2 (.14) + Controller B port 2 (.15)" },
+            { "Name": "Pair3", "A": 16, "B": 17, "ALabel": "A3", "BLabel": "B3", "_comment": "Controller A port 3 (.16) + Controller B port 3 (.17)" }
+        ],
+        "_Pairs_help": "Define your SAN target pairs. 'A' and 'B' are the last-octet suffixes (combined with iSCSISubnet). Convention: A side = even suffixes, B side = odd suffixes. Each pair represents one port on each controller (A0/B0 = port 0 on both controllers). ALabel/BLabel are optional display names.",
+
+        "HostAssignments": [
+            { "HostMod": 1, "PrimaryPair": "Pair0", "RetryOrder": ["Pair2", "Pair1", "Pair3"], "_comment": "Host 1, 5, 9, 13... → primary A0/B0, retry A2/B2 then A1/B1 then A3/B3" },
+            { "HostMod": 2, "PrimaryPair": "Pair1", "RetryOrder": ["Pair3", "Pair0", "Pair2"], "_comment": "Host 2, 6, 10, 14..." },
+            { "HostMod": 3, "PrimaryPair": "Pair2", "RetryOrder": ["Pair0", "Pair3", "Pair1"], "_comment": "Host 3, 7, 11, 15..." },
+            { "HostMod": 4, "PrimaryPair": "Pair3", "RetryOrder": ["Pair1", "Pair2", "Pair0"], "_comment": "Host 4, 8, 12, 16..." }
+        ],
+        "_HostAssignments_help": "Maps host numbers to pairs. HostMod = (HostNumber - 1) mod CycleSize + 1. So with CycleSize 4: host 1 → HostMod 1, host 2 → HostMod 2, ..., host 5 → HostMod 1 (repeats). PrimaryPair is tried first. RetryOrder lists fallback pairs in order.",
+
+        "CycleSize": 4,
+        "_CycleSize_help": "How many hosts before the pattern repeats. Usually matches the number of pairs. With 4 pairs and CycleSize 4, every 4th host gets the same primary pair."
+    },
 
     "_section_defender": "========== WINDOWS DEFENDER EXCLUSIONS ==========",
 

@@ -779,33 +779,76 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Host storage: skipped" -color "Debug"
     }
 
-    # Step 18: Create SET Switch
+    # Step 18: Create Virtual Switch (SET, External, Internal, or Private)
+    # Backward compat: CreateSETSwitch maps to CreateVirtualSwitch + VirtualSwitchType=SET
     $stepNum++
-    if ($Config.CreateSETSwitch -and $configType -eq "HOST") {
-        Write-OutputColor "  [$stepNum/$totalSteps] Creating SET switch '$($Config.SETSwitchName)'..." -color "Info"
+    $createSwitch = $Config.CreateVirtualSwitch -or $Config.CreateSETSwitch
+    $vSwitchType = if ($Config.VirtualSwitchType) { $Config.VirtualSwitchType } else { "SET" }
+    $vSwitchName = if ($Config.VirtualSwitchName) { $Config.VirtualSwitchName }
+                   elseif ($Config.SETSwitchName) { $Config.SETSwitchName }
+                   else { $SwitchName }
+
+    if ($createSwitch -and $configType -eq "HOST") {
+        Write-OutputColor "  [$stepNum/$totalSteps] Creating $vSwitchType switch '$vSwitchName'..." -color "Info"
         try {
-            $switchName = if ($Config.SETSwitchName) { $Config.SETSwitchName } else { $SwitchName }
-            $mgmtName = if ($Config.SETManagementName) { $Config.SETManagementName } else { $ManagementName }
-            # Find adapters with internet for SET
-            $internetAdapters = Test-AdapterInternetConnectivity | Where-Object { $_.HasInternet }
-            if ($internetAdapters.Count -ge 1) {
-                $adapterNames = @($internetAdapters | ForEach-Object { $_.Name })
-                New-VMSwitch -Name $switchName -NetAdapterName $adapterNames -EnableEmbeddedTeaming $true -AllowManagementOS $true -ErrorAction Stop
-                Set-VMSwitchTeam -Name $switchName -LoadBalancingAlgorithm Dynamic -ErrorAction SilentlyContinue
-                # Wait for management adapter
-                for ($wait = 0; $wait -lt 15; $wait++) {
-                    $vnic = Get-VMNetworkAdapter -ManagementOS -Name $switchName -ErrorAction SilentlyContinue
-                    if ($vnic) { break }
-                    Start-Sleep -Seconds 1
+            switch ($vSwitchType) {
+                "SET" {
+                    $mgmtName = if ($Config.SETManagementName) { $Config.SETManagementName } else { $ManagementName }
+                    $internetAdapters = Test-AdapterInternetConnectivity | Where-Object { $_.HasInternet }
+                    if ($internetAdapters.Count -ge 1) {
+                        $adapterNames = @($internetAdapters | ForEach-Object { $_.Name })
+                        New-VMSwitch -Name $vSwitchName -NetAdapterName $adapterNames -EnableEmbeddedTeaming $true -AllowManagementOS $true -ErrorAction Stop
+                        Set-VMSwitchTeam -Name $vSwitchName -LoadBalancingAlgorithm Dynamic -ErrorAction SilentlyContinue
+                        for ($wait = 0; $wait -lt 15; $wait++) {
+                            $vnic = Get-VMNetworkAdapter -ManagementOS -Name $vSwitchName -ErrorAction SilentlyContinue
+                            if ($vnic) { break }
+                            Start-Sleep -Seconds 1
+                        }
+                        Rename-VMNetworkAdapter -ManagementOS -Name $vSwitchName -NewName $mgmtName -ErrorAction SilentlyContinue
+                        $script:iSCSICandidateAdapters = Test-AdapterInternetConnectivity | Where-Object { -not $_.HasInternet }
+                        Write-OutputColor "           SET '$vSwitchName' created with $($adapterNames.Count) adapter(s)." -color "Success"
+                        $changesApplied++
+                        Add-SessionChange -Category "Network" -Description "Created SET '$vSwitchName'"
+                    } else {
+                        Write-OutputColor "           No adapters with internet found for SET." -color "Warning"
+                    }
                 }
-                Rename-VMNetworkAdapter -ManagementOS -Name $switchName -NewName $mgmtName -ErrorAction SilentlyContinue
-                # Store non-internet adapters for iSCSI
-                $script:iSCSICandidateAdapters = Test-AdapterInternetConnectivity | Where-Object { -not $_.HasInternet }
-                Write-OutputColor "           SET '$switchName' created with $($adapterNames.Count) adapter(s)." -color "Success"
-                $changesApplied++
-                Add-SessionChange -Category "Network" -Description "Created SET '$switchName'"
-            } else {
-                Write-OutputColor "           No adapters with internet found for SET." -color "Warning"
+                "External" {
+                    $adapterName = $Config.VirtualSwitchAdapter
+                    if (-not $adapterName) {
+                        $firstAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Name -notlike "vEthernet*" } | Select-Object -First 1
+                        if ($firstAdapter) { $adapterName = $firstAdapter.Name }
+                    }
+                    if ($adapterName) {
+                        New-VMSwitch -Name $vSwitchName -NetAdapterName $adapterName -AllowManagementOS $true -ErrorAction Stop
+                        for ($wait = 0; $wait -lt 15; $wait++) {
+                            $vnic = Get-VMNetworkAdapter -ManagementOS -Name $vSwitchName -ErrorAction SilentlyContinue
+                            if ($vnic) { break }
+                            Start-Sleep -Seconds 1
+                        }
+                        Rename-VMNetworkAdapter -ManagementOS -Name $vSwitchName -NewName "Management" -ErrorAction SilentlyContinue
+                        Write-OutputColor "           External switch '$vSwitchName' created on '$adapterName'." -color "Success"
+                        $changesApplied++
+                        Add-SessionChange -Category "Network" -Description "Created External switch '$vSwitchName'"
+                    } else {
+                        Write-OutputColor "           No physical adapter found for External switch." -color "Warning"
+                    }
+                }
+                "Internal" {
+                    New-VMSwitch -Name $vSwitchName -SwitchType Internal -ErrorAction Stop
+                    Write-OutputColor "           Internal switch '$vSwitchName' created." -color "Success"
+                    $changesApplied++
+                    Add-SessionChange -Category "Network" -Description "Created Internal switch '$vSwitchName'"
+                }
+                "Private" {
+                    New-VMSwitch -Name $vSwitchName -SwitchType Private -ErrorAction Stop
+                    Write-OutputColor "           Private switch '$vSwitchName' created." -color "Success"
+                    $changesApplied++
+                    Add-SessionChange -Category "Network" -Description "Created Private switch '$vSwitchName'"
+                }
+                default {
+                    Write-OutputColor "           Unknown switch type '$vSwitchType'." -color "Warning"
+                }
             }
         }
         catch {
@@ -814,42 +857,40 @@ function Start-BatchMode {
         }
     }
     else {
-        Write-OutputColor "  [$stepNum/$totalSteps] SET switch: skipped" -color "Debug"
+        Write-OutputColor "  [$stepNum/$totalSteps] Virtual switch: skipped" -color "Debug"
     }
 
-    # Step 19: Create Custom vNICs on SET
+    # Step 19: Create Custom vNICs on External/SET switch
     $stepNum++
     if ($Config.CustomVNICs -and $Config.CustomVNICs.Count -gt 0 -and $configType -eq "HOST") {
-        Write-OutputColor "  [$stepNum/$totalSteps] Creating custom vNICs on SET..." -color "Info"
+        Write-OutputColor "  [$stepNum/$totalSteps] Creating custom vNICs..." -color "Info"
         try {
-            $setSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" -and $_.EmbeddedTeamingEnabled }
-            if ($setSwitch) {
+            $targetSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" } | Select-Object -First 1
+            if ($targetSwitch) {
                 $vnicCount = 0
                 foreach ($vnicDef in $Config.CustomVNICs) {
                     $vnicName = $vnicDef.Name
                     if (-not $vnicName) { continue }
 
-                    # Remove existing if present
-                    $existing = Get-VMNetworkAdapter -ManagementOS -SwitchName $setSwitch.Name -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $vnicName }
+                    $existing = Get-VMNetworkAdapter -ManagementOS -SwitchName $targetSwitch.Name -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $vnicName }
                     if ($existing) {
                         Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
                         Start-Sleep -Seconds 1
                     }
 
-                    Add-VMNetworkAdapter -ManagementOS -SwitchName $setSwitch.Name -Name $vnicName -ErrorAction Stop
+                    Add-VMNetworkAdapter -ManagementOS -SwitchName $targetSwitch.Name -Name $vnicName -ErrorAction Stop
 
-                    # Configure VLAN if specified
                     $vlanId = $vnicDef.VLAN
                     if ($null -ne $vlanId -and $vlanId -ge 1 -and $vlanId -le 4094) {
                         Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vnicName -Access -VlanId $vlanId -ErrorAction SilentlyContinue
                     }
                     $vnicCount++
                 }
-                Write-OutputColor "           Created $vnicCount custom vNIC(s) on SET." -color "Success"
+                Write-OutputColor "           Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'." -color "Success"
                 $changesApplied++
-                Add-SessionChange -Category "Network" -Description "Created $vnicCount custom vNIC(s) on SET"
+                Add-SessionChange -Category "Network" -Description "Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'"
             } else {
-                Write-OutputColor "           No SET switch found. Create SET first (step 16)." -color "Warning"
+                Write-OutputColor "           No External switch found. Create a switch first." -color "Warning"
             }
         }
         catch {

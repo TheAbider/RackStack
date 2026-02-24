@@ -108,17 +108,26 @@ function New-BatchConfigTemplate {
 
     "_HOST_SECTION": "========== HOST-SPECIFIC (only used when ConfigType=HOST) ==========",
 
-    "CreateSETSwitch": false,
-    "_CreateSETSwitch_Help": "Create a Switch Embedded Team (SET) virtual switch. Requires Hyper-V.",
-    "SETSwitchName": "LAN-SET",
-    "_SETSwitchName_Help": "Name for the SET virtual switch.",
+    "CreateVirtualSwitch": false,
+    "_CreateVirtualSwitch_Help": "Create a Hyper-V virtual switch. Set VirtualSwitchType to choose the type.",
+    "VirtualSwitchType": "SET",
+    "_VirtualSwitchType_Help": "'SET' (Switch Embedded Team, default), 'External' (single NIC, no teaming), 'Internal' (host-only, no physical NIC), 'Private' (isolated, no host access).",
+    "VirtualSwitchName": "LAN-SET",
+    "_VirtualSwitchName_Help": "Name for the virtual switch.",
+    "VirtualSwitchAdapter": null,
+    "_VirtualSwitchAdapter_Help": "Physical adapter name for External/SET. null = auto-detect (internet adapters for SET, first available for External). Not used for Internal/Private.",
     "SETManagementName": "Management",
-    "_SETManagementName_Help": "Name for the management virtual NIC on the SET switch.",
+    "_SETManagementName_Help": "Name for the management virtual NIC (SET and External only).",
     "SETAdapterMode": "auto",
     "_SETAdapterMode_Help": "'auto' = detect internet adapters for SET, 'manual' = prompt for selection.",
 
+    "CreateSETSwitch": false,
+    "_CreateSETSwitch_Help": "DEPRECATED: Use CreateVirtualSwitch + VirtualSwitchType=SET. Kept for backward compat.",
+    "SETSwitchName": "LAN-SET",
+    "_SETSwitchName_Help": "DEPRECATED: Use VirtualSwitchName. Kept for backward compat.",
+
     "CustomVNICs": [],
-    "_CustomVNICs_Help": "Array of virtual NICs to create on the SET switch. Each needs Name (required) and optional VLAN (1-4094). Example: [{\"Name\": \"Backup\"}, {\"Name\": \"Cluster\", \"VLAN\": 100}, {\"Name\": \"Live Migration\", \"VLAN\": 200}]",
+    "_CustomVNICs_Help": "Array of virtual NICs to create on the virtual switch (External or SET). Each needs Name (required) and optional VLAN (1-4094). Example: [{\"Name\": \"Backup\"}, {\"Name\": \"Cluster\", \"VLAN\": 100}, {\"Name\": \"Live Migration\", \"VLAN\": 200}]",
 
     "StorageBackendType": "iSCSI",
     "_StorageBackendType_Help": "'iSCSI' (default), 'FC', 'S2D', 'SMB3', 'NVMeoF', or 'Local'. Controls which storage backend is configured in steps 18-19.",
@@ -130,6 +139,9 @@ function New-BatchConfigTemplate {
     "_ConfigureiSCSI_Help": "DEPRECATED: Use ConfigureSharedStorage + StorageBackendType=iSCSI. Kept for backward compat.",
     "iSCSIHostNumber": null,
     "_iSCSIHostNumber_Help": "Host number for iSCSI IP calculation (1-24). null = auto-detect from hostname.",
+
+    "SANTargetPairings": null,
+    "_SANTargetPairings_Help": "Custom SAN target pair definitions. Overrides default A0/B1 cycling pattern. Set to null for defaults. See defaults.example.json for full example with Pairs, HostAssignments, and CycleSize.",
 
     "SMB3SharePath": null,
     "_SMB3SharePath_Help": "UNC path to SMB3 share (e.g., '\\\\\\\\server\\\\share'). Only used when StorageBackendType=SMB3.",
@@ -413,10 +425,23 @@ function Export-BatchConfigFromState {
             }
         }
 
-        $config["CreateSETSwitch"]                 = $hasSetSwitch
-        $config["_CreateSETSwitch_Help"]           = "Create a Switch Embedded Team (SET) virtual switch. Requires Hyper-V."
-        $config["SETSwitchName"]                   = if ($setSwitchName) { $setSwitchName } else { "LAN-SET" }
-        $config["_SETSwitchName_Help"]             = "Name for the SET virtual switch."
+        # Detect switch type for export
+        $switchType = "SET"
+        if ($hasSetSwitch) {
+            $switchType = "SET"
+        } else {
+            $extSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" -and -not $_.EmbeddedTeamingEnabled }
+            if ($extSwitch) { $switchType = "External" }
+        }
+
+        $config["CreateVirtualSwitch"]              = $hasSetSwitch -or ($null -ne $extSwitch)
+        $config["_CreateVirtualSwitch_Help"]        = "Create a Hyper-V virtual switch."
+        $config["VirtualSwitchType"]                = $switchType
+        $config["_VirtualSwitchType_Help"]          = "'SET', 'External', 'Internal', or 'Private'."
+        $config["VirtualSwitchName"]                = if ($setSwitchName) { $setSwitchName } else { "LAN-SET" }
+        $config["_VirtualSwitchName_Help"]          = "Name for the virtual switch."
+        $config["VirtualSwitchAdapter"]             = $null
+        $config["_VirtualSwitchAdapter_Help"]       = "Physical adapter name. null = auto-detect."
         $config["SETManagementName"]               = if ($setMgmtName) { $setMgmtName } else { "Management" }
         $config["_SETManagementName_Help"]         = "Name for the management virtual NIC on the SET switch."
         $config["SETAdapterMode"]                  = "auto"

@@ -296,25 +296,48 @@ function New-SwitchEmbeddedTeam {
     }
 }
 
-# Function to add a custom virtual NIC to an existing SET
+# Function to add a custom virtual NIC to an existing External or SET switch
 function Add-CustomVNIC {
     param (
         [string]$PresetName = ""
     )
 
     Clear-Host
-    Write-CenteredOutput "Add Virtual NIC to SET" -color "Info"
+    Write-CenteredOutput "Add Virtual NIC to Switch" -color "Info"
 
-    # Find existing SET
-    $existingSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" -and $_.EmbeddedTeamingEnabled }
+    # Find existing External switches (SET or standard)
+    $externalSwitches = @(Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" })
 
-    if (-not $existingSwitch) {
-        Write-OutputColor "No Switch Embedded Team found." -color "Error"
-        Write-OutputColor "Please create a SET first using 'Configure Switch Embedded Team'." -color "Warning"
+    if ($externalSwitches.Count -eq 0) {
+        Write-OutputColor "No external virtual switch found." -color "Error"
+        Write-OutputColor "Please create a virtual switch first (SET or External)." -color "Warning"
         return
     }
 
-    Write-OutputColor "Found SET: $($existingSwitch.Name)" -color "Success"
+    # If multiple external switches, let user pick
+    if ($externalSwitches.Count -eq 1) {
+        $existingSwitch = $externalSwitches[0]
+    } else {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Multiple external switches found:" -color "Info"
+        $swIdx = 1
+        foreach ($sw in $externalSwitches) {
+            $typeLabel = if ($sw.EmbeddedTeamingEnabled) { "SET" } else { "External" }
+            Write-OutputColor "  [$swIdx]  $($sw.Name) ($typeLabel)" -color "Info"
+            $swIdx++
+        }
+        Write-OutputColor "" -color "Info"
+        $swChoice = Read-Host "  Select switch"
+        if ($swChoice -match '^\d+$' -and [int]$swChoice -ge 1 -and [int]$swChoice -le $externalSwitches.Count) {
+            $existingSwitch = $externalSwitches[[int]$swChoice - 1]
+        } else {
+            Write-OutputColor "  Invalid selection." -color "Error"
+            return
+        }
+    }
+
+    $typeLabel = if ($existingSwitch.EmbeddedTeamingEnabled) { "SET" } else { "External" }
+    Write-OutputColor "Using switch: $($existingSwitch.Name) ($typeLabel)" -color "Success"
 
     # Show existing management adapters
     $existingAdapters = Get-VMNetworkAdapter -ManagementOS -SwitchName $existingSwitch.Name -ErrorAction SilentlyContinue
@@ -480,5 +503,260 @@ function Add-BackupNIC {
     )
 
     Add-CustomVNIC -PresetName $BackupName
+}
+
+# Function to create a standard (non-SET) virtual switch
+function New-StandardVSwitch {
+    param (
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("External", "Internal", "Private")]
+        [string]$SwitchType,
+        [string]$SwitchName = "",
+        [string]$AdapterName = ""
+    )
+
+    Clear-Host
+    Write-CenteredOutput "Create $SwitchType Virtual Switch" -color "Info"
+
+    # Hyper-V required for all switch types
+    if (-not (Test-HyperVInstalled)) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Hyper-V is required for virtual switches." -color "Warning"
+        Write-OutputColor "" -color "Info"
+        if (Confirm-UserAction -Message "Install Hyper-V now?") {
+            Install-HyperVRole
+            if (-not (Test-HyperVInstalled)) {
+                Write-OutputColor "  Hyper-V requires a reboot before switches can be created." -color "Warning"
+                return
+            }
+        } else {
+            return
+        }
+    }
+
+    # Get switch name
+    if (-not $SwitchName) {
+        $defaultName = switch ($SwitchType) {
+            "External"  { "LAN" }
+            "Internal"  { "InternalSwitch" }
+            "Private"   { "PrivateSwitch" }
+        }
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Enter switch name (default: $defaultName):" -color "Info"
+        $userInput = Read-Host "  "
+        $SwitchName = if ([string]::IsNullOrWhiteSpace($userInput)) { $defaultName } else { $userInput }
+    }
+
+    # Check for existing switch with same name
+    $existing = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-OutputColor "  A switch named '$SwitchName' already exists." -color "Warning"
+        if (-not (Confirm-UserAction -Message "Remove it and create a new one?")) {
+            return
+        }
+        Remove-VMSwitch -Name $SwitchName -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+
+    try {
+        switch ($SwitchType) {
+            "External" {
+                # Need a physical adapter
+                if (-not $AdapterName) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Select a physical adapter for the External switch:" -color "Info"
+                    Write-OutputColor "" -color "Info"
+
+                    $adapters = @(Get-NetAdapter | Where-Object {
+                        $_.Status -eq "Up" -and
+                        $_.Name -notlike "vEthernet*" -and
+                        $_.InterfaceDescription -notlike "*Hyper-V*" -and
+                        $_.InterfaceDescription -notlike "*Virtual*"
+                    })
+
+                    if ($adapters.Count -eq 0) {
+                        Write-OutputColor "  No physical adapters available." -color "Error"
+                        return
+                    }
+
+                    $idx = 1
+                    foreach ($adapter in $adapters) {
+                        $ip = (Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress | Select-Object -First 1
+                        $ipStr = if ($ip) { $ip } else { "No IP" }
+                        Write-OutputColor "  [$idx]  $($adapter.Name) - $($adapter.InterfaceDescription) ($ipStr)" -color "Info"
+                        $idx++
+                    }
+                    Write-OutputColor "" -color "Info"
+
+                    $adChoice = Read-Host "  Select adapter"
+                    if ($adChoice -match '^\d+$' -and [int]$adChoice -ge 1 -and [int]$adChoice -le $adapters.Count) {
+                        $AdapterName = $adapters[[int]$adChoice - 1].Name
+                    } else {
+                        Write-OutputColor "  Invalid selection." -color "Error"
+                        return
+                    }
+                }
+
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Creating External switch '$SwitchName' on '$AdapterName'..." -color "Info"
+                New-VMSwitch -Name $SwitchName -NetAdapterName $AdapterName -AllowManagementOS $true -ErrorAction Stop
+
+                # Rename management adapter
+                $vnicReady = $false
+                for ($wait = 0; $wait -lt 15; $wait++) {
+                    $vnic = Get-VMNetworkAdapter -ManagementOS -Name $SwitchName -ErrorAction SilentlyContinue
+                    if ($vnic) { $vnicReady = $true; break }
+                    Start-Sleep -Seconds 1
+                }
+                if ($vnicReady) {
+                    Rename-VMNetworkAdapter -ManagementOS -Name $SwitchName -NewName "Management" -ErrorAction SilentlyContinue
+                }
+
+                Write-OutputColor "  External switch '$SwitchName' created!" -color "Success"
+                Add-SessionChange -Category "Network" -Description "Created External switch '$SwitchName' on $AdapterName"
+            }
+            "Internal" {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Creating Internal switch '$SwitchName'..." -color "Info"
+                New-VMSwitch -Name $SwitchName -SwitchType Internal -ErrorAction Stop
+                Write-OutputColor "  Internal switch '$SwitchName' created!" -color "Success"
+                Write-OutputColor "  Note: Host gets a vEthernet adapter. No physical NIC used." -color "Info"
+                Add-SessionChange -Category "Network" -Description "Created Internal switch '$SwitchName'"
+            }
+            "Private" {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Creating Private switch '$SwitchName'..." -color "Info"
+                New-VMSwitch -Name $SwitchName -SwitchType Private -ErrorAction Stop
+                Write-OutputColor "  Private switch '$SwitchName' created!" -color "Success"
+                Write-OutputColor "  Note: VMs can only communicate with each other. No host access." -color "Info"
+                Add-SessionChange -Category "Network" -Description "Created Private switch '$SwitchName'"
+            }
+        }
+    }
+    catch {
+        Write-OutputColor "  Failed to create switch: $_" -color "Error"
+    }
+}
+
+# Function to show all virtual switches with details
+function Show-VirtualSwitches {
+    Clear-Host
+    Write-CenteredOutput "Virtual Switches" -color "Info"
+
+    $switches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
+
+    if ($switches.Count -eq 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  No virtual switches found." -color "Warning"
+        return
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  VIRTUAL SWITCHES ($($switches.Count))".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    foreach ($sw in $switches) {
+        $typeLabel = $sw.SwitchType.ToString()
+        if ($sw.SwitchType -eq "External" -and $sw.EmbeddedTeamingEnabled) {
+            $typeLabel = "SET"
+            $teamNics = (Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue).NetAdapterInterfaceDescription
+            if ($teamNics) { $typeLabel += " ($($teamNics.Count) NICs)" }
+        }
+        elseif ($sw.SwitchType -eq "External") {
+            $adapter = (Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue).NetAdapterInterfaceDescription
+            if (-not $adapter) {
+                $adapter = $sw.NetAdapterInterfaceDescription
+            }
+            if ($adapter) { $typeLabel += " ($adapter)" }
+        }
+
+        $color = switch ($sw.SwitchType.ToString()) {
+            "External" { "Success" }
+            "Internal" { "Info" }
+            "Private"  { "Warning" }
+            default    { "Info" }
+        }
+
+        Write-OutputColor "  │$("  $($sw.Name)".PadRight(40))$($typeLabel.PadRight(32))│" -color $color
+
+        # Show management adapters on this switch
+        $mgmtAdapters = Get-VMNetworkAdapter -ManagementOS -SwitchName $sw.Name -ErrorAction SilentlyContinue
+        if ($mgmtAdapters) {
+            foreach ($adapter in $mgmtAdapters) {
+                $vlanInfo = Get-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $adapter.Name -ErrorAction SilentlyContinue
+                $vlanStr = if ($null -ne $vlanInfo -and $vlanInfo.AccessVlanId -gt 0) { " VLAN $($vlanInfo.AccessVlanId)" } else { "" }
+                Write-OutputColor "  │$("    └ vEthernet ($($adapter.Name))$vlanStr".PadRight(72))│" -color "Info"
+            }
+        }
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+}
+
+# Function to remove a virtual switch with safety checks
+function Remove-VirtualSwitch {
+    Clear-Host
+    Write-CenteredOutput "Remove Virtual Switch" -color "Info"
+
+    $switches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
+
+    if ($switches.Count -eq 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  No virtual switches found." -color "Warning"
+        return
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Select a switch to remove:" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $idx = 1
+    foreach ($sw in $switches) {
+        $typeLabel = $sw.SwitchType.ToString()
+        if ($sw.SwitchType -eq "External" -and $sw.EmbeddedTeamingEnabled) { $typeLabel = "SET" }
+        Write-OutputColor "  [$idx]  $($sw.Name) ($typeLabel)" -color "Info"
+        $idx++
+    }
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $choice = Read-Host "  Select"
+
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return }
+
+    if (-not ($choice -match '^\d+$') -or [int]$choice -lt 1 -or [int]$choice -gt $switches.Count) {
+        Write-OutputColor "  Invalid selection." -color "Error"
+        return
+    }
+
+    $targetSwitch = $switches[[int]$choice - 1]
+
+    # Safety check: any VMs connected to this switch?
+    $connectedVMs = Get-VMNetworkAdapter -All -ErrorAction SilentlyContinue | Where-Object { $_.SwitchName -eq $targetSwitch.Name -and -not $_.IsManagementOs }
+    if ($connectedVMs) {
+        $vmNames = ($connectedVMs | Select-Object -ExpandProperty VMName -Unique) -join ", "
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  WARNING: These VMs are connected to '$($targetSwitch.Name)':" -color "Critical"
+        Write-OutputColor "  $vmNames" -color "Warning"
+        Write-OutputColor "  Removing this switch will disconnect their network adapters." -color "Warning"
+        Write-OutputColor "" -color "Info"
+    }
+
+    if (-not (Confirm-UserAction -Message "Remove switch '$($targetSwitch.Name)'? This cannot be undone.")) {
+        Write-OutputColor "  Cancelled." -color "Info"
+        return
+    }
+
+    try {
+        Remove-VMSwitch -Name $targetSwitch.Name -Force -ErrorAction Stop
+        Write-OutputColor "  Switch '$($targetSwitch.Name)' removed." -color "Success"
+        Add-SessionChange -Category "Network" -Description "Removed virtual switch '$($targetSwitch.Name)'"
+    }
+    catch {
+        Write-OutputColor "  Failed to remove switch: $_" -color "Error"
+    }
 }
 #endregion

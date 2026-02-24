@@ -503,8 +503,9 @@ function Show-HostNetworkMenu {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-MenuItem "[1]  Configure Switch Embedded Team (SET)"
-    Write-MenuItem "[2]  Add Virtual NIC to SET"
+    Write-MenuItem "[1]  Virtual Switch Management ►"
+    Write-OutputColor "  │$("        Create, view, or remove virtual switches (SET/External/etc)".PadRight(72))│" -color "Info"
+    Write-MenuItem "[2]  Add Virtual NIC to Switch"
     Write-MenuItem "[3]  Configure IP Address"
     Write-MenuItem "[4]  Storage & SAN Management ►"
     Write-MenuItem "[5]  Rename Network Adapter"
@@ -512,6 +513,44 @@ function Show-HostNetworkMenu {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Networking    [M] ◄◄ Server Config" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $choice = Read-Host "  Select"
+    return $choice
+}
+
+# Function to display the Virtual Switch Management submenu
+function Show-VirtualSwitchMenu {
+    Clear-Host
+
+    # Get current switch summary
+    $switches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
+    $switchSummary = "$($switches.Count) switch(es)"
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                     VIRTUAL SWITCH MANAGEMENT").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  CREATE".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    Write-MenuItem "[1]  Create Switch Embedded Team (SET)" -Status "Multi-NIC teaming" -StatusColor "Info"
+    Write-MenuItem "[2]  Create External Virtual Switch" -Status "Single NIC" -StatusColor "Info"
+    Write-MenuItem "[3]  Create Internal Virtual Switch" -Status "Host-only" -StatusColor "Info"
+    Write-MenuItem "[4]  Create Private Virtual Switch" -Status "Isolated" -StatusColor "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  MANAGE".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    Write-MenuItem "[5]  Show Virtual Switches" -Status $switchSummary -StatusColor "Info"
+    Write-MenuItem "[6]  Remove Virtual Switch"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  [B] ◄ Back to Host Network" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"

@@ -2,7 +2,7 @@
 # Tool identity (override via defaults.json)
 $script:ToolName = "RackStack"                     # Short name (used in filenames, scheduled tasks)
 $script:ToolFullName = "RackStack"                 # Display name (used in UI banners, reports)
-$script:SupportContact = "support@abider.org"       # Support contact shown in agent installer messages
+$script:SupportContact = ""                          # Support contact shown in agent installer messages (set via defaults.json)
 $script:ConfigDirName = "rackstackconfig"           # Derived: config directory under USERPROFILE
 
 # Company/Environment Variables (generic defaults - override via defaults.json)
@@ -76,6 +76,12 @@ $script:SANTargetMappings = @(
     @{ Suffix = 17; Label = "A3" }
 )
 
+# Custom SAN target pairings - defines A/B pairs and host-to-pair assignments (override via defaults.json SANTargetPairings)
+# When set, this overrides the default Initialize-SANTargetPairs logic and Get-SANTargetsForHost retry order.
+# A side = even suffixes, B side = odd suffixes by convention.
+# CycleSize controls the modulo: host 5 maps the same as host 1, host 6 as host 2, etc.
+$script:SANTargetPairings = $null
+
 # Defender exclusion paths for Hyper-V hosts (override via defaults.json)
 $script:DefenderExclusionPaths = @(
     "C:\ProgramData\Microsoft\Windows\Hyper-V"
@@ -124,7 +130,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.4.1"
+$script:ScriptVersion = "1.5.0"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

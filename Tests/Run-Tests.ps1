@@ -5955,10 +5955,10 @@ try {
     # Add-CustomVNIC has PresetName parameter
     Write-TestResult "09-SET: Add-CustomVNIC has PresetName param" ($setContent -match 'Add-CustomVNIC[\s\S]*?\[string\]\$PresetName')
 
-    # Add-CustomVNIC finds existing SET switch
-    Write-TestResult "09-SET: Add-CustomVNIC finds SET switch" ($setContent -match 'Add-CustomVNIC[\s\S]*?Get-VMSwitch[\s\S]*?EmbeddedTeamingEnabled')
+    # Add-CustomVNIC finds existing External switches (SET or standard)
+    Write-TestResult "09-SET: Add-CustomVNIC finds External switches" ($setContent -match 'Add-CustomVNIC[\s\S]*?Get-VMSwitch[\s\S]*?External')
 
-    # Add-CustomVNIC shows existing vNICs on SET
+    # Add-CustomVNIC shows existing vNICs
     Write-TestResult "09-SET: Add-CustomVNIC shows existing adapters" ($setContent -match 'Add-CustomVNIC[\s\S]*?Get-VMNetworkAdapter -ManagementOS')
 
     # Add-CustomVNIC offers preset names (Backup, Cluster, Live Migration, Storage, Custom)
@@ -6000,9 +6000,9 @@ try {
     # Add-BackupNIC calls Add-CustomVNIC
     Write-TestResult "09-SET: Add-BackupNIC delegates to Add-CustomVNIC" ($setContent -match 'Add-BackupNIC[\s\S]*?Add-CustomVNIC -PresetName')
 
-    # Menu renamed to "Add Virtual NIC to SET"
+    # Menu renamed to "Add Virtual NIC to Switch"
     $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
-    Write-TestResult "48-MenuDisplay: menu says 'Add Virtual NIC to SET'" ($menuContent -match 'Add Virtual NIC to SET')
+    Write-TestResult "48-MenuDisplay: menu says 'Add Virtual NIC to Switch'" ($menuContent -match 'Add Virtual NIC to Switch')
     Write-TestResult "48-MenuDisplay: no 'Add Backup NIC to SET' label" (-not ($menuContent -match 'Add Backup NIC to SET'))
 
     # Menu runner calls Add-CustomVNIC
@@ -6277,6 +6277,181 @@ try {
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 112: VIRTUAL SWITCH MANAGEMENT (v1.5.0)
+# ============================================================================
+
+Write-SectionHeader "SECTION 112: VIRTUAL SWITCH MANAGEMENT"
+
+try {
+    $setContent = Get-Content (Join-Path $modulesPath "09-SET.ps1") -Raw
+    $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+    $runnerContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
+    $entryContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    $batchContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+
+    # New functions exist
+    Write-TestResult "09-SET: New-StandardVSwitch function exists" ($setContent -match 'function New-StandardVSwitch')
+    Write-TestResult "09-SET: Show-VirtualSwitches function exists" ($setContent -match 'function Show-VirtualSwitches')
+    Write-TestResult "09-SET: Remove-VirtualSwitch function exists" ($setContent -match 'function Remove-VirtualSwitch')
+
+    # New-StandardVSwitch supports all types
+    Write-TestResult "09-SET: New-StandardVSwitch validates External/Internal/Private" ($setContent -match 'ValidateSet.*External.*Internal.*Private')
+    Write-TestResult "09-SET: New-StandardVSwitch creates External with physical NIC" ($setContent -match 'New-StandardVSwitch[\s\S]*?New-VMSwitch -Name \$SwitchName -NetAdapterName')
+    Write-TestResult "09-SET: New-StandardVSwitch creates Internal switch" ($setContent -match 'New-VMSwitch -Name \$SwitchName -SwitchType Internal')
+    Write-TestResult "09-SET: New-StandardVSwitch creates Private switch" ($setContent -match 'New-VMSwitch -Name \$SwitchName -SwitchType Private')
+
+    # Show-VirtualSwitches displays switch info
+    Write-TestResult "09-SET: Show-VirtualSwitches displays switch type" ($setContent -match 'Show-VirtualSwitches[\s\S]*?SwitchType')
+    Write-TestResult "09-SET: Show-VirtualSwitches detects SET" ($setContent -match 'Show-VirtualSwitches[\s\S]*?EmbeddedTeamingEnabled')
+
+    # Remove-VirtualSwitch has safety checks
+    Write-TestResult "09-SET: Remove-VirtualSwitch checks for connected VMs" ($setContent -match 'Remove-VirtualSwitch[\s\S]*?VMName')
+    Write-TestResult "09-SET: Remove-VirtualSwitch confirms before delete" ($setContent -match 'Remove-VirtualSwitch[\s\S]*?Confirm-UserAction')
+
+    # Virtual Switch Management menu exists
+    Write-TestResult "48-MenuDisplay: Show-VirtualSwitchMenu function exists" ($menuContent -match 'function Show-VirtualSwitchMenu')
+    Write-TestResult "48-MenuDisplay: menu has Virtual Switch Management" ($menuContent -match 'Virtual Switch Management')
+    Write-TestResult "48-MenuDisplay: menu offers SET creation" ($menuContent -match 'Create Switch Embedded Team')
+    Write-TestResult "48-MenuDisplay: menu offers External creation" ($menuContent -match 'Create External Virtual Switch')
+    Write-TestResult "48-MenuDisplay: menu offers Internal creation" ($menuContent -match 'Create Internal Virtual Switch')
+    Write-TestResult "48-MenuDisplay: menu offers Private creation" ($menuContent -match 'Create Private Virtual Switch')
+    Write-TestResult "48-MenuDisplay: menu offers Show switches" ($menuContent -match 'Show Virtual Switches')
+    Write-TestResult "48-MenuDisplay: menu offers Remove switch" ($menuContent -match 'Remove Virtual Switch')
+
+    # Menu runner routes to submenu
+    Write-TestResult "49-MenuRunner: Start-Show-VirtualSwitchMenu exists" ($runnerContent -match 'function Start-Show-VirtualSwitchMenu')
+    Write-TestResult "49-MenuRunner: host network option 1 routes to VirtualSwitchMenu" ($runnerContent -match 'Start-Show-VirtualSwitchMenu')
+    Write-TestResult "49-MenuRunner: virtual switch menu calls New-StandardVSwitch" ($runnerContent -match 'New-StandardVSwitch')
+
+    # Batch mode supports new switch types
+    Write-TestResult "50-EntryPoint: batch supports CreateVirtualSwitch" ($entryContent -match 'CreateVirtualSwitch')
+    Write-TestResult "50-EntryPoint: batch handles VirtualSwitchType SET" ($entryContent -match 'VirtualSwitchType[\s\S]*?SET')
+    Write-TestResult "50-EntryPoint: batch handles External switch type" ($entryContent -match '"External"[\s\S]*?New-VMSwitch')
+    Write-TestResult "50-EntryPoint: batch handles Internal switch type" ($entryContent -match '"Internal"[\s\S]*?New-VMSwitch')
+    Write-TestResult "50-EntryPoint: batch handles Private switch type" ($entryContent -match '"Private"[\s\S]*?New-VMSwitch')
+    Write-TestResult "50-EntryPoint: backward compat CreateSETSwitch" ($entryContent -match 'Config\.CreateSETSwitch')
+
+    # Batch template has new fields
+    Write-TestResult "36-BatchConfig: template has CreateVirtualSwitch" ($batchContent -match '"CreateVirtualSwitch"')
+    Write-TestResult "36-BatchConfig: template has VirtualSwitchType" ($batchContent -match '"VirtualSwitchType"')
+    Write-TestResult "36-BatchConfig: template has VirtualSwitchName" ($batchContent -match '"VirtualSwitchName"')
+    Write-TestResult "36-BatchConfig: template has VirtualSwitchAdapter" ($batchContent -match '"VirtualSwitchAdapter"')
+
+    # VM deployment offers switch type choice when no switch exists
+    $vmContent = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+    Write-TestResult "44-VMDeployment: no-switch menu offers SET" ($vmContent -match 'Switch Embedded Team.*SET')
+    Write-TestResult "44-VMDeployment: no-switch menu offers External" ($vmContent -match 'External Virtual Switch')
+    Write-TestResult "44-VMDeployment: switch list shows type (SET label)" ($vmContent -match 'EmbeddedTeamingEnabled.*SET')
+
+} catch {
+    Write-TestResult "Virtual Switch Management Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 113: CUSTOM SAN TARGET PAIRINGS (v1.5.0)
+# ============================================================================
+
+Write-SectionHeader "SECTION 113: CUSTOM SAN TARGET PAIRINGS"
+
+try {
+    $initContent = Get-Content (Join-Path $modulesPath "00-Initialization.ps1") -Raw
+    $opsContent = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+    $iscsiContent = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
+    $batchContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+    $exampleContent = Get-Content (Join-Path $script:ModuleRoot "defaults.example.json") -Raw
+
+    # Initialization
+    Write-TestResult "00-Init: SANTargetPairings variable declared" ($initContent -match '\$script:SANTargetPairings')
+    Write-TestResult "00-Init: SANTargetPairings defaults to null" ($initContent -match '\$script:SANTargetPairings = \$null')
+
+    # Import-Defaults loads SANTargetPairings
+    Write-TestResult "56-OpsMenu: Import-Defaults loads SANTargetPairings" ($opsContent -match 'SANTargetPairings[\s\S]*?Pairs')
+    Write-TestResult "56-OpsMenu: Import-Defaults parses HostAssignments" ($opsContent -match 'HostAssignments[\s\S]*?HostMod')
+    Write-TestResult "56-OpsMenu: Import-Defaults parses CycleSize" ($opsContent -match 'CycleSize')
+
+    # Initialize-SANTargetPairs supports custom pairings
+    Write-TestResult "56-OpsMenu: Initialize-SANTargetPairs handles custom Pairs" ($opsContent -match 'Initialize-SANTargetPairs[\s\S]*?SANTargetPairings\.Pairs')
+    Write-TestResult "56-OpsMenu: Initialize-SANTargetPairs sets Name on pairs" ($opsContent -match 'Name\s*=\s*\$pair\.Name')
+    Write-TestResult "56-OpsMenu: Initialize-SANTargetPairs still has default fallback" ($opsContent -match 'Initialize-SANTargetPairs[\s\S]*?\$mappings\.Count')
+
+    # Get-SANTargetsForHost supports custom assignments
+    Write-TestResult "10-iSCSI: Get-SANTargetsForHost uses HostAssignments" ($iscsiContent -match 'Get-SANTargetsForHost[\s\S]*?HostAssignments')
+    Write-TestResult "10-iSCSI: Get-SANTargetsForHost uses CycleSize" ($iscsiContent -match 'CycleSize')
+    Write-TestResult "10-iSCSI: Get-SANTargetsForHost uses PrimaryPair name" ($iscsiContent -match 'PrimaryPair')
+    Write-TestResult "10-iSCSI: Get-SANTargetsForHost builds RetryOrder from config" ($iscsiContent -match 'RetryOrder')
+    Write-TestResult "10-iSCSI: Get-SANTargetsForHost still has default mod fallback" ($iscsiContent -match 'primaryIndex.*HostNumber.*1.*%.*pairCount')
+
+    # Batch template has SANTargetPairings
+    Write-TestResult "36-BatchConfig: template has SANTargetPairings field" ($batchContent -match '"SANTargetPairings"')
+
+    # defaults.example.json documents SANTargetPairings
+    Write-TestResult "defaults.example.json: has SANTargetPairings section" ($exampleContent -match '"SANTargetPairings"')
+    Write-TestResult "defaults.example.json: has Pairs with A/B" ($exampleContent -match '"Pairs"[\s\S]*?"A".*?"B"')
+    Write-TestResult "defaults.example.json: has HostAssignments with HostMod" ($exampleContent -match '"HostAssignments"[\s\S]*?"HostMod"')
+    Write-TestResult "defaults.example.json: has CycleSize" ($exampleContent -match '"CycleSize":\s*4')
+    Write-TestResult "defaults.example.json: pairs use A0/B0 labeling" ($exampleContent -match '"ALabel":\s*"A0"')
+
+    # Test Get-SANTargetsForHost default behavior still works
+    $script:SANTargetPairings = $null
+    $sub = "172.16.1"
+    $script:SANTargetPairs = @(
+        @{ Index = 0; A = "$sub.10"; B = "$sub.11"; ALabel = "A0"; BLabel = "B1"; Labels = "A0/B1" },
+        @{ Index = 1; A = "$sub.13"; B = "$sub.12"; ALabel = "A1"; BLabel = "B0"; Labels = "A1/B0" },
+        @{ Index = 2; A = "$sub.14"; B = "$sub.15"; ALabel = "A2"; BLabel = "B3"; Labels = "A2/B3" },
+        @{ Index = 3; A = "$sub.17"; B = "$sub.16"; ALabel = "A3"; BLabel = "B2"; Labels = "A3/B2" }
+    )
+
+    $host1 = Get-SANTargetsForHost -HostNumber 1
+    $host2 = Get-SANTargetsForHost -HostNumber 2
+    $host5 = Get-SANTargetsForHost -HostNumber 5
+
+    Write-TestResult "Get-SANTargetsForHost: host 1 gets pair 0" ($host1.Index -eq 0)
+    Write-TestResult "Get-SANTargetsForHost: host 2 gets pair 1" ($host2.Index -eq 1)
+    Write-TestResult "Get-SANTargetsForHost: host 5 cycles to pair 0" ($host5.Index -eq 0)
+
+    $retryOrder = Get-SANTargetsForHost -HostNumber 1 -AllPairsInRetryOrder
+    Write-TestResult "Get-SANTargetsForHost: retry order returns all pairs" (@($retryOrder).Count -eq 4)
+    Write-TestResult "Get-SANTargetsForHost: primary pair first in retry" ($retryOrder[0].Index -eq 0)
+
+    # Test custom pairings behavior
+    $script:SANTargetPairings = @{
+        Pairs = @(
+            @{ Name = "Pair0"; A = 10; B = 11 },
+            @{ Name = "Pair1"; A = 12; B = 13 }
+        )
+        HostAssignments = @(
+            @{ HostMod = 1; PrimaryPair = "Pair0"; RetryOrder = @("Pair1") },
+            @{ HostMod = 2; PrimaryPair = "Pair1"; RetryOrder = @("Pair0") }
+        )
+        CycleSize = 2
+    }
+
+    # Re-initialize pairs with custom config
+    Initialize-SANTargetPairs
+    Write-TestResult "Custom SANTargetPairings: builds 2 pairs" ($script:SANTargetPairs.Count -eq 2)
+    Write-TestResult "Custom SANTargetPairings: pair 0 has name Pair0" ($script:SANTargetPairs[0].Name -eq "Pair0")
+
+    $customHost1 = Get-SANTargetsForHost -HostNumber 1
+    $customHost2 = Get-SANTargetsForHost -HostNumber 2
+    $customHost3 = Get-SANTargetsForHost -HostNumber 3
+
+    Write-TestResult "Custom pairings: host 1 gets Pair0" ($customHost1.Name -eq "Pair0")
+    Write-TestResult "Custom pairings: host 2 gets Pair1" ($customHost2.Name -eq "Pair1")
+    Write-TestResult "Custom pairings: host 3 cycles to Pair0 (CycleSize=2)" ($customHost3.Name -eq "Pair0")
+
+    $customRetry = Get-SANTargetsForHost -HostNumber 1 -AllPairsInRetryOrder
+    Write-TestResult "Custom pairings: retry order has 2 entries" (@($customRetry).Count -eq 2)
+    Write-TestResult "Custom pairings: retry starts with Pair0" ($customRetry[0].Name -eq "Pair0")
+    Write-TestResult "Custom pairings: retry fallback is Pair1" ($customRetry[1].Name -eq "Pair1")
+
+    # Reset
+    $script:SANTargetPairings = $null
+
+} catch {
+    Write-TestResult "Custom SAN Target Pairings Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

@@ -311,19 +311,44 @@ function Invoke-RemoteServiceManager {
 }
 
 # Initialize SAN target pairs from configured iSCSI subnet
+# Supports custom SANTargetPairings config (A side = even, B side = odd by convention)
 function Initialize-SANTargetPairs {
     $sub = $script:iSCSISubnet
-    $mappings = $script:SANTargetMappings
-    $script:SANTargetPairs = @()
-    # Build pairs from consecutive mapping entries (A, B alternating)
-    for ($i = 0; $i -lt $mappings.Count - 1; $i += 2) {
-        $script:SANTargetPairs += @{
-            Index  = [int]($i / 2)
-            A      = "$sub.$($mappings[$i].Suffix)"
-            B      = "$sub.$($mappings[$i + 1].Suffix)"
-            ALabel = $mappings[$i].Label
-            BLabel = $mappings[$i + 1].Label
-            Labels = "$($mappings[$i].Label)/$($mappings[$i + 1].Label)"
+
+    if ($null -ne $script:SANTargetPairings -and $script:SANTargetPairings.Pairs) {
+        # Custom pairings: build from SANTargetPairings config
+        $script:SANTargetPairs = @()
+        $pairIndex = 0
+        foreach ($pair in $script:SANTargetPairings.Pairs) {
+            $aLabel = "A$($pair.A)"
+            $bLabel = "B$($pair.B)"
+            if ($pair.ALabel) { $aLabel = $pair.ALabel }
+            if ($pair.BLabel) { $bLabel = $pair.BLabel }
+            $script:SANTargetPairs += @{
+                Index  = $pairIndex
+                Name   = $pair.Name
+                A      = "$sub.$($pair.A)"
+                B      = "$sub.$($pair.B)"
+                ALabel = $aLabel
+                BLabel = $bLabel
+                Labels = "$aLabel/$bLabel"
+            }
+            $pairIndex++
+        }
+    }
+    else {
+        # Default: build pairs from consecutive mapping entries (A, B alternating)
+        $mappings = $script:SANTargetMappings
+        $script:SANTargetPairs = @()
+        for ($i = 0; $i -lt $mappings.Count - 1; $i += 2) {
+            $script:SANTargetPairs += @{
+                Index  = [int]($i / 2)
+                A      = "$sub.$($mappings[$i].Suffix)"
+                B      = "$sub.$($mappings[$i + 1].Suffix)"
+                ALabel = $mappings[$i].Label
+                BLabel = $mappings[$i + 1].Label
+                Labels = "$($mappings[$i].Label)/$($mappings[$i + 1].Label)"
+            }
         }
     }
 }
@@ -437,6 +462,36 @@ function Import-Defaults {
                 $script:SANTargetMappings += $mapping
             }
         }
+    }
+
+    # Override SAN target pairings (custom A/B pair definitions and host assignments)
+    if ($merged.SANTargetPairings -and $merged.SANTargetPairings -is [PSCustomObject]) {
+        $pairings = @{}
+        if ($merged.SANTargetPairings.Pairs -and $merged.SANTargetPairings.Pairs -is [array]) {
+            $pairings.Pairs = @()
+            foreach ($pair in $merged.SANTargetPairings.Pairs) {
+                $p = @{ Name = $pair.Name; A = [int]$pair.A; B = [int]$pair.B }
+                if ($pair.ALabel) { $p.ALabel = $pair.ALabel }
+                if ($pair.BLabel) { $p.BLabel = $pair.BLabel }
+                $pairings.Pairs += $p
+            }
+        }
+        if ($merged.SANTargetPairings.HostAssignments -and $merged.SANTargetPairings.HostAssignments -is [array]) {
+            $pairings.HostAssignments = @()
+            foreach ($assignment in $merged.SANTargetPairings.HostAssignments) {
+                $pairings.HostAssignments += @{
+                    HostMod      = [int]$assignment.HostMod
+                    PrimaryPair  = $assignment.PrimaryPair
+                    RetryOrder   = @($assignment.RetryOrder)
+                }
+            }
+        }
+        $cycleSize = 4
+        if ($merged.SANTargetPairings.CycleSize) {
+            $cycleSize = [int]$merged.SANTargetPairings.CycleSize
+        }
+        $pairings.CycleSize = $cycleSize
+        $script:SANTargetPairings = $pairings
     }
 
     # Override Defender exclusion paths
