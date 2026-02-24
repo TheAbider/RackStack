@@ -243,6 +243,50 @@ function Undo-LastChange {
     }
 }
 
+# Execute batch undo stack in reverse order (called from Start-BatchMode on failure)
+function Invoke-BatchUndo {
+    if (-not $script:BatchUndoStack -or $script:BatchUndoStack.Count -eq 0) {
+        Write-OutputColor "  No batch changes to undo." -color "Warning"
+        return
+    }
+
+    $reversible = @($script:BatchUndoStack | Where-Object { $_.Reversible })
+    if ($reversible.Count -eq 0) {
+        Write-OutputColor "  No reversible batch changes found." -color "Warning"
+        return
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Undoing $($reversible.Count) batch change(s) in reverse order..." -color "Warning"
+    Write-OutputColor "" -color "Info"
+
+    $undone = 0
+    $undoFailed = 0
+
+    # Reverse order
+    for ($i = $reversible.Count - 1; $i -ge 0; $i--) {
+        $action = $reversible[$i]
+        Write-OutputColor "  [UNDO] Step $($action.Step): $($action.Description)" -color "Info"
+        try {
+            & $action.UndoScript
+            Write-OutputColor "         Reverted." -color "Success"
+            $undone++
+            Add-SessionChange -Category "Undo" -Description "Batch undo: $($action.Description)"
+        }
+        catch {
+            Write-OutputColor "         Failed to undo: $_" -color "Error"
+            $undoFailed++
+        }
+    }
+
+    Write-OutputColor "" -color "Info"
+    $resultColor = if ($undoFailed -eq 0) { "Success" } else { "Warning" }
+    Write-OutputColor "  BATCH UNDO: $undone reverted, $undoFailed failed" -color $resultColor
+
+    # Clear the batch undo stack
+    $script:BatchUndoStack = [System.Collections.Generic.List[object]]::new()
+}
+
 # Caching system for main menu status display
 $script:MenuCache = @{
     HyperVInstalled = $null

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.5.10
+    Automated Test Runner for RackStack v1.6.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7015,6 +7015,76 @@ try {
 
 } catch {
     Write-TestResult "Hyper-V Replica Module Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 130: BATCH IDEMPOTENCY (50-EntryPoint.ps1 v1.6.0)
+# ============================================================================
+
+Write-SectionHeader "130" "BATCH IDEMPOTENCY"
+
+try {
+    $entryContent = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+
+    # Idempotency checks exist for each step
+    Write-TestResult "50-Batch: hostname idempotency check" ($entryContent -match '\$env:COMPUTERNAME\s+-eq\s+\$Config\.Hostname')
+    Write-TestResult "50-Batch: network IP idempotency check" ($entryContent -match 'Get-NetIPAddress.*InterfaceAlias.*adapterName.*IPAddress.*Config\.IPAddress')
+    Write-TestResult "50-Batch: timezone idempotency check" ($entryContent -match '\(Get-TimeZone\)\.Id\s+-eq\s+\$Config\.Timezone')
+    Write-TestResult "50-Batch: RDP idempotency check" ($entryContent -match '\$rdpValue\s+-eq\s+0')
+    Write-TestResult "50-Batch: WinRM idempotency check" ($entryContent -match 'winrmSvc.*Status\s+-eq\s+.Running')
+    Write-TestResult "50-Batch: firewall idempotency check" ($entryContent -match 'fwState\.Domain.*fwState\.Private.*fwState\.Public')
+    Write-TestResult "50-Batch: power plan idempotency check" ($entryContent -match 'currentPlan\.Name\s+-eq\s+\$Config\.SetPowerPlan')
+    Write-TestResult "50-Batch: DC promotion idempotency check" ($entryContent -match 'DomainRole\s+-ge\s+4')
+    Write-TestResult "50-Batch: host storage idempotency check" ($entryContent -match 'storageAlready.*checkPaths')
+    Write-TestResult "50-Batch: vSwitch idempotency check" ($entryContent -match '\$existingSwitch\s*=\s*Get-VMSwitch\s+-Name\s+\$vSwitchName')
+    Write-TestResult "50-Batch: vNIC idempotency (skip existing)" ($entryContent -match 'vnicSkipped\+\+')
+    Write-TestResult "50-Batch: Defender exclusion idempotency" ($entryContent -match '\$missingPaths.*notin.*currentExclusions')
+
+    # Summary line includes skipped count
+    Write-TestResult "50-Batch: summary includes skipped" ($entryContent -match 'BATCH MODE COMPLETE.*changed.*skipped.*failed')
+    Write-TestResult "50-Batch: skipped counter initialized" ($entryContent -match '\$skipped\s*=\s*0')
+    Write-TestResult "50-Batch: BatchUndoStack initialized" ($entryContent -match 'BatchUndoStack.*Generic\.List')
+
+    # Undo prompt on errors
+    Write-TestResult "50-Batch: undo prompt on errors" ($entryContent -match 'Invoke-BatchUndo')
+    Write-TestResult "50-Batch: undo prompt asks user" ($entryContent -match 'step\(s\) can be undone')
+
+} catch {
+    Write-TestResult "Batch Idempotency Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 131: TRANSACTION ROLLBACK (04-Navigation.ps1 v1.6.0)
+# ============================================================================
+
+Write-SectionHeader "131" "TRANSACTION ROLLBACK"
+
+try {
+    $navContent = Get-Content "$modulesPath\04-Navigation.ps1" -Raw
+    $entryContent2 = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+
+    Write-TestResult "04-Nav: function Invoke-BatchUndo exists" ($navContent -match 'function\s+Invoke-BatchUndo\b')
+    Write-TestResult "04-Nav: Invoke-BatchUndo reverses order" ($navContent -match 'reversible\.Count\s*-\s*1.*-ge\s*0.*i--')
+    Write-TestResult "04-Nav: Invoke-BatchUndo executes UndoScript" ($navContent -match '&\s+\$action\.UndoScript')
+    Write-TestResult "04-Nav: Invoke-BatchUndo tracks undone/failed counts" ($navContent -match '\$undone\+\+' -and $navContent -match '\$undoFailed\+\+')
+    Write-TestResult "04-Nav: Invoke-BatchUndo clears stack" ($navContent -match 'BatchUndoStack.*Generic\.List.*new\(\)')
+    Write-TestResult "04-Nav: Invoke-BatchUndo logs session changes" ($navContent -match 'Add-SessionChange.*Undo.*Batch undo')
+
+    # Undo registrations in batch mode
+    Write-TestResult "50-Batch: hostname undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Revert hostname')
+    Write-TestResult "50-Batch: network undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Restore network')
+    Write-TestResult "50-Batch: timezone undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Revert timezone')
+    Write-TestResult "50-Batch: RDP undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Disable RDP')
+    Write-TestResult "50-Batch: WinRM undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Disable WinRM')
+    Write-TestResult "50-Batch: firewall undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Restore firewall')
+    Write-TestResult "50-Batch: power plan undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Revert power plan')
+    Write-TestResult "50-Batch: local admin undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Remove local admin')
+    Write-TestResult "50-Batch: vSwitch undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Remove virtual switch')
+    Write-TestResult "50-Batch: vNIC undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Remove vNIC')
+    Write-TestResult "50-Batch: Defender undo registered" ($entryContent2 -match 'BatchUndoStack\.Add.*Remove Defender')
+
+} catch {
+    Write-TestResult "Transaction Rollback Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

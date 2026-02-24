@@ -335,19 +335,27 @@ function Start-BatchMode {
     $stepNum = 0
     $totalSteps = 22
     $changesApplied = 0
+    $skipped = 0
     $errors = 0
+    $script:BatchUndoStack = [System.Collections.Generic.List[object]]::new()
 
     # Step 1: Set hostname
     $stepNum++
     if ($Config.Hostname) {
-        Write-OutputColor "  [$stepNum/$totalSteps] Setting hostname to '$($Config.Hostname)'..." -color "Info"
-        if (Test-ValidHostname -Hostname $Config.Hostname) {
+        if ($env:COMPUTERNAME -eq $Config.Hostname) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Hostname: already '$($Config.Hostname)'" -color "Debug"
+            $skipped++
+        }
+        elseif (Test-ValidHostname -Hostname $Config.Hostname) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Setting hostname to '$($Config.Hostname)'..." -color "Info"
             try {
+                $oldHostname = $env:COMPUTERNAME
                 Rename-Computer -NewName $Config.Hostname -Force -ErrorAction Stop
                 Write-OutputColor "           Hostname set. Reboot required." -color "Success"
                 $global:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Set hostname to $($Config.Hostname)"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert hostname to $oldHostname"; Reversible = $true; UndoScript = [scriptblock]::Create("Rename-Computer -NewName '$oldHostname' -Force") })
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
@@ -368,44 +376,65 @@ function Start-BatchMode {
     $skipNetwork = ($configType -eq "HOST" -and -not $Config.AdapterName)
     if (-not $skipNetwork -and $Config.IPAddress -and $Config.Gateway) {
         $adapterName = if ($Config.AdapterName) { $Config.AdapterName } else { "Ethernet" }
-        Write-OutputColor "  [$stepNum/$totalSteps] Configuring network on '$adapterName'..." -color "Info"
-        try {
-            # Validate inputs
-            if (-not (Test-ValidIPAddress -IPAddress $Config.IPAddress)) {
-                throw "Invalid IP address: $($Config.IPAddress)"
-            }
-            if (-not (Test-ValidIPAddress -IPAddress $Config.Gateway)) {
-                throw "Invalid gateway: $($Config.Gateway)"
-            }
+        $cidr = if ($Config.SubnetCIDR) { [int]$Config.SubnetCIDR } else { 24 }
 
-            $cidr = if ($Config.SubnetCIDR) { [int]$Config.SubnetCIDR } else { 24 }
-
-            # Clear existing config
-            Remove-NetIPAddress -InterfaceAlias $adapterName -Confirm:$false -ErrorAction SilentlyContinue
-            Remove-NetRoute -InterfaceAlias $adapterName -Confirm:$false -ErrorAction SilentlyContinue
-
-            # Set IP
-            New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $Config.IPAddress `
-                -PrefixLength $cidr -DefaultGateway $Config.Gateway -ErrorAction Stop
-
-            # Set DNS
-            $dnsServers = @()
-            if ($Config.DNS1) { $dnsServers += $Config.DNS1 }
-            if ($Config.DNS2) { $dnsServers += $Config.DNS2 }
-            if ($dnsServers.Count -gt 0) {
-                Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers
-            }
-
-            Write-OutputColor "           IP: $($Config.IPAddress)/$cidr  GW: $($Config.Gateway)" -color "Success"
-            if ($dnsServers.Count -gt 0) {
-                Write-OutputColor "           DNS: $($dnsServers -join ', ')" -color "Success"
-            }
-            $changesApplied++
-            Add-SessionChange -Category "Network" -Description "Set IP $($Config.IPAddress)/$cidr on $adapterName"
+        # Idempotency: check if adapter already has the target IP
+        $existingIP = Get-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -eq $Config.IPAddress -and $_.PrefixLength -eq $cidr }
+        if ($existingIP) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Network: already configured ($($Config.IPAddress)/$cidr)" -color "Debug"
+            $skipped++
         }
-        catch {
-            Write-OutputColor "           Failed: $_" -color "Error"
-            $errors++
+        else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Configuring network on '$adapterName'..." -color "Info"
+            try {
+                # Validate inputs
+                if (-not (Test-ValidIPAddress -IPAddress $Config.IPAddress)) {
+                    throw "Invalid IP address: $($Config.IPAddress)"
+                }
+                if (-not (Test-ValidIPAddress -IPAddress $Config.Gateway)) {
+                    throw "Invalid gateway: $($Config.Gateway)"
+                }
+
+                # Capture current config for undo
+                $oldIP = Get-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+                $oldGW = (Get-NetRoute -InterfaceAlias $adapterName -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
+                $oldDNS = (Get-DnsClientServerAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
+
+                # Clear existing config
+                Remove-NetIPAddress -InterfaceAlias $adapterName -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-NetRoute -InterfaceAlias $adapterName -Confirm:$false -ErrorAction SilentlyContinue
+
+                # Set IP
+                New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $Config.IPAddress `
+                    -PrefixLength $cidr -DefaultGateway $Config.Gateway -ErrorAction Stop
+
+                # Set DNS
+                $dnsServers = @()
+                if ($Config.DNS1) { $dnsServers += $Config.DNS1 }
+                if ($Config.DNS2) { $dnsServers += $Config.DNS2 }
+                if ($dnsServers.Count -gt 0) {
+                    Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers
+                }
+
+                Write-OutputColor "           IP: $($Config.IPAddress)/$cidr  GW: $($Config.Gateway)" -color "Success"
+                if ($dnsServers.Count -gt 0) {
+                    Write-OutputColor "           DNS: $($dnsServers -join ', ')" -color "Success"
+                }
+                $changesApplied++
+                Add-SessionChange -Category "Network" -Description "Set IP $($Config.IPAddress)/$cidr on $adapterName"
+
+                # Register undo (restore previous IP config)
+                $undoAdapter = $adapterName
+                $undoOldIP = if ($oldIP) { $oldIP.IPAddress } else { $null }
+                $undoOldPrefix = if ($oldIP) { $oldIP.PrefixLength } else { 24 }
+                $undoOldGW = $oldGW
+                $undoOldDNS = $oldDNS
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore network config on $undoAdapter"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-NetIPAddress -InterfaceAlias '$undoAdapter' -Confirm:`$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceAlias '$undoAdapter' -Confirm:`$false -ErrorAction SilentlyContinue; if ('$undoOldIP') { New-NetIPAddress -InterfaceAlias '$undoAdapter' -IPAddress '$undoOldIP' -PrefixLength $undoOldPrefix $(if($undoOldGW){"-DefaultGateway '$undoOldGW'"}) -ErrorAction SilentlyContinue }") })
+            }
+            catch {
+                Write-OutputColor "           Failed: $_" -color "Error"
+                $errors++
+            }
         }
     }
     else {
@@ -416,16 +445,24 @@ function Start-BatchMode {
     # Step 3: Set timezone
     $stepNum++
     if ($Config.Timezone) {
-        Write-OutputColor "  [$stepNum/$totalSteps] Setting timezone to '$($Config.Timezone)'..." -color "Info"
-        try {
-            Set-TimeZone -Id $Config.Timezone -ErrorAction Stop
-            Write-OutputColor "           Timezone set." -color "Success"
-            $changesApplied++
-            Add-SessionChange -Category "System" -Description "Set timezone to $($Config.Timezone)"
+        if ((Get-TimeZone).Id -eq $Config.Timezone) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Timezone: already '$($Config.Timezone)'" -color "Debug"
+            $skipped++
         }
-        catch {
-            Write-OutputColor "           Failed: $_" -color "Error"
-            $errors++
+        else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Setting timezone to '$($Config.Timezone)'..." -color "Info"
+            try {
+                $oldTimezone = (Get-TimeZone).Id
+                Set-TimeZone -Id $Config.Timezone -ErrorAction Stop
+                Write-OutputColor "           Timezone set." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "System" -Description "Set timezone to $($Config.Timezone)"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert timezone to $oldTimezone"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-TimeZone -Id '$oldTimezone'") })
+            }
+            catch {
+                Write-OutputColor "           Failed: $_" -color "Error"
+                $errors++
+            }
         }
     }
     else {
@@ -435,17 +472,25 @@ function Start-BatchMode {
     # Step 4: Enable RDP
     $stepNum++
     if ($Config.EnableRDP) {
-        Write-OutputColor "  [$stepNum/$totalSteps] Enabling Remote Desktop..." -color "Info"
-        try {
-            Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
-            Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
-            Write-OutputColor "           RDP enabled." -color "Success"
-            $changesApplied++
-            Add-SessionChange -Category "System" -Description "Enabled RDP"
+        $rdpValue = (Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -ErrorAction SilentlyContinue).fDenyTSConnections
+        if ($rdpValue -eq 0) {
+            Write-OutputColor "  [$stepNum/$totalSteps] RDP: already enabled" -color "Debug"
+            $skipped++
         }
-        catch {
-            Write-OutputColor "           Failed: $_" -color "Error"
-            $errors++
+        else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Enabling Remote Desktop..." -color "Info"
+            try {
+                Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
+                Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                Write-OutputColor "           RDP enabled." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "System" -Description "Enabled RDP"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Disable RDP"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 1; Disable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue") })
+            }
+            catch {
+                Write-OutputColor "           Failed: $_" -color "Error"
+                $errors++
+            }
         }
     }
     else {
@@ -455,17 +500,25 @@ function Start-BatchMode {
     # Step 5: Enable WinRM
     $stepNum++
     if ($Config.EnableWinRM) {
-        Write-OutputColor "  [$stepNum/$totalSteps] Enabling PowerShell Remoting..." -color "Info"
-        try {
-            Enable-PSRemoting -Force -SkipNetworkProfileCheck -ErrorAction Stop
-            Set-Item WSMan:\localhost\Service\Auth\Kerberos -Value $true -ErrorAction SilentlyContinue
-            Write-OutputColor "           WinRM enabled with Kerberos auth." -color "Success"
-            $changesApplied++
-            Add-SessionChange -Category "System" -Description "Enabled PowerShell Remoting"
+        $winrmSvc = Get-Service -Name WinRM -ErrorAction SilentlyContinue
+        if ($winrmSvc -and $winrmSvc.Status -eq "Running") {
+            Write-OutputColor "  [$stepNum/$totalSteps] WinRM: already enabled" -color "Debug"
+            $skipped++
         }
-        catch {
-            Write-OutputColor "           Failed: $_" -color "Error"
-            $errors++
+        else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Enabling PowerShell Remoting..." -color "Info"
+            try {
+                Enable-PSRemoting -Force -SkipNetworkProfileCheck -ErrorAction Stop
+                Set-Item WSMan:\localhost\Service\Auth\Kerberos -Value $true -ErrorAction SilentlyContinue
+                Write-OutputColor "           WinRM enabled with Kerberos auth." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "System" -Description "Enabled PowerShell Remoting"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Disable WinRM"; Reversible = $true; UndoScript = [scriptblock]::Create("Disable-PSRemoting -Force -ErrorAction SilentlyContinue; Stop-Service WinRM -Force -ErrorAction SilentlyContinue") })
+            }
+            catch {
+                Write-OutputColor "           Failed: $_" -color "Error"
+                $errors++
+            }
         }
     }
     else {
@@ -475,18 +528,29 @@ function Start-BatchMode {
     # Step 6: Configure firewall
     $stepNum++
     if ($Config.ConfigureFirewall) {
-        Write-OutputColor "  [$stepNum/$totalSteps] Configuring firewall..." -color "Info"
-        try {
-            Set-NetFirewallProfile -Profile Domain -Enabled False -ErrorAction Stop
-            Set-NetFirewallProfile -Profile Private -Enabled False -ErrorAction Stop
-            Set-NetFirewallProfile -Profile Public -Enabled True -ErrorAction Stop
-            Write-OutputColor "           Firewall: Domain=Off Private=Off Public=On" -color "Success"
-            $changesApplied++
-            Add-SessionChange -Category "Security" -Description "Configured firewall profiles"
+        $fwState = Get-FirewallState
+        if (-not $fwState.Domain -and -not $fwState.Private -and $fwState.Public) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Firewall: already configured (Domain=Off Private=Off Public=On)" -color "Debug"
+            $skipped++
         }
-        catch {
-            Write-OutputColor "           Failed: $_" -color "Error"
-            $errors++
+        else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Configuring firewall..." -color "Info"
+            try {
+                $oldDomain = $fwState.Domain
+                $oldPrivate = $fwState.Private
+                $oldPublic = $fwState.Public
+                Set-NetFirewallProfile -Profile Domain -Enabled False -ErrorAction Stop
+                Set-NetFirewallProfile -Profile Private -Enabled False -ErrorAction Stop
+                Set-NetFirewallProfile -Profile Public -Enabled True -ErrorAction Stop
+                Write-OutputColor "           Firewall: Domain=Off Private=Off Public=On" -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "Security" -Description "Configured firewall profiles"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore firewall profiles"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-NetFirewallProfile -Profile Domain -Enabled `$$oldDomain; Set-NetFirewallProfile -Profile Private -Enabled `$$oldPrivate; Set-NetFirewallProfile -Profile Public -Enabled `$$oldPublic") })
+            }
+            catch {
+                Write-OutputColor "           Failed: $_" -color "Error"
+                $errors++
+            }
         }
     }
     else {
@@ -496,15 +560,24 @@ function Start-BatchMode {
     # Step 7: Set power plan
     $stepNum++
     if ($Config.SetPowerPlan) {
-        Write-OutputColor "  [$stepNum/$totalSteps] Setting power plan to '$($Config.SetPowerPlan)'..." -color "Info"
         if ($script:PowerPlanGUID.ContainsKey($Config.SetPowerPlan)) {
-            powercfg /setactive $script:PowerPlanGUID[$Config.SetPowerPlan] 2>&1 | Out-Null
-            Write-OutputColor "           Power plan set." -color "Success"
-            $changesApplied++
-            Add-SessionChange -Category "System" -Description "Set power plan to $($Config.SetPowerPlan)"
+            $currentPlan = Get-CurrentPowerPlan
+            if ($currentPlan.Name -eq $Config.SetPowerPlan) {
+                Write-OutputColor "  [$stepNum/$totalSteps] Power plan: already '$($Config.SetPowerPlan)'" -color "Debug"
+                $skipped++
+            }
+            else {
+                Write-OutputColor "  [$stepNum/$totalSteps] Setting power plan to '$($Config.SetPowerPlan)'..." -color "Info"
+                $oldPlanGuid = $currentPlan.Guid
+                powercfg /setactive $script:PowerPlanGUID[$Config.SetPowerPlan] 2>&1 | Out-Null
+                Write-OutputColor "           Power plan set." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "System" -Description "Set power plan to $($Config.SetPowerPlan)"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert power plan to $($currentPlan.Name)"; Reversible = $true; UndoScript = [scriptblock]::Create("powercfg /setactive '$oldPlanGuid' 2>&1 | Out-Null") })
+            }
         }
         else {
-            Write-OutputColor "           Unknown plan: $($Config.SetPowerPlan)" -color "Warning"
+            Write-OutputColor "  [$stepNum/$totalSteps] Power plan: unknown '$($Config.SetPowerPlan)'" -color "Warning"
         }
     }
     else {
@@ -605,6 +678,8 @@ function Start-BatchMode {
                 Write-OutputColor "           Local admin '$adminName' created and added to Administrators." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Created local admin account '$adminName'"
+                $undoAdminName = $adminName
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove local admin '$undoAdminName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-LocalUser -Name '$undoAdminName' -ErrorAction SilentlyContinue") })
             }
         }
         catch {
@@ -708,6 +783,12 @@ function Start-BatchMode {
     # Step 15: Promote to Domain Controller
     $stepNum++
     if ($Config.PromoteToDC) {
+        $domainRole = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).DomainRole
+        if ($domainRole -ge 4) {
+            Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion: already a domain controller" -color "Debug"
+            $skipped++
+        }
+        else {
         $promoType = if ($Config.DCPromoType) { $Config.DCPromoType } else { "NewForest" }
         Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion ($promoType)..." -color "Info"
         try {
@@ -774,6 +855,7 @@ function Start-BatchMode {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
         }
+        }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion: skipped" -color "Debug"
@@ -799,6 +881,24 @@ function Start-BatchMode {
     # Step 17: Initialize Host Storage
     $stepNum++
     if ($Config.InitializeHostStorage -and $configType -eq "HOST") {
+        # Idempotency: check if storage directories already exist on the target drive
+        $checkDrive = $Config.HostStorageDrive
+        if (-not $checkDrive) {
+            $autoVol = Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -and $_.DriveLetter -ne 'C' -and $_.DriveType -eq 'Fixed' -and $_.FileSystem -eq 'NTFS' } | Select-Object -First 1
+            if ($autoVol) { $checkDrive = $autoVol.DriveLetter }
+        }
+        $storageAlready = $false
+        if ($checkDrive) {
+            $checkPaths = @("$($checkDrive):\Virtual Machines", "$($checkDrive):\ISOs", "$($checkDrive):\Virtual Machines\_BaseImages")
+            $storageAlready = ($checkPaths | Where-Object { Test-Path $_ }).Count -eq 3
+        }
+        if ($storageAlready) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Host storage: already initialized on $($checkDrive):" -color "Debug"
+            $script:SelectedHostDrive = "$($checkDrive):"
+            $script:StorageInitialized = $true
+            $skipped++
+        }
+        else {
         Write-OutputColor "  [$stepNum/$totalSteps] Initializing host storage..." -color "Info"
         try {
             $driveLetter = $Config.HostStorageDrive
@@ -838,6 +938,7 @@ function Start-BatchMode {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
         }
+        }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Host storage: skipped" -color "Debug"
@@ -853,6 +954,12 @@ function Start-BatchMode {
                    else { $SwitchName }
 
     if ($createSwitch -and $configType -eq "HOST") {
+        $existingSwitch = Get-VMSwitch -Name $vSwitchName -ErrorAction SilentlyContinue
+        if ($existingSwitch) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Virtual switch: '$vSwitchName' already exists ($($existingSwitch.SwitchType))" -color "Debug"
+            $skipped++
+        }
+        else {
         Write-OutputColor "  [$stepNum/$totalSteps] Creating $vSwitchType switch '$vSwitchName'..." -color "Info"
         try {
             switch ($vSwitchType) {
@@ -919,6 +1026,9 @@ function Start-BatchMode {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
         }
+        $undoSwitchName = $vSwitchName
+        $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove virtual switch '$undoSwitchName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMSwitch -Name '$undoSwitchName' -Force -ErrorAction SilentlyContinue") })
+        }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Virtual switch: skipped" -color "Debug"
@@ -932,14 +1042,17 @@ function Start-BatchMode {
             $targetSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" } | Select-Object -First 1
             if ($targetSwitch) {
                 $vnicCount = 0
+                $vnicSkipped = 0
+                $createdVnicNames = @()
                 foreach ($vnicDef in $Config.CustomVNICs) {
                     $vnicName = $vnicDef.Name
                     if (-not $vnicName) { continue }
 
+                    # Idempotency: skip if vNIC already exists on the target switch
                     $existing = Get-VMNetworkAdapter -ManagementOS -SwitchName $targetSwitch.Name -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $vnicName }
                     if ($existing) {
-                        Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 1
+                        $vnicSkipped++
+                        continue
                     }
 
                     Add-VMNetworkAdapter -ManagementOS -SwitchName $targetSwitch.Name -Name $vnicName -ErrorAction Stop
@@ -949,10 +1062,20 @@ function Start-BatchMode {
                         Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vnicName -Access -VlanId $vlanId -ErrorAction SilentlyContinue
                     }
                     $vnicCount++
+                    $createdVnicNames += $vnicName
                 }
-                Write-OutputColor "           Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'." -color "Success"
-                $changesApplied++
-                Add-SessionChange -Category "Network" -Description "Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'"
+                if ($vnicCount -gt 0) {
+                    Write-OutputColor "           Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'$(if ($vnicSkipped -gt 0) { ", $vnicSkipped already existed" })." -color "Success"
+                    $changesApplied++
+                    Add-SessionChange -Category "Network" -Description "Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'"
+                    foreach ($createdName in $createdVnicNames) {
+                        $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove vNIC '$createdName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMNetworkAdapter -ManagementOS -Name '$createdName' -ErrorAction SilentlyContinue") })
+                    }
+                }
+                else {
+                    Write-OutputColor "           All $vnicSkipped vNIC(s) already exist." -color "Debug"
+                    $skipped++
+                }
             } else {
                 Write-OutputColor "           No External switch found. Create a switch first." -color "Warning"
             }
@@ -1066,39 +1189,66 @@ function Start-BatchMode {
     # Step 22: Configure Defender Exclusions
     $stepNum++
     if ($Config.ConfigureDefenderExclusions -and $configType -eq "HOST") {
-        Write-OutputColor "  [$stepNum/$totalSteps] Configuring Defender exclusions..." -color "Info"
-        try {
-            $allPaths = @($script:DefenderExclusionPaths) + @($script:DefenderCommonVMPaths)
-            $addedCount = 0
-            foreach ($path in $allPaths) {
-                if ($path) {
+        # Idempotency: check if exclusion paths are already configured
+        $currentExclusions = @()
+        try { $currentExclusions = @((Get-MpPreference -ErrorAction SilentlyContinue).ExclusionPath) } catch {}
+        $allPaths = @($script:DefenderExclusionPaths) + @($script:DefenderCommonVMPaths) | Where-Object { $_ }
+        $missingPaths = @($allPaths | Where-Object { $_ -notin $currentExclusions })
+
+        if ($missingPaths.Count -eq 0) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Defender exclusions: already configured" -color "Debug"
+            $skipped++
+        }
+        else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Configuring Defender exclusions..." -color "Info"
+            try {
+                $addedCount = 0
+                $addedPaths = @()
+                foreach ($path in $missingPaths) {
                     Add-MpPreference -ExclusionPath $path -ErrorAction SilentlyContinue
+                    $addedPaths += $path
                     $addedCount++
                 }
+                # Add process exclusions
+                $defenderProcesses = @("vmms.exe", "vmwp.exe", "vmcompute.exe")
+                foreach ($proc in $defenderProcesses) {
+                    Add-MpPreference -ExclusionProcess $proc -ErrorAction SilentlyContinue
+                }
+                Write-OutputColor "           Added $addedCount path exclusions and $($defenderProcesses.Count) process exclusions." -color "Success"
+                $changesApplied++
+                Add-SessionChange -Category "Security" -Description "Configured Defender exclusions for Hyper-V"
+                $pathsList = ($addedPaths | ForEach-Object { "'$_'" }) -join ','
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove Defender exclusions"; Reversible = $true; UndoScript = [scriptblock]::Create("foreach (`$p in @($pathsList)) { Remove-MpPreference -ExclusionPath `$p -ErrorAction SilentlyContinue }") })
             }
-            # Add process exclusions
-            $defenderProcesses = @("vmms.exe", "vmwp.exe", "vmcompute.exe")
-            foreach ($proc in $defenderProcesses) {
-                Add-MpPreference -ExclusionProcess $proc -ErrorAction SilentlyContinue
+            catch {
+                Write-OutputColor "           Failed: $_" -color "Error"
+                $errors++
             }
-            Write-OutputColor "           Added $addedCount path exclusions and $($defenderProcesses.Count) process exclusions." -color "Success"
-            $changesApplied++
-            Add-SessionChange -Category "Security" -Description "Configured Defender exclusions for Hyper-V"
-        }
-        catch {
-            Write-OutputColor "           Failed: $_" -color "Error"
-            $errors++
         }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Defender exclusions: skipped" -color "Debug"
     }
 
+    # Undo prompt on errors
+    if ($errors -gt 0 -and $script:BatchUndoStack.Count -gt 0) {
+        $reversible = @($script:BatchUndoStack | Where-Object { $_.Reversible })
+        if ($reversible.Count -gt 0) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  $errors step(s) failed. $($reversible.Count) previous step(s) can be undone." -color "Warning"
+            Write-OutputColor "  Undo all reversible changes? [y/N]: " -color "Warning"
+            $undoChoice = Read-Host
+            if ($undoChoice -eq 'y' -or $undoChoice -eq 'Y') {
+                Invoke-BatchUndo
+            }
+        }
+    }
+
     # Summary
     Write-OutputColor "" -color "Info"
     Write-OutputColor ("=" * 65) -color "Info"
     $resultColor = if ($errors -eq 0) { "Success" } else { "Warning" }
-    Write-OutputColor "  BATCH MODE COMPLETE: $changesApplied succeeded, $errors failed" -color $resultColor
+    Write-OutputColor "  BATCH MODE COMPLETE: $changesApplied changed, $skipped skipped, $errors failed" -color $resultColor
     Write-OutputColor "  Finished: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -color "Info"
     Write-OutputColor ("=" * 65) -color "Info"
     Write-OutputColor "" -color "Info"
