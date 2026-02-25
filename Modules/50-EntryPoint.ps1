@@ -197,7 +197,7 @@ function Test-BatchConfig {
                     "DisableBuiltInAdmin", "InstallUpdates", "AutoReboot",
                     "CreateVirtualSwitch", "CreateSETSwitch", "ConfigureSharedStorage",
                     "ConfigureMPIO", "InitializeHostStorage", "ConfigureDefenderExclusions",
-                    "PromoteToDC")
+                    "PromoteToDC", "InstallAgent", "ValidateCluster")
     foreach ($field in $boolFields) {
         if ($null -ne $Config[$field] -and $Config[$field] -isnot [bool]) {
             $null = $errors.Add("$field must be true or false (got '$($Config[$field])').")

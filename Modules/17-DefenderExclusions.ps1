@@ -48,7 +48,9 @@ function Set-DefenderExclusions {
     if ($processExclusions) {
         Write-OutputColor "  │$("  Process Exclusions:".PadRight(72))│" -color "Info"
         foreach ($proc in $processExclusions | Select-Object -First 3) {
-            Write-OutputColor "  │$("    $proc".PadRight(72))│" -color "Success"
+            $lineStr = "    $proc"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
         }
         if ($processExclusions.Count -gt 3) {
             Write-OutputColor "  │$("    ... and $($processExclusions.Count - 3) more".PadRight(72))│" -color "Info"
@@ -270,7 +272,9 @@ function Show-AllDefenderExclusions {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     if ($prefs.ExclusionProcess) {
         foreach ($proc in $prefs.ExclusionProcess) {
-            Write-OutputColor "  │$("  - $proc".PadRight(72))│" -color "Success"
+            $lineStr = "  - $proc"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
         }
     } else {
         Write-OutputColor "  │$("  (none)".PadRight(72))│" -color "Info"
@@ -284,7 +288,9 @@ function Show-AllDefenderExclusions {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     if ($prefs.ExclusionExtension) {
         $extList = $prefs.ExclusionExtension -join ", "
-        Write-OutputColor "  │$("  $extList".PadRight(72))│" -color "Success"
+        $lineStr = "  $extList"
+        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
     } else {
         Write-OutputColor "  │$("  (none)".PadRight(72))│" -color "Info"
     }

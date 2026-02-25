@@ -30,10 +30,16 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.34
+    1.9.35
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.35
+    BUG FIXES:
+    - FIXED: 18 TUI box-drawing lines overflowed borders when content exceeded 72 characters — long disk names, cluster node lists, FQDNs, file paths, and exception messages pushed past the right border character. Now truncates with ellipsis before padding (09-SET, 10-iSCSI, 17-DefenderExclusions, 27-FailoverClustering, 33-StorageReplica, 35-Utilities, 59-StorageBackends, 61-ActiveDirectory)
+    - FIXED: Batch config accepted non-boolean strings for InstallAgent and ValidateCluster fields without error — these boolean fields were missing from the validation list, so values like "yes" or "1" passed validation but evaluated as truthy strings instead of proper booleans (50-EntryPoint)
+    - FIXED: $driveLetter uninitialized in VM deployment space check when CSV path resolves successfully — returned hash included DriveLetter key with undefined value (44-VMDeployment)
 
 .CHANGELOG v1.9.34
     BUG FIXES:

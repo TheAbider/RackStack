@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.35
+
+- **Bug Fix:** 18 TUI box-drawing display lines overflowed their right border when variable-length content exceeded 72 characters. Affected: cluster node lists with 4+ nodes (27-FailoverClustering), CSV volume names with long paths (27-FailoverClustering), Storage Replica partnership lines with FQDNs (33-StorageReplica), iSCSI disk FriendlyName (10-iSCSI), Defender process exclusion paths and extension lists (17-DefenderExclusions), network adapter connectivity results (09-SET), profile comparison values (35-Utilities), FC/S2D/NVMe physical disk names (59-StorageBackends), storage pool and virtual disk names (59-StorageBackends), and AD forest query exception messages (61-ActiveDirectory). All now truncate with `...` ellipsis at 69 characters before `.PadRight(72)`.
+- **Bug Fix:** Batch config validation accepted non-boolean strings for `InstallAgent` and `ValidateCluster` fields without error — these two boolean fields were missing from the `$boolFields` validation array in `Confirm-BatchConfig`. Values like `"yes"` or `"1"` passed validation but evaluated as truthy strings instead of proper `$true`/`$false` booleans at runtime (50-EntryPoint).
+- **Bug Fix:** `$driveLetter` uninitialized in VM deployment storage space check when a CSV path resolved successfully — the variable was only assigned inside the `$null -eq $freeBytes` fallback branch, so the returned hashtable included `DriveLetter = $null` for all CSV-backed storage (44-VMDeployment).
+- 63 modules, 1854 tests
+
 ## v1.9.34
 
 - **Bug Fix:** VLAN IDs with first digit 5-9 silently not applied to custom vNICs during batch mode when the JSON value was a quoted string (e.g., `"VLAN": "5"` instead of `"VLAN": 5`). The validation function correctly cast with `-as [int]` and accepted the value, but the execution path used the raw string in a numeric comparison — `"5" -le "4094"` becomes a string comparison where `"5" > "4"`, so the VLAN was silently dropped. VLANs 1-4 and 10+ happened to work due to string sort order. Now casts to `[int]` at point of use (50-EntryPoint).

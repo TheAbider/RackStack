@@ -74,20 +74,28 @@ function Compare-ConfigurationProfiles {
 
         if ($hasVal1 -and -not $hasVal2) {
             Write-OutputColor "  │$("  [-] $prop".PadRight(72))│" -color "Error"
-            Write-OutputColor "  │$("      Profile 1: $val1".PadRight(72))│" -color "Error"
+            $lineStr = "      Profile 1: $val1"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Error"
             $removed++
             $differences++
         }
         elseif (-not $hasVal1 -and $hasVal2) {
             Write-OutputColor "  │$("  [+] $prop".PadRight(72))│" -color "Success"
-            Write-OutputColor "  │$("      Profile 2: $val2".PadRight(72))│" -color "Success"
+            $lineStr = "      Profile 2: $val2"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
             $added++
             $differences++
         }
         elseif ($val1 -ne $val2) {
             Write-OutputColor "  │$("  [~] $prop".PadRight(72))│" -color "Warning"
-            Write-OutputColor "  │$("      Profile 1: $val1".PadRight(72))│" -color "Warning"
-            Write-OutputColor "  │$("      Profile 2: $val2".PadRight(72))│" -color "Warning"
+            $lineStr = "      Profile 1: $val1"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
+            $lineStr = "      Profile 2: $val2"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
             $changed++
             $differences++
         }

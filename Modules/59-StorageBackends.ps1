@@ -135,7 +135,9 @@ function Show-FCAdapters {
     if ($fcDisks) {
         foreach ($disk in $fcDisks) {
             $sizeGB = [math]::Round($disk.Size / 1GB, 1)
-            Write-OutputColor "  │$("  Disk $($disk.Number): $($disk.FriendlyName) | $sizeGB GB | $($disk.OperationalStatus)".PadRight(72))│" -color "Success"
+            $lineStr = "  Disk $($disk.Number): $($disk.FriendlyName) | $sizeGB GB | $($disk.OperationalStatus)"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
         }
     }
     else {
@@ -313,7 +315,9 @@ function Show-S2DStatus {
             $totalTB = [math]::Round($p.Size / 1TB, 2)
             $allocTB = [math]::Round($p.AllocatedSize / 1TB, 2)
             $healthColor = if ($p.HealthStatus -eq "Healthy") { "Success" } else { "Warning" }
-            Write-OutputColor "  │$("  $($p.FriendlyName) | $totalTB TB total | $allocTB TB allocated".PadRight(72))│" -color $healthColor
+            $lineStr = "  $($p.FriendlyName) | $totalTB TB total | $allocTB TB allocated"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $healthColor
             Write-OutputColor "  │$("    Health: $($p.HealthStatus) | Operational: $($p.OperationalStatus)".PadRight(72))│" -color "Info"
         }
     }
@@ -333,7 +337,9 @@ function Show-S2DStatus {
         foreach ($vd in $vDisks) {
             $sizeGB = [math]::Round($vd.Size / 1GB, 1)
             $healthColor = if ($vd.HealthStatus -eq "Healthy") { "Success" } else { "Warning" }
-            Write-OutputColor "  │$("  $($vd.FriendlyName) | $sizeGB GB | $($vd.ResiliencySettingName)".PadRight(72))│" -color $healthColor
+            $lineStr = "  $($vd.FriendlyName) | $sizeGB GB | $($vd.ResiliencySettingName)"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $healthColor
         }
     }
     else {
@@ -353,7 +359,9 @@ function Show-S2DStatus {
             $sizeGB = [math]::Round($pd.Size / 1GB, 1)
             $healthColor = if ($pd.HealthStatus -eq "Healthy") { "Success" } else { "Warning" }
             $mediaType = $pd.MediaType
-            Write-OutputColor "  │$("  $($pd.FriendlyName) | $sizeGB GB | $mediaType | $($pd.Usage)".PadRight(72))│" -color $healthColor
+            $lineStr = "  $($pd.FriendlyName) | $sizeGB GB | $mediaType | $($pd.Usage)"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $healthColor
         }
     }
     else {
@@ -765,7 +773,9 @@ function Show-NVMeoFStatus {
     if ($physNvme) {
         foreach ($pd in $physNvme) {
             $sizeGB = [math]::Round($pd.Size / 1GB, 1)
-            Write-OutputColor "  │$("  $($pd.FriendlyName) | $sizeGB GB | $($pd.MediaType) | $($pd.Usage)".PadRight(72))│" -color "Success"
+            $lineStr = "  $($pd.FriendlyName) | $sizeGB GB | $($pd.MediaType) | $($pd.Usage)"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
         }
     }
     else {

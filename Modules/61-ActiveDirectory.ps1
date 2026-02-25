@@ -737,7 +737,9 @@ function Show-ADDSStatus {
     catch {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  Could not retrieve forest/domain information.".PadRight(72))│" -color "Warning"
-        Write-OutputColor "  │$("  Error: $($_.Exception.Message)".PadRight(72))│" -color "Error"
+        $lineStr = "  Error: $($_.Exception.Message)"
+        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Error"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
     }

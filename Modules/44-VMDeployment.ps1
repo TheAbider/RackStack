@@ -2342,6 +2342,7 @@ function Test-DeploymentDiskSpace {
 
     # Get free space on the target volume
     $freeBytes = $null
+    $driveLetter = $null
     if ($StoragePath -like "*ClusterStorage*") {
         # CSV paths (e.g., C:\ClusterStorage\Volume1) — drive letter points to OS drive, not CSV
         try {

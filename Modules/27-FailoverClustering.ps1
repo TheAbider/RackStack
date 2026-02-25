@@ -106,7 +106,9 @@ function Show-ClusterManagementMenu {
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-OutputColor "  │$("  Name: $($cluster.Name)".PadRight(72))│" -color "Success"
         $nodes = (Get-ClusterNode -ErrorAction SilentlyContinue) -join ", "
-        Write-OutputColor "  │$("  Nodes: $nodes".PadRight(72))│" -color "Info"
+        $lineStr = "  Nodes: $nodes"
+        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     } else {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -368,7 +370,9 @@ function Edit-ClusterSharedVolume {
             $info = $csv.SharedVolumeInfo
             $freeGB = if ($info) { [math]::Round($info.Partition.FreeSpace / 1GB, 1) } else { "N/A" }
             $totalGB = if ($info) { [math]::Round($info.Partition.Size / 1GB, 1) } else { "N/A" }
-            Write-OutputColor "  │$("  $($csv.Name) | $state | Free: $freeGB GB / $totalGB GB".PadRight(72))│" -color $color
+            $lineStr = "  $($csv.Name) | $state | Free: $freeGB GB / $totalGB GB"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $color
         }
     }
     else {

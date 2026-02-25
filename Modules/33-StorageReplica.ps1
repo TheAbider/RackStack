@@ -70,7 +70,9 @@ function Show-StorageReplicaManagement {
         if ($partnerships.Count -gt 0) {
             foreach ($p in $partnerships) {
                 $status = if ($p.ReplicationMode -eq "Synchronous") { "Sync" } else { "Async" }
-                Write-OutputColor "  │$("  $($p.SourceComputerName) -> $($p.DestinationComputerName) [$status]".PadRight(72))│" -color "Success"
+                $lineStr = "  $($p.SourceComputerName) -> $($p.DestinationComputerName) [$status]"
+                if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
             }
         }
         else {

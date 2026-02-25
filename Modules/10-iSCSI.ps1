@@ -1092,7 +1092,9 @@ function Show-iSCSIStatus {
         foreach ($disk in $iscsiDisks) {
             $sizeGB = [math]::Round($disk.Size / 1GB, 1)
             $status = $disk.OperationalStatus
-            Write-OutputColor "  │$("  Disk $($disk.Number): $($disk.FriendlyName) | $sizeGB GB | $status".PadRight(72))│" -color "Success"
+            $lineStr = "  Disk $($disk.Number): $($disk.FriendlyName) | $sizeGB GB | $status"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
         }
     }
     else {

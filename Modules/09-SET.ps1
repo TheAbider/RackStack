@@ -101,6 +101,7 @@ function Select-PhysicalAdaptersSmart {
             $color = if ($result.HasInternet) { "Success" } else { "Warning" }
             $ip = if ($result.IPAddress) { $result.IPAddress } else { "No IP" }
             $line = "  $($result.Name) | $ip | $status"
+            if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($line.PadRight(72))│" -color $color
         }
 
