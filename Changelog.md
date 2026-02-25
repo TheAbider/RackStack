@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.8.2
+
+- **Pre-release History:** Added detailed changelog entries for 11 pre-release versions (v0.1.0 through v0.10.0) covering the tool's development history before the v1.0.0 open-source release — iSCSI auto-configuration, VM deployment system, storage manager, batch mode, configuration profiles, licensing, and more
+- 63 modules, 1787 tests, backward compatible with all existing configs
+
 ## v1.8.1
 
 - **Changelog Standardization:** Consistent format across all 30+ version entries — every entry now has a stats footer (modules, tests), flattened bug fix lists, missing v1.5.9 entry added, pre-release origin section added
@@ -305,10 +310,110 @@
 - Full feature set: networking, Hyper-V, VM deployment, storage, monitoring, batch mode
 - 59 modules, 905 tests, backward compatible with all existing configs
 
-## Pre-release
+## Pre-release History
 
-- Originally developed as an internal Windows Server configuration tool for MSP field deployments
-- Designed to replace the built-in `sconfig` with a comprehensive, menu-driven alternative
-- Core feature set built from scratch in PowerShell: IP configuration, Hyper-V setup, VM deployment, iSCSI/SAN management, batch mode automation, and system health monitoring
-- Modular architecture (numbered .ps1 files) with monolithic build system for single-file distribution and EXE compilation via ps2exe
-- Open-sourced as RackStack v1.0.0
+Originally developed as an internal Windows Server configuration tool for MSP field deployments. Designed to replace the built-in `sconfig` with a comprehensive, menu-driven alternative. Version numbers below are remapped from the original internal versioning.
+
+### v0.10.0
+
+- **SET Smart Auto-Detection:** `Test-AdapterInternetConnectivity` identifies which NICs have internet; auto-detect mode selects NICs with internet for SET automatically; identifies iSCSI candidate adapters (NICs without internet); option to configure iSCSI immediately after SET creation
+- **iSCSI Smart Auto-Configuration:** Extract host number from hostname to calculate iSCSI IPs automatically; `Test-SANTargetConnectivity` pings SAN targets to verify connectivity; auto-configure mode detects host number, calculates IPs, configures A/B sides; `Get-SANTargetsForHost` returns correct SAN targets per host with cycling pairs
+- **iSCSI & SAN Management Menu:** New submenu for complete iSCSI/SAN management — disable NICs for physical identification, connect/disconnect iSCSI targets with multipath, initialize MPIO for iSCSI (Round Robin), display session/target/MPIO/disk status
+- **Utilities Expansion:** Configuration profile diff with color output, update checker, pre-check computer name in AD, IP conflict detection (ping + DNS + ARP), remote profile application via WinRM, credential manager for stored domain/remote credentials
+- Internal pre-release
+
+### v0.9.0
+
+- **Batch Mode Expanded:** Total batch steps increased from 10 to 14 — added MPIO install, Failover Clustering install, local admin creation, and disable built-in admin steps
+- **Configuration Profiles Expanded:** Save/load profiles now include MPIO, Failover Clustering, local admin, and disable admin settings; preview shows all flags before applying
+- **Export Expanded:** Server configuration export now includes MPIO status, Failover Clustering status, and cluster membership details
+- **Help & Documentation:** VHD/ISO management and deployment options added to built-in help system; two new tips for VHD deploy and VM queue
+- **Settings Menu:** Added "View Changelog" option; automatic transcript cleanup (removes logs older than 30 days)
+- **UI Fixes:** All menu boxes standardized to 72-char inner width; firewall color logic corrected
+- Internal pre-release
+
+### v0.8.0
+
+- **Sysprepped VHD Deployment:** Download sysprepped VHDs from file server; VHD caching with reuse prompts; copy cached dynamic VHD per VM and convert to fixed; offline VHD customization before first boot (mount, inject computer name, RDP, timezone, power plan, PS Remoting via registry); SetupComplete.cmd for first-boot firewall and remoting setup; VHD management menu with download status; sysprep VHD creation guide
+- **ISO Download:** Download Server ISOs from file server (2019/2022/2025); host ISOs stored on data drive, cluster ISOs on CSV
+- **Host Storage Setup:** Data drive validation (rejects optical/small drives); automatic DVD drive remount from D: to free letter; creates VM, ISO, and base image directories; sets Hyper-V default paths
+- **Full VM Deployment System:** Deploy VMs on standalone hosts or failover clusters; local, remote, or cluster connection modes; automatic site detection from hostname; standard VM templates for common server roles; OS type support (Windows/Linux) with Secure Boot template selection; multi-disk and multi-NIC templates with VLAN support; VM name collision detection with next-available suggestion; Generation 2 VMs with production checkpoints; cluster CSV path detection; VM-specific subdirectories
+- **Storage Manager Improvements:** Better disk health correlation, partition filtering, OS disk protection with extra confirmation warnings, allocation unit size option (4K-64K)
+- Internal pre-release
+
+### v0.7.0
+
+- **Storage Manager:** Full disk management with 14 options — view all disks (status, health, size, partition style, bus type), view all volumes (letters, labels, file systems, space usage), view disk partitions, initialize RAW disks (GPT/MBR), set disk online/offline, clear disk with safety confirmations, create/delete partitions, format volumes (NTFS/ReFS/exFAT, quick or full), extend/shrink volumes, change drive letters, change volume labels
+- **Helper Functions:** Human-readable byte formatting, disk health retrieval, disk and partition selection helpers
+- **Safety Features:** Multiple confirmation prompts for destructive operations, type-to-confirm for dangerous actions, system/boot partition warnings, color-coded health indicators
+- Internal pre-release
+
+### v0.6.0
+
+- **Menu Restructure:** New "Configure Server" and "Deploy VMs" layout; System Health Check moved to option 1
+- **PowerShell Remoting:** Secure WinRM configuration with Kerberos authentication
+- **Agent Installer:** Download and install MSP agent from file server
+- **Configuration Profiles:** Save server settings as JSON for cloning; load and apply saved profiles to new servers
+- **Undo System:** Undo functionality for network, system, and security changes; consolidated undo action tracking
+- **Transcript Logging:** Automatic session logging to timestamped files
+- **Security:** Password handling uses `ZeroFreeBSTR` for secure memory cleanup; `Clear-SecureMemory` function; try/finally blocks ensure passwords always cleaned
+- **Code Quality:** 13 functions renamed to follow PowerShell verb-noun conventions (`Is-*` → `Test-*`, `Check-*` → `Test-*`/`Get-*`, `Configure-*` → `Set-*`/`New-*`, `Display-*` → `Show-*`, `Ensure-*` → `Assert-*`, `Log-*` → `Write-*`)
+- **New Features:** Disable IPv6, network adapter rename, smart status caching, `Write-PressEnter` helper
+- Internal pre-release
+
+### v0.5.1
+
+- **Restored Server Licensing:** Full `Register-ServerLicense` with KMS client setup keys (Server 2008–2025), AVMA keys (Server 2012 R2–2025 including Essentials and Azure editions), guided Host vs VM licensing path, Datacenter host detection for AVMA eligibility, retry logic with attempt counter
+- **Session Tracking:** Added session change tracking for RDP, local admin, firewall, hostname, domain join, and disable admin operations
+- **Navigation:** Navigation command support added to adapter selection and licensing menus
+- Internal pre-release
+
+### v0.5.0
+
+- **NIC Link Speed Display:** Adapter tables now show link speed (10Mbps to 10Gbps+) with refresh option
+- **Test Network Connectivity:** Ping gateway, DNS, and internet from any menu
+- **Power Plan Configuration:** Set power plan (High Performance recommended for servers)
+- **Batch Config Templates:** Generate JSON template with all configuration options
+- **Color Themes:** 5 built-in themes (Default, Dark, Light, Matrix, Ocean)
+- **Help System:** Type `help` at main menu for built-in documentation
+- **Undo Framework:** Track and revert configuration changes
+- **Settings Menu:** Theme selection, help, undo history
+- **DNS Presets:** Expanded with Google, Cloudflare, OpenDNS, Quad9
+- Internal pre-release
+
+### v0.4.0
+
+- **Disable IPv6:** New option in Host Network menu
+- **Install Hyper-V:** Added as main menu option
+- **Backup NIC:** Creation option for SET configurations
+- **Navigation Commands:** Universal `back`, `cancel`, `exit` handling throughout all menus
+- **DNS Presets:** Quick-select from preconfigured DNS server lists
+- **Progress Indicators:** Visual feedback for long-running operations
+- **Session Summary:** Exit screen shows runtime and changes made
+- **Configuration Export:** Save current server configuration to file
+- **Batch Mode:** Apply configurations from JSON config files
+- **Bug Fixes:** Timezone function name conflict, Hyper-V client vs server detection, reboot detection, main menu navigation, Windows version detection, VLAN error handling
+- Internal pre-release
+
+### v0.3.0
+
+- **UI Consistency:** Clear-Host added before all adapter selection tables; all adapter selections show both UP and DOWN adapters; consistent screen clearing throughout; color-coded adapter status
+- Internal pre-release
+
+### v0.2.0
+
+- **Bug Fixes:** iSCSI confirmation logic, parameter typos (`col1umnWidths`, `R ead-Host`), wrong parameter names, invalid `Break 2` syntax, `$null` comparison order, VLAN menu function calls, script path scope, domain join credential handling, duplicate timezone prompts
+- **Input Validation:** Hostname, IP address, and VLAN ID validation
+- **Windows Update Timeout:** 5-minute timeout protection for update operations
+- **VLAN Configuration:** VLAN support for Hyper-V virtual adapters
+- **Network Checks:** Connectivity verification
+- **Navigation:** `back` command support in menus
+- **Improvements:** Global variable initialization, better error messages with hints, 14-character minimum passwords
+- Internal pre-release
+
+### v0.1.0
+
+- **iSCSI NIC Configuration:** Dedicated iSCSI network adapter setup with isolation
+- **Network Menu Split:** Separate Host Network and VM Network menus for clearer organization
+- **Menu Improvements:** Better menu organization and navigation
+- Initial internal version
