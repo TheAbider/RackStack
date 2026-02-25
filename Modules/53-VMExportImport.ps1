@@ -67,6 +67,8 @@ function Export-VMWizard {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Export destination (Enter for default: $defaultPath):" -color "Info"
     $exportPath = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $exportPath
+    if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $defaultPath }
 
     # Ensure export directory exists

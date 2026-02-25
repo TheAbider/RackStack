@@ -465,11 +465,11 @@ function New-S2DVirtualDisk {
     # Get size
     Write-OutputColor "  Enter size in GB (available: $freeGB GB):" -color "Warning"
     $sizeInput = Read-Host "  "
-    if (-not ($sizeInput -match '^\d+$') -or [int]$sizeInput -lt 1) {
+    $sizeGB = 0
+    if (-not ($sizeInput -match '^\d+$') -or -not [int]::TryParse($sizeInput, [ref]$sizeGB) -or $sizeGB -lt 1) {
         Write-OutputColor "  Invalid size." -color "Error"
         return
     }
-    $sizeGB = [int]$sizeInput
 
     # Resiliency setting
     Write-OutputColor "" -color "Info"

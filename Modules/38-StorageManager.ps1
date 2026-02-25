@@ -614,7 +614,7 @@ function Clear-DiskData {
 
     # Require explicit confirmation
     Write-OutputColor "Type 'YES' (all caps) to confirm deletion:" -color "Warning"
-    $confirmation = Read-Host
+    $confirmation = (Read-Host).Trim()
 
     if ($confirmation -ne "YES") {
         Write-OutputColor "Operation cancelled." -color "Info"
@@ -815,7 +815,7 @@ function Remove-DiskPartition {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "Type 'DELETE' (all caps) to confirm:" -color "Warning"
-    $confirmation = Read-Host
+    $confirmation = (Read-Host).Trim()
 
     if ($confirmation -ne "DELETE") {
         Write-OutputColor "Operation cancelled." -color "Info"
@@ -945,7 +945,7 @@ function Format-DiskVolume {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "Type 'FORMAT' (all caps) to confirm:" -color "Warning"
-    $confirmation = Read-Host
+    $confirmation = (Read-Host).Trim()
 
     if ($confirmation -ne "FORMAT") {
         Write-OutputColor "Operation cancelled." -color "Info"
@@ -1682,7 +1682,7 @@ function Set-VolumeLabel {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "Enter new label (or press Enter to clear label):" -color "Info"
-    $newLabel = Read-Host "New label"
+    $newLabel = (Read-Host "New label").Trim()
 
     $navResult = Test-NavigationCommand -UserInput $newLabel
     if ($navResult.ShouldReturn) { return }

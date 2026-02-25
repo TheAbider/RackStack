@@ -30,10 +30,20 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.30
+    1.9.31
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.31
+    BUG FIXES:
+    - FIXED: Confirm-UserAction rejected valid "yes" responses with leading/trailing whitespace — Read-Host not trimmed, causing " y" to fail the regex match (03-InputValidation, ~175 call sites affected)
+    - FIXED: Typing "back" at Defender custom exclusion prompts added "back" as an actual Windows Defender exclusion path/process instead of navigating back (17-DefenderExclusions)
+    - FIXED: Typing "back" at VM Export path prompt created a directory named "back" instead of navigating back (53-VMExportImport)
+    - FIXED: Navigation commands ignored at remote session credential prompt, BitLocker key save path, batch config save paths, and Hyper-V Replica cleanup choice (56-OperationsMenu, 31-BitLocker, 36-BatchConfig, 62-HyperVReplica)
+    - FIXED: Integer overflow crash when entering numbers larger than 2,147,483,647 at IP sweep range, pagefile size, virtual disk size, VM disk size, and metric interval/duration prompts — [int] cast throws OverflowException after regex validation passes (58-NetworkDiagnostics, 55-QoLFeatures, 59-StorageBackends, 44-VMDeployment, 56-OperationsMenu)
+    - FIXED: Volume label with leading/trailing whitespace passed to Set-Volume — could create labels with invisible characters (38-StorageManager)
+    - FIXED: Destructive confirmation prompts (YES/DELETE/FORMAT) rejected valid input with accidental whitespace — Read-Host not trimmed (38-StorageManager)
 
 .CHANGELOG v1.9.30
     BUG FIXES:

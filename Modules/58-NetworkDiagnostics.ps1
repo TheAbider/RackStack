@@ -192,8 +192,20 @@ function Invoke-SubnetSweep {
 
     $startInput = Read-Host "  Start IP (last octet) [1]"
     $endInput = Read-Host "  End IP (last octet) [254]"
-    $start = if ([string]::IsNullOrWhiteSpace($startInput)) { 1 } else { [int]$startInput }
-    $end = if ([string]::IsNullOrWhiteSpace($endInput)) { 254 } else { [int]$endInput }
+    $startVal = 0
+    $endVal = 0
+    if ([string]::IsNullOrWhiteSpace($startInput)) { $startVal = 1 }
+    elseif (-not [int]::TryParse($startInput, [ref]$startVal) -or $startVal -lt 1 -or $startVal -gt 254) {
+        Write-OutputColor "  Invalid start octet (must be 1-254)." -color "Error"
+        return
+    }
+    if ([string]::IsNullOrWhiteSpace($endInput)) { $endVal = 254 }
+    elseif (-not [int]::TryParse($endInput, [ref]$endVal) -or $endVal -lt 1 -or $endVal -gt 254) {
+        Write-OutputColor "  Invalid end octet (must be 1-254)." -color "Error"
+        return
+    }
+    $start = $startVal
+    $end = $endVal
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Sweeping $subnet.$start - $subnet.$end ..." -color "Info"

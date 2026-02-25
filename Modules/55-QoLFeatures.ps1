@@ -518,7 +518,12 @@ function Set-PagefileConfiguration {
                     Write-PressEnter
                     continue
                 }
-                $initialMB = [int]$initialInput
+                $initialMB = 0
+                if (-not [int]::TryParse($initialInput, [ref]$initialMB)) {
+                    Write-OutputColor "  Value too large or invalid." -color "Error"
+                    Write-PressEnter
+                    continue
+                }
                 if ($initialMB -lt 1024) {
                     Write-OutputColor "  Minimum initial size is 1024 MB." -color "Error"
                     Write-PressEnter
@@ -532,7 +537,12 @@ function Set-PagefileConfiguration {
                     Write-PressEnter
                     continue
                 }
-                $maxMB = [int]$maxInput
+                $maxMB = 0
+                if (-not [int]::TryParse($maxInput, [ref]$maxMB)) {
+                    Write-OutputColor "  Value too large or invalid." -color "Error"
+                    Write-PressEnter
+                    continue
+                }
                 if ($maxMB -lt $initialMB) {
                     Write-OutputColor "  Maximum size must be >= initial size ($initialMB MB)." -color "Error"
                     Write-PressEnter

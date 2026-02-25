@@ -197,6 +197,9 @@ function New-BatchConfigTemplate {
     Write-OutputColor "Enter path (press Enter for default):" -color "Info"
     $customPath = Read-Host
 
+    $navResult = Test-NavigationCommand -UserInput $customPath
+    if ($navResult.ShouldReturn) { return }
+
     if ([string]::IsNullOrWhiteSpace($customPath)) {
         $savePath = $defaultPath
     }
@@ -520,6 +523,9 @@ function Export-BatchConfigFromState {
 
         Write-OutputColor "Enter path (press Enter for default):" -color "Info"
         $customPath = Read-Host
+
+        $navResult = Test-NavigationCommand -UserInput $customPath
+        if ($navResult.ShouldReturn) { return }
 
         if ([string]::IsNullOrWhiteSpace($customPath)) {
             $savePath = $defaultPath

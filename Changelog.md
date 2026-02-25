@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.9.31
+
+- **Bug Fix:** `Confirm-UserAction` rejected valid "yes"/"y" responses when the user typed with leading or trailing whitespace — `Read-Host` was not trimmed before the regex match, so `" y"` or `"y "` failed the `'^(y|yes)$'` pattern. Affects all ~175 confirmation prompts across the tool (03-InputValidation).
+- **Bug Fix:** Typing "back" at the custom Defender exclusion prompts (path and process) added "back" as an actual Windows Defender exclusion instead of navigating back to the menu — missing `Test-NavigationCommand` check before `Add-MpPreference` (17-DefenderExclusions).
+- **Bug Fix:** Typing "back" at the VM Export path prompt created a directory named "back" instead of returning to the menu — missing navigation check before `New-Item` (53-VMExportImport).
+- **Bug Fix:** Navigation commands ("back", "exit", "quit", "menu") ignored at several prompts: remote session credential choice, BitLocker key save path, batch config template save paths (2 locations), and Hyper-V Replica test failover cleanup choice (56-OperationsMenu, 31-BitLocker, 36-BatchConfig, 62-HyperVReplica).
+- **Bug Fix:** Integer overflow crash (OverflowException) when entering numbers larger than 2,147,483,647 at IP sweep range octets, pagefile initial/maximum size, S2D virtual disk size, VM additional disk size, and metric collection interval/duration prompts — `^\d+$` regex validation passes but subsequent `[int]` cast throws. Now uses `[int]::TryParse()` with proper error messages (58-NetworkDiagnostics, 55-QoLFeatures, 59-StorageBackends, 44-VMDeployment, 56-OperationsMenu).
+- **Bug Fix:** Volume label prompt accepted input with leading/trailing whitespace, passing invisible characters to `Set-Volume` (38-StorageManager).
+- **Bug Fix:** Destructive confirmation prompts ("YES", "DELETE", "FORMAT") rejected valid input typed with accidental whitespace — `Read-Host` was not trimmed before exact string comparison (38-StorageManager).
+- 63 modules, 1854 tests
+
 ## v1.9.30
 
 - **Bug Fix:** File integrity check crashed with "cannot call a method on a null-valued expression" when local hash computation failed — `.Substring(0,16)` called on a null hash value with no null guard (39-FileServer).

@@ -667,6 +667,8 @@ function Start-TestFailover {
         Write-OutputColor "  [L] Leave running for manual testing" -color "Info"
         Write-OutputColor "" -color "Info"
         $cleanChoice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $cleanChoice
+        if ($navResult.ShouldReturn) { return }
 
         if ($cleanChoice -eq "C" -or $cleanChoice -eq "c") {
             Write-OutputColor "" -color "Info"

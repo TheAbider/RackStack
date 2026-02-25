@@ -117,7 +117,8 @@ function Show-OperationsMenu {
                 Write-OutputColor "  Interval (minutes, default 5):" -color "Info"
                 $interval = Read-Host "  "
                 if ([string]::IsNullOrWhiteSpace($interval)) { $interval = "5" }
-                if ($interval -notmatch '^\d+$' -or [int]$interval -eq 0) {
+                $intervalInt = 0
+                if ($interval -notmatch '^\d+$' -or -not [int]::TryParse($interval, [ref]$intervalInt) -or $intervalInt -eq 0) {
                     Write-OutputColor "  Invalid interval (must be 1 or greater)." -color "Error"
                     Write-PressEnter
                     continue
@@ -125,12 +126,13 @@ function Show-OperationsMenu {
                 Write-OutputColor "  Duration (minutes, default 60):" -color "Info"
                 $duration = Read-Host "  "
                 if ([string]::IsNullOrWhiteSpace($duration)) { $duration = "60" }
-                if ($duration -notmatch '^\d+$') {
+                $durationInt = 0
+                if ($duration -notmatch '^\d+$' -or -not [int]::TryParse($duration, [ref]$durationInt)) {
                     Write-OutputColor "  Invalid duration." -color "Error"
                     Write-PressEnter
                     continue
                 }
-                Start-MetricCollection -IntervalMinutes ([int]$interval) -DurationMinutes ([int]$duration)
+                Start-MetricCollection -IntervalMinutes $intervalInt -DurationMinutes $durationInt
                 Write-PressEnter
             }
             "b" { return }
@@ -174,6 +176,8 @@ function Invoke-RemotePSSession {
 
     try {
         $useCredential = Read-Host "  Use alternate credentials? [Y/N]"
+        $navResult = Test-NavigationCommand -UserInput $useCredential
+        if ($navResult.ShouldReturn) { return }
         if ($useCredential -eq 'Y' -or $useCredential -eq 'y') {
             $cred = Get-Credential -Message "Credentials for $target"
             Enter-PSSession -ComputerName $target -Credential $cred

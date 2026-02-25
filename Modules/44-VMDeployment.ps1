@@ -1274,7 +1274,8 @@ function Set-VMConfigDisks {
 
                 Write-OutputColor "Disk size in GB:" -color "Info"
                 $diskSize = Read-Host
-                if ($diskSize -notmatch '^\d+$' -or [int]$diskSize -lt 1) {
+                $diskSizeInt = 0
+                if ($diskSize -notmatch '^\d+$' -or -not [int]::TryParse($diskSize, [ref]$diskSizeInt) -or $diskSizeInt -lt 1) {
                     Write-OutputColor "Invalid size." -color "Error"
                     Start-Sleep -Seconds 2
                     continue
@@ -1285,7 +1286,7 @@ function Set-VMConfigDisks {
                 $diskType = if ($diskTypeChoice -eq "2") { "Dynamic" } else { "Fixed" }
 
                 $Config.Disks += @{
-                    SizeGB = [int]$diskSize
+                    SizeGB = $diskSizeInt
                     Type = $diskType
                     Name = $diskName
                 }

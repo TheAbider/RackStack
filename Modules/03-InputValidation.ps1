@@ -78,6 +78,7 @@ function Confirm-UserAction {
     $prompt = if ($DefaultYes) { "$Message [Y/n]" } else { "$Message [y/N]" }
     Write-OutputColor $prompt -color "Info"
     $response = Read-Host
+    if ($response) { $response = $response.Trim() }
 
     if ([string]::IsNullOrWhiteSpace($response)) {
         return $DefaultYes.IsPresent

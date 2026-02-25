@@ -196,6 +196,8 @@ function Show-BitLockerManagement {
                         } else {
                             # Client: save to file
                             $savePath = Read-Host "  Enter save path (e.g., C:\Temp\BitLockerKey.txt)"
+                            $navResult = Test-NavigationCommand -UserInput $savePath
+                            if ($navResult.ShouldReturn) { continue }
                             if ([string]::IsNullOrWhiteSpace($savePath)) {
                                 $savePath = "$env:USERPROFILE\Desktop\BitLockerKey_$($vol.MountPoint -replace '[:\\]','')_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
                                 Write-OutputColor "  Using default path: $savePath" -color "Info"
