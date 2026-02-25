@@ -30,10 +30,16 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.23
+    1.9.24
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.24
+    BUG FIXES:
+    - FIXED: Batch mode internet adapter detection failed with single adapter — .Count undefined on single Where-Object result, skipped management NIC rename (50-EntryPoint)
+    - FIXED: Batch mode iSCSI candidate adapter detection failed with single adapter — same .Count issue, skipped iSCSI configuration entirely (50-EntryPoint)
+    - FIXED: Batch mode iSCSI adapter assignment failed with single adapter result — both primary and fallback pipelines returned scalar instead of array (50-EntryPoint)
 
 .CHANGELOG v1.9.23
     BUG FIXES:

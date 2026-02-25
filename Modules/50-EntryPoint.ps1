@@ -995,7 +995,7 @@ function Start-BatchMode {
             switch ($vSwitchType) {
                 "SET" {
                     $mgmtName = if ($Config.SETManagementName) { $Config.SETManagementName } else { $ManagementName }
-                    $internetAdapters = Test-AdapterInternetConnectivity | Where-Object { $_.HasInternet }
+                    $internetAdapters = @(Test-AdapterInternetConnectivity | Where-Object { $_.HasInternet })
                     if ($internetAdapters.Count -ge 1) {
                         $adapterNames = @($internetAdapters | ForEach-Object { $_.Name })
                         New-VMSwitch -Name $vSwitchName -NetAdapterName $adapterNames -EnableEmbeddedTeaming $true -AllowManagementOS $true -ErrorAction Stop
@@ -1006,7 +1006,7 @@ function Start-BatchMode {
                             Start-Sleep -Seconds 1
                         }
                         Rename-VMNetworkAdapter -ManagementOS -Name $vSwitchName -NewName $mgmtName -ErrorAction SilentlyContinue
-                        $script:iSCSICandidateAdapters = Test-AdapterInternetConnectivity | Where-Object { -not $_.HasInternet }
+                        $script:iSCSICandidateAdapters = @(Test-AdapterInternetConnectivity | Where-Object { -not $_.HasInternet })
                         Write-OutputColor "           SET '$vSwitchName' created with $($adapterNames.Count) adapter(s)." -color "Success"
                         $changesApplied++
                         Add-SessionChange -Category "Network" -Description "Created SET '$vSwitchName'"
@@ -1138,13 +1138,13 @@ function Start-BatchMode {
                     $ip2 = Get-iSCSIAutoIP -HostNumber $hostNum -PortNumber 2
                     $iscsiAdapters = @()
                     if ($script:iSCSICandidateAdapters) {
-                        $iscsiAdapters = $script:iSCSICandidateAdapters | ForEach-Object { $_.Adapter }
+                        $iscsiAdapters = @($script:iSCSICandidateAdapters | ForEach-Object { $_.Adapter })
                     } else {
-                        $iscsiAdapters = Get-NetAdapter | Where-Object {
+                        $iscsiAdapters = @(Get-NetAdapter | Where-Object {
                             $_.Name -notlike "vEthernet*" -and
                             $_.InterfaceDescription -notlike "*Hyper-V*" -and
                             $_.InterfaceDescription -notlike "*Virtual*"
-                        }
+                        })
                     }
                     if ($iscsiAdapters.Count -ge 2) {
                         $sideCheck = Test-iSCSICabling -Adapters $iscsiAdapters
