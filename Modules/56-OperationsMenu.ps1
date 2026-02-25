@@ -211,8 +211,8 @@ function Invoke-RemoteHealthCheck {
             $totalMem = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
             $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
             $usedMem = $totalMem - $freeMem
-            $memPct = [math]::Round(($usedMem / $totalMem) * 100, 1)
-            $uptime = (Get-Date) - $os.LastBootUpTime
+            $memPct = if ($totalMem -gt 0) { [math]::Round(($usedMem / $totalMem) * 100, 1) } else { 0 }
+            $uptime = if ($os -and $os.LastBootUpTime) { (Get-Date) - $os.LastBootUpTime } else { [timespan]::Zero }
             $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
                 @{
                     Drive = $_.DeviceID

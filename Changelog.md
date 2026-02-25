@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.17
+
+- **Bug Fix:** Division by zero / NaN cascade in performance dashboard when CIM returns null — memory percentage and progress bar produced errors. Added `-ErrorAction SilentlyContinue` and zero guards (28-PerformanceDashboard).
+- **Bug Fix:** Health check memory and disk percentage calculations unguarded — division by zero when `$os` or `$disk.Size` is null/zero. Added guards across both display and summary sections (37-HealthCheck).
+- **Bug Fix:** HTML system report crashed on null uptime when OS CIM query returned nothing. Added null guards on uptime, memory percent, and disk percent across report generation and performance snapshots (54-HTMLReports).
+- **Bug Fix:** Remote server health check memory percentage and uptime calculation crashed when target's CIM returned null (56-OperationsMenu).
+- 63 modules, 1854 tests
+
 ## v1.9.16
 
 - **Bug Fix:** SAN target pairing loop used `$i -lt $mappings.Count - 1` which skips the last entry when custom mappings have odd count. Changed to `$i + 1 -lt $mappings.Count`.

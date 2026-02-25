@@ -30,10 +30,19 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.16
+    1.9.17
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.17
+    BUG FIXES:
+    - FIXED: Division by zero / NaN in performance dashboard when CIM returns null (28-PerformanceDashboard)
+    - FIXED: Division by zero in health check memory percentage when CIM fails (37-HealthCheck)
+    - FIXED: HTML reports uptime crash and memory division by zero on CIM failure (54-HTMLReports)
+    - FIXED: Remote health check memory percentage and uptime crash on CIM failure (56-OperationsMenu)
+    - FIXED: Missing -ErrorAction SilentlyContinue on CIM calls in dashboard and health check
+    - FIXED: Disk usage calculations unguarded in health check and HTML reports
 
 .CHANGELOG v1.9.16
     BUG FIXES:

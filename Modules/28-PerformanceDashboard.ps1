@@ -9,8 +9,8 @@ function Show-PerformanceDashboard {
     Write-OutputColor "" -color "Info"
 
     # CPU
-    $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average
-    $cpuAvg = [math]::Round($cpu.Average, 1)
+    $cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
+    $cpuAvg = if ($null -ne $cpu.Average) { [math]::Round($cpu.Average, 1) } else { 0 }
     $cpuColor = if ($cpuAvg -lt 70) { "Success" } elseif ($cpuAvg -lt 90) { "Warning" } else { "Error" }
     $cpuBar = Get-ProgressBar -Percent $cpuAvg -Width 40
 
@@ -22,11 +22,11 @@ function Show-PerformanceDashboard {
     Write-OutputColor "" -color "Info"
 
     # Memory
-    $os = Get-CimInstance Win32_OperatingSystem
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
     $totalMem = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
     $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
     $usedMem = $totalMem - $freeMem
-    $memPercent = [math]::Round(($usedMem / $totalMem) * 100, 1)
+    $memPercent = if ($totalMem -gt 0) { [math]::Round(($usedMem / $totalMem) * 100, 1) } else { 0 }
     $memColor = if ($memPercent -lt 70) { "Success" } elseif ($memPercent -lt 90) { "Warning" } else { "Error" }
     $memBar = Get-ProgressBar -Percent $memPercent -Width 40
 
@@ -70,15 +70,15 @@ function Show-PerformanceDashboard {
     Write-OutputColor "" -color "Info"
 
     # Uptime (reuse $os from memory section above)
-    $bootTime = $os.LastBootUpTime
-    $uptime = (Get-Date) - $bootTime
-    $uptimeStr = "$($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m"
+    $bootTime = if ($os) { $os.LastBootUpTime } else { $null }
+    $uptime = if ($bootTime) { (Get-Date) - $bootTime } else { $null }
+    $uptimeStr = if ($uptime) { "$($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m" } else { "Unknown" }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  SYSTEM INFO".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Uptime: $uptimeStr".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Last Boot: $($bootTime.ToString('yyyy-MM-dd HH:mm:ss'))".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  Last Boot: $(if ($bootTime) { $bootTime.ToString('yyyy-MM-dd HH:mm:ss') } else { 'Unknown' })".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
     Write-PressEnter

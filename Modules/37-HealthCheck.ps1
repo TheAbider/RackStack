@@ -25,7 +25,7 @@ function Show-SystemHealthCheck {
 
     # CPU
     Write-OutputColor "=== CPU ===" -color "Success"
-    $cpuAll = Get-CimInstance -ClassName Win32_Processor
+    $cpuAll = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
     $cpu = $cpuAll | Select-Object -First 1
     Write-OutputColor "  Processor: $($cpu.Name)" -color "Info"
     Write-OutputColor "  Cores: $($cpu.NumberOfCores) | Logical: $($cpu.NumberOfLogicalProcessors)" -color "Info"
@@ -41,7 +41,7 @@ function Show-SystemHealthCheck {
     $totalMemGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
     $freeMemGB = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
     $usedMemGB = $totalMemGB - $freeMemGB
-    $memPercent = [math]::Round(($usedMemGB / $totalMemGB) * 100, 1)
+    $memPercent = if ($totalMemGB -gt 0) { [math]::Round(($usedMemGB / $totalMemGB) * 100, 1) } else { 0 }
     $memColor = if ($memPercent -gt 90) { "Error" } elseif ($memPercent -gt 75) { "Warning" } else { "Success" }
     Write-OutputColor "  Total: $totalMemGB GB" -color "Info"
     Write-OutputColor "  Used: $usedMemGB GB ($memPercent%)" -color $memColor
@@ -50,11 +50,11 @@ function Show-SystemHealthCheck {
 
     # Disk Space
     Write-OutputColor "=== DISK SPACE ===" -color "Success"
-    $disks = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3"
+    $disks = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
     foreach ($disk in $disks) {
         $totalGB = [math]::Round($disk.Size / 1GB, 2)
         $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-        $usedPercent = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1)
+        $usedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
         $diskColor = if ($usedPercent -gt 90) { "Error" } elseif ($usedPercent -gt 75) { "Warning" } else { "Success" }
         Write-OutputColor "  $($disk.DeviceID) - Total: $totalGB GB | Free: $freeGB GB | Used: $usedPercent%" -color $diskColor
     }
@@ -123,7 +123,7 @@ function Show-SystemHealthCheck {
     if ($cpuLoad -gt 80) { $issues += "High CPU usage" }
     if ($memPercent -gt 90) { $issues += "High memory usage" }
     foreach ($disk in $disks) {
-        $usedPercent = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1)
+        $usedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
         if ($usedPercent -gt 90) { $issues += "Low disk space on $($disk.DeviceID)" }
     }
     if (Test-RebootPending) { $issues += "Reboot pending" }

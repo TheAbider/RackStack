@@ -32,8 +32,8 @@ function Export-HTMLHealthReport {
     $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
     $cpuAll = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
     $cpu = $cpuAll | Select-Object -First 1
-    $uptime = (Get-Date) - $os.LastBootUpTime
-    $uptimeStr = "{0} days, {1} hours, {2} minutes" -f $uptime.Days, $uptime.Hours, $uptime.Minutes
+    $uptime = if ($os -and $os.LastBootUpTime) { (Get-Date) - $os.LastBootUpTime } else { $null }
+    $uptimeStr = if ($uptime) { "{0} days, {1} hours, {2} minutes" -f $uptime.Days, $uptime.Hours, $uptime.Minutes } else { "Unknown" }
 
     # CPU load
     $cpuLoad = ($cpuAll | Measure-Object -Property LoadPercentage -Average).Average
@@ -43,7 +43,7 @@ function Export-HTMLHealthReport {
     $totalMemGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
     $freeMemGB = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
     $usedMemGB = $totalMemGB - $freeMemGB
-    $memPercent = [math]::Round(($usedMemGB / $totalMemGB) * 100, 1)
+    $memPercent = if ($totalMemGB -gt 0) { [math]::Round(($usedMemGB / $totalMemGB) * 100, 1) } else { 0 }
     $memStatus = if ($memPercent -gt 90) { "bad" } elseif ($memPercent -gt 75) { "warn" } else { "good" }
 
     # Disks
@@ -52,7 +52,7 @@ function Export-HTMLHealthReport {
     foreach ($disk in $disks) {
         $totalGB = [math]::Round($disk.Size / 1GB, 1)
         $freeGB = [math]::Round($disk.FreeSpace / 1GB, 1)
-        $usedPercent = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1)
+        $usedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
         $diskStatus = if ($usedPercent -gt 90) { "bad" } elseif ($usedPercent -gt 75) { "warn" } else { "good" }
         $diskHtml += @"
         <tr>
@@ -172,7 +172,7 @@ function Export-HTMLHealthReport {
     if ($cpuLoad -gt 80) { $issues += "High CPU usage ($([math]::Round($cpuLoad, 1))%)" }
     if ($memPercent -gt 90) { $issues += "High memory usage ($memPercent%)" }
     foreach ($disk in $disks) {
-        $usedPercent = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1)
+        $usedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
         if ($usedPercent -gt 90) { $issues += "Low disk space on $($disk.DeviceID) ($usedPercent% used)" }
     }
     if (Test-RebootPending) { $issues += "Reboot pending" }
@@ -708,7 +708,7 @@ function Save-PerformanceSnapshot {
         foreach ($disk in $disks) {
             $totalGB = [math]::Round($disk.Size / 1GB, 2)
             $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-            $diskInfo += @{ Drive = $disk.DeviceID; TotalGB = $totalGB; FreeGB = $freeGB; UsedPercent = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) }
+            $diskInfo += @{ Drive = $disk.DeviceID; TotalGB = $totalGB; FreeGB = $freeGB; UsedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 } }
         }
 
         # Network bytes
@@ -726,7 +726,7 @@ function Save-PerformanceSnapshot {
             CPUPercent = [math]::Round($cpuLoad, 1)
             MemoryTotalMB = $totalMemMB
             MemoryFreeMB = $freeMemMB
-            MemoryUsedPercent = [math]::Round((($totalMemMB - $freeMemMB) / $totalMemMB) * 100, 1)
+            MemoryUsedPercent = if ($totalMemMB -gt 0) { [math]::Round((($totalMemMB - $freeMemMB) / $totalMemMB) * 100, 1) } else { 0 }
             Disks = $diskInfo
             Network = $netInfo
         }
