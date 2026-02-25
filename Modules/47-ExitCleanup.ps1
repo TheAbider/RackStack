@@ -37,8 +37,9 @@ function Exit-Script {
 
         # 1) Find all script-related files anywhere in the Administrator profile
         if (Test-Path $adminFolder) {
-            # Search for script-related files (monolithic, exe, configs)
-            $monoFiles = Get-ChildItem -Path $adminFolder -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object {
+            # Single file traversal for script-related files (monolithic, exe, configs)
+            $allProfileFiles = Get-ChildItem -Path $adminFolder -Recurse -Force -File -ErrorAction SilentlyContinue
+            $monoFiles = $allProfileFiles | Where-Object {
                 $_.Name -like "$($script:ToolName) v*.ps1" -or
                 $_.Name -like "$($script:ToolName)*Configuration Tool*.ps1" -or
                 $_.Name -eq "$($script:ToolName).exe" -or
@@ -51,23 +52,13 @@ function Exit-Script {
             }
             foreach ($f in $monoFiles) { $pathsToDelete.Add($f.FullName) }
 
-            # Search for module folders (folders containing numbered module files like 00-Initialization.ps1)
-            $moduleFolders = Get-ChildItem -Path $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue | Where-Object {
-                Test-Path (Join-Path $_.FullName "00-Initialization.ps1")
+            # Single directory traversal for module folders, tool folders, and test folders
+            $allProfileDirs = Get-ChildItem -Path $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue
+            foreach ($folder in $allProfileDirs) {
+                if (Test-Path (Join-Path $folder.FullName "00-Initialization.ps1")) { $pathsToDelete.Add($folder.FullName) }
+                elseif ($folder.Name -eq "RackStack") { $pathsToDelete.Add($folder.FullName) }
+                elseif ($folder.Name -eq "Tests" -and (Test-Path (Join-Path $folder.FullName "Run-Tests.ps1"))) { $pathsToDelete.Add($folder.FullName) }
             }
-            foreach ($folder in $moduleFolders) { $pathsToDelete.Add($folder.FullName) }
-
-            # Search for RackStack folders
-            $toolFolders = Get-ChildItem -Path $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue | Where-Object {
-                $_.Name -eq "RackStack"
-            }
-            foreach ($folder in $toolFolders) { $pathsToDelete.Add($folder.FullName) }
-
-            # Search for test folders with Run-Tests.ps1
-            $testFolders = Get-ChildItem -Path $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue | Where-Object {
-                $_.Name -eq "Tests" -and (Test-Path (Join-Path $_.FullName "Run-Tests.ps1"))
-            }
-            foreach ($folder in $testFolders) { $pathsToDelete.Add($folder.FullName) }
         }
 
         # 2) Also delete the currently-running script and its parent (if modular)
@@ -114,7 +105,8 @@ function Exit-Script {
                     $cleanupCommands += "Remove-Item -LiteralPath '$escapedPath' -Force -ErrorAction SilentlyContinue`n"
                 }
             }
-            $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($script:ToolName)Cleanup' -Confirm:`$false -ErrorAction SilentlyContinue"
+            $toolNameEsc = $script:ToolName -replace "'", "''"
+            $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)Cleanup' -Confirm:`$false -ErrorAction SilentlyContinue"
 
             $bytes = [System.Text.Encoding]::Unicode.GetBytes($cleanupCommands)
             $encoded = [Convert]::ToBase64String($bytes)

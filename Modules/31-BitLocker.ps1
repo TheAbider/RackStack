@@ -150,10 +150,15 @@ function Show-BitLockerManagement {
                                     Enable-BitLocker -MountPoint $vol.MountPoint -PasswordProtector -Password $securePassword -ErrorAction Stop
                                     Add-BitLockerKeyProtector -MountPoint $vol.MountPoint -RecoveryPasswordProtector -ErrorAction Stop
                                 }
+                                default {
+                                    Write-OutputColor "  Invalid selection. Choose 1, 2, or 3." -color "Error"
+                                }
                             }
-                            Write-OutputColor "  BitLocker enabled on $($vol.MountPoint). Encryption will begin." -color "Success"
-                            Write-OutputColor "  IMPORTANT: Save your recovery key!" -color "Warning"
-                            Add-SessionChange -Category "Security" -Description "Enabled BitLocker on $($vol.MountPoint)"
+                            if ($method -in "1","2","3") {
+                                Write-OutputColor "  BitLocker enabled on $($vol.MountPoint). Encryption will begin." -color "Success"
+                                Write-OutputColor "  IMPORTANT: Save your recovery key!" -color "Warning"
+                                Add-SessionChange -Category "Security" -Description "Enabled BitLocker on $($vol.MountPoint)"
+                            }
                         }
                         catch {
                             Write-OutputColor "  Failed: $_" -color "Error"

@@ -30,10 +30,18 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.32
+    1.9.33
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.33
+    BUG FIXES:
+    - FIXED: BitLocker encryption method prompt accepted invalid input then falsely reported success — typing anything other than 1/2/3 at the encryption method menu silently skipped encryption but displayed "BitLocker enabled" and logged a session change, making the user believe the volume was encrypted (31-BitLocker)
+    - FIXED: Undo stack registered a "Remove virtual switch" entry even when no switch was created — entering an unknown switch type hit the default case but the undo entry was unconditionally added outside the switch, creating a phantom undo action (50-EntryPoint)
+    - FIXED: Single quotes in user-provided names broke undo scriptblocks — names like O'Brien in local admin accounts, virtual switch names, or vNIC names caused [scriptblock]::Create() to produce malformed PowerShell when building the undo command string. Now escapes single quotes before interpolation (50-EntryPoint)
+    - FIXED: Single quotes in ToolName broke the self-destruct cleanup scheduled task — ToolName interpolated unescaped into the encoded cleanup command string, producing a syntax error in the post-reboot cleanup task (47-ExitCleanup)
+    - PERF: Consolidated 4 separate recursive Get-ChildItem traversals of the Administrator profile into 2 — self-destruct cleanup scanned the same directory tree 4 times (once for files, 3 times for directories). Now performs one file pass and one directory pass with combined filtering (47-ExitCleanup)
 
 .CHANGELOG v1.9.32
     BUG FIXES:

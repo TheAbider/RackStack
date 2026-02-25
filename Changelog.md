@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.9.33
+
+- **Bug Fix:** BitLocker encryption method prompt accepted invalid input then falsely reported "BitLocker enabled" — typing anything other than 1, 2, or 3 at the encryption method selection silently skipped the actual `Enable-BitLocker` call but executed the success message and logged a session change, making the user believe the volume was encrypted when it was not (31-BitLocker).
+- **Bug Fix:** Undo stack registered a "Remove virtual switch" entry even when no switch was actually created — entering an unknown switch type (neither External, Internal, nor Private) hit the `default` warning case, but the undo entry was added unconditionally outside the switch statement, creating a phantom undo action that references a non-existent switch (50-EntryPoint).
+- **Bug Fix:** Single quotes in user-provided names broke batch config undo scriptblocks — names containing apostrophes (e.g., `O'Brien` for local admin, or `vNIC 'Management'`) caused `[scriptblock]::Create()` to produce malformed PowerShell due to unescaped single quotes in the command string. Now escapes `'` to `''` before interpolation into scriptblock strings for local admin undo, virtual switch undo, and vNIC undo (50-EntryPoint).
+- **Bug Fix:** Single quotes in ToolName (from `defaults.json` override) broke the self-destruct scheduled task — the ToolName was interpolated unescaped into the PowerShell cleanup command string that gets Base64-encoded for the post-reboot scheduled task, causing a syntax error in `Unregister-ScheduledTask` (47-ExitCleanup).
+- **Perf:** Consolidated 4 separate recursive `Get-ChildItem` traversals of the Administrator profile into 2 passes — the self-destruct cleanup scanned the entire Administrator profile directory tree 4 times (1 file scan + 3 directory scans). Now performs one file pass and one directory pass with combined filtering logic (47-ExitCleanup).
+- 63 modules, 1854 tests
+
 ## v1.9.32
 
 - **Bug Fix:** 11 cmdlets inside `try/catch` blocks were missing `-ErrorAction Stop`, causing non-terminating errors to be silently swallowed instead of caught by the catch block:

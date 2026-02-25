@@ -713,8 +713,8 @@ function Start-BatchMode {
                 Write-OutputColor "           Local admin '$adminName' created and added to Administrators." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Created local admin account '$adminName'"
-                $undoAdminName = $adminName
-                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove local admin '$undoAdminName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-LocalUser -Name '$undoAdminName' -ErrorAction SilentlyContinue") })
+                $undoAdminNameEsc = $adminName -replace "'", "''"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove local admin '$adminName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-LocalUser -Name '$undoAdminNameEsc' -ErrorAction SilentlyContinue") })
             }
         }
         catch {
@@ -1056,8 +1056,10 @@ function Start-BatchMode {
                     Write-OutputColor "           Unknown switch type '$vSwitchType'." -color "Warning"
                 }
             }
-            $undoSwitchName = $vSwitchName
-            $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove virtual switch '$undoSwitchName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMSwitch -Name '$undoSwitchName' -Force -ErrorAction SilentlyContinue") })
+            if ($vSwitchType -in "External","Internal","Private") {
+                $undoSwitchNameEsc = $vSwitchName -replace "'", "''"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove virtual switch '$vSwitchName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMSwitch -Name '$undoSwitchNameEsc' -Force -ErrorAction SilentlyContinue") })
+            }
         }
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
@@ -1104,7 +1106,8 @@ function Start-BatchMode {
                     $changesApplied++
                     Add-SessionChange -Category "Network" -Description "Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'"
                     foreach ($createdName in $createdVnicNames) {
-                        $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove vNIC '$createdName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMNetworkAdapter -ManagementOS -Name '$createdName' -ErrorAction SilentlyContinue") })
+                        $createdNameEsc = $createdName -replace "'", "''"
+                        $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove vNIC '$createdName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMNetworkAdapter -ManagementOS -Name '$createdNameEsc' -ErrorAction SilentlyContinue") })
                     }
                 }
                 else {
