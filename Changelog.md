@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.12
+
+- **Bug Fix:** BitLocker volume selection used `.Count` on unguarded `Get-BitLockerVolume` result — single-volume systems couldn't select their volume. Wrapped in `@()`.
+- 63 modules, 1854 tests
+
 ## v1.9.11
 
 - **Bug Fix:** Cluster dashboard node drain/resume used `.Count` on unguarded `Where-Object` results — wrapped in `@()` for consistent array handling.

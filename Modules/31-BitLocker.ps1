@@ -75,7 +75,7 @@ function Show-BitLockerManagement {
 
         $volumes = $null
         try {
-            $volumes = Get-BitLockerVolume -ErrorAction Stop
+            $volumes = @(Get-BitLockerVolume -ErrorAction Stop)
         }
         catch {
             Write-OutputColor "  │$("  BitLocker requires a reboot before it can be used.".PadRight(72))│" -color "Warning"

@@ -30,10 +30,14 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.11
+    1.9.12
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.12
+    BUG FIXES:
+    - FIXED: BitLocker volume list .Count fails on single-volume systems (missing array wrapping)
 
 .CHANGELOG v1.9.11
     BUG FIXES:
