@@ -27,7 +27,7 @@ $script:DNSPresets = [ordered]@{
 $script:MinPasswordLength = 14           # Minimum password length
 $script:MaxRetryAttempts = 3             # Max retries for operations
 $script:UpdateTimeoutSeconds = 300       # 5 minute timeout for updates
-$script:CacheTTLMinutes = 10               # TTL for file listings and Kaseya agent cache
+$script:CacheTTLMinutes = 10               # TTL for file listings and agent installer cache
 $script:FeatureInstallTimeoutSeconds = 1800  # 30 minutes max for Windows Feature installs
 $script:LargeFileDownloadTimeoutSeconds = 3600  # 1 hour for ISO/VHD downloads
 $script:DefaultDownloadTimeoutSeconds = 1800    # 30 minutes for standard downloads
@@ -135,7 +135,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.9.1"
+$script:ScriptVersion = "1.9.2"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

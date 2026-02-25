@@ -531,14 +531,16 @@ function Export-HTMLReadinessReport {
     if ($winrm -eq "Running") { $ready++; $rows += Add-ReadinessRow -Cat "Remote Access" -Name "WinRM" -Value "Running" -Status "ok" }
     else { $rows += Add-ReadinessRow -Cat "Remote Access" -Name "WinRM" -Value $winrm -Status "warn" }
 
-    # Agent
-    $total++
-    $kaseya = Test-AgentInstalled
-    if ($kaseya.Installed) {
-        $ready++
-        $kVal = if ($kaseya.Status -eq "Running") { "Running" } else { "$($kaseya.Status)" }
-        $rows += Add-ReadinessRow -Cat "Software" -Name "$($script:AgentInstaller.ToolName) Agent" -Value $kVal -Status "ok"
-    } else { $rows += Add-ReadinessRow -Cat "Software" -Name "$($script:AgentInstaller.ToolName) Agent" -Value "Not Installed" -Status "fail" }
+    # Agent (only if configured)
+    if (Test-AgentInstallerConfigured) {
+        $total++
+        $agentCheck = Test-AgentInstalled
+        if ($agentCheck.Installed) {
+            $ready++
+            $kVal = if ($agentCheck.Status -eq "Running") { "Running" } else { "$($agentCheck.Status)" }
+            $rows += Add-ReadinessRow -Cat "Software" -Name "$($script:AgentInstaller.ToolName) Agent" -Value $kVal -Status "ok"
+        } else { $rows += Add-ReadinessRow -Cat "Software" -Name "$($script:AgentInstaller.ToolName) Agent" -Value "Not Installed" -Status "fail" }
+    }
 
     # Hyper-V
     $total++

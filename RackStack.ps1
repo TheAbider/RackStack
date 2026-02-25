@@ -13,7 +13,7 @@
     Environment-specific settings are configured via defaults.json.
 
 .VERSION
-    1.9.1
+    1.9.2
 
 .NOTES
     - Requires Windows Server 2012 R2 or later (or Windows 10/11 for testing)
@@ -94,7 +94,7 @@ $moduleFiles = @(
     "54-HTMLReports.ps1"
     "55-QoLFeatures.ps1"
     "56-OperationsMenu.ps1"
-    "57-KaseyaInstaller.ps1"
+    "57-AgentInstaller.ps1"
     "58-NetworkDiagnostics.ps1"
     "59-StorageBackends.ps1"
     "60-ServerRoleTemplates.ps1"

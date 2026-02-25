@@ -4,9 +4,9 @@ function Join-Domain {
     Clear-Host
     Write-CenteredOutput "Join Domain" -color "Info"
 
-    # Check if agent is installed (required before domain join)
+    # Check if agent is installed (required before domain join) — skip if agent not configured
     $agentStatus = Test-AgentInstalled
-    if (-not $agentStatus.Installed) {
+    if (Test-AgentInstallerConfigured -and -not $agentStatus.Installed) {
         $agentToolName = $script:AgentInstaller.ToolName
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -18,7 +18,7 @@ function Join-Domain {
         Write-OutputColor "" -color "Info"
 
         if (Confirm-UserAction -Message "Install $agentToolName Agent now?") {
-            Install-KaseyaAgent -ReturnAfterInstall
+            Install-Agent -ReturnAfterInstall
 
             # Re-check after install
             $agentStatus = Test-AgentInstalled

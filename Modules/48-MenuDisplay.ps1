@@ -143,15 +143,21 @@ function Show-ConfigureServerMenu {
     $clusterStatus = Get-CachedValue -Key "ClusteringInstalled" -FetchScript {
         if (Test-FailoverClusteringInstalled) { "Installed" } else { "Not Installed" }
     }
-    $kaseyaStatus = Get-CachedValue -Key "AgentInstalled" -FetchScript {
-        $kStatus = Test-AgentInstalled
-        if ($kStatus.Installed) { "Installed" } else { "Not Installed" }
+    $agentConfigured = Test-AgentInstallerConfigured
+    $agentStatus = if (-not $agentConfigured) { "Not Configured" } else {
+        Get-CachedValue -Key "AgentInstalled" -FetchScript {
+            $kStatus = Test-AgentInstalled
+            if ($kStatus.Installed) { "Installed" } else { "Not Installed" }
+        }
     }
 
-    # Compute summary counts for submenu status
-    $rolesOK = @($hypervStatus, $mpioStatus, $clusterStatus, $kaseyaStatus) | Where-Object { $_ -eq "Installed" }
-    $rolesSummary = "$($rolesOK.Count)/4 Installed"
-    $rolesColor = if ($rolesOK.Count -eq 4) { "Success" } elseif ($rolesOK.Count -ge 2) { "Info" } else { "Warning" }
+    # Compute summary counts for submenu status (exclude agent if not configured)
+    $roleItems = @($hypervStatus, $mpioStatus, $clusterStatus)
+    if ($agentConfigured) { $roleItems += $agentStatus }
+    $rolesOK = @($roleItems) | Where-Object { $_ -eq "Installed" }
+    $rolesTotal = if ($agentConfigured) { 4 } else { 3 }
+    $rolesSummary = "$($rolesOK.Count)/$rolesTotal Installed"
+    $rolesColor = if ($rolesOK.Count -eq $rolesTotal) { "Success" } elseif ($rolesOK.Count -ge 2) { "Info" } else { "Warning" }
 
     $rdpQuick = Get-CachedValue -Key "RDPState" -FetchScript { Get-RDPState }
     $winrmQuick = Get-CachedValue -Key "WinRMState" -FetchScript { Get-WinRMState }
@@ -294,15 +300,18 @@ function Show-RolesFeaturesMenu {
     $clusterStatus = Get-CachedValue -Key "ClusteringInstalled" -FetchScript {
         if (Test-FailoverClusteringInstalled) { "Installed" } else { "Not Installed" }
     }
-    $kaseyaStatus = Get-CachedValue -Key "AgentInstalled" -FetchScript {
-        $kStatus = Test-AgentInstalled
-        if ($kStatus.Installed) { "Installed" } else { "Not Installed" }
+    $agentConfigured = Test-AgentInstallerConfigured
+    $agentStatus = if (-not $agentConfigured) { "Not Configured" } else {
+        Get-CachedValue -Key "AgentInstalled" -FetchScript {
+            $kStatus = Test-AgentInstalled
+            if ($kStatus.Installed) { "Installed" } else { "Not Installed" }
+        }
     }
 
     $hypervColor = if ($hypervStatus -eq "Installed") { "Success" } else { "Warning" }
     $mpioColor = if ($mpioStatus -eq "Installed") { "Success" } else { "Warning" }
     $clusterColor = if ($clusterStatus -eq "Installed") { "Success" } else { "Warning" }
-    $kaseyaColor = if ($kaseyaStatus -eq "Installed") { "Success" } else { "Warning" }
+    $agentColor = if ($agentStatus -eq "Installed") { "Success" } elseif ($agentStatus -eq "Not Configured") { "Debug" } else { "Warning" }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -314,7 +323,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[1]  Install Hyper-V" -Status $hypervStatus -StatusColor $hypervColor
     Write-MenuItem "[2]  Install MPIO" -Status $mpioStatus -StatusColor $mpioColor
     Write-MenuItem "[3]  Install Failover Clustering" -Status $clusterStatus -StatusColor $clusterColor
-    Write-MenuItem "[4]  Install $($script:AgentInstaller.ToolName) Agent" -Status $kaseyaStatus -StatusColor $kaseyaColor
+    Write-MenuItem "[4]  Install $($script:AgentInstaller.ToolName) Agent" -Status $agentStatus -StatusColor $agentColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

@@ -6,7 +6,7 @@ If you discover a security vulnerability in RackStack, please report it responsi
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, email: **security@abider.org**
+Instead, please use [GitHub Security Advisories](https://github.com/TheAbider/RackStack/security/advisories) to report privately.
 
 Include:
 - Description of the vulnerability

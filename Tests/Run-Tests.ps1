@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.9.1
+    Automated Test Runner for RackStack v1.9.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -178,16 +178,12 @@ $script:FeatureInstallTimeoutSeconds = 1800
 $script:LargeFileDownloadTimeoutSeconds = 3600
 $script:DefaultDownloadTimeoutSeconds = 1800
 $script:AgentInstaller = @{
-    ToolName        = "Kaseya"
+    ToolName        = "MSP"
     FolderName      = "Agents"
-    FilePattern     = "Kaseya.*\.exe$"
-    ServiceName     = "Kaseya Agent*"
+    FilePattern     = ".*\.exe$"
+    ServiceName     = "*Agent*"
     InstallArgs     = "/s /norestart"
-    InstallPaths    = @(
-        "$env:ProgramFiles\Kaseya"
-        "${env:ProgramFiles(x86)}\Kaseya"
-        "C:\kworking"
-    )
+    InstallPaths    = @()
     SuccessExitCodes = @(0, 1641, 3010)
     TimeoutSeconds  = 300
 }
@@ -394,7 +390,7 @@ $requiredFunctions = @(
     "Save-ConfigurationProfile",
     "Import-ConfigurationProfile",
     "Show-SessionSummary",
-    # Kaseya (57)
+    # Agent Installer (57)
     "Test-AgentInstalled",
     "Get-AgentInstallerList",
     "ConvertFrom-AgentFilename",
@@ -402,7 +398,7 @@ $requiredFunctions = @(
     "Get-SiteNumberFromHostname",
     "Show-AgentInstallerList",
     "Install-SelectedAgent",
-    "Install-KaseyaAgent",
+    "Install-Agent",
     # Guard functions (26-27)
     "Test-MPIOInstalled",
     "Test-FailoverClusteringInstalled",
@@ -2687,10 +2683,10 @@ try {
     $monoRaw4 = Get-Content $monolithicPath -Raw
     $isoMod = Get-Content (Join-Path $modulesPath "42-ISODownload.ps1") -Raw
     $vhdMod = Get-Content (Join-Path $modulesPath "41-VHDManagement.ps1") -Raw
-    $kaseyaMod = Get-Content (Join-Path $modulesPath "57-KaseyaInstaller.ps1") -Raw
+    $agentMod = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
 
     # Integrity is now centralized in Get-FileServerFile (39-FileServer) via Test-FileIntegrity
-    # Consumer modules (ISO/VHD/Kaseya) no longer need their own post-download checks
+    # Consumer modules (ISO/VHD/Agent) no longer need their own post-download checks
     $acMod2 = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
     $acHasIntegrity = $acMod2 -match 'Test-FileIntegrity'
     $acHasTransferComplete = $acMod2 -match 'Write-TransferComplete'
@@ -2800,11 +2796,11 @@ try {
 }
 
 try {
-    $kaseyaContent = Get-Content (Join-Path $modulesPath "57-KaseyaInstaller.ps1") -Raw
-    $usesConstant = $kaseyaContent -match 'AgentInstaller\.TimeoutSeconds'
-    Write-TestResult "57-KaseyaInstaller uses AgentInstaller.TimeoutSeconds constant" $usesConstant
+    $aiContent1 = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
+    $usesConstant = $aiContent1 -match 'AgentInstaller\.TimeoutSeconds'
+    Write-TestResult "57-AgentInstaller uses AgentInstaller.TimeoutSeconds constant" $usesConstant
 } catch {
-    Write-TestResult "57-KaseyaInstaller uses constant" $false $_.Exception.Message
+    Write-TestResult "57-AgentInstaller uses constant" $false $_.Exception.Message
 }
 
 try {
@@ -2816,11 +2812,11 @@ try {
 }
 
 try {
-    $kaseyaContent2 = Get-Content (Join-Path $modulesPath "57-KaseyaInstaller.ps1") -Raw
-    $usesConstant = $kaseyaContent2 -match 'CacheTTLMinutes'
-    Write-TestResult "57-KaseyaInstaller uses CacheTTLMinutes constant" $usesConstant
+    $aiContent2 = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
+    $usesConstant = $aiContent2 -match 'CacheTTLMinutes'
+    Write-TestResult "57-AgentInstaller uses CacheTTLMinutes constant" $usesConstant
 } catch {
-    Write-TestResult "57-KaseyaInstaller uses CacheTTL" $false $_.Exception.Message
+    Write-TestResult "57-AgentInstaller uses CacheTTL" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -3270,7 +3266,7 @@ foreach ($tc in $navEdgeCases) {
 
 Write-SectionHeader "SECTION 48: CONVERTFROM-AGENTFILENAME EDGE CASES"
 
-$kaseyaEdgeCases = @(
+$agentEdgeCases = @(
     @{ File = "Kaseya_acme.1001-0452-0453-multi.exe"; Sites = @("1001","0452","0453"); Name = "multi"; Desc = "three sites with hyphens" }
     @{ File = "Kaseya_acme.0001-a.exe"; Sites = @("0001"); Name = "a"; Desc = "min site number" }
     @{ File = "Kaseya_acme.999999-big.exe"; Sites = @("999999"); Name = "big"; Desc = "max site number" }
@@ -3278,7 +3274,7 @@ $kaseyaEdgeCases = @(
     @{ File = "Kaseya_acme.5001_5002-northdc.exe"; Sites = @("5001","5002"); Name = "northdc"; Desc = "underscore between sites" }
 )
 
-foreach ($tc in $kaseyaEdgeCases) {
+foreach ($tc in $agentEdgeCases) {
     try {
         $result = ConvertFrom-AgentFilename -FileName $tc.File
         $sitesMatch = ($null -ne $result) -and (@(Compare-Object @($result.SiteNumbers) @($tc.Sites) -SyncWindow 0).Count -eq 0)
@@ -3445,61 +3441,61 @@ try {
 
 # SECTION 51: KASEYA INSTALLER VERIFICATION TESTS
 # ============================================================================
-Write-SectionHeader "SECTION 51: KASEYA INSTALLER TESTS"
+Write-SectionHeader "SECTION 51: AGENT INSTALLER TESTS"
 
 # Verify Install-SelectedAgent has post-install service verification
 try {
-    $kaseyaContent = Get-Content (Join-Path $modulesPath "57-KaseyaInstaller.ps1") -Raw
+    $aiModContent = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
 
     # Exit code handling
-    $hasExitCodes = $kaseyaContent -match 'switch \(\$exitCode\)' -and $kaseyaContent -match '3010' -and $kaseyaContent -match '1641'
-    Write-TestResult "57-Kaseya: exit code handling (0, 1641, 3010, 1602, 1603)" $hasExitCodes
+    $hasExitCodes = $aiModContent -match 'switch \(\$exitCode\)' -and $aiModContent -match '3010' -and $aiModContent -match '1641'
+    Write-TestResult "57-Agent: exit code handling (0, 1641, 3010, 1602, 1603)" $hasExitCodes
 
     # Service verification polling loop
-    $hasServicePoll = $kaseyaContent -match 'verifyTimeout' -and $kaseyaContent -match 'Test-AgentInstalled' -and $kaseyaContent -match 'verifyElapsed'
-    Write-TestResult "57-Kaseya: post-install service verification loop" $hasServicePoll
+    $hasServicePoll = $aiModContent -match 'verifyTimeout' -and $aiModContent -match 'Test-AgentInstalled' -and $aiModContent -match 'verifyElapsed'
+    Write-TestResult "57-Agent: post-install service verification loop" $hasServicePoll
 
     # Result display box
-    $hasResultBox = $kaseyaContent -match 'INSTALLATION RESULT' -and $kaseyaContent -match 'overallStatus' -and $kaseyaContent -match 'serviceStatus'
-    Write-TestResult "57-Kaseya: installation result display box" $hasResultBox
+    $hasResultBox = $aiModContent -match 'INSTALLATION RESULT' -and $aiModContent -match 'overallStatus' -and $aiModContent -match 'serviceStatus'
+    Write-TestResult "57-Agent: installation result display box" $hasResultBox
 
     # Menu cache clearing after install
-    $hasCacheClear = $kaseyaContent -match 'MenuCache\["AgentInstalled"\]'
-    Write-TestResult "57-Kaseya: clears MenuCache after install" $hasCacheClear
+    $hasCacheClear = $aiModContent -match 'MenuCache\["AgentInstalled"\]'
+    Write-TestResult "57-Agent: clears MenuCache after install" $hasCacheClear
 
     # Timeout logging (the fix we just added)
-    $hasTimeoutLog = $kaseyaContent -match 'Add-SessionChange.*timed out'
-    Write-TestResult "57-Kaseya: timeout logs to session changes" $hasTimeoutLog
+    $hasTimeoutLog = $aiModContent -match 'Add-SessionChange.*timed out'
+    Write-TestResult "57-Agent: timeout logs to session changes" $hasTimeoutLog
 
     # Reboot flag on 3010/1641
-    $hasRebootFlag = $kaseyaContent -match 'RebootNeeded = \$true'
-    Write-TestResult "57-Kaseya: sets RebootNeeded on reboot exit codes" $hasRebootFlag
+    $hasRebootFlag = $aiModContent -match 'RebootNeeded = \$true'
+    Write-TestResult "57-Agent: sets RebootNeeded on reboot exit codes" $hasRebootFlag
 
     # Hostname prerequisite checks
-    $hasHostnameCheck = $kaseyaContent -match 'WIN-' -and $kaseyaContent -match 'DESKTOP-' -and $kaseyaContent -match 'HOSTNAME NOT CONFIGURED'
-    Write-TestResult "57-Kaseya: hostname prerequisite validation" $hasHostnameCheck
+    $hasHostnameCheck = $aiModContent -match 'WIN-' -and $aiModContent -match 'DESKTOP-' -and $aiModContent -match 'HOSTNAME NOT CONFIGURED'
+    Write-TestResult "57-Agent: hostname prerequisite validation" $hasHostnameCheck
 
     # Pending hostname change detection
-    $hasPendingName = $kaseyaContent -match 'pendingName' -and $kaseyaContent -match 'activeName'
-    Write-TestResult "57-Kaseya: detects pending hostname change" $hasPendingName
+    $hasPendingName = $aiModContent -match 'pendingName' -and $aiModContent -match 'activeName'
+    Write-TestResult "57-Agent: detects pending hostname change" $hasPendingName
 
     # Already-installed detection (dynamic tool name)
-    $hasAlreadyInstalled = $kaseyaContent -match 'ALREADY INSTALLED'
-    Write-TestResult "57-Kaseya: checks if already installed" $hasAlreadyInstalled
+    $hasAlreadyInstalled = $aiModContent -match 'ALREADY INSTALLED'
+    Write-TestResult "57-Agent: checks if already installed" $hasAlreadyInstalled
 
     # Site number auto-detection from hostname
-    $hasSiteDetect = $kaseyaContent -match 'Get-SiteNumberFromHostname' -and $kaseyaContent -match 'AGENT MATCH FOUND'
-    Write-TestResult "57-Kaseya: auto-detects site from hostname" $hasSiteDetect
+    $hasSiteDetect = $aiModContent -match 'Get-SiteNumberFromHostname' -and $aiModContent -match 'AGENT MATCH FOUND'
+    Write-TestResult "57-Agent: auto-detects site from hostname" $hasSiteDetect
 
     # Installer cleanup in finally block
-    $hasCleanup = $kaseyaContent -match 'finally' -and $kaseyaContent -match 'Remove-Item \$tempPath'
-    Write-TestResult "57-Kaseya: cleans up temp installer in finally block" $hasCleanup
+    $hasCleanup = $aiModContent -match 'finally' -and $aiModContent -match 'Remove-Item \$tempPath'
+    Write-TestResult "57-Agent: cleans up temp installer in finally block" $hasCleanup
 
     # Install uses AgentInstaller.InstallArgs
-    $hasSilent = $kaseyaContent -match 'AgentInstaller\.InstallArgs'
-    Write-TestResult "57-Kaseya: uses AgentInstaller.InstallArgs for install flags" $hasSilent
+    $hasSilent = $aiModContent -match 'AgentInstaller\.InstallArgs'
+    Write-TestResult "57-Agent: uses AgentInstaller.InstallArgs for install flags" $hasSilent
 } catch {
-    Write-TestResult "57-Kaseya: installer verification" $false $_.Exception.Message
+    Write-TestResult "57-Agent: installer verification" $false $_.Exception.Message
 }
 
 # Verify ConvertFrom-AgentFilename returns consistent structure
@@ -3508,7 +3504,7 @@ try {
     $hasAllKeys = $valid.ContainsKey('SiteNumbers') -and $valid.ContainsKey('SiteName') -and $valid.ContainsKey('DisplayName') -and $valid.ContainsKey('Valid')
     Write-TestResult "ConvertFrom-AgentFilename: returns all 4 keys" $hasAllKeys
 
-    $invalid = ConvertFrom-AgentFilename -FileName "notakaseya.txt"
+    $invalid = ConvertFrom-AgentFilename -FileName "notanagent.txt"
     Write-TestResult "ConvertFrom-AgentFilename: invalid file returns Valid=false" (-not $invalid.Valid)
     Write-TestResult "ConvertFrom-AgentFilename: invalid file returns empty SiteNumbers" ($invalid.SiteNumbers.Count -eq 0)
 } catch {
@@ -3551,8 +3547,8 @@ try {
     $checksDomain = $hcContent -match 'PartOfDomain'
     Write-TestResult "37-HealthCheck: readiness checks domain join" $checksDomain
 
-    $checksKaseya = $hcContent -match 'Test-AgentInstalled' -and $hcContent -match 'Show-ServerReadiness' -and $hcContent -match 'Kaseya Agent'
-    Write-TestResult "37-HealthCheck: readiness checks Kaseya" $checksKaseya
+    $checksAgent = $hcContent -match 'Test-AgentInstallerConfigured' -and $hcContent -match 'Install-Agent' -and $hcContent -match 'Show-ServerReadiness'
+    Write-TestResult "37-HealthCheck: readiness checks agent (conditional)" $checksAgent
 
     $checksRDP = $hcContent -match 'Get-RDPState' -and $hcContent -match 'Show-ServerReadiness'
     Write-TestResult "37-HealthCheck: readiness checks RDP" $checksRDP
@@ -3645,7 +3641,7 @@ try {
 try {
     $rptContent = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
     $hasChecks = $rptContent -match 'Export-HTMLReadinessReport' -and $rptContent -match 'Test-AgentInstalled' -and $rptContent -match 'Get-RDPState'
-    Write-TestResult "54-HTMLReports: readiness report checks Kaseya + RDP" $hasChecks
+    Write-TestResult "54-HTMLReports: readiness report checks agent + RDP" $hasChecks
 
     $hasScore = $rptContent -match 'READINESS SCORE\|READY\|PARTIALLY READY\|NOT READY' -or ($rptContent -match 'READY' -and $rptContent -match 'PARTIALLY READY')
     Write-TestResult "54-HTMLReports: readiness report has score display" $hasScore
@@ -3798,12 +3794,12 @@ try {
     Write-TestResult "48-MenuDisplay: license status" $false $_.Exception.Message
 }
 
-# Verify Kaseya status cached in Configure Server
+# Verify agent status cached in Configure Server
 try {
-    $hasKaseyaCache = $menuContent -match 'AgentInstalled' -and $menuContent -match 'kaseyaStatus'
-    Write-TestResult "48-MenuDisplay: Configure Server caches Kaseya status" $hasKaseyaCache
+    $hasAgentCache = $menuContent -match 'AgentInstalled' -and $menuContent -match 'agentStatus'
+    Write-TestResult "48-MenuDisplay: Configure Server caches agent status" $hasAgentCache
 } catch {
-    Write-TestResult "48-MenuDisplay: kaseya cache" $false $_.Exception.Message
+    Write-TestResult "48-MenuDisplay: agent cache" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -5440,7 +5436,7 @@ try {
         Write-TestResult "AgentInstaller has '$key' key" ($script:AgentInstaller.ContainsKey($key))
     }
 
-    # Default values (Kaseya when no defaults.json override)
+    # Default values (MSP generic when no defaults.json override)
     Write-TestResult "AgentInstaller: ToolName is string" ($script:AgentInstaller.ToolName -is [string])
     Write-TestResult "AgentInstaller: InstallPaths is array" ($script:AgentInstaller.InstallPaths -is [array])
     Write-TestResult "AgentInstaller: SuccessExitCodes is array" ($script:AgentInstaller.SuccessExitCodes -is [array])
@@ -5448,19 +5444,31 @@ try {
     Write-TestResult "AgentInstaller: SuccessExitCodes contains 0" (0 -in $script:AgentInstaller.SuccessExitCodes)
 
     # Functions use config, not hardcoded values
-    $aiContent = Get-Content (Join-Path $modulesPath "57-KaseyaInstaller.ps1") -Raw
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.ServiceName" ($aiContent -match 'AgentInstaller\.ServiceName')
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.InstallArgs" ($aiContent -match 'AgentInstaller\.InstallArgs')
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.FilePattern" ($aiContent -match 'AgentInstaller\.FilePattern')
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.InstallPaths" ($aiContent -match 'AgentInstaller\.InstallPaths')
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.SuccessExitCodes" ($aiContent -match 'AgentInstaller\.SuccessExitCodes')
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.TimeoutSeconds" ($aiContent -match 'AgentInstaller\.TimeoutSeconds')
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.FolderName" ($aiContent -match 'AgentInstaller\.FolderName')
-    Write-TestResult "57-KaseyaInstaller: uses AgentInstaller.ToolName" ($aiContent -match 'AgentInstaller\.ToolName')
+    $aiContent = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.ServiceName" ($aiContent -match 'AgentInstaller\.ServiceName')
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.InstallArgs" ($aiContent -match 'AgentInstaller\.InstallArgs')
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.FilePattern" ($aiContent -match 'AgentInstaller\.FilePattern')
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.InstallPaths" ($aiContent -match 'AgentInstaller\.InstallPaths')
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.SuccessExitCodes" ($aiContent -match 'AgentInstaller\.SuccessExitCodes')
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.TimeoutSeconds" ($aiContent -match 'AgentInstaller\.TimeoutSeconds')
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.FolderName" ($aiContent -match 'AgentInstaller\.FolderName')
+    Write-TestResult "57-AgentInstaller: uses AgentInstaller.ToolName" ($aiContent -match 'AgentInstaller\.ToolName')
 
     # Import-Defaults handles AgentInstaller override
     $opsContent = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
     Write-TestResult "Import-Defaults: handles AgentInstaller override" ($opsContent -match 'merged\.AgentInstaller')
+
+    # Test-AgentInstallerConfigured function exists and guards
+    Write-TestResult "57-AgentInstaller: Test-AgentInstallerConfigured exists" ($aiContent -match 'function\s+Test-AgentInstallerConfigured')
+    Write-TestResult "57-AgentInstaller: Install-Agent checks configuration" ($aiContent -match 'Test-AgentInstallerConfigured')
+    Write-TestResult "57-AgentInstaller: not-configured message shown" ($aiContent -match 'AGENT INSTALLER NOT CONFIGURED')
+
+    # Menu display guards agent status on configuration
+    Write-TestResult "48-MenuDisplay: agent status conditional on config" ($menuContent -match 'Test-AgentInstallerConfigured')
+
+    # HealthCheck guards agent checks on configuration
+    $hcContent2 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
+    Write-TestResult "37-HealthCheck: agent check conditional" ($hcContent2 -match 'Test-AgentInstallerConfigured')
 
 } catch {
     Write-TestResult "Agent Installer Configuration Tests" $false $_.Exception.Message
@@ -7267,13 +7275,13 @@ try {
 }
 
 # ============================================================================
-# SECTION 138: MULTI-AGENT SUPPORT (57-KaseyaInstaller.ps1 v1.8.0)
+# SECTION 138: MULTI-AGENT SUPPORT (57-AgentInstaller.ps1 v1.8.0)
 # ============================================================================
 
 Write-SectionHeader "138" "MULTI-AGENT SUPPORT"
 
 try {
-    $agentContent = Get-Content "$modulesPath\57-KaseyaInstaller.ps1" -Raw
+    $agentContent = Get-Content "$modulesPath\57-AgentInstaller.ps1" -Raw
     $initContent2 = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
 
     Write-TestResult "57-Agent: function Get-AllAgentConfigs exists" ($agentContent -match 'function\s+Get-AllAgentConfigs\b')

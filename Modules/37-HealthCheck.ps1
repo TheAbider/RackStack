@@ -303,15 +303,17 @@ function Show-ServerReadiness {
     }
 
     # --- SOFTWARE ---
-    $total++
-    $kaseyaStatus = Test-AgentInstalled
-    if ($kaseyaStatus.Installed) {
-        $ready++
-        $kaseyaVal = if ($kaseyaStatus.Status -eq "Running") { "Installed & Running" } else { "Installed ($($kaseyaStatus.Status))" }
-        $kaseyaColor = if ($kaseyaStatus.Status -eq "Running") { "Success" } else { "Warning" }
-        $items += @{ Category = "SOFTWARE"; Name = "$($script:AgentInstaller.ToolName) Agent"; Value = $kaseyaVal; Color = $kaseyaColor; Symbol = "[OK]" }
-    } else {
-        $items += @{ Category = "SOFTWARE"; Name = "$($script:AgentInstaller.ToolName) Agent"; Value = "Not Installed"; Color = "Error"; Symbol = "[!!]" }
+    if (Test-AgentInstallerConfigured) {
+        $total++
+        $agentStatus = Test-AgentInstalled
+        if ($agentStatus.Installed) {
+            $ready++
+            $agentVal = if ($agentStatus.Status -eq "Running") { "Installed & Running" } else { "Installed ($($agentStatus.Status))" }
+            $agentColor = if ($agentStatus.Status -eq "Running") { "Success" } else { "Warning" }
+            $items += @{ Category = "SOFTWARE"; Name = "$($script:AgentInstaller.ToolName) Agent"; Value = $agentVal; Color = $agentColor; Symbol = "[OK]" }
+        } else {
+            $items += @{ Category = "SOFTWARE"; Name = "$($script:AgentInstaller.ToolName) Agent"; Value = "Not Installed"; Color = "Error"; Symbol = "[!!]" }
+        }
     }
 
     # --- ROLES & FEATURES ---
@@ -518,38 +520,40 @@ function Show-QuickSetupWizard {
         Start-Sleep -Milliseconds 500
     }
 
-    # === STEP 3: KASEYA AGENT ===
-    Clear-Host
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                        QUICK SETUP WIZARD").PadRight(72))║" -color "Info"
-    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Step 3 of 6: $($script:AgentInstaller.ToolName.ToUpper()) AGENT" -color "Info"
-    Write-OutputColor "  ────────────────────────────────────────────" -color "Info"
-    Write-OutputColor "" -color "Info"
+    # === STEP 3: AGENT ===
+    if (Test-AgentInstallerConfigured) {
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                        QUICK SETUP WIZARD").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Step 3 of 6: $($script:AgentInstaller.ToolName.ToUpper()) AGENT" -color "Info"
+        Write-OutputColor "  ────────────────────────────────────────────" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    $kaseyaStatus = Test-AgentInstalled
-    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    if ($kaseyaStatus.Installed) {
-        $kVal = if ($kaseyaStatus.Status -eq "Running") { "Installed & Running" } else { "Installed ($($kaseyaStatus.Status))" }
-        Write-OutputColor "  │$("  Current:  $kVal".PadRight(72))│" -color "Success"
-    } else {
-        Write-OutputColor "  │$("  Current:  Not Installed".PadRight(72))│" -color "Warning"
-    }
-    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-OutputColor "" -color "Info"
+        $agentStatus = Test-AgentInstalled
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        if ($agentStatus.Installed) {
+            $kVal = if ($agentStatus.Status -eq "Running") { "Installed & Running" } else { "Installed ($($agentStatus.Status))" }
+            Write-OutputColor "  │$("  Current:  $kVal".PadRight(72))│" -color "Success"
+        } else {
+            Write-OutputColor "  │$("  Current:  Not Installed".PadRight(72))│" -color "Warning"
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    if (-not $kaseyaStatus.Installed) {
-        if (Confirm-UserAction -Message "Install $($script:AgentInstaller.ToolName) Agent now?") {
-            Install-KaseyaAgent -ReturnAfterInstall
+        if (-not $agentStatus.Installed) {
+            if (Confirm-UserAction -Message "Install $($script:AgentInstaller.ToolName) Agent now?") {
+                Install-Agent -ReturnAfterInstall
+                $completed++
+            } else { $skipped++ }
+        } else {
+            Write-OutputColor "  $($script:AgentInstaller.ToolName) is installed. Skipping." -color "Success"
             $completed++
-        } else { $skipped++ }
-    } else {
-        Write-OutputColor "  $($script:AgentInstaller.ToolName) is installed. Skipping." -color "Success"
-        $completed++
-        Start-Sleep -Milliseconds 500
-    }
+            Start-Sleep -Milliseconds 500
+        }
+    } else { $skipped++ }
 
     # === STEP 4: RDP ===
     Clear-Host
@@ -715,9 +719,9 @@ function Show-RoleTemplates {
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
                 @{ Name = "Hyper-V Installed";         Test = { Test-HyperVInstalled }; Action = "Install-HyperVRole"; Category = "Roles" }
                 @{ Name = "MPIO Installed";            Test = { Test-MPIOInstalled }; Action = "Install-MPIOFeature"; Category = "Roles" }
-                @{ Name = "$($script:AgentInstaller.ToolName) Agent";              Test = { (Test-AgentInstalled).Installed }; Action = "Install-KaseyaAgent"; Category = "Software" }
                 @{ Name = "Windows Licensed";          Test = { Test-WindowsActivated }; Action = "Register-ServerLicense"; Category = "System" }
             )
+            if (Test-AgentInstallerConfigured) { $checks += @{ Name = "$($script:AgentInstaller.ToolName) Agent"; Test = { (Test-AgentInstalled).Installed }; Action = "Install-Agent"; Category = "Software" } }
         }
         "2" {
             $templateName = "STANDALONE SERVER"
@@ -727,9 +731,9 @@ function Show-RoleTemplates {
                 @{ Name = "RDP Enabled";               Test = { (Get-RDPState) -eq "Enabled" }; Action = "Enable-RDP"; Category = "Access" }
                 @{ Name = "WinRM Enabled";             Test = { (Get-WinRMState) -match "Enabled|Running" }; Action = "Enable-PSRemoting"; Category = "Access" }
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
-                @{ Name = "$($script:AgentInstaller.ToolName) Agent";              Test = { (Test-AgentInstalled).Installed }; Action = "Install-KaseyaAgent"; Category = "Software" }
                 @{ Name = "Windows Licensed";          Test = { Test-WindowsActivated }; Action = "Register-ServerLicense"; Category = "System" }
             )
+            if (Test-AgentInstallerConfigured) { $checks += @{ Name = "$($script:AgentInstaller.ToolName) Agent"; Test = { (Test-AgentInstalled).Installed }; Action = "Install-Agent"; Category = "Software" } }
         }
         "3" {
             $templateName = "CLUSTER NODE"
@@ -741,9 +745,9 @@ function Show-RoleTemplates {
                 @{ Name = "Hyper-V Installed";         Test = { Test-HyperVInstalled }; Action = "Install-HyperVRole"; Category = "Roles" }
                 @{ Name = "MPIO Installed";            Test = { Test-MPIOInstalled }; Action = "Install-MPIOFeature"; Category = "Roles" }
                 @{ Name = "Failover Clustering";       Test = { Test-FailoverClusteringInstalled }; Action = "Install-FailoverClusteringFeature"; Category = "Roles" }
-                @{ Name = "$($script:AgentInstaller.ToolName) Agent";              Test = { (Test-AgentInstalled).Installed }; Action = "Install-KaseyaAgent"; Category = "Software" }
                 @{ Name = "Windows Licensed";          Test = { Test-WindowsActivated }; Action = "Register-ServerLicense"; Category = "System" }
             )
+            if (Test-AgentInstallerConfigured) { $checks += @{ Name = "$($script:AgentInstaller.ToolName) Agent"; Test = { (Test-AgentInstalled).Installed }; Action = "Install-Agent"; Category = "Software" } }
         }
         default {
             Write-OutputColor "Invalid selection." -color "Warning"

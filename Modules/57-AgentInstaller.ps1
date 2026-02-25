@@ -1,4 +1,13 @@
 ﻿#region ===== AGENT INSTALLER =====
+# Check if agent installer feature is configured (FileServer + non-default ToolName)
+function Test-AgentInstallerConfigured {
+    # Must have FileServer configured to download agents
+    if (-not (Test-FileServerConfigured)) { return $false }
+    # ToolName must be customized from the built-in "MSP" default
+    if ($script:AgentInstaller.ToolName -eq "MSP") { return $false }
+    return $true
+}
+
 # Function to check if the configured agent is installed
 function Test-AgentInstalled {
     # Check for agent service
@@ -79,26 +88,22 @@ function Get-AgentInstallerList {
 }
 
 # Parse agent filename to extract site numbers and name
-# Smart parsing for Kaseya naming convention (Kaseya_<org>.{numbers}-{name}.exe)
-# Falls back to raw filename for other agent types
+# Supports <Tool>_<org>.{numbers}-{name}.exe convention (e.g., Kaseya, Datto, etc.)
+# Falls back to raw filename for unrecognized formats
 function ConvertFrom-AgentFilename {
     param([string]$FileName)
 
-    # Formats handled (Kaseya_<org>.{numbers}-{name}.exe):
-    # Kaseya_acme.1001-mainoffice.exe
-    # Kaseya_acme.2001-2002-2005-westbranch.exe
-    # Kaseya_acme.3001.exe (no site name)
-    # Kaseya_acme.4001-eastsite.staging.exe (has .staging suffix)
-    # Kaseya_acme.5001_5002-north-dc.exe (underscore between numbers)
-    # Kaseya_acme.6001-labsite.workstations.exe (has .workstations suffix)
+    # Known format: <Tool>_<org>.{numbers}-{name}.exe
+    # Examples: Agent_acme.1001-mainoffice.exe, Agent_acme.3001.exe
+    # Supports underscore/hyphen between numbers, optional .staging/.workstations suffix
     $result = @{ SiteNumbers = @(); SiteName = ""; DisplayName = ""; Valid = $false }
 
     # Remove any suffix like .staging, .workstations before .exe
     $cleanName = $FileName -replace '\.(staging|workstations|linac-workstations)\.exe$', '.exe'
 
-    # Try Kaseya naming convention: Kaseya_<org>.{numbers}-{name}.exe
+    # Try <Tool>_<org>.{numbers}-{name}.exe convention
     # Numbers can be separated by - or _
-    if ($cleanName -match 'Kaseya_[a-zA-Z0-9]+\.([0-9_\-]+)(?:-([a-zA-Z][a-zA-Z0-9\-]*))?\.exe$') {
+    if ($cleanName -match '[a-zA-Z]+_[a-zA-Z0-9]+\.([0-9_\-]+)(?:-([a-zA-Z][a-zA-Z0-9\-]*))?\.exe$') {
         $regexMatches = $matches
         $numbersPart = $regexMatches[1]
         $namePart = if ($regexMatches[2]) { $regexMatches[2] } else { "" }
@@ -121,7 +126,7 @@ function ConvertFrom-AgentFilename {
         }
     }
 
-    # Fallback: use raw filename for non-Kaseya agents (must be .exe)
+    # Fallback: use raw filename for unrecognized formats (must be .exe)
     if ($FileName -notmatch '\.exe$') {
         return $result
     }
@@ -476,12 +481,33 @@ function Install-SelectedAgent {
 }
 
 # Main agent installation menu
-function Install-KaseyaAgent {
+function Install-Agent {
     param(
         [switch]$ReturnAfterInstall  # Returns after successful install (for domain join flow)
     )
 
     $toolName = $script:AgentInstaller.ToolName
+
+    # --- Section: Pre-check - Feature Configuration ---
+    if (-not (Test-AgentInstallerConfigured)) {
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                     AGENT INSTALLER NOT CONFIGURED").PadRight(72))║" -color "Warning"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+        if (-not (Test-FileServerConfigured)) {
+            Write-OutputColor "  FileServer is not configured. Agent downloads require a configured" -color "Warning"
+            Write-OutputColor "  file server in defaults.json (FileServer.BaseURL)." -color "Warning"
+        }
+        if ($script:AgentInstaller.ToolName -eq "MSP") {
+            Write-OutputColor "  Agent installer has not been customized. Set AgentInstaller.ToolName" -color "Warning"
+            Write-OutputColor "  in defaults.json or company defaults to enable this feature." -color "Warning"
+        }
+        Write-OutputColor "" -color "Info"
+        Write-PressEnter
+        return
+    }
 
     # --- Section: Initialization ---
     $hostname = $env:COMPUTERNAME
@@ -865,7 +891,7 @@ function Show-AgentManagement {
     # If no additional agents configured, fall back to original menu
     $allConfigs = Get-AllAgentConfigs
     if ($allConfigs.Count -le 1) {
-        Install-KaseyaAgent -ReturnAfterInstall:$ReturnAfterInstall
+        Install-Agent -ReturnAfterInstall:$ReturnAfterInstall
         return
     }
 
@@ -915,7 +941,7 @@ function Show-AgentManagement {
                 if (-not $status.Installed) {
                     Write-OutputColor "  --- Installing $($config.ToolName) ---" -color "Info"
                     if ($config.IsPrimary) {
-                        Install-KaseyaAgent -ReturnAfterInstall
+                        Install-Agent -ReturnAfterInstall
                     }
                     else {
                         Write-OutputColor "  $($config.ToolName) requires manual installation from FileServer." -color "Info"
@@ -930,7 +956,7 @@ function Show-AgentManagement {
             if ($num -ge 0 -and $num -lt $allConfigs.Count) {
                 $selectedConfig = $allConfigs[$num]
                 if ($selectedConfig.IsPrimary) {
-                    Install-KaseyaAgent -ReturnAfterInstall:$ReturnAfterInstall
+                    Install-Agent -ReturnAfterInstall:$ReturnAfterInstall
                     if ($ReturnAfterInstall) { return }
                 }
                 else {

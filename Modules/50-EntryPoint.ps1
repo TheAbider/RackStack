@@ -1246,7 +1246,7 @@ function Start-BatchMode {
         $agentsToInstall += $script:AgentInstaller
     }
 
-    if ($agentsToInstall.Count -gt 0) {
+    if ($agentsToInstall.Count -gt 0 -and (Test-AgentInstallerConfigured)) {
         foreach ($agentCfg in $agentsToInstall) {
             $agentInstalled = Test-AgentInstalledByConfig -AgentConfig $agentCfg
             if ($agentInstalled) {
@@ -1256,7 +1256,7 @@ function Start-BatchMode {
             else {
                 Write-OutputColor "  [$stepNum/$totalSteps] Installing $($agentCfg.ToolName) agent..." -color "Info"
                 try {
-                    Install-KaseyaAgent
+                    Install-Agent
                     $changesApplied++
                     Add-SessionChange -Category "Software" -Description "Installed $($agentCfg.ToolName) agent via batch mode"
                 }

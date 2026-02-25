@@ -216,7 +216,7 @@ function Start-Show-RolesFeaturesMenu {
             "1" { Install-HyperVRole; Write-PressEnter }
             "2" { Install-MPIOFeature; Write-PressEnter }
             "3" { Install-FailoverClusteringFeature; Write-PressEnter }
-            "4" { Install-KaseyaAgent; Write-PressEnter }
+            "4" { Install-Agent; Write-PressEnter }
             "back" { return }
             default {
                 Write-OutputColor "Invalid choice. Please enter 1-4 or B." -color "Error"
