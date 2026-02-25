@@ -385,17 +385,16 @@ function Install-SelectedAgent {
 
     try {
         $elapsed = 0
-        $installArgs = $script:AgentInstaller.InstallArgs -split '\s+'
         $installJob = Start-Job -ScriptBlock {
-            param($installerPath, $argList)
+            param($installerPath, $argString)
             try {
-                $process = Start-Process -FilePath $installerPath -ArgumentList $argList -Wait -PassThru -ErrorAction Stop
+                $process = Start-Process -FilePath $installerPath -ArgumentList $argString -Wait -PassThru -ErrorAction Stop
                 return @{ Success = $true; ExitCode = $process.ExitCode }
             }
             catch {
                 return @{ Success = $false; Error = $_.Exception.Message }
             }
-        } -ArgumentList $tempPath, $installArgs
+        } -ArgumentList $tempPath, $script:AgentInstaller.InstallArgs
 
         while ($installJob.State -eq "Running") {
             Show-ProgressMessage -Activity "Installing $toolName Agent" -Status "Please wait..." -SecondsElapsed $elapsed

@@ -30,10 +30,17 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.20
+    1.9.21
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.21
+    BUG FIXES:
+    - FIXED: Cluster disk/CSV selection failed with single item — .Count undefined on single pipeline result in PS 5.1 (27-FailoverClustering)
+    - FIXED: Quorum disk witness selection failed with single disk — same .Count issue (27-FailoverClustering)
+    - FIXED: Agent installer dropped all arguments after the first — Start-Job ArgumentList flattened array, scriptblock only received first arg (57-AgentInstaller)
+    - FIXED: Paused nodes header box misaligned — .PadRight(72) applied to wrong string in box-drawing (51-ClusterDashboard)
 
 .CHANGELOG v1.9.20
     BUG FIXES:

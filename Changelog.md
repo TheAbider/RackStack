@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.21
+
+- **Bug Fix:** Cluster disk and CSV selection menus rejected valid choices when only one item existed — single pipeline result has no `.Count` in PS 5.1. Wrapped cluster disk, CSV, and quorum disk queries in `@()` and updated emptiness checks to use `.Count -eq 0` (27-FailoverClustering).
+- **Bug Fix:** Agent installer silently dropped all install arguments after the first — `Start-Job -ArgumentList` flattened the args array, and the scriptblock's `param()` only captured the first element. Changed to pass install args as a single unsplit string (57-AgentInstaller).
+- **Bug Fix:** "Paused Nodes" box header had `.PadRight(72)` applied to the border character instead of the header text, producing misaligned box drawing (51-ClusterDashboard).
+- 63 modules, 1854 tests
+
 ## v1.9.20
 
 - **Bug Fix:** Batch mode firewall undo was completely broken — scriptblock used `` `$$oldDomain `` which produced undefined variable references like `$Enabled` instead of actual True/False values. Undo silently failed, leaving firewall profiles disabled after batch undo (50-EntryPoint).

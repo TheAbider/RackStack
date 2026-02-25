@@ -356,12 +356,12 @@ function Edit-ClusterSharedVolume {
     }
 
     # Show current CSVs
-    $csvs = Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+    $csvs = @(Get-ClusterSharedVolume -ErrorAction SilentlyContinue)
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  CURRENT CLUSTER SHARED VOLUMES".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-    if ($csvs) {
+    if ($csvs.Count -gt 0) {
         foreach ($csv in $csvs) {
             $state = $csv.State
             $color = if ($state -eq "Online") { "Success" } else { "Warning" }
@@ -395,8 +395,8 @@ function Edit-ClusterSharedVolume {
     switch ($choice) {
         "1" {
             # Show available cluster disks
-            $clusterDisks = Get-ClusterResource | Where-Object { $_.ResourceType -eq "Physical Disk" -and $_.OwnerGroup -ne "Cluster Shared Volume" }
-            if (-not $clusterDisks) {
+            $clusterDisks = @(Get-ClusterResource | Where-Object { $_.ResourceType -eq "Physical Disk" -and $_.OwnerGroup -ne "Cluster Shared Volume" })
+            if ($clusterDisks.Count -eq 0) {
                 Write-OutputColor "  No available cluster disks to add." -color "Warning"
                 return
             }
@@ -427,7 +427,7 @@ function Edit-ClusterSharedVolume {
             }
         }
         "2" {
-            if (-not $csvs) {
+            if ($csvs.Count -eq 0) {
                 Write-OutputColor "  No CSVs to remove." -color "Warning"
                 return
             }
@@ -684,8 +684,8 @@ function Set-ClusterQuorum {
             }
         }
         "2" {
-            $disks = Get-ClusterResource | Where-Object { $_.ResourceType -eq "Physical Disk" }
-            if (-not $disks) {
+            $disks = @(Get-ClusterResource | Where-Object { $_.ResourceType -eq "Physical Disk" })
+            if ($disks.Count -eq 0) {
                 Write-OutputColor "  No cluster disks available for disk witness." -color "Warning"
                 Write-OutputColor "  Add a shared disk to the cluster first, or use File Share" -color "Info"
                 Write-OutputColor "  Witness [3] or Cloud Witness [4] instead." -color "Info"

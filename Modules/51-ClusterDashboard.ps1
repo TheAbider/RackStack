@@ -213,7 +213,7 @@ function Resume-ClusterNodeFromDrain {
     }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  PAUSED NODES").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  PAUSED NODES".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $index = 1
