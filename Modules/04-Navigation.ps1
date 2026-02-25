@@ -96,7 +96,7 @@ function Add-SessionChange {
             Move-Item -Path $auditFile -Destination $archivePath -Force -ErrorAction Stop
         }
         catch {
-            Write-LogMessage "Failed to rotate audit log: $_"
+            Write-LogMessage -message "Failed to rotate audit log: $_" -logFilePath $logFilePath
         }
     }
 }

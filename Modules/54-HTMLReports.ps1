@@ -762,11 +762,17 @@ function Export-HTMLTrendReport {
     Write-OutputColor "  Loading $($files.Count) snapshot(s)..." -color "Info"
 
     $snapshots = @()
+    $failedFiles = 0
     foreach ($file in $files) {
         try {
             $data = Get-Content $file.FullName -Raw | ConvertFrom-Json
             $snapshots += $data
-        } catch {}
+        } catch {
+            $failedFiles++
+        }
+    }
+    if ($failedFiles -gt 0) {
+        Write-OutputColor "  Warning: $failedFiles snapshot file(s) could not be parsed and were skipped." -color "Warning"
     }
 
     if ($snapshots.Count -eq 0) {

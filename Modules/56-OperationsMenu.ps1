@@ -117,8 +117,8 @@ function Show-OperationsMenu {
                 Write-OutputColor "  Interval (minutes, default 5):" -color "Info"
                 $interval = Read-Host "  "
                 if ([string]::IsNullOrWhiteSpace($interval)) { $interval = "5" }
-                if ($interval -notmatch '^\d+$') {
-                    Write-OutputColor "  Invalid interval." -color "Error"
+                if ($interval -notmatch '^\d+$' -or [int]$interval -eq 0) {
+                    Write-OutputColor "  Invalid interval (must be 1 or greater)." -color "Error"
                     Write-PressEnter
                     continue
                 }
@@ -524,7 +524,9 @@ function Import-Defaults {
                         $script:CompanyDefaultsPath = $matchingFile.Path
                     }
                 }
-            } catch { }
+            } catch {
+                Write-OutputColor "  Warning: Could not read defaults.json for company defaults: $_" -color "Warning"
+            }
             # Don't prompt — user already has personal defaults
         }
         else {

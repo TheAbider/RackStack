@@ -30,10 +30,21 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.28
+    1.9.29
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.29
+    BUG FIXES:
+    - FIXED: RDP status reported "Enabled" when registry key was inaccessible — $null -eq 0 returns $true in PowerShell, causing false positive (05-SystemCheck)
+    - FIXED: Performance dashboard showed "0 GB" memory when CIM query failed — missing null guard on Get-CimInstance result (28-PerformanceDashboard)
+    - FIXED: Health check showed "0 GB" memory when CIM query failed — missing null guard on $os despite other properties being guarded (37-HealthCheck)
+    - FIXED: Metric collection crashed with DivideByZeroException when interval set to 0 — input validation accepted "0" as valid (56-OperationsMenu)
+    - FIXED: Company defaults silently lost when defaults.json was corrupted — empty catch {} swallowed JSON parse errors (56-OperationsMenu)
+    - FIXED: Trend report silently skipped corrupted snapshot files — empty catch {} with no feedback on how many files failed to parse (54-HTMLReports)
+    - FIXED: Audit log rotation errors silently discarded — Write-LogMessage called without -logFilePath parameter, making it a no-op (04-Navigation)
+    - FIXED: Navigation commands (back/exit) ignored at manual license key prompts — Test-NavigationCommand result checked but function never returned (21-Licensing)
 
 .CHANGELOG v1.9.28
     BUG FIXES:

@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.9.29
+
+- **Bug Fix:** RDP status falsely reported "Enabled" when the registry key was inaccessible — `$null -eq 0` evaluates to `$true` in PowerShell, so a failed `Get-ItemProperty` with `-ErrorAction SilentlyContinue` always matched the "enabled" condition (05-SystemCheck).
+- **Bug Fix:** Performance dashboard displayed "0 GB" for all memory metrics when the CIM query failed — `$os` from `Get-CimInstance` used without null guard, causing `$null / 1MB` to silently evaluate to 0 (28-PerformanceDashboard).
+- **Bug Fix:** Health check displayed "0 GB" for memory when the CIM query failed — same `$os` null guard missing despite other properties in the same function being properly guarded (37-HealthCheck).
+- **Bug Fix:** Metric collection crashed with `DivideByZeroException` when interval was set to 0 minutes — input validation regex `^\d+$` accepted "0" as valid, causing `[math]::Ceiling(60 / 0)` (56-OperationsMenu).
+- **Bug Fix:** Company defaults silently lost when `defaults.json` was corrupted — empty `catch { }` swallowed JSON parse errors with no user feedback, causing fallback to generic defaults (56-OperationsMenu).
+- **Bug Fix:** Trend report silently skipped corrupted snapshot JSON files with no indication of missing data — empty `catch { }` during snapshot loading provided no warning about how many files failed to parse (54-HTMLReports).
+- **Bug Fix:** Audit log rotation errors silently discarded — `Write-LogMessage` called without the `-logFilePath` parameter, making the call a no-op that wrote nothing (04-Navigation).
+- **Bug Fix:** Navigation commands ("back"/"exit") ignored at manual license key entry prompts — `Test-NavigationCommand` result checked but function never returned, silently falling through instead of navigating (21-Licensing).
+- 63 modules, 1854 tests
+
 ## v1.9.28
 
 - **Bug Fix:** File search in single-file shared folders returned a raw hashtable instead of an array — `Get-FileServerFiles` result not wrapped in `@()`, causing `.Count` to return the number of hashtable keys and `foreach` to iterate `DictionaryEntry` objects instead of file records (39-FileServer).

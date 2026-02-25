@@ -38,8 +38,13 @@ function Show-SystemHealthCheck {
 
     # Memory
     Write-OutputColor "=== MEMORY ===" -color "Success"
-    $totalMemGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
-    $freeMemGB = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+    if ($os) {
+        $totalMemGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
+        $freeMemGB = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+    } else {
+        $totalMemGB = 0
+        $freeMemGB = 0
+    }
     $usedMemGB = $totalMemGB - $freeMemGB
     $memPercent = if ($totalMemGB -gt 0) { [math]::Round(($usedMemGB / $totalMemGB) * 100, 1) } else { 0 }
     $memColor = if ($memPercent -gt 90) { "Error" } elseif ($memPercent -gt 75) { "Warning" } else { "Success" }

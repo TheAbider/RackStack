@@ -23,8 +23,13 @@ function Show-PerformanceDashboard {
 
     # Memory
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-    $totalMem = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
-    $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    if ($os) {
+        $totalMem = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+        $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    } else {
+        $totalMem = 0
+        $freeMem = 0
+    }
     $usedMem = $totalMem - $freeMem
     $memPercent = if ($totalMem -gt 0) { [math]::Round(($usedMem / $totalMem) * 100, 1) } else { 0 }
     $memColor = if ($memPercent -lt 70) { "Success" } elseif ($memPercent -lt 90) { "Warning" } else { "Error" }

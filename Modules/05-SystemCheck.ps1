@@ -109,7 +109,7 @@ function Test-NetworkConnectivity {
 function Get-RDPState {
     try {
         $rdpStatus = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -ErrorAction SilentlyContinue
-        if ($rdpStatus.fDenyTSConnections -eq 0) {
+        if ($null -ne $rdpStatus -and $rdpStatus.fDenyTSConnections -eq 0) {
             return "Enabled"
         }
         else {

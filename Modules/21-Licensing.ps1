@@ -438,7 +438,10 @@ function Register-ServerLicense {
 
                             $manualChoice = Read-Host "Enter key manually? (yes/no)"
                             $navResult = Test-NavigationCommand -UserInput $manualChoice
-                            if (-not $navResult.ShouldReturn -and ($manualChoice -eq "yes" -or $manualChoice -eq "y")) {
+                            if ($navResult.ShouldReturn) {
+                                if (Invoke-NavigationAction -NavResult $navResult) { return }
+                            }
+                            if ($manualChoice -eq "yes" -or $manualChoice -eq "y") {
                                 $productKey = Enter-ManualKey
                                 if ($null -ne $productKey) {
                                     Enable-ServerActivation -productKey $productKey
@@ -453,7 +456,10 @@ function Register-ServerLicense {
 
                         $manualChoice = Read-Host "Enter key manually? (yes/no)"
                         $navResult = Test-NavigationCommand -UserInput $manualChoice
-                        if (-not $navResult.ShouldReturn -and ($manualChoice -eq "yes" -or $manualChoice -eq "y")) {
+                        if ($navResult.ShouldReturn) {
+                            if (Invoke-NavigationAction -NavResult $navResult) { return }
+                        }
+                        if ($manualChoice -eq "yes" -or $manualChoice -eq "y") {
                             $productKey = Enter-ManualKey
                             if ($null -ne $productKey) {
                                 Enable-ServerActivation -productKey $productKey
