@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.14
+
+- **Bug Fix:** Cluster dashboard VM count displayed blank for nodes with 0 or 1 VMs — wrapped `Where-Object` pipeline in `@()` for consistent `.Count`.
+- 63 modules, 1854 tests
+
 ## v1.9.13
 
 - **Bug Fix:** VM deployment site detection used `.Count` on unguarded `Get-ClusterNode` result — single-node clusters couldn't detect site. Wrapped in `@()`.

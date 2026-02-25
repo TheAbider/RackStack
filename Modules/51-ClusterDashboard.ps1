@@ -32,7 +32,7 @@ function Show-ClusterDashboard {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     foreach ($node in $nodes) {
-        $vmCount = (Get-ClusterGroup -Cluster $cluster.Name -ErrorAction SilentlyContinue |
+        $vmCount = @(Get-ClusterGroup -Cluster $cluster.Name -ErrorAction SilentlyContinue |
             Where-Object { $_.GroupType -eq 'VirtualMachine' -and $_.OwnerNode -eq $node.Name }).Count
 
         $statusSymbol = switch ($node.State) {

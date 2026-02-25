@@ -30,10 +30,14 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.13
+    1.9.14
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.14
+    BUG FIXES:
+    - FIXED: Cluster dashboard VM count shows blank for nodes with 0 or 1 VM (missing array wrapping)
 
 .CHANGELOG v1.9.13
     BUG FIXES:
