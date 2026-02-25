@@ -209,7 +209,7 @@ function Show-AllVolumes {
             default { "Info" }
         }
 
-        Write-OutputColor ("{0,-8} {1,-20} {2,-12} {3,-15} {4,-15} " -f $driveLetter, $label, $vol.FileSystem, $size, $free) -color "Info" -NoNewline
+        Write-OutputColor "$($driveLetter.PadRight(8)) $($label.PadRight(20)) $("$($vol.FileSystem)".PadRight(12)) $($size.PadRight(15)) $($free.PadRight(15)) " -color "Info" -NoNewline
         Write-OutputColor ("{0,-10} " -f "$usedPercent%") -color $usageColor -NoNewline
         Write-OutputColor ("{0}" -f $vol.HealthStatus) -color $healthColor
     }

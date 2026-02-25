@@ -30,10 +30,19 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.37
+    1.9.38
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.38
+    BUG FIXES:
+    - FIXED: Unescaped single quotes in adapter name broke batch config network undo scriptblock — same class of bug as v1.9.33's fix for admin/vSwitch/vNIC names, but the adapter name in the network undo was missed (50-EntryPoint)
+    - FIXED: 5 -f format string calls threw FormatException when user-settable names (volume labels, VM names, disk names, adapter names, switch names) contained curly braces — replaced with string interpolation (06-NetworkAdapters, 38-StorageManager, 44-VMDeployment)
+    - FIXED: VM name prefix containing $ followed by digits silently dropped characters in -replace — regex backreference interpretation on replacement side. Now uses .Replace() for literal substitution (44-VMDeployment)
+    - FIXED: VM export progress showed 0 bytes when VM name contained brackets — Test-Path and Get-ChildItem -Path interpreted [] as wildcard classes. Now uses -LiteralPath (53-VMExportImport)
+    - FIXED: VM directory creation skipped when VM name contained brackets — Test-Path without -LiteralPath incorrectly reported directory exists (44-VMDeployment)
+    - CLEANUP: Removed dead $script:IsEXE reference that was never assigned anywhere in the codebase (47-ExitCleanup)
 
 .CHANGELOG v1.9.37
     BUG FIXES:

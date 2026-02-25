@@ -325,9 +325,7 @@ function Get-NextAvailableVMName {
 
     while ($counter -le $maxAttempts) {
         $seqStr = if ($seqFormat) { $counter.ToString($seqFormat) } else { "$counter" }
-        $proposedName = $namePattern -replace '\{Site\}', $SiteNumber `
-                                     -replace '\{Prefix\}', $Prefix `
-                                     -replace '\{Seq\}', $seqStr
+        $proposedName = $namePattern.Replace('{Site}', $SiteNumber).Replace('{Prefix}', $Prefix).Replace('{Seq}', $seqStr)
 
         # Check if VM exists on host/cluster
         $vmCheck = Test-VMNameExists -VMName $proposedName -ComputerName $ComputerName -ClusterName $ClusterName -Credential $Credential
@@ -1247,7 +1245,7 @@ function Set-VMConfigDisks {
 
         $index = 1
         foreach ($disk in $Config.Disks) {
-            Write-OutputColor ("  [{0}] {1}: {2} GB ({3})" -f $index, $disk.Name, $disk.SizeGB, $disk.Type) -color "Info"
+            Write-OutputColor "  [$index] $($disk.Name): $($disk.SizeGB) GB ($($disk.Type))" -color "Info"
             $index++
         }
 
@@ -1414,7 +1412,7 @@ function Set-VMConfigNICs {
         foreach ($nic in $Config.NICs) {
             $switchDisplay = if ($nic.SwitchName) { $nic.SwitchName } else { "(Not Connected)" }
             $vlanDisplay = if ($nic.VLAN) { "VLAN $($nic.VLAN)" } else { "No VLAN" }
-            Write-OutputColor ("  [{0}] {1} - {2}" -f $index, $switchDisplay, $vlanDisplay) -color "Info"
+            Write-OutputColor "  [$index] $switchDisplay - $vlanDisplay" -color "Info"
             $index++
         }
 
@@ -1700,8 +1698,8 @@ function New-VMDirectories {
         Invoke-Command @invokeParams
     }
     else {
-        if (-not (Test-Path $VMSpecificPath)) { New-Item -Path $VMSpecificPath -ItemType Directory -Force | Out-Null }
-        if (-not (Test-Path $VHDSpecificPath)) { New-Item -Path $VHDSpecificPath -ItemType Directory -Force | Out-Null }
+        if (-not (Test-Path -LiteralPath $VMSpecificPath)) { New-Item -Path $VMSpecificPath -ItemType Directory -Force | Out-Null }
+        if (-not (Test-Path -LiteralPath $VHDSpecificPath)) { New-Item -Path $VHDSpecificPath -ItemType Directory -Force | Out-Null }
     }
 }
 
@@ -2030,7 +2028,7 @@ function Show-ExistingVMs {
                 "-"
             }
 
-            Write-OutputColor ("{0,-30} " -f $vm.Name) -color "Info" -NoNewline
+            Write-OutputColor "$("$($vm.Name)".PadRight(30)) " -color "Info" -NoNewline
             Write-OutputColor ("{0,-12} " -f $vm.State) -color $stateColor -NoNewline
             Write-OutputColor ("{0,-8} {1,-10} {2}" -f $vm.ProcessorCount, $memoryDisplay, $uptimeDisplay) -color "Info"
         }

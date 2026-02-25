@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.9.38
+
+- **Bug Fix:** Unescaped single quotes in network adapter name broke the batch config network undo scriptblock — same class of bug fixed in v1.9.33 for admin names, virtual switch names, and vNIC names, but the adapter name in the network IP configuration undo was missed. An adapter named `O'Brien NIC` would produce a malformed scriptblock via `[scriptblock]::Create()`. Now escapes `'` to `''` before interpolation (50-EntryPoint).
+- **Bug Fix:** 5 `-f` format string operator calls threw `System.FormatException` when user-settable names contained curly braces `{` or `}`. Volume labels like `{Data}`, VM names like `VM{Test}`, disk names, switch names, and adapter names were all vulnerable. The `-f` operator interprets `{0}`, `{1}` etc. as placeholder references, so any braces in the values caused a crash. Replaced with string interpolation and `.PadRight()` (06-NetworkAdapters, 38-StorageManager, 44-VMDeployment).
+- **Bug Fix:** VM name prefix containing `$` followed by digits (e.g., `$1MYAPP`) silently dropped the `$1` when generating VM names — PowerShell's `-replace` operator interprets `$1` in the replacement string as a regex backreference to capture group 1. Switched from `-replace` to `.Replace()` for literal string substitution (44-VMDeployment).
+- **Bug Fix:** VM export progress tracking showed 0 bytes and final export size showed 0 when the VM name contained square brackets `[` or `]` — `Test-Path` and `Get-ChildItem -Path` interpret brackets as wildcard character class patterns, silently matching nothing. Switched to `-LiteralPath` (53-VMExportImport).
+- **Bug Fix:** VM-specific directory creation logic incorrectly skipped creating directories when the VM name contained brackets — `Test-Path` without `-LiteralPath` treated `[]` as wildcards, potentially reporting a non-existent directory as existing or vice versa. Switched to `-LiteralPath` (44-VMDeployment).
+- **Cleanup:** Removed dead `$script:IsEXE` variable reference that was never assigned anywhere in the codebase — the fallback condition already handled EXE detection correctly (47-ExitCleanup).
+- 63 modules, 1854 tests
+
 ## v1.9.37
 
 - **Bug Fix:** 10 `Get-CimInstance` and `Get-Partition` calls inside `try/catch` blocks were missing `-ErrorAction Stop`, causing non-terminating errors to silently bypass the catch block:

@@ -319,7 +319,7 @@ function Show-AdaptersTable {
             default { "Warning" }
         }
 
-        Write-OutputColor ($headerFormat -f $adapter.InterfaceIndex, $adapter.Name, $desc, $adapter.Status, $speed) -color $statusColor
+        Write-OutputColor "| $("$($adapter.InterfaceIndex)".PadRight($columnWidths.Index)) | $("$($adapter.Name)".PadRight($columnWidths.Name)) | $($desc.PadRight($columnWidths.Description)) | $("$($adapter.Status)".PadRight($statusWidth)) | $($speed.PadRight($speedWidth)) |" -color $statusColor
     }
 
     Write-OutputColor $separator -color "Info"

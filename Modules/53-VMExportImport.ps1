@@ -116,9 +116,9 @@ function Export-VMWizard {
 
         while ($exportJob.State -eq 'Running') {
             $currentSize = 0
-            if (Test-Path $exportFolder) {
+            if (Test-Path -LiteralPath $exportFolder) {
                 try {
-                    $measured = Get-ChildItem -Path $exportFolder -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
+                    $measured = Get-ChildItem -LiteralPath $exportFolder -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
                     if ($null -ne $measured.Sum) { $currentSize = $measured.Sum }
                 } catch { $currentSize = 0 }
             }
@@ -146,9 +146,9 @@ function Export-VMWizard {
 
         # Get final export size for completion summary
         $finalExportSize = 0
-        if (Test-Path $exportFolder) {
+        if (Test-Path -LiteralPath $exportFolder) {
             try {
-                $measured = Get-ChildItem -Path $exportFolder -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
+                $measured = Get-ChildItem -LiteralPath $exportFolder -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
                 if ($null -ne $measured.Sum) { $finalExportSize = $measured.Sum }
             } catch { $finalExportSize = 0 }
         }

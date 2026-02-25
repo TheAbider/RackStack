@@ -82,7 +82,7 @@ function Exit-Script {
         }
 
         # If running as EXE, also clean up adjacent files
-        if ($script:IsEXE -or ($currentScriptPath -and $currentScriptPath -match '\.exe$')) {
+        if ($currentScriptPath -and $currentScriptPath -match '\.exe$') {
             $exeDir = Split-Path $currentScriptPath -Parent
             $adjacentDefaults = Join-Path $exeDir "defaults.json"
             if (Test-Path $adjacentDefaults) { $pathsToDelete.Add($adjacentDefaults) }
