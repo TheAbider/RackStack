@@ -30,10 +30,19 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.36
+    1.9.37
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.37
+    BUG FIXES:
+    - FIXED: 10 Get-CimInstance/Get-Partition calls inside try/catch missing -ErrorAction Stop — non-terminating errors silently bypassed catch blocks:
+      * Get-CimInstance Win32_OperatingSystem in Hyper-V detection and licensing — incorrect server/client classification on WMI failure (05-SystemCheck, 21-Licensing)
+      * Get-CimInstance Win32_ComputerSystem/Win32_OperatingSystem/Win32_Processor in config export — silently produced empty values in exported config (45-ConfigExport)
+      * Get-CimInstance Win32_ComputerSystem in profile import domain join check — could trigger re-join attempt on WMI failure (45-ConfigExport)
+      * Get-CimInstance Win32_ComputerSystem in pagefile management — null object caused confusing downstream errors in Set-CimInstance (55-QoLFeatures)
+      * Get-Partition in offline VHD mount — error swallowed with no diagnostic output (43-OfflineVHD)
 
 .CHANGELOG v1.9.36
     BUG FIXES:

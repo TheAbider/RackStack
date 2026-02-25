@@ -496,7 +496,7 @@ function Set-PagefileConfiguration {
 
                 try {
                     # Enable automatic managed pagefile
-                    $compSysObj = Get-CimInstance Win32_ComputerSystem
+                    $compSysObj = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
                     Set-CimInstance -InputObject $compSysObj -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop
                     Write-OutputColor "  Pagefile set to System Managed (Automatic)." -color "Success"
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
@@ -571,7 +571,7 @@ function Set-PagefileConfiguration {
 
                 try {
                     # Disable automatic management first
-                    $compSysObj = Get-CimInstance Win32_ComputerSystem
+                    $compSysObj = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
                     if ($compSysObj.AutomaticManagedPagefile) {
                         Set-CimInstance -InputObject $compSysObj -Property @{ AutomaticManagedPagefile = $false } -ErrorAction Stop
                     }
@@ -647,7 +647,7 @@ function Set-PagefileConfiguration {
 
                 try {
                     # Disable automatic management
-                    $compSysObj = Get-CimInstance Win32_ComputerSystem
+                    $compSysObj = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
                     if ($compSysObj.AutomaticManagedPagefile) {
                         Set-CimInstance -InputObject $compSysObj -Property @{ AutomaticManagedPagefile = $false } -ErrorAction Stop
                     }

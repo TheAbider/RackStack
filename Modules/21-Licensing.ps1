@@ -9,7 +9,7 @@ function Get-WindowsVersionInfo {
         $productName = $ntVersion.ProductName
 
         # Check if this is Server or Client
-        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
+        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
         $isServer = $osInfo.ProductType -ne 1
 
         # Determine Windows version based on build number

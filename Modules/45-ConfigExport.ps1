@@ -37,9 +37,9 @@ function Export-ServerConfiguration {
 
         # System Info
         $config += "### SYSTEM INFORMATION ###"
-        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
-        $os = Get-CimInstance -ClassName Win32_OperatingSystem
-        $proc = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
+        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+        $proc = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
         $config += "Hostname:       $($computerSystem.Name)"
         $config += "Domain:         $($computerSystem.Domain)"
         $config += "Part of Domain: $($computerSystem.PartOfDomain)"
@@ -774,7 +774,7 @@ function Import-ConfigurationProfile {
         }
 
         # Domain join (always last among quick tasks - prompts for creds)
-        if ($configProfile.Domain.JoinDomain -and -not (Get-CimInstance -ClassName Win32_ComputerSystem).PartOfDomain) {
+        if ($configProfile.Domain.JoinDomain -and -not (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).PartOfDomain) {
             Write-OutputColor "  [13/13] Joining domain '$($configProfile.Domain.DomainName)'..." -color "Info"
             Write-OutputColor "        Enter domain credentials:" -color "Info"
             try {

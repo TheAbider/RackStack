@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.9.37
+
+- **Bug Fix:** 10 `Get-CimInstance` and `Get-Partition` calls inside `try/catch` blocks were missing `-ErrorAction Stop`, causing non-terminating errors to silently bypass the catch block:
+  - `Get-CimInstance Win32_OperatingSystem` in Hyper-V detection and licensing version info — on WMI failure, `$osInfo.ProductType -ne 1` evaluated as `$true` on null, incorrectly classifying the machine as a server (05-SystemCheck, 21-Licensing).
+  - Three `Get-CimInstance` calls (`Win32_ComputerSystem`, `Win32_OperatingSystem`, `Win32_Processor`) in config text export — silently produced empty hostname, domain, OS, and CPU info in the exported configuration file (45-ConfigExport).
+  - `Get-CimInstance Win32_ComputerSystem` inline in profile import domain join check — on WMI failure, `.PartOfDomain` evaluated as `$null`, making `-not $null` = `$true`, which could trigger a domain re-join attempt on a machine that is already domain-joined (45-ConfigExport).
+  - Three `Get-CimInstance Win32_ComputerSystem` calls in pagefile management (system managed, custom size, move to drive) — null `$compSysObj` passed to `Set-CimInstance -InputObject` causing a confusing "cannot validate argument" error instead of the intended catch message (55-QoLFeatures).
+  - `Get-Partition` in offline VHD Windows drive detection — error silently swallowed with no diagnostic output, making VHD mount failures hard to troubleshoot (43-OfflineVHD).
+- 63 modules, 1854 tests
+
 ## v1.9.36
 
 - **Bug Fix:** Config profile export saved `SubnetCIDR` as a JSON array (e.g., `[24, 16]`) instead of a single integer when the primary adapter had multiple IPv4 addresses (e.g., static + APIPA 169.254.x.x). `Get-NetIPAddress` returned multiple objects, and PowerShell property unrolling produced an array. This corrupted the saved profile and caused `New-NetIPAddress -PrefixLength` to fail on import. Now filters out link-local (WellKnown) addresses and selects a single result (45-ConfigExport).

@@ -59,7 +59,7 @@ function Set-OfflineVHDConfiguration {
             # Try to assign a drive letter if none assigned
             $freeLetter = Get-NextAvailableDriveLetter
             if ($freeLetter) {
-                $mainPartition = $disk | Get-Partition | Where-Object { $_.Size -gt 10GB } | Select-Object -First 1
+                $mainPartition = $disk | Get-Partition -ErrorAction Stop | Where-Object { $_.Size -gt 10GB } | Select-Object -First 1
                 if ($mainPartition) {
                     Set-Partition -DiskNumber $mainPartition.DiskNumber -PartitionNumber $mainPartition.PartitionNumber -NewDriveLetter $freeLetter -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 2

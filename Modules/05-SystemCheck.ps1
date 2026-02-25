@@ -25,7 +25,7 @@ function Test-WindowsActivated {
 function Test-HyperVInstalled {
     try {
         # Check if this is Windows Server or Windows Client
-        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
+        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
         $isServer = $osInfo.ProductType -ne 1  # 1 = Workstation, 2 = Domain Controller, 3 = Server
 
         if ($isServer) {
