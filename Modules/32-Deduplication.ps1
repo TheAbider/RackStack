@@ -56,7 +56,7 @@ function Show-DeduplicationManagement {
         $idx = 1
         $volList = @()
         foreach ($vol in $volumes) {
-            $dedupStatus = Get-DedupStatus -Volume $vol.DriveLetter -ErrorAction SilentlyContinue
+            $dedupStatus = Get-DedupStatus -Volume "$($vol.DriveLetter):" -ErrorAction SilentlyContinue
             $dedupConfig = Get-DedupVolume -Volume "$($vol.DriveLetter):" -ErrorAction SilentlyContinue
             if ($dedupConfig) {
                 $enabled = $dedupConfig.Enabled

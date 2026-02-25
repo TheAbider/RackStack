@@ -196,7 +196,7 @@ function New-ClusterWizard {
     $navResult = Test-NavigationCommand -UserInput $nodesInput
     if ($navResult.ShouldReturn) { return }
 
-    $nodes = $nodesInput -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    $nodes = @($nodesInput -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
     if ($nodes.Count -lt 1) {
         Write-OutputColor "  At least one node is required." -color "Error"
@@ -316,7 +316,7 @@ function Test-ClusterValidation {
     $nodesInput = Read-Host "  Nodes"
 
     $nodes = if ($nodesInput) {
-        $nodesInput -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        @($nodesInput -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     } else {
         @($env:COMPUTERNAME)
     }

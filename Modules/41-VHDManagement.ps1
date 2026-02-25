@@ -91,11 +91,14 @@ function Get-SyspreppedVHD {
     $cached = Test-CachedVHD -OSVersion $OSVersion
 
     if ($cached.Exists) {
-        # Integrity check: size mismatch = corrupt, silently delete
+        # Integrity check: size mismatch = corrupt or incomplete transfer
         $remoteSize = Get-FileServerFileSize -FilePath $driveFile.FilePath
         if ($remoteSize -gt 0 -and $cached.Size -ne $remoteSize) {
-            Remove-Item $cached.Path -Force -ErrorAction SilentlyContinue
-            $cached = @{ Exists = $false; Path = $null; Size = 0 }
+            Write-OutputColor "  Cached VHD size mismatch (local: $([math]::Round($cached.Size/1GB, 2))GB, remote: $([math]::Round($remoteSize/1GB, 2))GB)" -color "Warning"
+            if (Confirm-UserAction -Message "Delete mismatched cache and re-download?") {
+                Remove-Item $cached.Path -Force -ErrorAction SilentlyContinue
+                $cached = @{ Exists = $false; Path = $null; Size = 0 }
+            }
         }
 
         # Integrity check: filename mismatch = newer version available

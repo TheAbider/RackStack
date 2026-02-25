@@ -40,7 +40,8 @@ function Export-VMWizard {
     $vmMap = @{}
     foreach ($vm in $vms) {
         $stateColor = if ($vm.State -eq 'Running') { "Success" } elseif ($vm.State -eq 'Off') { "Warning" } else { "Info" }
-        $sizeStr = "{0:N0}GB" -f (($vm.HardDrives | ForEach-Object { (Get-VHD $_.Path -ErrorAction SilentlyContinue).FileSize } | Measure-Object -Sum).Sum / 1GB)
+        $vhdSizes = ($vm.HardDrives | ForEach-Object { (Get-VHD $_.Path -ErrorAction SilentlyContinue).FileSize } | Measure-Object -Sum)
+        $sizeStr = if ($null -ne $vhdSizes.Sum -and $vhdSizes.Sum -gt 0) { "{0:N0}GB" -f ($vhdSizes.Sum / 1GB) } else { "N/A" }
         $vmDisplay = "[$vmIndex]  $($vm.Name.PadRight(35)) $($vm.State.ToString().PadRight(10)) $sizeStr"
         Write-OutputColor "  │  $($vmDisplay.PadRight(68))│" -color $stateColor
         $vmMap["$vmIndex"] = $vm

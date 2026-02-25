@@ -181,7 +181,7 @@ function Enable-ReplicaServer {
             Write-OutputColor "  No servers specified. Cancelled." -color "Error"
             return
         }
-        $script:ReplicaAllowedServers = $serverList -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+        $script:ReplicaAllowedServers = @($serverList -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
     }
 
     # Step 3: Set storage path

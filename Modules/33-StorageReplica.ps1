@@ -66,8 +66,8 @@ function Show-StorageReplicaManagement {
         Write-OutputColor "  │$("  STORAGE REPLICA PARTNERSHIPS".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-        $partnerships = Get-SRPartnership -ErrorAction SilentlyContinue
-        if ($partnerships) {
+        $partnerships = @(Get-SRPartnership -ErrorAction SilentlyContinue)
+        if ($partnerships.Count -gt 0) {
             foreach ($p in $partnerships) {
                 $status = if ($p.ReplicationMode -eq "Synchronous") { "Sync" } else { "Async" }
                 Write-OutputColor "  │$("  $($p.SourceComputerName) -> $($p.DestinationComputerName) [$status]".PadRight(72))│" -color "Success"

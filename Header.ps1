@@ -15,7 +15,7 @@
     - Configure iSCSI NICs with proper isolation
     - Set hostname with validation
     - Join Active Directory domain
-    - Set timezone (US timezones)
+    - Set timezone (world timezones with continent-based selection)
     - Install Windows Updates with timeout protection
     - Enable Remote Desktop with firewall rules
     - Configure Windows Firewall profiles
@@ -30,10 +30,40 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.4
+    1.9.8
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.8
+    BUG FIXES:
+    - FIXED: Deduplication status query now passes volume with drive letter colon (was silently failing)
+    - FIXED: VM export size display handles null VHD sizes gracefully instead of dividing null by 1GB
+    - FIXED: VHD cache size mismatch now prompts user instead of silently deleting cached file
+    - FIXED: Array handling hardened for single-item results in cluster, replica, and storage modules
+
+.CHANGELOG v1.9.7
+    IMPROVEMENTS:
+    - ADDED: Edit Defaults menu expanded with Auto-Update toggle, Temp Path, and Timezone Region options
+    - MOVED: Validate-Release.ps1 to local/ (no longer tracked in public repo)
+
+.CHANGELOG v1.9.6
+    BUG FIXES:
+    - FIXED: Disk cleanup now only counts freed bytes after successful file deletion
+    - FIXED: First-run wizard auto-adopts company defaults without unnecessary prompts
+    IMPROVEMENTS:
+    - ADDED: Transcript directory size-based cleanup (removes oldest if directory exceeds 500MB)
+
+.CHANGELOG v1.9.5
+    NEW FEATURES:
+    - ADDED: World timezone support with 7 continent-based regions (58 curated timezones)
+    - ADDED: Browse all system timezones with paginated view
+    - ADDED: TimeZoneRegion default to skip region picker for known deployments
+    BUG FIXES:
+    - FIXED: Disk space check skipped entirely when volume has exactly 0 bytes free
+    - FIXED: Audit log rotation failures now logged instead of silently swallowed
+    TESTS:
+    - ADDED: Server Role Templates (Module 60) test coverage (Section 141)
 
 .CHANGELOG v1.9.4
     IMPROVEMENTS:

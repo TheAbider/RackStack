@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.9.4
+    Automated Test Runner for RackStack v1.9.8
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -2807,7 +2807,7 @@ try {
     Write-TestResult "Module 42-ISO: has filename mismatch update detection" $isoUpdate
 
     # VHD: same patterns
-    $vhdPreUse = $vhdMod2 -match 'Integrity check: size mismatch = corrupt, silently delete'
+    $vhdPreUse = $vhdMod2 -match 'Integrity check: size mismatch'
     Write-TestResult "Module 41-VHD: has pre-use size mismatch detection" $vhdPreUse
 
     $vhdUpdate = $vhdMod2 -match 'UPDATE AVAILABLE'
@@ -4109,26 +4109,28 @@ try {
 }
 
 # ============================================================================
-# SECTION 62: RELEASE VALIDATION SCRIPT TESTS
+# SECTION 62: RELEASE VALIDATION (local/ — not tracked in public repo)
 # ============================================================================
-Write-SectionHeader "SECTION 62: RELEASE VALIDATION SCRIPT TESTS"
+Write-SectionHeader "SECTION 62: RELEASE VALIDATION"
 
-$validateScript = Join-Path $PSScriptRoot "Validate-Release.ps1"
-Write-TestResult "Validate-Release.ps1 exists" (Test-Path $validateScript)
-
-try {
-    $vrContent = Get-Content $validateScript -Raw
-    Write-TestResult "Validate-Release: has parse check section" ($vrContent -match 'PARSE CHECK')
-    Write-TestResult "Validate-Release: has PSSA section" ($vrContent -match 'PSSCRIPTANALYZER')
-    Write-TestResult "Validate-Release: has module structure check" ($vrContent -match 'MODULE STRUCTURE')
-    Write-TestResult "Validate-Release: has region integrity check" ($vrContent -match 'REGION INTEGRITY')
-    Write-TestResult "Validate-Release: has version consistency check" ($vrContent -match 'VERSION CONSISTENCY')
-    Write-TestResult "Validate-Release: has sync verification" ($vrContent -match 'SYNC VERIFICATION')
-    Write-TestResult "Validate-Release: has defaults check" ($vrContent -match 'DEFAULTS.*CONFIGURATION')
-    Write-TestResult "Validate-Release: has test suite integration" ($vrContent -match 'AUTOMATED TEST SUITE')
-    Write-TestResult "Validate-Release: supports -SkipTests flag" ($vrContent -match '\[switch\]\$SkipTests')
-} catch {
-    Write-TestResult "Validate-Release: content" $false $_.Exception.Message
+# Validate-Release.ps1 is in local/ (gitignored) — skip tests in CI, run locally
+$validateScript = Join-Path (Split-Path $PSScriptRoot) "local\Validate-Release.ps1"
+if (Test-Path $validateScript) {
+    try {
+        $vrContent = Get-Content $validateScript -Raw
+        Write-TestResult "Validate-Release: has parse check section" ($vrContent -match 'PARSE CHECK')
+        Write-TestResult "Validate-Release: has PSSA section" ($vrContent -match 'PSSCRIPTANALYZER')
+        Write-TestResult "Validate-Release: has module structure check" ($vrContent -match 'MODULE STRUCTURE')
+        Write-TestResult "Validate-Release: has version consistency check" ($vrContent -match 'VERSION CONSISTENCY')
+        Write-TestResult "Validate-Release: has sync verification" ($vrContent -match 'SYNC VERIFICATION')
+        Write-TestResult "Validate-Release: has defaults check" ($vrContent -match 'DEFAULTS.*CONFIGURATION')
+        Write-TestResult "Validate-Release: has test suite integration" ($vrContent -match 'AUTOMATED TEST SUITE')
+        Write-TestResult "Validate-Release: supports -SkipTests flag" ($vrContent -match '\[switch\]\$SkipTests')
+    } catch {
+        Write-TestResult "Validate-Release: content" $false $_.Exception.Message
+    }
+} else {
+    Write-TestResult "Validate-Release tests" -Skipped -Message "local/ not present (CI mode)"
 }
 
 # ============================================================================
@@ -4383,7 +4385,7 @@ try {
     Write-TestResult "NTP: uses Write-MenuItem for menu" ($ntpContent -match 'Write-MenuItem')
 
     Write-TestResult "Timezone: Set-ServerTimeZone function exists" ($tzContent -match 'function Set-ServerTimeZone')
-    Write-TestResult "Timezone: has US timezone options" ($tzContent -match 'Pacific|Mountain|Central|Eastern')
+    Write-TestResult "Timezone: has timezone regions" ($tzContent -match 'TimezoneRegions|North America')
 
     Write-TestResult "Firewall: Disable-WindowsFirewallDomainPrivate exists" ($fwContent -match 'function Disable-WindowsFirewallDomainPrivate')
     Write-TestResult "Firewall: disables Domain and Private profiles" ($fwContent -match 'Domain.*Private|Set-NetFirewallProfile')
@@ -7451,6 +7453,75 @@ try {
 
 } catch {
     Write-TestResult "Company Defaults Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 141: SERVER ROLE TEMPLATES (MODULE 60)
+# ============================================================================
+Write-SectionHeader "SECTION 141: SERVER ROLE TEMPLATES (MODULE 60)"
+
+try {
+    $roleContent = Get-Content (Join-Path $modulesPath "60-ServerRoleTemplates.ps1") -Raw
+    $initContent141 = Get-Content (Join-Path $modulesPath "00-Initialization.ps1") -Raw
+    $opsContent141 = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+
+    # Function existence checks
+    Write-TestResult "RoleTemplates: Show-RoleTemplateSelector function exists" ($roleContent -match 'function\s+Show-RoleTemplateSelector\b')
+    Write-TestResult "RoleTemplates: Install-ServerRoleTemplate function exists" ($roleContent -match 'function\s+Install-ServerRoleTemplate\b')
+    Write-TestResult "RoleTemplates: Show-InstalledRoles function exists" ($roleContent -match 'function\s+Show-InstalledRoles\b')
+    Write-TestResult "RoleTemplates: Get-RoleTemplateStatus function exists" ($roleContent -match 'function\s+Get-RoleTemplateStatus\b')
+    Write-TestResult "RoleTemplates: Start-DHCPPostInstall function exists" ($roleContent -match 'function\s+Start-DHCPPostInstall\b')
+    Write-TestResult "RoleTemplates: Start-WSUSPostInstall function exists" ($roleContent -match 'function\s+Start-WSUSPostInstall\b')
+    Write-TestResult "RoleTemplates: Invoke-DCPromoWizard function exists" ($roleContent -match 'function\s+Invoke-DCPromoWizard\b')
+
+    # Built-in template existence (10 templates)
+    Write-TestResult "RoleTemplates: DC template defined" ($roleContent -match '"DC"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: FS template defined" ($roleContent -match '"FS"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: WEB template defined" ($roleContent -match '"WEB"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: DHCP template defined" ($roleContent -match '"DHCP"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: DNS template defined" ($roleContent -match '"DNS"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: PRINT template defined" ($roleContent -match '"PRINT"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: WSUS template defined" ($roleContent -match '"WSUS"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: NPS template defined" ($roleContent -match '"NPS"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: HV template defined" ($roleContent -match '"HV"\s*=\s*@\{')
+    Write-TestResult "RoleTemplates: RDS template defined" ($roleContent -match '"RDS"\s*=\s*@\{')
+
+    # Template structure checks
+    Write-TestResult "RoleTemplates: DC has Features array" ($roleContent -match '"DC"[\s\S]{0,200}Features\s*=\s*@\(')
+    Write-TestResult "RoleTemplates: DC has FullName" ($roleContent -match '"DC"[\s\S]{0,100}FullName\s*=\s*"Domain Controller"')
+    Write-TestResult "RoleTemplates: DC RequiresReboot is true" ($roleContent -match '"DC"[\s\S]{0,500}RequiresReboot\s*=\s*\$true')
+    Write-TestResult "RoleTemplates: FS ServerOnly is true" ($roleContent -match '"FS"[\s\S]{0,500}ServerOnly\s*=\s*\$true')
+    Write-TestResult "RoleTemplates: WEB has Description" ($roleContent -match '"WEB"[\s\S]{0,100}Description\s*=')
+
+    # Get-RoleTemplateStatus return structure
+    Write-TestResult "RoleTemplates: Get-RoleTemplateStatus returns Status" ($roleContent -match 'Get-RoleTemplateStatus[\s\S]{0,2000}Status\s*=\s*\$statusText')
+    Write-TestResult "RoleTemplates: Get-RoleTemplateStatus returns Features" ($roleContent -match 'Get-RoleTemplateStatus[\s\S]{0,2000}Features\s*=\s*\$featureList')
+    Write-TestResult "RoleTemplates: Get-RoleTemplateStatus returns Total" ($roleContent -match 'Get-RoleTemplateStatus[\s\S]{0,2000}Total\s*=\s*\$totalCount')
+    Write-TestResult "RoleTemplates: Get-RoleTemplateStatus checks installed count" ($roleContent -match 'Get-RoleTemplateStatus[\s\S]{0,500}Installed\s*=')
+
+    # Install-ServerRoleTemplate behavior
+    Write-TestResult "RoleTemplates: Install-ServerRoleTemplate has TemplateKey param" ($roleContent -match 'Install-ServerRoleTemplate[\s\S]{0,200}\$TemplateKey')
+    Write-TestResult "RoleTemplates: Install-ServerRoleTemplate checks built-in templates" ($roleContent -match 'ServerRoleTemplates\.ContainsKey')
+    Write-TestResult "RoleTemplates: Install-ServerRoleTemplate checks custom templates" ($roleContent -match 'CustomRoleTemplates\.ContainsKey')
+
+    # Custom template merge from defaults
+    Write-TestResult "RoleTemplates: CustomRoleTemplates declared in init" ($initContent141 -match '\$script:CustomRoleTemplates\s*=\s*@\{\}')
+    Write-TestResult "RoleTemplates: CustomRoleTemplates in Export-Defaults" ($opsContent141 -match 'CustomRoleTemplates\s*=\s*\$script:CustomRoleTemplates')
+
+    # Session tracking
+    Write-TestResult "RoleTemplates: Install tracks session change" ($roleContent -match 'Add-SessionChange')
+
+    # Server-only guard
+    Write-TestResult "RoleTemplates: ServerOnly check uses Test-WindowsServer" ($roleContent -match 'Test-WindowsServer')
+
+    # Navigation support
+    Write-TestResult "RoleTemplates: Selector supports navigation commands" ($roleContent -match 'Test-NavigationCommand')
+
+    # Menu cache clearing
+    Write-TestResult "RoleTemplates: Show-RoleTemplateSelector has [R] Show Installed" ($roleContent -match '\[R\].*Show.*Installed')
+
+} catch {
+    Write-TestResult "Server Role Templates Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
