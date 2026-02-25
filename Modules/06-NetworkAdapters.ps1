@@ -344,7 +344,7 @@ function Show-AdapterStatus {
     Write-OutputColor "Adapter: $AdapterName" -color "Info"
     Write-OutputColor "Status: $($adapter.Status)" -color $(if ($adapter.Status -eq "Up") { "Success" } else { "Warning" })
 
-    $ipConfig = Get-NetIPAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    $ipConfig = Get-NetIPAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($ipConfig) {
         Write-OutputColor "IPv4: $($ipConfig.IPAddress)/$($ipConfig.PrefixLength)" -color "Success"
     }

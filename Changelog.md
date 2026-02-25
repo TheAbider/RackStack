@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.22
+
+- **Bug Fix:** Storage Manager disk selection, initialization, volume display, and label functions all failed to detect empty results — `$null.Count -eq 0` is false in PS 5.1. Wrapped 6 pipeline results in `@()` across `Select-Disk`, `Show-AllDisks`, `Show-AllVolumes`, `Initialize-NewDisk`, and `Set-VolumeLabel` (38-StorageManager).
+- **Bug Fix:** VLAN adapter partial match (`-like "*name*"`) could return multiple Hyper-V adapters when names overlap (e.g., "LAN" matching both "LAN" and "VLAN"). Array of names passed to `-VMNetworkAdapterName`, causing wrong adapter to be tagged. Added `Select-Object -First 1` (08-VLAN).
+- **Bug Fix:** IP configuration rollback failed when adapter had multiple IPv4 addresses (DHCP + APIPA) — `Get-NetIPAddress` returned array, and `New-NetIPAddress` rejected array parameters for `-IPAddress` and `-PrefixLength`. Added `Select-Object -First 1` (07-IPConfiguration).
+- **Bug Fix:** Adapter status display garbled when multiple IPv4 addresses existed — string interpolation produced "192.168.1.100 169.254.1.1/24 16" instead of clean output. Added `Select-Object -First 1` (06-NetworkAdapters).
+- 63 modules, 1854 tests
+
 ## v1.9.21
 
 - **Bug Fix:** Cluster disk and CSV selection menus rejected valid choices when only one item existed — single pipeline result has no `.Count` in PS 5.1. Wrapped cluster disk, CSV, and quorum disk queries in `@()` and updated emptiness checks to use `.Count -eq 0` (27-FailoverClustering).

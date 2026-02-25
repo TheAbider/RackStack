@@ -61,7 +61,7 @@ function Show-AllDisks {
     Write-OutputColor "Scanning disks..." -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $disks = Get-Disk | Sort-Object Number
+    $disks = @(Get-Disk | Sort-Object Number)
 
     if ($disks.Count -eq 0) {
         Write-OutputColor "No disks found." -color "Warning"
@@ -174,7 +174,7 @@ function Show-AllVolumes {
 
     Write-OutputColor "" -color "Info"
 
-    $volumes = Get-Volume | Where-Object { $_.DriveLetter -or $_.FileSystemLabel } | Sort-Object DriveLetter
+    $volumes = @(Get-Volume | Where-Object { $_.DriveLetter -or $_.FileSystemLabel } | Sort-Object DriveLetter)
 
     if ($volumes.Count -eq 0) {
         Write-OutputColor "No volumes found." -color "Warning"
@@ -228,18 +228,18 @@ function Select-Disk {
         [switch]$ExcludeSystemDisk
     )
 
-    $disks = Get-Disk | Sort-Object Number
+    $disks = @(Get-Disk | Sort-Object Number)
 
     if ($OnlyUninitialized) {
-        $disks = $disks | Where-Object { $_.PartitionStyle -eq "RAW" }
+        $disks = @($disks | Where-Object { $_.PartitionStyle -eq "RAW" })
     }
 
     if ($OnlyInitialized) {
-        $disks = $disks | Where-Object { $_.PartitionStyle -ne "RAW" }
+        $disks = @($disks | Where-Object { $_.PartitionStyle -ne "RAW" })
     }
 
     if (-not $AllowOffline) {
-        $disks = $disks | Where-Object { $_.OperationalStatus -eq "Online" }
+        $disks = @($disks | Where-Object { $_.OperationalStatus -eq "Online" })
     }
 
     # Identify the OS disk (contains Windows partition)
@@ -257,7 +257,7 @@ function Select-Disk {
 
     # Exclude OS disk for destructive operations unless explicitly allowed
     if ($ExcludeSystemDisk -and $null -ne $osDiskNumber) {
-        $disks = $disks | Where-Object { $_.Number -ne $osDiskNumber }
+        $disks = @($disks | Where-Object { $_.Number -ne $osDiskNumber })
     }
 
     if ($disks.Count -eq 0) {
@@ -415,7 +415,7 @@ function Initialize-NewDisk {
     }
 
     # Show only uninitialized disks
-    $rawDisks = Get-Disk | Where-Object { $_.PartitionStyle -eq "RAW" }
+    $rawDisks = @(Get-Disk | Where-Object { $_.PartitionStyle -eq "RAW" })
 
     if ($rawDisks.Count -eq 0) {
         Write-OutputColor "No uninitialized disks found." -color "Warning"
@@ -1638,7 +1638,7 @@ function Set-VolumeLabel {
     Write-OutputColor "" -color "Info"
 
     # Show volumes with drive letters
-    $volumes = Get-Volume | Where-Object { $_.DriveLetter } | Sort-Object DriveLetter
+    $volumes = @(Get-Volume | Where-Object { $_.DriveLetter } | Sort-Object DriveLetter)
 
     if ($volumes.Count -eq 0) {
         Write-OutputColor "No volumes with drive letters found." -color "Warning"

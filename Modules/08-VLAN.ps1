@@ -49,7 +49,7 @@ function Set-AdapterVLAN {
 
     if (-not $vmAdapter) {
         # Try finding by partial match
-        $vmAdapter = Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$vmAdapterName*" }
+        $vmAdapter = Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$vmAdapterName*" } | Select-Object -First 1
     }
 
     if (-not $vmAdapter) {

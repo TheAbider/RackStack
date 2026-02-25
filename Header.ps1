@@ -30,10 +30,17 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.21
+    1.9.22
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.22
+    BUG FIXES:
+    - FIXED: Storage Manager disk/volume selection failed with zero results — .Count on null pipeline result (38-StorageManager, 6 functions)
+    - FIXED: VLAN partial match returned multiple adapters — caused wrong adapter to get VLAN tagged (08-VLAN)
+    - FIXED: IP rollback failed when adapter had multiple IPv4 addresses — arrays passed where singles expected (07-IPConfiguration)
+    - FIXED: Adapter status display garbled with multiple IPv4 addresses (06-NetworkAdapters)
 
 .CHANGELOG v1.9.21
     BUG FIXES:
