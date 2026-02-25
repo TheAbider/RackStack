@@ -30,10 +30,17 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.3
+    1.9.4
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.4
+    IMPROVEMENTS:
+    - ADDED: Documentation integrity and UTF-8 BOM checks in release validation pipeline
+    - FIXED: Batch mode agent install uses unattended mode (no interactive prompts)
+    - FIXED: Null safety for CIM queries, IP state checks, and timezone display
+    - FIXED: Zero-search normalization in agent installer
 
 .CHANGELOG v1.9.3
     BUG FIXES:

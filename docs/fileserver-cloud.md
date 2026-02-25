@@ -57,7 +57,7 @@ Blob storage uses virtual directories (flat namespace with `/` separators):
 server-tools/
     ISOs/en-us_windows_server_2025_x64.iso
     VirtualHardDrives/Server2025-Std-Sysprepped.vhdx
-    Agents/KaseyaAgent_Site101.exe
+    Agents/Agent_org.101-mainoffice.exe
 ```
 
 ### Generate a SAS token
@@ -129,7 +129,7 @@ Same virtual directory convention:
 server-tools/
     ISOs/en-us_windows_server_2025_x64.iso
     VirtualHardDrives/Server2025-Std-Sysprepped.vhdx
-    Agents/KaseyaAgent_Site101.exe
+    Agents/Agent_org.101-mainoffice.exe
 ```
 
 ### Access pattern: Presigned URLs

@@ -7,12 +7,15 @@
     2. PSScriptAnalyzer (0 errors required)
     3. Module count verification
     4. Region count verification (monolithic)
-    5. Sync verification (modules match monolithic)
-    6. Version consistency check
-    7. Required function existence
-    8. Content integrity scans
-    9. Changelog validation (entry exists, format correct, stats footer)
-    10. Full test suite (Run-Tests.ps1)
+    5. Version consistency check
+    6. Sync verification (modules match monolithic)
+    7. Defaults & configuration
+    8. Constants verification
+    9. Content integrity scans
+    10. Documentation integrity (vendor filenames, stale version refs)
+    11. UTF-8 BOM verification
+    12. Changelog validation (entry exists, format correct, stats footer)
+    13. Full test suite (Run-Tests.ps1)
     Results are displayed with pass/fail indicators and a final summary.
 .NOTES
     Run from the RackStack directory:
@@ -336,7 +339,95 @@ foreach ($f in $scanFiles) {
 Write-Check "Content scan B: 0 blocked terms ($($scanFiles.Count) files)" ($hitsB -eq 0) "$hitsB file(s) matched"
 
 # ============================================================================
-Write-Section "10. CHANGELOG VALIDATION"
+Write-Section "10. DOCUMENTATION INTEGRITY"
+# ============================================================================
+
+$docsDir = Join-Path $_vrRepoRoot "docs"
+$docFiles = @()
+if (Test-Path $docsDir) {
+    $docFiles = @(Get-ChildItem $docsDir -Filter "*.md" -Recurse)
+}
+
+# Check docs for stale vendor-specific example filenames
+$vendorPatterns = @("Kas" + "eyaAgent", "Kas" + "eya_")
+$vendorHits = @()
+foreach ($f in $docFiles) {
+    $fc = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
+    if ($fc) {
+        foreach ($pat in $vendorPatterns) {
+            if ($fc -match $pat) {
+                $vendorHits += $f.Name
+                break
+            }
+        }
+    }
+}
+Write-Check "Docs: no vendor-specific example filenames ($($docFiles.Count) files)" ($vendorHits.Count -eq 0) "Files with vendor refs: $($vendorHits -join ', ')"
+
+# Check README for hardcoded version numbers (should use {version} placeholder)
+$readmePath = Join-Path $_vrRepoRoot "README.md"
+if (Test-Path $readmePath) {
+    $readmeContent = Get-Content $readmePath -Raw
+    # Look for RackStack vX.Y.Z patterns that should be dynamic
+    $staleRefs = [regex]::Matches($readmeContent, 'RackStack\s+v\d+\.\d+\.\d+')
+    Write-Check "README: no hardcoded 'RackStack vX.Y.Z' version strings" ($staleRefs.Count -eq 0) "Found: $($staleRefs.Value -join ', ')"
+}
+
+# Check docs for any remaining hardcoded vendor terms in filenames
+$vendorTerms = @("Kas" + "eya")
+$docsVendorHits = @()
+foreach ($f in $docFiles) {
+    $fc = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
+    if ($fc) {
+        foreach ($pat in $vendorTerms) {
+            if ($fc -match $pat) {
+                $docsVendorHits += $f.Name
+                break
+            }
+        }
+    }
+}
+# Also check README
+if (Test-Path $readmePath) {
+    $readmeRaw = Get-Content $readmePath -Raw
+    foreach ($pat in $vendorTerms) {
+        if ($readmeRaw -match $pat) {
+            $docsVendorHits += "README.md"
+            break
+        }
+    }
+}
+Write-Check "Docs + README: no vendor product names" ($docsVendorHits.Count -eq 0) "Files: $($docsVendorHits -join ', ')"
+
+# ============================================================================
+Write-Section "11. UTF-8 BOM VERIFICATION"
+# ============================================================================
+
+$bomMissing = @()
+foreach ($f in $moduleFiles) {
+    $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+    if ($bytes.Count -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+        $bomMissing += $f.Name
+    }
+}
+Write-Check "UTF-8 BOM: all $($moduleFiles.Count) modules have BOM" ($bomMissing.Count -eq 0) "Missing: $($bomMissing -join ', ')"
+
+# Also check Header.ps1 and RackStack.ps1
+$extraPs1 = @("Header.ps1", "RackStack.ps1")
+$extraBomMissing = @()
+foreach ($name in $extraPs1) {
+    $fPath = Join-Path $_vrRepoRoot $name
+    if (Test-Path $fPath) {
+        $bytes = [System.IO.File]::ReadAllBytes($fPath)
+        if ($bytes.Count -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+            $extraBomMissing += $name
+        }
+    }
+}
+Write-Check "UTF-8 BOM: Header.ps1 and RackStack.ps1 have BOM" ($extraBomMissing.Count -eq 0) "Missing: $($extraBomMissing -join ', ')"
+
+# ============================================================================
+Write-Section "12. CHANGELOG VALIDATION"
 # ============================================================================
 
 $changelogPath = Join-Path $_vrRepoRoot "Changelog.md"
@@ -406,7 +497,7 @@ if ($changelogExists) {
 }
 
 # ============================================================================
-Write-Section "11. AUTOMATED TEST SUITE"
+Write-Section "13. AUTOMATED TEST SUITE"
 # ============================================================================
 
 if ($SkipTests) {

@@ -262,8 +262,8 @@ fileserver/
                 Server2022-Std-Sysprepped.vhdx
                 Server2025-Std-Sysprepped.vhdx
             Agents/
-                KaseyaAgent_Site101.exe
-                KaseyaAgent_Site202.exe
+                Agent_org.101-mainoffice.exe
+                Agent_org.202-westbranch.exe
             version.json
 ```
 

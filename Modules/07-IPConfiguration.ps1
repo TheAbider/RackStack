@@ -227,8 +227,8 @@ function Set-VMIPAddress {
         while ($dadWait -lt 10) {
             Start-Sleep -Seconds 1
             $dadWait++
-            $addrState = (Get-NetIPAddress -InterfaceAlias $selectedAdapterName -IPAddress $ipAddress -ErrorAction SilentlyContinue).AddressState
-            if ($addrState -eq 'Preferred') { break }
+            $addrObj = Get-NetIPAddress -InterfaceAlias $selectedAdapterName -IPAddress $ipAddress -ErrorAction SilentlyContinue
+            if ($null -ne $addrObj -and $addrObj.AddressState -eq 'Preferred') { break }
         }
 
         # Show updated configuration

@@ -174,7 +174,7 @@ function Search-AgentInstaller {
     foreach ($agent in $Agents) {
         $matched = $false
 
-        if ($isNumeric) {
+        if ($isNumeric -and $normalizedSearch) {
             # Search by site number — partial/substring matching
             foreach ($siteNum in @($agent.SiteNumbers)) {
                 $normalizedSiteNum = ([string]$siteNum).TrimStart('0')
@@ -185,6 +185,14 @@ function Search-AgentInstaller {
                 }
                 # Partial match — search term appears anywhere in site number
                 if ($normalizedSiteNum -like "*$normalizedSearch*") {
+                    $matched = $true
+                    break
+                }
+            }
+        } elseif ($isNumeric) {
+            # Search for "0" or "00" etc — exact match only (no partial)
+            foreach ($siteNum in @($agent.SiteNumbers)) {
+                if ($siteNum -eq $SearchTerm) {
                     $matched = $true
                     break
                 }
@@ -511,10 +519,40 @@ function Install-SelectedAgent {
 # Main agent installation menu
 function Install-Agent {
     param(
-        [switch]$ReturnAfterInstall  # Returns after successful install (for domain join flow)
+        [switch]$ReturnAfterInstall,  # Returns after successful install (for domain join flow)
+        [switch]$Unattended           # Non-interactive: auto-detect from hostname, install if single match
     )
 
     $toolName = $script:AgentInstaller.ToolName
+
+    # --- Section: Unattended Mode (batch/automated installs) ---
+    if ($Unattended) {
+        if (-not (Test-AgentInstallerConfigured)) {
+            Write-OutputColor "  $toolName agent: not configured (skipped)" -color "Debug"
+            return
+        }
+        $agentStatus = Test-AgentInstalled
+        if ($agentStatus.Installed) {
+            Write-OutputColor "  $toolName agent: already installed" -color "Debug"
+            return
+        }
+        $detectedSite = Get-SiteNumberFromHostname
+        if (-not $detectedSite) {
+            Write-OutputColor "  $toolName agent: no site number in hostname (skipped)" -color "Warning"
+            return
+        }
+        $agents = Get-AgentInstallerList
+        $matchingAgents = @(Search-AgentInstaller -SearchTerm $detectedSite -Agents $agents)
+        if ($matchingAgents.Count -eq 1) {
+            Write-OutputColor "  $toolName agent: auto-detected site $detectedSite, installing..." -color "Info"
+            Install-SelectedAgent -Agent $matchingAgents[0]
+        } elseif ($matchingAgents.Count -gt 1) {
+            Write-OutputColor "  $toolName agent: $($matchingAgents.Count) matches for site $detectedSite (skipped — needs manual selection)" -color "Warning"
+        } else {
+            Write-OutputColor "  $toolName agent: no match for site $detectedSite (skipped)" -color "Warning"
+        }
+        return
+    }
 
     # --- Section: Pre-check - Feature Configuration ---
     if (-not (Test-AgentInstallerConfigured)) {

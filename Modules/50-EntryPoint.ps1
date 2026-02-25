@@ -1256,7 +1256,7 @@ function Start-BatchMode {
             else {
                 Write-OutputColor "  [$stepNum/$totalSteps] Installing $($agentCfg.ToolName) agent..." -color "Info"
                 try {
-                    Install-Agent
+                    Install-Agent -Unattended
                     $changesApplied++
                     Add-SessionChange -Category "Software" -Description "Installed $($agentCfg.ToolName) agent via batch mode"
                 }

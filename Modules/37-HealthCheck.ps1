@@ -9,15 +9,17 @@ function Show-SystemHealthCheck {
 
     # System Info
     Write-OutputColor "=== SYSTEM INFORMATION ===" -color "Success"
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem
-    Write-OutputColor "  Computer Name: $($cs.Name)" -color "Info"
-    Write-OutputColor "  OS: $($os.Caption)" -color "Info"
-    Write-OutputColor "  Version: $($os.Version)" -color "Info"
-    Write-OutputColor "  Last Boot: $($os.LastBootUpTime)" -color "Info"
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    Write-OutputColor "  Computer Name: $(if ($cs) { $cs.Name } else { $env:COMPUTERNAME })" -color "Info"
+    Write-OutputColor "  OS: $(if ($os) { $os.Caption } else { 'Unknown' })" -color "Info"
+    Write-OutputColor "  Version: $(if ($os) { $os.Version } else { 'Unknown' })" -color "Info"
+    Write-OutputColor "  Last Boot: $(if ($os) { $os.LastBootUpTime } else { 'Unknown' })" -color "Info"
 
-    $uptime = (Get-Date) - $os.LastBootUpTime
-    $uptimeStr = "{0} days, {1} hours, {2} minutes" -f $uptime.Days, $uptime.Hours, $uptime.Minutes
+    if ($os -and $os.LastBootUpTime) {
+        $uptime = (Get-Date) - $os.LastBootUpTime
+        $uptimeStr = "{0} days, {1} hours, {2} minutes" -f $uptime.Days, $uptime.Hours, $uptime.Minutes
+    } else { $uptimeStr = "Unknown" }
     Write-OutputColor "  Uptime: $uptimeStr" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -28,7 +30,8 @@ function Show-SystemHealthCheck {
     Write-OutputColor "  Processor: $($cpu.Name)" -color "Info"
     Write-OutputColor "  Cores: $($cpu.NumberOfCores) | Logical: $($cpu.NumberOfLogicalProcessors)" -color "Info"
 
-    $cpuLoad = ($cpuAll | Measure-Object -Property LoadPercentage -Average).Average
+    $cpuMeasure = $cpuAll | Measure-Object -Property LoadPercentage -Average
+    $cpuLoad = if ($null -ne $cpuMeasure -and $null -ne $cpuMeasure.Average) { $cpuMeasure.Average } else { 0 }
     $cpuColor = if ($cpuLoad -gt 80) { "Error" } elseif ($cpuLoad -gt 50) { "Warning" } else { "Success" }
     Write-OutputColor "  Current Load: $([math]::Round($cpuLoad, 1))%" -color $cpuColor
     Write-OutputColor "" -color "Info"
@@ -61,7 +64,7 @@ function Show-SystemHealthCheck {
     Write-OutputColor "=== NETWORK ADAPTERS ===" -color "Success"
     $allAdapters = Get-NetAdapter
     foreach ($adapter in ($allAdapters | Where-Object { $_.Status -eq "Up" })) {
-        $ip = Get-NetIPAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $ip = Get-NetIPAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
         $ipStr = if ($ip) { $ip.IPAddress } else { "No IP" }
         Write-OutputColor "  $($adapter.Name): $ipStr ($($adapter.LinkSpeed))" -color "Success"
     }

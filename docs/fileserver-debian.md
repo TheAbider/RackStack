@@ -26,7 +26,7 @@ sudo chown -R www-data:www-data /srv/files
 Upload your files into the appropriate folders:
 - `/srv/files/server-tools/ISOs/` -- Windows Server installation ISOs (e.g., `en-us_windows_server_2025_x64.iso`)
 - `/srv/files/server-tools/VirtualHardDrives/` -- Sysprepped VHDX files (e.g., `Server2025-Std-Sysprepped.vhdx`)
-- `/srv/files/server-tools/Agents/` -- agent installer files (e.g., `KaseyaAgent_Site101.exe`)
+- `/srv/files/server-tools/Agents/` -- agent installer files (e.g., `Agent_org.101-mainoffice.exe`)
 
 ## Step 3: Configure nginx
 
@@ -201,8 +201,8 @@ You should see a JSON directory listing of your ISOs.
         Server2022-Std-Sysprepped.vhdx
         Server2025-Std-Sysprepped.vhdx
     Agents/
-        KaseyaAgent_Site101.exe
-        KaseyaAgent_Site202.exe
+        Agent_org.101-mainoffice.exe
+        Agent_org.202-westbranch.exe
     version.json
 ```
 

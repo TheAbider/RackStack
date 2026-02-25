@@ -184,15 +184,14 @@ Default storage paths for Hyper-V hosts. Drive letters are updated by Host Stora
 
 ```json
 "AgentInstaller": {
-    "ToolName": "Kaseya",
+    "ToolName": "MyRMM",
     "FolderName": "Agents",
-    "FilePattern": "Kaseya.*\\.exe$",
-    "ServiceName": "Kaseya Agent*",
+    "FilePattern": "Agent_.*\\.exe$",
+    "ServiceName": "MyRMM Agent*",
     "InstallArgs": "/s /norestart",
     "InstallPaths": [
-        "%ProgramFiles%\\Kaseya",
-        "%ProgramFiles(x86)%\\Kaseya",
-        "C:\\kworking"
+        "%ProgramFiles%\\MyRMM",
+        "%ProgramFiles(x86)%\\MyRMM"
     ],
     "SuccessExitCodes": [0, 1641, 3010],
     "TimeoutSeconds": 300

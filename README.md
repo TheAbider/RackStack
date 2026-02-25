@@ -86,7 +86,7 @@ For production use, generate a monolithic single-file script (~34K lines) that y
 
 The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 63 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
-> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v1.9.1.ps1` = monolithic build for deployment/compilation.
+> **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v{version}.ps1` = monolithic build for deployment/compilation.
 
 ## Requirements
 
@@ -155,12 +155,12 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
     },
 
     "AgentInstaller": {
-        "ToolName": "Kaseya",
+        "ToolName": "MyRMM",
         "FolderName": "Agents",
-        "FilePattern": "Kaseya.*\\.exe$",
-        "ServiceName": "Kaseya Agent*",
+        "FilePattern": "Agent_.*\\.exe$",
+        "ServiceName": "MyRMM Agent*",
         "InstallArgs": "/s /norestart",
-        "InstallPaths": ["%ProgramFiles%\\Kaseya", "%ProgramFiles(x86)%\\Kaseya"],
+        "InstallPaths": ["%ProgramFiles%\\MyRMM", "%ProgramFiles(x86)%\\MyRMM"],
         "SuccessExitCodes": [0, 1641, 3010],
         "TimeoutSeconds": 300
     },
@@ -259,7 +259,7 @@ Automate full server builds with a JSON config file:
     "EnableRDP": true,
     "SetPowerPlan": "High Performance",
     "CreateLocalAdmin": true,
-    "InstallAgents": ["Kaseya", "ExampleRMM"],
+    "InstallAgents": ["MyRMM", "ExampleRMM"],
     "ValidateCluster": false,
     "AutoReboot": true
 }
@@ -274,7 +274,7 @@ New in v1.8.0: `InstallAgents` array for multi-agent installs, `ValidateCluster`
 ```
 RackStack/
 ├── RackStack.ps1               # Modular loader -- dot-sources 63 modules (dev use)
-├── RackStack v1.9.1.ps1        # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack v{version}.ps1    # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
 ├── defaults.example.json       # Config template with examples

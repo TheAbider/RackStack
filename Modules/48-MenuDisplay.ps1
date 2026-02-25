@@ -251,7 +251,8 @@ function Show-SystemConfigMenu {
     $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
     $hostdisplay = if ($computerSystem) { $computerSystem.Name } else { $env:COMPUTERNAME }
     $domaindisplay = if ($computerSystem) { $computerSystem.Domain } else { "Unknown" }
-    $timezonedisplay = (Get-TimeZone).Id
+    $tzObj = Get-TimeZone -ErrorAction SilentlyContinue
+    $timezonedisplay = if ($tzObj) { $tzObj.Id } else { "Unknown" }
     $powerPlan = Get-CachedValue -Key "PowerPlan" -FetchScript { (Get-CurrentPowerPlan).Name }
     $powerColor = if ($powerPlan -match "High") { "Success" } else { "Warning" }
 
