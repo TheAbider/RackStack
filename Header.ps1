@@ -30,10 +30,18 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.17
+    1.9.18
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.18
+    BUG FIXES:
+    - FIXED: Single pipeline result .Count returns null in PS 5.1 — SET team detection missed single no-internet adapter for iSCSI (09-SET)
+    - FIXED: FC adapter detection returned false for single HBA — storage backend misidentified as Local (59-StorageBackends)
+    - FIXED: NVMe disk detection returned false for single drive — storage backend misidentified as Local (59-StorageBackends)
+    - FIXED: FC port display skipped when only one HBA present (59-StorageBackends)
+    - FIXED: Network sweep "No hosts responded" message never shown when zero hosts alive (58-NetworkDiagnostics)
 
 .CHANGELOG v1.9.17
     BUG FIXES:

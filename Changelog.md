@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.18
+
+- **Bug Fix:** SET team auto-detection failed on 2-NIC servers — single pipeline result from `Where-Object` has no `.Count` property in PS 5.1, so `.Count -gt 0` returned false. iSCSI candidate adapters were never identified. Wrapped pipeline results in `@()` array subexpression (09-SET).
+- **Bug Fix:** Storage backend detection missed Fibre Channel when only one HBA present — `$fcAdapters -and $fcAdapters.Count -gt 0` evaluated to false for single objects. Same bug for single NVMe disks. Wrapped in `@()` (59-StorageBackends).
+- **Bug Fix:** FC adapter display function skipped all content when only one HBA port existed — same single-object `.Count` pattern (59-StorageBackends).
+- **Bug Fix:** Network sweep "No hosts responded" message never displayed — when `$alive` is `$null` (zero results), `.Count -eq 0` evaluates to `$null -eq 0` which is false. Wrapped in `@()` (58-NetworkDiagnostics).
+- 63 modules, 1854 tests
+
 ## v1.9.17
 
 - **Bug Fix:** Division by zero / NaN cascade in performance dashboard when CIM returns null — memory percentage and progress bar produced errors. Added `-ErrorAction SilentlyContinue` and zero guards (28-PerformanceDashboard).

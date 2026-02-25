@@ -108,8 +108,8 @@ function Select-PhysicalAdaptersSmart {
         Write-OutputColor "" -color "Info"
 
         # Select adapters with internet
-        $internetAdapters = $results | Where-Object { $_.HasInternet }
-        $noInternetAdapters = $results | Where-Object { -not $_.HasInternet }
+        $internetAdapters = @($results | Where-Object { $_.HasInternet })
+        $noInternetAdapters = @($results | Where-Object { -not $_.HasInternet })
 
         if ($internetAdapters.Count -eq 0) {
             Write-OutputColor "No adapters with internet connectivity found." -color "Warning"

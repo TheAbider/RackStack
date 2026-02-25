@@ -69,8 +69,8 @@ function Get-DetectedStorageBackend {
     catch { }
 
     # Check for FC HBAs
-    $fcAdapters = Get-InitiatorPort -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionType -eq "Fibre Channel" }
-    if ($fcAdapters -and $fcAdapters.Count -gt 0) {
+    $fcAdapters = @(Get-InitiatorPort -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionType -eq "Fibre Channel" })
+    if ($fcAdapters.Count -gt 0) {
         # Check if FC disks are present
         $fcDisks = Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "Fibre Channel" }
         if ($fcDisks) { return "FC" }
@@ -85,8 +85,8 @@ function Get-DetectedStorageBackend {
     catch { }
 
     # Check for NVMe-oF
-    $nvmeDisks = Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "NVMe" }
-    if ($nvmeDisks -and $nvmeDisks.Count -gt 0) { return "NVMeoF" }
+    $nvmeDisks = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "NVMe" })
+    if ($nvmeDisks.Count -gt 0) { return "NVMeoF" }
 
     return "Local"
 }
@@ -105,9 +105,9 @@ function Show-FCAdapters {
     Write-OutputColor "  │$("  FC HOST BUS ADAPTERS".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-    $fcPorts = Get-InitiatorPort -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionType -eq "Fibre Channel" }
+    $fcPorts = @(Get-InitiatorPort -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionType -eq "Fibre Channel" })
 
-    if ($fcPorts -and $fcPorts.Count -gt 0) {
+    if ($fcPorts.Count -gt 0) {
         $index = 1
         foreach ($port in $fcPorts) {
             $status = $port.OperationalStatus
