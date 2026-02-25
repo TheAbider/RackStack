@@ -10,7 +10,9 @@
     5. Sync verification (modules match monolithic)
     6. Version consistency check
     7. Required function existence
-    8. Full test suite (Run-Tests.ps1)
+    8. Content integrity scans
+    9. Changelog validation (entry exists, format correct, stats footer)
+    10. Full test suite (Run-Tests.ps1)
     Results are displayed with pass/fail indicators and a final summary.
 .NOTES
     Run from the RackStack directory:
@@ -334,7 +336,77 @@ foreach ($f in $scanFiles) {
 Write-Check "Content scan B: 0 blocked terms ($($scanFiles.Count) files)" ($hitsB -eq 0) "$hitsB file(s) matched"
 
 # ============================================================================
-Write-Section "10. AUTOMATED TEST SUITE"
+Write-Section "10. CHANGELOG VALIDATION"
+# ============================================================================
+
+$changelogPath = Join-Path $_vrRepoRoot "Changelog.md"
+$changelogExists = Test-Path $changelogPath
+Write-Check "Changelog.md exists" $changelogExists
+
+if ($changelogExists) {
+    $clContent = Get-Content $changelogPath -Raw
+    $clLines = Get-Content $changelogPath
+
+    # Current version has an entry
+    $versionHeader = "## v$moduleVersion"
+    $hasVersionEntry = $clContent -match [regex]::Escape($versionHeader)
+    Write-Check "Changelog has entry for v$moduleVersion" $hasVersionEntry
+
+    # Current version is the first entry (after # Changelog header)
+    $firstVersionLine = $clLines | Where-Object { $_ -match '^\s*## v\d+\.\d+' } | Select-Object -First 1
+    $isTopEntry = $false
+    if ($firstVersionLine) {
+        $isTopEntry = $firstVersionLine.Trim() -eq $versionHeader
+    }
+    Write-Check "v$moduleVersion is the top changelog entry" $isTopEntry "Top entry: $($firstVersionLine)"
+
+    # Entry has at least one feature bullet
+    $inCurrentSection = $false
+    $bulletCount = 0
+    foreach ($line in $clLines) {
+        if ($line -match '^\s*## v') {
+            if ($inCurrentSection) { break }
+            if ($line.Trim() -eq $versionHeader) { $inCurrentSection = $true }
+        }
+        elseif ($inCurrentSection -and $line -match '^\s*-\s+\*\*') {
+            $bulletCount++
+        }
+    }
+    Write-Check "v$moduleVersion entry has feature bullets ($bulletCount)" ($bulletCount -ge 1)
+
+    # Entry has a stats footer line (N modules, N tests)
+    $hasStats = $false
+    $inCurrentSection = $false
+    foreach ($line in $clLines) {
+        if ($line -match '^\s*## v') {
+            if ($inCurrentSection) { break }
+            if ($line.Trim() -eq $versionHeader) { $inCurrentSection = $true }
+        }
+        elseif ($inCurrentSection -and $line -match '^\s*-\s+\d+\s+modules?,\s+\d+\s+tests?') {
+            $hasStats = $true
+        }
+    }
+    Write-Check "v$moduleVersion entry has stats footer (modules, tests)" $hasStats
+
+    # No empty version sections
+    $emptyVersions = @()
+    $prevWasVersion = $false
+    $prevVersion = ""
+    foreach ($line in $clLines) {
+        if ($line -match '^\s*## (v\d+\.\d+)') {
+            if ($prevWasVersion) { $emptyVersions += $prevVersion }
+            $prevWasVersion = $true
+            $prevVersion = $Matches[1]
+        }
+        elseif ($line -match '^\s*-\s+') {
+            $prevWasVersion = $false
+        }
+    }
+    Write-Check "No empty version sections" ($emptyVersions.Count -eq 0) "Empty: $($emptyVersions -join ', ')"
+}
+
+# ============================================================================
+Write-Section "11. AUTOMATED TEST SUITE"
 # ============================================================================
 
 if ($SkipTests) {
