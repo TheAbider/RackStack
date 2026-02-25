@@ -30,10 +30,16 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.8
+    1.9.9
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.9
+    BUG FIXES:
+    - FIXED: CPU dashboard null-safe when Measure-Object returns no average
+    - FIXED: Ping average null-safe in network diagnostics
+    - FIXED: SET adapter connectivity results wrapped as array for consistent .Count
 
 .CHANGELOG v1.9.8
     BUG FIXES:

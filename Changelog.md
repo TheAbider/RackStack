@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.9
+
+- **Bug Fix:** CPU dashboard null-safe when `Measure-Object` returns no average (edge case on inaccessible WMI).
+- **Bug Fix:** Ping average in network diagnostics null-safe when `Measure-Object` has no data.
+- **Bug Fix:** SET adapter connectivity results wrapped as array for consistent `.Count` behavior.
+- 63 modules, 1854 tests
+
 ## v1.9.8
 
 - **Bug Fix:** Deduplication status query now passes the volume with drive letter colon (e.g., `D:`) — was silently failing on the status display.

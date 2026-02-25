@@ -84,7 +84,7 @@ function Select-PhysicalAdaptersSmart {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Testing adapter internet connectivity..." -color "Info"
 
-        $results = Test-AdapterInternetConnectivity
+        $results = @(Test-AdapterInternetConnectivity)
 
         if ($results.Count -eq 0) {
             Write-OutputColor "No physical adapters found." -color "Error"

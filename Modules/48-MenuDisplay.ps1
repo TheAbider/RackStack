@@ -43,7 +43,10 @@ function Show-MainMenu {
     } -CacheSeconds 60
 
     $dashCPU = Get-CachedValue -Key "DashCPU" -FetchScript {
-        try { [math]::Round((Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average) }
+        try {
+            $cpuMeasure = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
+            if ($null -ne $cpuMeasure.Average) { [math]::Round($cpuMeasure.Average) } else { 0 }
+        }
         catch { 0 }
     } -CacheSeconds 15
 

@@ -78,7 +78,8 @@ function Invoke-PingHost {
             $line = "  Reply from $addr - ${ms}ms"
             Write-MenuItem -Text $line
         }
-        $avg = ($results | ForEach-Object { if ($null -ne $_.ResponseTime) { $_.ResponseTime } elseif ($null -ne $_.Latency) { $_.Latency } else { 0 } } | Measure-Object -Average).Average
+        $avgMeasure = $results | ForEach-Object { if ($null -ne $_.ResponseTime) { $_.ResponseTime } elseif ($null -ne $_.Latency) { $_.Latency } else { 0 } } | Measure-Object -Average
+        $avg = if ($null -ne $avgMeasure.Average) { $avgMeasure.Average } else { 0 }
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-MenuItem -Text "  Average: $([math]::Round($avg, 1))ms"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
