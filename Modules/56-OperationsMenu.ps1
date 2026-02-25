@@ -396,6 +396,7 @@ function Get-CompanyDefaultsFiles {
         # Exclude defaults.json itself and defaults.example.json
         if ($f.Name -eq "defaults.json" -or $f.Name -eq "defaults.example.json") { continue }
         $name = $f.BaseName -replace '\.defaults$', ''
+        if (-not $name) { continue }  # Skip files with empty extracted name
         $results += @{ Name = $name; Path = $f.FullName }
     }
     return ,$results
@@ -511,20 +512,35 @@ function Import-Defaults {
 
     # Tier 2: Merge company defaults if available and not yet loaded
     if ($companyFiles.Count -gt 0 -and -not $script:CompanyDefaultsPath) {
-        if ($companyFiles.Count -eq 1) {
-            # Single company file: auto-prompt
-            $compFile = $companyFiles[0]
-            if (Confirm-UserAction -Message "Load company defaults from '$($compFile.Name).defaults.json'?" -DefaultYes) {
-                $script:CompanyDefaultsName = $compFile.Name
-                $script:CompanyDefaultsPath = $compFile.Path
-            }
+        if (Test-Path $script:DefaultsPath) {
+            # defaults.json exists: silently re-load company file if previously selected
+            try {
+                $existingDefaults = Get-Content $script:DefaultsPath -Raw | ConvertFrom-Json
+                if ($existingDefaults._companyDefaults) {
+                    $matchingFile = $companyFiles | Where-Object { $_.Name -eq $existingDefaults._companyDefaults } | Select-Object -First 1
+                    if ($matchingFile) {
+                        $script:CompanyDefaultsName = $matchingFile.Name
+                        $script:CompanyDefaultsPath = $matchingFile.Path
+                    }
+                }
+            } catch { }
+            # Don't prompt — user already has personal defaults
         }
         else {
-            # Multiple files: show picker
-            $picked = Show-CompanyDefaultsPicker
-            if ($null -ne $picked -and $picked -ne "__skip__") {
-                $script:CompanyDefaultsName = $picked.Name
-                $script:CompanyDefaultsPath = $picked.Path
+            # No defaults.json: offer company defaults
+            if ($companyFiles.Count -eq 1) {
+                $compFile = $companyFiles[0]
+                if (Confirm-UserAction -Message "Load company defaults from '$($compFile.Name).defaults.json'?" -DefaultYes) {
+                    $script:CompanyDefaultsName = $compFile.Name
+                    $script:CompanyDefaultsPath = $compFile.Path
+                }
+            }
+            else {
+                $picked = Show-CompanyDefaultsPicker
+                if ($null -ne $picked -and $picked -ne "__skip__") {
+                    $script:CompanyDefaultsName = $picked.Name
+                    $script:CompanyDefaultsPath = $picked.Path
+                }
             }
         }
     }

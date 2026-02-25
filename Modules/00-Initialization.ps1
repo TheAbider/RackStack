@@ -35,16 +35,12 @@ $script:MaxDownloadRetries = 3                      # Max retry attempts for lar
 $script:BITSPreferred = $true                       # Use BITS transfer when available (supports native resume)
 # Configurable MSP agent installer (override via defaults.json AgentInstaller)
 $script:AgentInstaller = @{
-    ToolName        = "Kaseya"
+    ToolName        = "MSP"
     FolderName      = "Agents"
-    FilePattern     = "Kaseya.*\.exe$"
-    ServiceName     = "Kaseya Agent*"
+    FilePattern     = ".*\.exe$"
+    ServiceName     = "*Agent*"
     InstallArgs     = "/s /norestart"
-    InstallPaths    = @(
-        "$env:ProgramFiles\Kaseya"
-        "${env:ProgramFiles(x86)}\Kaseya"
-        "C:\kworking"
-    )
+    InstallPaths    = @()
     SuccessExitCodes = @(0, 1641, 3010)
     TimeoutSeconds  = 300
 }
@@ -139,7 +135,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.9.0"
+$script:ScriptVersion = "1.9.1"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

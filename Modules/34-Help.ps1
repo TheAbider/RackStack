@@ -263,7 +263,7 @@ RackStack - White-Label & Open Source:
 
 v2.9.0
 ======
-Kaseya Agent Installer:
+Agent Installer:
 - Hostname without site number now prompts to set hostname first
 - Pending hostname change detected via registry - blocks install until reboot
 - Agent list paginated (25 per page) with [N]ext/[P]rev navigation
