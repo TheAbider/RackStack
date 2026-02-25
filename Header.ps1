@@ -30,10 +30,16 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.2
+    1.9.3
 
 .LAST UPDATED
-    02/24/2026
+    02/25/2026
+
+.CHANGELOG v1.9.3
+    BUG FIXES:
+    - FIXED: Agent search supports partial site number matching and raw filename search
+    - FIXED: Agent filename parser handles any prefix format (flexible regex)
+    - FIXED: Agent list shows filename instead of "(unknown)" for unparsed entries
 
 .CHANGELOG v1.4.1
     BUG FIXES:
@@ -81,7 +87,7 @@
     - ADDED: Export-BatchConfigFromState detects vNICs on SET
     - ADDED: iSCSI menu option [3] Test iSCSI Cabling
     - RENAMED: Host Network [2] from "Add Backup NIC to SET" to "Add Virtual NIC to SET"
-    - RENAMED: FileServer.KaseyaFolder to FileServer.AgentFolder (backward-compatible)
+    - RENAMED: FileServer config key for agent folder (backward-compatible)
 
 .CHANGELOG v1.1.0
     NEW FEATURES:
@@ -211,7 +217,7 @@
     - ADDED: JSON audit logging (Show-AuditLog) - structured change tracking with export
     - ADDED: Network Diagnostics submenu - ping, port test, traceroute, subnet sweep, DNS lookup, connections, ARP
     - ADDED: Operations Menu - Remote PS Session, Remote Health Check, Remote Service Manager
-    - ADDED: FileServer integration (replaced Nextcloud) - ISOs, VHDs, Kaseya agents via REST API
+    - ADDED: FileServer integration (replaced Nextcloud) - ISOs, VHDs, agent installers via REST API
     - ADDED: Quick Setup Wizard (Show-QuickSetupWizard) - guided initial server configuration
     - ADDED: Server Readiness report (Show-ServerReadiness) - comprehensive deployment readiness score
     - ADDED: Performance Dashboard (Show-PerformanceDashboard) - real-time CPU/RAM/disk/network monitoring
@@ -220,7 +226,7 @@
     - ADDED: Get-CachedValue TTL caching system
     - ADDED: Test-WindowsServer function with client OS guards on server-only features
     - ADDED: Centralized constants ($script:PowerPlanGUID, $script:WindowsLicensingAppId)
-    - ADDED: Kaseya post-install verification with service polling
+    - ADDED: Agent post-install verification with service polling
     - ADDED: Domain join pre-flight DNS resolution check
     - ADDED: IP config rollback on failure
     - ADDED: Disk space validation before cloud downloads
@@ -230,7 +236,7 @@
     - UPDATED: Navigation labels with descriptive [B] Back to {parent}
     - UPDATED: RDP NLA uses proper try/catch with warning
     - UPDATED: iSCSI adapter validation with partial failure tracking
-    - UPDATED: Kaseya pagination, sorting, dedup, hostname flow
+    - UPDATED: Agent installer pagination, sorting, dedup, hostname flow
     - UPDATED: DNS menu refactored to dynamic preset list
     - UPDATED: Console resize uses Win32 P/Invoke for ps2exe compatibility
     - UPDATED: defaults.json ships with custom values + KMS keys
@@ -417,7 +423,7 @@
     - ADDED: Restructured main menu with "Configure Server" and "Deploy VMs"
     - ADDED: System Health Check - CPU, RAM, disk, network, services status (now option 1)
     - ADDED: Enable PowerShell Remoting - secure WinRM configuration with Kerberos auth
-    - ADDED: Install Kaseya Agent - downloads installer from Google Drive by site number
+    - ADDED: Install Agent - downloads MSP agent installer from file server by site number
     - ADDED: Save Configuration Profile - export settings as JSON for cloning to other servers
     - ADDED: Load Configuration Profile - apply saved settings to new servers
     - ADDED: Disable IPv6 option in VM Network configuration menu

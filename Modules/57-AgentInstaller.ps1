@@ -50,7 +50,7 @@ function Get-AgentInstallerList {
 
             if ($fileName -match $script:AgentInstaller.FilePattern) {
                 $parsed = ConvertFrom-AgentFilename -FileName $fileName
-                if ($parsed.Valid -and $parsed.SiteNumbers.Count -gt 0) {
+                if ($parsed.Valid) {
                     $agents += @{
                         FilePath = $file.FilePath
                         FileName = $fileName
@@ -88,22 +88,27 @@ function Get-AgentInstallerList {
 }
 
 # Parse agent filename to extract site numbers and name
-# Supports <Tool>_<org>.{numbers}-{name}.exe convention (e.g., Kaseya, Datto, etc.)
-# Falls back to raw filename for unrecognized formats
+# Supports any prefix followed by .{numbers}[-{name}].exe (e.g., Tool_org.1001-sitename.exe)
+# Numbers can be separated by - or _ for multi-site agents
+# Falls back to extracting 3+ digit sequences from anywhere in the filename
 function ConvertFrom-AgentFilename {
     param([string]$FileName)
 
-    # Known format: <Tool>_<org>.{numbers}-{name}.exe
-    # Examples: Agent_acme.1001-mainoffice.exe, Agent_acme.3001.exe
-    # Supports underscore/hyphen between numbers, optional .staging/.workstations suffix
-    $result = @{ SiteNumbers = @(); SiteName = ""; DisplayName = ""; Valid = $false }
+    $result = @{ SiteNumbers = @(); SiteName = ""; DisplayName = ""; RawName = $FileName; Valid = $false }
+
+    # Must be an exe
+    if ($FileName -notmatch '\.exe$') {
+        return $result
+    }
 
     # Remove any suffix like .staging, .workstations before .exe
     $cleanName = $FileName -replace '\.(staging|workstations|linac-workstations)\.exe$', '.exe'
 
-    # Try <Tool>_<org>.{numbers}-{name}.exe convention
-    # Numbers can be separated by - or _
-    if ($cleanName -match '[a-zA-Z]+_[a-zA-Z0-9]+\.([0-9_\-]+)(?:-([a-zA-Z][a-zA-Z0-9\-]*))?\.exe$') {
+    # Primary pattern: anything.{numbers}[-{name}].exe
+    # The dot-then-digit anchor finds the site number section regardless of prefix format
+    # Numbers can be separated by _ or - and the name part is optional
+    # When hyphens separate both numbers and name, regex backtracking resolves the ambiguity
+    if ($cleanName -match '\.(\d[\d_-]*)(?:-([a-zA-Z][a-zA-Z0-9\-]*))?\.exe$') {
         $regexMatches = $matches
         $numbersPart = $regexMatches[1]
         $namePart = if ($regexMatches[2]) { $regexMatches[2] } else { "" }
@@ -126,20 +131,21 @@ function ConvertFrom-AgentFilename {
         }
     }
 
-    # Fallback: use raw filename for unrecognized formats (must be .exe)
-    if ($FileName -notmatch '\.exe$') {
-        return $result
-    }
-
+    # Fallback: extract any 3+ digit sequences from the filename
     $baseName = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
-    if ($baseName -match '^(\d+)') {
+    $digitMatches = [regex]::Matches($baseName, '\d{3,}')
+    if ($digitMatches.Count -gt 0) {
+        $result.SiteNumbers = @($digitMatches | ForEach-Object { $_.Value })
+        $result.SiteName = $baseName
+        $result.DisplayName = $baseName
+        $result.Valid = $true
+    } elseif ($baseName -match '^(\d+)') {
         $regexMatches = $matches
         $result.SiteNumbers = @($regexMatches[1])
         $result.SiteName = $baseName
         $result.DisplayName = $baseName
         $result.Valid = $true
     } elseif ($baseName) {
-        $result.SiteNumbers = @("0")
         $result.SiteName = $baseName
         $result.DisplayName = $baseName
         $result.Valid = $true
@@ -148,7 +154,7 @@ function ConvertFrom-AgentFilename {
     return $result
 }
 
-# Search for agent by site number or name
+# Search for agent by site number or name (supports partial matching)
 function Search-AgentInstaller {
     param(
         [string]$SearchTerm,
@@ -169,18 +175,32 @@ function Search-AgentInstaller {
         $matched = $false
 
         if ($isNumeric) {
-            # Search by site number - match any site number in the list
+            # Search by site number — partial/substring matching
             foreach ($siteNum in @($agent.SiteNumbers)) {
                 $normalizedSiteNum = ([string]$siteNum).TrimStart('0')
+                # Exact match (with zero normalization)
                 if ($normalizedSiteNum -eq $normalizedSearch -or $siteNum -eq $SearchTerm) {
+                    $matched = $true
+                    break
+                }
+                # Partial match — search term appears anywhere in site number
+                if ($normalizedSiteNum -like "*$normalizedSearch*") {
                     $matched = $true
                     break
                 }
             }
         }
-        else {
+
+        if (-not $matched) {
             # Search by site name (partial match, case insensitive)
-            if ($agent.SiteName -like "*$SearchTerm*") {
+            if ($agent.SiteName -and $agent.SiteName -like "*$SearchTerm*") {
+                $matched = $true
+            }
+        }
+
+        if (-not $matched) {
+            # Fallback: search raw filename (catches anything the parser missed)
+            if ($agent.FileName -like "*$SearchTerm*") {
                 $matched = $true
             }
         }
@@ -218,7 +238,10 @@ function Show-AgentInstallerList {
     $toolName = $script:AgentInstaller.ToolName
 
     # Sort by first site number numerically (smallest to largest)
-    $allAgents = $Agents | Sort-Object { [int](([string]@($_.SiteNumbers)[0]).TrimStart('0') -replace '^$','0') }
+    $allAgents = $Agents | Sort-Object {
+        $firstSite = if ($_.SiteNumbers -and $_.SiteNumbers.Count -gt 0) { [string]@($_.SiteNumbers)[0] } else { "9999999" }
+        [int]($firstSite.TrimStart('0') -replace '^$','0')
+    }
     $displayAgents = $allAgents
     $searchFilter = $null
 
@@ -248,8 +271,13 @@ function Show-AgentInstallerList {
             for ($i = $startIdx; $i -le $endIdx; $i++) {
                 $agent = $displayAgents[$i]
                 $num = $i + 1
-                $siteNums = ($agent.SiteNumbers -join ',').PadRight(20)
-                $siteName = if ($agent.SiteName) { $agent.SiteName } else { "(unknown)" }
+                $siteNums = if ($agent.SiteNumbers -and $agent.SiteNumbers.Count -gt 0) {
+                    ($agent.SiteNumbers -join ',').PadRight(20)
+                } else { "".PadRight(20) }
+                $siteName = if ($agent.SiteName) { $agent.SiteName }
+                            elseif ($agent.DisplayName) { $agent.DisplayName }
+                            else { [System.IO.Path]::GetFileNameWithoutExtension($agent.FileName) }
+                if ($siteName.Length -gt 30) { $siteName = $siteName.Substring(0, 27) + "..." }
                 $siteName = $siteName.PadRight(30)
                 $display = "  [$num] $siteNums $siteName"
                 Write-OutputColor "  │$($display.PadRight(72))│" -color "Info"

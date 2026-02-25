@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.9.2
+    Automated Test Runner for RackStack v1.9.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -593,32 +593,32 @@ Write-SectionHeader "SECTION 9: ConvertFrom-AgentFilename TESTS"
 
 # Test case 1: Standard format - site number + name
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.1001-mainoffice.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.1001-mainoffice.exe"
     $pass = $result.Valid -and
             @($result.SiteNumbers).Count -eq 1 -and
             @($result.SiteNumbers)[0] -eq "1001" -and
             $result.SiteName -eq "mainoffice" -and
             $result.DisplayName -ne ""
-    Write-TestResult "Parse 'Kaseya_acme.1001-mainoffice.exe' (standard)" $pass "Sites=$(@($result.SiteNumbers) -join ','), Name=$($result.SiteName)"
+    Write-TestResult "Parse 'Agent_org.1001-mainoffice.exe' (standard)" $pass "Sites=$(@($result.SiteNumbers) -join ','), Name=$($result.SiteName)"
 } catch {
-    Write-TestResult "Parse 'Kaseya_acme.1001-mainoffice.exe'" $false $_.Exception.Message
+    Write-TestResult "Parse 'Agent_org.1001-mainoffice.exe'" $false $_.Exception.Message
 }
 
 # Test case 2: Site number only (no name)
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.3001.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.3001.exe"
     $pass = $result.Valid -and
             @($result.SiteNumbers).Count -eq 1 -and
             @($result.SiteNumbers)[0] -eq "3001" -and
             $result.SiteName -eq ""
-    Write-TestResult "Parse 'Kaseya_acme.3001.exe' (number only)" $pass "Sites=$(@($result.SiteNumbers) -join ',')"
+    Write-TestResult "Parse 'Agent_org.3001.exe' (number only)" $pass "Sites=$(@($result.SiteNumbers) -join ',')"
 } catch {
-    Write-TestResult "Parse 'Kaseya_acme.3001.exe'" $false $_.Exception.Message
+    Write-TestResult "Parse 'Agent_org.3001.exe'" $false $_.Exception.Message
 }
 
 # Test case 3: Underscore-separated multiple site numbers
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.1001_0452-sitename.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.1001_0452-sitename.exe"
     $pass = $result.Valid -and
             @($result.SiteNumbers).Count -eq 2 -and
             "1001" -in @($result.SiteNumbers) -and
@@ -630,7 +630,7 @@ try {
 
 # Test case 4: .staging suffix
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.1001-mainoffice.staging.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.1001-mainoffice.staging.exe"
     $pass = $result.Valid -and
             @($result.SiteNumbers)[0] -eq "1001" -and
             $result.SiteName -eq "mainoffice"
@@ -641,7 +641,7 @@ try {
 
 # Test case 5: .workstations suffix
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.1001-mainoffice.workstations.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.1001-mainoffice.workstations.exe"
     $pass = $result.Valid -and
             @($result.SiteNumbers)[0] -eq "1001" -and
             $result.SiteName -eq "mainoffice"
@@ -660,7 +660,7 @@ try {
 
 # Test case 7: SiteNumbers is always an array
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.1001-mainoffice.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.1001-mainoffice.exe"
     $isArray = @($result.SiteNumbers) -is [Array]
     Write-TestResult "SiteNumbers wrapped in @() is array" $isArray "Type: $(@($result.SiteNumbers).GetType().Name)"
 } catch {
@@ -669,7 +669,7 @@ try {
 
 # Test case 8: DisplayName non-empty for valid entries
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.1001-mainoffice.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.1001-mainoffice.exe"
     $pass = $result.Valid -and -not [string]::IsNullOrWhiteSpace($result.DisplayName)
     Write-TestResult "DisplayName non-empty for valid entry" $pass "DisplayName='$($result.DisplayName)'"
 } catch {
@@ -678,7 +678,7 @@ try {
 
 # Test case 9: Large underscore-separated numbers
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.5001_5002-branch-datacenter.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.5001_5002-branch-datacenter.exe"
     $pass = $result.Valid -and @($result.SiteNumbers).Count -eq 2
     Write-TestResult "Parse large underscore numbers (5001_5002)" $pass "Sites=$(@($result.SiteNumbers) -join ',')"
 } catch {
@@ -687,7 +687,7 @@ try {
 
 # Test case 10: Multiple dash-separated site numbers
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.2001-2002-2005-westsite.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.2001-2002-2005-westsite.exe"
     $pass = $result.Valid -and @($result.SiteNumbers).Count -eq 3
     Write-TestResult "Parse dash-separated numbers (2001-2002-2005)" $pass "Sites=$(@($result.SiteNumbers) -join ',')"
 } catch {
@@ -696,7 +696,7 @@ try {
 
 # Test case 11: Multiple numbers with no site name
 try {
-    $result = ConvertFrom-AgentFilename -FileName "Kaseya_acme.7001-7002.exe"
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.7001-7002.exe"
     $pass = $result.Valid -and @($result.SiteNumbers).Count -eq 2 -and $result.SiteName -eq ""
     Write-TestResult "Parse two numbers with no site name" $pass "Sites=$(@($result.SiteNumbers) -join ','), Name='$($result.SiteName)'"
 } catch {
@@ -709,6 +709,33 @@ try {
     Write-TestResult "Parse empty string returns Valid=false" (-not $result.Valid)
 } catch {
     Write-TestResult "Parse empty string" $false $_.Exception.Message
+}
+
+# Test case 13: Flexible prefix — hyphens in org name
+try {
+    $result = ConvertFrom-AgentFilename -FileName "Agent_my-org.4001-branch.exe"
+    $pass = $result.Valid -and @($result.SiteNumbers)[0] -eq "4001" -and $result.SiteName -eq "branch"
+    Write-TestResult "Parse with hyphenated org 'my-org'" $pass "Sites=$(@($result.SiteNumbers) -join ','), Name=$($result.SiteName)"
+} catch {
+    Write-TestResult "Parse hyphenated org" $false $_.Exception.Message
+}
+
+# Test case 14: Fallback parser — non-standard format with 3+ digit numbers
+try {
+    $result = ConvertFrom-AgentFilename -FileName "CustomAgent_Setup_402_Office.exe"
+    $pass = $result.Valid -and @($result.SiteNumbers) -contains "402"
+    Write-TestResult "Fallback parser finds '402' in non-standard filename" $pass "Sites=$(@($result.SiteNumbers) -join ',')"
+} catch {
+    Write-TestResult "Fallback parser" $false $_.Exception.Message
+}
+
+# Test case 15: RawName preserved in result
+try {
+    $result = ConvertFrom-AgentFilename -FileName "Agent_org.1001-mainoffice.exe"
+    $pass = $result.RawName -eq "Agent_org.1001-mainoffice.exe"
+    Write-TestResult "RawName preserved in parse result" $pass "RawName=$($result.RawName)"
+} catch {
+    Write-TestResult "RawName preservation" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -951,12 +978,12 @@ try {
 
 Write-SectionHeader "SECTION 15: Search-AgentInstaller TESTS"
 
-# Create mock agent array for testing
+# Create mock agent array for testing (generic — no vendor-specific filenames)
 $mockAgents = @(
-    @{ FileID = "id1"; FileName = "Kaseya_acme.1001-mainoffice.exe"; SiteNumbers = @("1001"); SiteName = "mainoffice"; DisplayName = "mainoffice (Sites: 1001)" }
-    @{ FileID = "id2"; FileName = "Kaseya_acme.3001.exe"; SiteNumbers = @("3001"); SiteName = ""; DisplayName = "Site 3001" }
-    @{ FileID = "id3"; FileName = "Kaseya_acme.2001-westsite.exe"; SiteNumbers = @("2001"); SiteName = "westsite"; DisplayName = "westsite (Sites: 2001)" }
-    @{ FileID = "id4"; FileName = "Kaseya_acme.0500-testco.exe"; SiteNumbers = @("0500"); SiteName = "testco"; DisplayName = "testco (Sites: 0500)" }
+    @{ FileID = "id1"; FileName = "Agent_org.1001-mainoffice.exe"; SiteNumbers = @("1001"); SiteName = "mainoffice"; DisplayName = "mainoffice (Sites: 1001)" }
+    @{ FileID = "id2"; FileName = "Agent_org.3001.exe"; SiteNumbers = @("3001"); SiteName = ""; DisplayName = "Site 3001" }
+    @{ FileID = "id3"; FileName = "Agent_org.2001-westsite.exe"; SiteNumbers = @("2001"); SiteName = "westsite"; DisplayName = "westsite (Sites: 2001)" }
+    @{ FileID = "id4"; FileName = "Agent_org.0500-testco.exe"; SiteNumbers = @("0500"); SiteName = "testco"; DisplayName = "testco (Sites: 0500)" }
 )
 
 # Search by exact site number
@@ -1014,11 +1041,59 @@ try {
 # Search by name returning multiple (if name matches)
 try {
     $results = @(Search-AgentInstaller -SearchTerm "s" -Agents $mockAgents)
-    # "mainoffice" and "testco" have 's' - at least mainoffice
+    # "mainoffice", "westsite", "testco" all contain 's'
     $pass = $results.Count -ge 1
     Write-TestResult "Search by partial 's' returns multiple matches" $pass "Count=$($results.Count)"
 } catch {
     Write-TestResult "Search by partial 's'" $false $_.Exception.Message
+}
+
+# Partial numeric search — "10" should match site 1001
+try {
+    $results = @(Search-AgentInstaller -SearchTerm "10" -Agents $mockAgents)
+    $pass = $results.Count -ge 1
+    Write-TestResult "Partial numeric search '10' matches site 1001" $pass "Count=$($results.Count)"
+} catch {
+    Write-TestResult "Partial numeric search '10'" $false $_.Exception.Message
+}
+
+# Partial numeric search — "30" should match site 3001
+try {
+    $results = @(Search-AgentInstaller -SearchTerm "30" -Agents $mockAgents)
+    $pass = $results.Count -ge 1
+    Write-TestResult "Partial numeric search '30' matches site 3001" $pass "Count=$($results.Count)"
+} catch {
+    Write-TestResult "Partial numeric search '30'" $false $_.Exception.Message
+}
+
+# Partial numeric search — "00" should match sites with leading zeros (0500)
+try {
+    $results = @(Search-AgentInstaller -SearchTerm "500" -Agents $mockAgents)
+    $pass = $results.Count -ge 1 -and $results[0].SiteNumbers -contains "0500"
+    Write-TestResult "Partial numeric search '500' matches site 0500" $pass "Count=$($results.Count)"
+} catch {
+    Write-TestResult "Partial numeric search '500'" $false $_.Exception.Message
+}
+
+# Filename fallback search — search term in filename but not in parsed fields
+try {
+    $results = @(Search-AgentInstaller -SearchTerm "org" -Agents $mockAgents)
+    $pass = $results.Count -eq 4  # all 4 filenames contain "org"
+    Write-TestResult "Filename fallback search 'org' matches all agents" $pass "Count=$($results.Count)"
+} catch {
+    Write-TestResult "Filename fallback search 'org'" $false $_.Exception.Message
+}
+
+# Numeric search also checks filename as fallback
+try {
+    $mockWithFallback = @(
+        @{ FileID = "x1"; FileName = "Agent_402_setup.exe"; SiteNumbers = @(); SiteName = "Agent_402_setup"; DisplayName = "Agent_402_setup" }
+    )
+    $results = @(Search-AgentInstaller -SearchTerm "402" -Agents $mockWithFallback)
+    $pass = $results.Count -eq 1
+    Write-TestResult "Numeric search falls back to filename match" $pass "Count=$($results.Count)"
+} catch {
+    Write-TestResult "Numeric filename fallback" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -3267,11 +3342,13 @@ foreach ($tc in $navEdgeCases) {
 Write-SectionHeader "SECTION 48: CONVERTFROM-AGENTFILENAME EDGE CASES"
 
 $agentEdgeCases = @(
-    @{ File = "Kaseya_acme.1001-0452-0453-multi.exe"; Sites = @("1001","0452","0453"); Name = "multi"; Desc = "three sites with hyphens" }
-    @{ File = "Kaseya_acme.0001-a.exe"; Sites = @("0001"); Name = "a"; Desc = "min site number" }
-    @{ File = "Kaseya_acme.999999-big.exe"; Sites = @("999999"); Name = "big"; Desc = "max site number" }
-    @{ File = "Kaseya_acme.1001.exe"; Sites = @("1001"); Name = ""; Desc = "no site name" }
-    @{ File = "Kaseya_acme.5001_5002-northdc.exe"; Sites = @("5001","5002"); Name = "northdc"; Desc = "underscore between sites" }
+    @{ File = "Agent_org.1001-0452-0453-multi.exe"; Sites = @("1001","0452","0453"); Name = "multi"; Desc = "three sites with hyphens" }
+    @{ File = "Agent_org.0001-a.exe"; Sites = @("0001"); Name = "a"; Desc = "min site number" }
+    @{ File = "Agent_org.999999-big.exe"; Sites = @("999999"); Name = "big"; Desc = "max site number" }
+    @{ File = "Agent_org.1001.exe"; Sites = @("1001"); Name = ""; Desc = "no site name" }
+    @{ File = "Agent_org.5001_5002-northdc.exe"; Sites = @("5001","5002"); Name = "northdc"; Desc = "underscore between sites" }
+    @{ File = "Tool_my-org.8001-office.exe"; Sites = @("8001"); Name = "office"; Desc = "hyphenated org prefix" }
+    @{ File = "Agent_x.100.exe"; Sites = @("100"); Name = ""; Desc = "short 3-digit site" }
 )
 
 foreach ($tc in $agentEdgeCases) {
@@ -3500,9 +3577,9 @@ try {
 
 # Verify ConvertFrom-AgentFilename returns consistent structure
 try {
-    $valid = ConvertFrom-AgentFilename -FileName "Kaseya_acme.1001-testsite.exe"
-    $hasAllKeys = $valid.ContainsKey('SiteNumbers') -and $valid.ContainsKey('SiteName') -and $valid.ContainsKey('DisplayName') -and $valid.ContainsKey('Valid')
-    Write-TestResult "ConvertFrom-AgentFilename: returns all 4 keys" $hasAllKeys
+    $valid = ConvertFrom-AgentFilename -FileName "Agent_org.1001-testsite.exe"
+    $hasAllKeys = $valid.ContainsKey('SiteNumbers') -and $valid.ContainsKey('SiteName') -and $valid.ContainsKey('DisplayName') -and $valid.ContainsKey('Valid') -and $valid.ContainsKey('RawName')
+    Write-TestResult "ConvertFrom-AgentFilename: returns all 5 keys" $hasAllKeys
 
     $invalid = ConvertFrom-AgentFilename -FileName "notanagent.txt"
     Write-TestResult "ConvertFrom-AgentFilename: invalid file returns Valid=false" (-not $invalid.Valid)
