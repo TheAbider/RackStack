@@ -139,7 +139,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.8.3"
+$script:ScriptVersion = "1.9.0"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)
@@ -182,6 +182,8 @@ $script:FavoritesPath = "$script:AppConfigDir\favorites.json"
 $script:HistoryPath = "$script:AppConfigDir\history.json"
 $script:SessionStatePath = "$script:AppConfigDir\session.json"
 $script:DefaultsPath = "$script:ModuleRoot\defaults.json"
+$script:CompanyDefaultsName = $null             # e.g., "acme" (loaded from acme.defaults.json)
+$script:CompanyDefaultsPath = $null             # e.g., "C:\...\acme.defaults.json"
 $script:Favorites = @()
 $script:CommandHistory = @()
 $script:MaxHistoryItems = 100

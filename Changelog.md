@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.0
+
+- **Company Defaults:** New three-tier configuration system — built-in defaults can be overlaid with a company-wide `<name>.defaults.json` file, then personal `defaults.json` overrides on top. Supports multiple company config files with a startup picker.
+- **First-Run Wizard Updated:** Detects available company defaults files and offers to adopt them during initial setup, pre-populating the wizard with company values.
+- **Edit Defaults Menu [9]:** New "Company Defaults" option in Settings > Edit Environment Defaults to switch, clear, or browse available company configurations.
+- **Export Protection:** `Export-Defaults` never overwrites company files — always writes to personal `defaults.json` only. Tracks active company config via `_companyDefaults` metadata.
+- 63 modules, 1806 tests, backward compatible with all existing configs
+
 ## v1.8.3
 
 - **Bug Fix Sweep:** Fixed 29 bugs across 18 modules identified during full codebase audit

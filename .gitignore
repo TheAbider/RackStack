@@ -1,5 +1,6 @@
 # Credentials (org-specific URLs, keys, passwords)
 defaults.json
+*.defaults.json
 !defaults.example.json
 
 # Build artifacts

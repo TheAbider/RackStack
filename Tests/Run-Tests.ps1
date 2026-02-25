@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.8.3
+    Automated Test Runner for RackStack v1.9.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -2091,19 +2091,31 @@ try {
     $testDir = "$env:TEMP\appconfig_test_$(Get-Random)"
     $origDefaultsPath = $script:DefaultsPath
     $origConfigDir = $script:AppConfigDir
+    $origModuleRoot = $script:ModuleRoot
+    $origCompanyName = $script:CompanyDefaultsName
+    $origCompanyPath = $script:CompanyDefaultsPath
     $script:AppConfigDir = $testDir
     $script:DefaultsPath = "$testDir\defaults.json"
+    $script:ModuleRoot = $testDir
+    $script:CompanyDefaultsName = $null
+    $script:CompanyDefaultsPath = $null
     Import-Defaults
     $domainAfter = $script:domain
     Write-TestResult "Import-Defaults (no file): domain stays empty" ($domainAfter -eq "" -or $null -eq $domainAfter) "domain='$domainAfter'"
     # Restore
     $script:DefaultsPath = $origDefaultsPath
     $script:AppConfigDir = $origConfigDir
+    $script:ModuleRoot = $origModuleRoot
+    $script:CompanyDefaultsName = $origCompanyName
+    $script:CompanyDefaultsPath = $origCompanyPath
     if (Test-Path $testDir) { Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue }
 } catch {
     Write-TestResult "Import-Defaults (no file): domain stays empty" $false $_.Exception.Message
     $script:DefaultsPath = $origDefaultsPath
     $script:AppConfigDir = $origConfigDir
+    $script:ModuleRoot = $origModuleRoot
+    $script:CompanyDefaultsName = $origCompanyName
+    $script:CompanyDefaultsPath = $origCompanyPath
 }
 
 # Test Import-Defaults with file (should merge)
@@ -2503,8 +2515,16 @@ try {
 
 Write-TestResult "FileServer: VHDsFolder defaults to 'VirtualHardDrives'" ($script:FileServer.VHDsFolder -eq "VirtualHardDrives")
 Write-TestResult "FileServer: AgentFolder defaults to 'Agents'" ($script:FileServer.AgentFolder -eq "Agents")
-Write-TestResult "FileServer: ClientId is empty at init" ($script:FileServer.ClientId -eq "")
-Write-TestResult "FileServer: ClientSecret is empty at init" ($script:FileServer.ClientSecret -eq "")
+# ClientId/ClientSecret may be populated by company defaults — check they're strings (empty or from company file)
+$clientIdIsString = $script:FileServer.ClientId -is [string]
+$clientSecretIsString = $script:FileServer.ClientSecret -is [string]
+if ($script:CompanyDefaultsPath) {
+    Write-TestResult "FileServer: ClientId is string (company loaded)" $clientIdIsString
+    Write-TestResult "FileServer: ClientSecret is string (company loaded)" $clientSecretIsString
+} else {
+    Write-TestResult "FileServer: ClientId is empty at init" ($script:FileServer.ClientId -eq "")
+    Write-TestResult "FileServer: ClientSecret is empty at init" ($script:FileServer.ClientSecret -eq "")
+}
 
 # --- 35f: Import-Defaults merges FileServer fields ---
 try {
@@ -7297,6 +7317,55 @@ try {
 
 } catch {
     Write-TestResult "Cluster CSV Prep Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 140: COMPANY DEFAULTS FEATURE (v1.9.0)
+# ============================================================================
+
+Write-SectionHeader "140" "COMPANY DEFAULTS FEATURE"
+
+try {
+    $opsContent = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    $initContent = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+
+    # Function existence
+    Write-TestResult "Company: Get-CompanyDefaultsFiles function exists" ($opsContent -match 'function\s+Get-CompanyDefaultsFiles\b')
+    Write-TestResult "Company: Show-CompanyDefaultsPicker function exists" ($opsContent -match 'function\s+Show-CompanyDefaultsPicker\b')
+    Write-TestResult "Company: Import-CompanyDefaults function exists" ($opsContent -match 'function\s+Import-CompanyDefaults\b')
+
+    # Script variables in 00-Initialization
+    Write-TestResult "Company: CompanyDefaultsName variable declared" ($initContent -match '\$script:CompanyDefaultsName\s*=\s*\$null')
+    Write-TestResult "Company: CompanyDefaultsPath variable declared" ($initContent -match '\$script:CompanyDefaultsPath\s*=\s*\$null')
+
+    # Get-CompanyDefaultsFiles: scans for *.defaults.json, excludes defaults.json and defaults.example.json
+    Write-TestResult "Company: Get-CompanyDefaultsFiles scans *.defaults.json" ($opsContent -match 'Get-ChildItem.*\*\.defaults\.json')
+    Write-TestResult "Company: Get-CompanyDefaultsFiles excludes defaults.json" ($opsContent -match '\$f\.Name\s*-eq\s*"defaults\.json"')
+    Write-TestResult "Company: Get-CompanyDefaultsFiles excludes defaults.example.json" ($opsContent -match '\$f\.Name\s*-eq\s*"defaults\.example\.json"')
+
+    # Import-CompanyDefaults: merges, skips _* metadata
+    Write-TestResult "Company: Import-CompanyDefaults takes Merged and CompanyFilePath params" ($opsContent -match 'function\s+Import-CompanyDefaults[\s\S]{0,200}\$Merged[\s\S]{0,200}\$CompanyFilePath')
+    Write-TestResult "Company: Import-CompanyDefaults skips _* metadata fields" ($opsContent -match 'Import-CompanyDefaults[\s\S]{0,500}\$prop\.Name\s+-like\s+"_\*"')
+    Write-TestResult "Company: Import-CompanyDefaults handles missing file" ($opsContent -match 'Import-CompanyDefaults[\s\S]{0,300}Test-Path\s+\$CompanyFilePath')
+
+    # Three-tier merge in Import-Defaults
+    Write-TestResult "Company: Import-Defaults calls Get-CompanyDefaultsFiles" ($opsContent -match 'function\s+Import-Defaults[\s\S]{0,2000}Get-CompanyDefaultsFiles')
+    Write-TestResult "Company: Import-Defaults calls Import-CompanyDefaults" ($opsContent -match 'function\s+Import-Defaults[\s\S]{0,5000}Import-CompanyDefaults')
+    Write-TestResult "Company: Import-Defaults single-file auto-prompt" ($opsContent -match 'companyFiles\.Count\s*-eq\s*1')
+    Write-TestResult "Company: Import-Defaults multi-file shows picker" ($opsContent -match 'Show-CompanyDefaultsPicker')
+
+    # Export-Defaults includes _companyDefaults metadata
+    Write-TestResult "Company: Export-Defaults includes _companyDefaults metadata" ($opsContent -match '"_companyDefaults"\s*=')
+
+    # Show-EditDefaults has [9] Company Defaults
+    Write-TestResult "Company: Show-EditDefaults has Company Defaults menu item" ($opsContent -match '\[9\].*Company Defaults')
+
+    # Show-FirstRunWizard detects company files
+    Write-TestResult "Company: FirstRunWizard detects company defaults files" ($opsContent -match 'Show-FirstRunWizard[\s\S]{0,1000}Get-CompanyDefaultsFiles')
+    Write-TestResult "Company: FirstRunWizard offers to adopt company defaults" ($opsContent -match 'Show-FirstRunWizard[\s\S]{0,3000}company defaults loaded')
+
+} catch {
+    Write-TestResult "Company Defaults Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

@@ -386,8 +386,96 @@ function Initialize-SANTargetPairs {
     }
 }
 
+# Get available company defaults files (*.defaults.json excluding defaults.json and defaults.example.json)
+function Get-CompanyDefaultsFiles {
+    $results = @()
+    if (-not $script:ModuleRoot) { return $results }
+
+    $files = Get-ChildItem -Path $script:ModuleRoot -Filter "*.defaults.json" -File -ErrorAction SilentlyContinue
+    foreach ($f in $files) {
+        # Exclude defaults.json itself and defaults.example.json
+        if ($f.Name -eq "defaults.json" -or $f.Name -eq "defaults.example.json") { continue }
+        $name = $f.BaseName -replace '\.defaults$', ''
+        $results += @{ Name = $name; Path = $f.FullName }
+    }
+    return ,$results
+}
+
+# Show interactive picker for company defaults files
+function Show-CompanyDefaultsPicker {
+    $files = @(Get-CompanyDefaultsFiles)
+    if ($files.Count -eq 0) {
+        Write-OutputColor "  No company defaults files found." -color "Warning"
+        Write-OutputColor "  Place <name>.defaults.json files in the script directory." -color "Debug"
+        return $null
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Available company defaults:" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    for ($i = 0; $i -lt $files.Count; $i++) {
+        $marker = ""
+        if ($script:CompanyDefaultsPath -and $files[$i].Path -eq $script:CompanyDefaultsPath) {
+            $marker = " (current)"
+        }
+        Write-MenuItem "[$($i + 1)]  $($files[$i].Name)$marker"
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  [S] Skip / no company defaults" -color "Info"
+    Write-OutputColor "  [B] Back" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $choice = Read-Host "  Select"
+
+    if ("$choice".ToUpper() -eq "B") { return $null }
+    if ("$choice".ToUpper() -eq "S") { return "__skip__" }
+
+    if ($choice -match '^\d+$') {
+        $idx = [int]$choice - 1
+        if ($idx -ge 0 -and $idx -lt $files.Count) {
+            return $files[$idx]
+        }
+    }
+
+    Write-OutputColor "  Invalid selection." -color "Error"
+    return $null
+}
+
+# Merge company defaults into a hashtable (same logic as personal defaults merge)
+function Import-CompanyDefaults {
+    param (
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Merged,
+        [Parameter(Mandatory=$true)]
+        [string]$CompanyFilePath
+    )
+
+    if (-not (Test-Path $CompanyFilePath)) {
+        Write-OutputColor "  Warning: Company defaults file not found: $CompanyFilePath" -color "Warning"
+        return
+    }
+
+    try {
+        $companyData = Get-Content $CompanyFilePath -Raw | ConvertFrom-Json
+        foreach ($prop in $companyData.PSObject.Properties) {
+            if ($prop.Name -like "_*") { continue }  # Skip metadata fields
+            if ($null -ne $prop.Value -and $prop.Value -ne "") {
+                $Merged[$prop.Name] = $prop.Value
+            }
+        }
+    }
+    catch {
+        Write-OutputColor "  Warning: Could not read company defaults: $_" -color "Warning"
+    }
+}
+
 # Import environment defaults from defaults.json (merges with built-in generics)
 function Import-Defaults {
+
+    # Check for company defaults files
+    $companyFiles = @(Get-CompanyDefaultsFiles)
 
     # Run first-run wizard if no defaults.json exists (skip in batch mode)
     if (-not (Test-Path $script:DefaultsPath)) {
@@ -421,7 +509,31 @@ function Import-Defaults {
     # Start with built-in defaults
     $merged = $builtinDefaults.Clone()
 
-    # Merge from file if it exists
+    # Tier 2: Merge company defaults if available and not yet loaded
+    if ($companyFiles.Count -gt 0 -and -not $script:CompanyDefaultsPath) {
+        if ($companyFiles.Count -eq 1) {
+            # Single company file: auto-prompt
+            $compFile = $companyFiles[0]
+            if (Confirm-UserAction -Message "Load company defaults from '$($compFile.Name).defaults.json'?" -DefaultYes) {
+                $script:CompanyDefaultsName = $compFile.Name
+                $script:CompanyDefaultsPath = $compFile.Path
+            }
+        }
+        else {
+            # Multiple files: show picker
+            $picked = Show-CompanyDefaultsPicker
+            if ($null -ne $picked -and $picked -ne "__skip__") {
+                $script:CompanyDefaultsName = $picked.Name
+                $script:CompanyDefaultsPath = $picked.Path
+            }
+        }
+    }
+
+    if ($script:CompanyDefaultsPath) {
+        Import-CompanyDefaults -Merged $merged -CompanyFilePath $script:CompanyDefaultsPath
+    }
+
+    # Tier 3: Merge personal defaults from file if it exists
     if (Test-Path $script:DefaultsPath) {
         try {
             $fileDefaults = Get-Content $script:DefaultsPath -Raw | ConvertFrom-Json
@@ -805,6 +917,7 @@ function Export-Defaults {
 
     $defaults = [ordered]@{
         "_description"       = "Environment defaults for $($script:ToolFullName)"
+        "_companyDefaults"   = if ($script:CompanyDefaultsName) { $script:CompanyDefaultsName } else { $null }
         ToolName             = $script:ToolName
         ToolFullName         = $script:ToolFullName
         SupportContact       = $script:SupportContact
@@ -896,6 +1009,8 @@ function Show-EditDefaults {
         Write-MenuItem "[6]  FileServer Settings" -Status $acDisplay -StatusColor "Info"
         Write-MenuItem "[7]  iSCSI Subnet" -Status "$($script:iSCSISubnet).x" -StatusColor "Info"
         Write-MenuItem "[8]  Storage Backend" -Status $script:StorageBackendType -StatusColor "Info"
+        $companyDisplay = if ($script:CompanyDefaultsName) { $script:CompanyDefaultsName } else { "(none)" }
+        Write-MenuItem "[9]  Company Defaults" -Status $companyDisplay -StatusColor "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -1030,6 +1145,31 @@ function Show-EditDefaults {
             }
             "8" {
                 Set-StorageBackendType
+            }
+            "9" {
+                $companyFiles = @(Get-CompanyDefaultsFiles)
+                if ($companyFiles.Count -eq 0) {
+                    Write-OutputColor "  No company defaults files found." -color "Warning"
+                    Write-OutputColor "  Place <name>.defaults.json files in the script directory." -color "Debug"
+                    Start-Sleep -Seconds 2
+                }
+                else {
+                    $picked = Show-CompanyDefaultsPicker
+                    if ($null -ne $picked -and $picked -ne "__skip__") {
+                        $script:CompanyDefaultsName = $picked.Name
+                        $script:CompanyDefaultsPath = $picked.Path
+                        Import-Defaults
+                        Write-OutputColor "  Company defaults loaded: $($picked.Name)" -color "Success"
+                        Start-Sleep -Seconds 1
+                    }
+                    elseif ($picked -eq "__skip__") {
+                        $script:CompanyDefaultsName = $null
+                        $script:CompanyDefaultsPath = $null
+                        Import-Defaults
+                        Write-OutputColor "  Company defaults cleared." -color "Info"
+                        Start-Sleep -Seconds 1
+                    }
+                }
             }
             "S" {
                 Export-Defaults
@@ -1245,6 +1385,43 @@ function Show-FirstRunWizard {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Settings can be changed later from: Settings > Edit Environment Defaults" -color "Debug"
     Write-OutputColor "" -color "Info"
+
+    # Check for company defaults files
+    $companyFiles = @(Get-CompanyDefaultsFiles)
+    if ($companyFiles.Count -gt 0) {
+        Write-OutputColor "  Company defaults file(s) detected:" -color "Success"
+        foreach ($cf in $companyFiles) {
+            Write-OutputColor "    - $($cf.Name).defaults.json" -color "Info"
+        }
+        Write-OutputColor "" -color "Info"
+
+        if ($companyFiles.Count -eq 1) {
+            if (Confirm-UserAction -Message "Use '$($companyFiles[0].Name)' company defaults as your base configuration?" -DefaultYes) {
+                $script:CompanyDefaultsName = $companyFiles[0].Name
+                $script:CompanyDefaultsPath = $companyFiles[0].Path
+            }
+        }
+        else {
+            $picked = Show-CompanyDefaultsPicker
+            if ($null -ne $picked -and $picked -ne "__skip__") {
+                $script:CompanyDefaultsName = $picked.Name
+                $script:CompanyDefaultsPath = $picked.Path
+            }
+        }
+
+        if ($script:CompanyDefaultsPath) {
+            Write-OutputColor "  Company defaults loaded: $($script:CompanyDefaultsName)" -color "Success"
+            Write-OutputColor "" -color "Info"
+
+            if (-not (Confirm-UserAction -Message "Customize personal overrides now?")) {
+                Export-Defaults
+                Write-OutputColor "  Minimal defaults.json saved with company base." -color "Success"
+                Write-OutputColor "  You can customize later in Settings." -color "Info"
+                Start-Sleep -Seconds 2
+                return
+            }
+        }
+    }
 
     if (-not (Confirm-UserAction -Message "Configure environment defaults now?")) {
         # User declined - save generic defaults so wizard won't run again
