@@ -30,10 +30,16 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.10
+    1.9.11
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.11
+    BUG FIXES:
+    - FIXED: Cluster dashboard node drain/resume .Count on single-item Where-Object results
+    - FIXED: Firewall template status .Count on single-item rule results
+    - FIXED: Defender exclusion array wrapping handles null ExclusionPath correctly
 
 .CHANGELOG v1.9.10
     BUG FIXES:

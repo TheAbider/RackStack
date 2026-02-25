@@ -134,7 +134,7 @@ function Start-ClusterNodeDrain {
         return
     }
 
-    $nodes = Get-ClusterNode -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Up" }
+    $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Up" })
     if ($nodes.Count -eq 0) {
         Write-OutputColor "  No nodes available to drain." -color "Warning"
         return
@@ -206,7 +206,7 @@ function Resume-ClusterNodeFromDrain {
         return
     }
 
-    $pausedNodes = Get-ClusterNode -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Paused" }
+    $pausedNodes = @(Get-ClusterNode -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Paused" })
     if ($pausedNodes.Count -eq 0) {
         Write-OutputColor "  No paused nodes to resume." -color "Info"
         return

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.11
+
+- **Bug Fix:** Cluster dashboard node drain/resume used `.Count` on unguarded `Where-Object` results — wrapped in `@()` for consistent array handling.
+- **Bug Fix:** Firewall template status display `.Count` on single-rule groups wrapped in `@()`.
+- **Bug Fix:** Defender exclusion array wrapping now handles null `ExclusionPath`/`ExclusionProcess` correctly (prevents `@($null)` creating a 1-element array).
+- 63 modules, 1854 tests
+
 ## v1.9.10
 
 - **Bug Fix:** Firewall readiness check in health report compared strings ("Enabled"/"Disabled") as booleans — always showed incorrect firewall state. Fixed in both health check and batch mode idempotency.

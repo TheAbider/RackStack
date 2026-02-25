@@ -170,9 +170,9 @@ function Show-HyperVClusterFirewallRules {
     $groups = @("Hyper-V", "Hyper-V Management Clients", "Hyper-V Replica HTTP", "Hyper-V Replica HTTPS", "Failover Clusters", "iSCSI Service", "File and Printer Sharing")
 
     foreach ($group in $groups) {
-        $rules = Get-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue
-        if ($rules) {
-            $enabledCount = ($rules | Where-Object { $_.Enabled -eq $true }).Count
+        $rules = @(Get-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue)
+        if ($rules.Count -gt 0) {
+            $enabledCount = @($rules | Where-Object { $_.Enabled -eq $true }).Count
             $totalCount = $rules.Count
             $status = if ($enabledCount -eq $totalCount) { "All Enabled" } elseif ($enabledCount -gt 0) { "$enabledCount/$totalCount Enabled" } else { "Disabled" }
             $color = if ($enabledCount -eq $totalCount) { "Success" } elseif ($enabledCount -gt 0) { "Warning" } else { "Error" }
