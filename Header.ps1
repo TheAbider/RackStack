@@ -30,10 +30,23 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.27
+    1.9.28
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.28
+    BUG FIXES:
+    - FIXED: File search in single-file folders returned a hashtable instead of array — Get-FileServerFiles result not wrapped in @(), causing .Count to return key count and foreach to iterate DictionaryEntry objects (39-FileServer)
+    - FIXED: Pagefile drive detection skipped when exactly one pagefile existed — Get-CimInstance result not wrapped in @(), .Count returned $null and array indexing failed (55-QoLFeatures)
+    - FIXED: Snapshot count displayed blank when exactly one metrics JSON existed — Get-ChildItem result not wrapped in @() (54-HTMLReports)
+    - FIXED: Cluster resources "and X more" message never appeared with single resource — Get-ClusterResource .Count failed without @() wrapping (27-FailoverClustering)
+    - FIXED: Installed features count check failed with single installed feature — Get-WindowsFeature pipeline not wrapped in @() (60-ServerRoleTemplates)
+    - FIXED: RDP listener count displayed blank with single WSMan listener — Get-ChildItem result not wrapped in @() (15-RDP)
+    - FIXED: SET team NIC count displayed blank with single-NIC team — NetAdapterInterfaceDescription property not wrapped in @() (09-SET)
+    - FIXED: Deep clean reported success even when DISM component store cleanup failed — Dism.exe exit code not checked (20-DiskCleanup)
+    - FIXED: Batch config reported power plan set even when powercfg failed — exit code not checked, changes counter incremented unconditionally (50-EntryPoint)
+    - FIXED: Profile apply reported power plan set even when powercfg failed — exit code not checked (45-ConfigExport)
 
 .CHANGELOG v1.9.27
     BUG FIXES:

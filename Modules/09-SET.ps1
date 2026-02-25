@@ -678,7 +678,7 @@ function Show-VirtualSwitches {
         $typeLabel = $sw.SwitchType.ToString()
         if ($sw.SwitchType -eq "External" -and $sw.EmbeddedTeamingEnabled) {
             $typeLabel = "SET"
-            $teamNics = (Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue).NetAdapterInterfaceDescription
+            $teamNics = @((Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue).NetAdapterInterfaceDescription)
             if ($teamNics) { $typeLabel += " ($($teamNics.Count) NICs)" }
         }
         elseif ($sw.SwitchType -eq "External") {

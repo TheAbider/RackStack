@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.9.27
+    Automated Test Runner for RackStack v1.9.28
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:

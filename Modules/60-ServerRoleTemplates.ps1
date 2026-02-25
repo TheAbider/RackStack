@@ -350,7 +350,7 @@ function Show-InstalledRoles {
     }
 
     try {
-        $installedFeatures = Get-WindowsFeature | Where-Object { $_.Installed }
+        $installedFeatures = @(Get-WindowsFeature | Where-Object { $_.Installed })
 
         if ($null -eq $installedFeatures -or $installedFeatures.Count -eq 0) {
             Write-OutputColor "  No roles or features are currently installed." -color "Warning"

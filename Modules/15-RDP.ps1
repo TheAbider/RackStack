@@ -218,7 +218,7 @@ function Enable-PowerShellRemoting {
 
         # Check listeners
         try {
-            $listeners = Get-ChildItem -Path WSMan:\localhost\Listener -ErrorAction Stop
+            $listeners = @(Get-ChildItem -Path WSMan:\localhost\Listener -ErrorAction Stop)
             Write-OutputColor "  Listeners: $($listeners.Count) configured" -color "Success"
         }
         catch {

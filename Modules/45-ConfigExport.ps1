@@ -649,9 +649,13 @@ function Import-ConfigurationProfile {
             Write-OutputColor "  [7/13] Setting power plan to '$($configProfile.PowerPlan)'..." -color "Info"
             if ($script:PowerPlanGUID.ContainsKey($configProfile.PowerPlan)) {
                 powercfg /setactive $script:PowerPlanGUID[$configProfile.PowerPlan] 2>&1 | Out-Null
-                $changesApplied++
-                Write-OutputColor "        Power plan set." -color "Success"
-                Add-SessionChange -Category "System" -Description "Set power plan to $($configProfile.PowerPlan)"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-OutputColor "        Failed to set power plan (exit code $LASTEXITCODE)." -color "Warning"
+                } else {
+                    $changesApplied++
+                    Write-OutputColor "        Power plan set." -color "Success"
+                    Add-SessionChange -Category "System" -Description "Set power plan to $($configProfile.PowerPlan)"
+                }
                 Clear-MenuCache
             } else {
                 Write-OutputColor "        Unknown power plan: $($configProfile.PowerPlan)" -color "Warning"

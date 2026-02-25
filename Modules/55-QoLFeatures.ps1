@@ -420,7 +420,7 @@ function Set-PagefileConfiguration {
         # --- Section: Retrieve Current Pagefile Status ---
         # Read current pagefile settings
         $pagefileSettings = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
-        $pagefileUsage = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue
+        $pagefileUsage = @(Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue)
         $compSys = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
         $autoManaged = if ($null -ne $compSys) { $compSys.AutomaticManagedPagefile } else { $false }
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.9.28
+
+- **Bug Fix:** File search in single-file shared folders returned a raw hashtable instead of an array — `Get-FileServerFiles` result not wrapped in `@()`, causing `.Count` to return the number of hashtable keys and `foreach` to iterate `DictionaryEntry` objects instead of file records (39-FileServer).
+- **Bug Fix:** Pagefile drive detection was skipped when exactly one pagefile existed — `Get-CimInstance Win32_PageFileUsage` result not wrapped in `@()`, so `.Count` returned `$null` and `[0]` indexing failed on a single CIM object (55-QoLFeatures).
+- **Bug Fix:** Performance snapshot count displayed blank when exactly one metrics JSON file existed — `Get-ChildItem` result not wrapped in `@()` (54-HTMLReports).
+- **Bug Fix:** Cluster dashboard "and X more resources" message never appeared when a single cluster resource existed — `Get-ClusterResource` `.Count` failed without `@()` wrapping (27-FailoverClustering).
+- **Bug Fix:** Installed features count check failed when exactly one Windows feature was installed — `Get-WindowsFeature` pipeline result not wrapped in `@()` (60-ServerRoleTemplates).
+- **Bug Fix:** RDP listener count displayed blank when a single WSMan listener was configured — `Get-ChildItem` result not wrapped in `@()` (15-RDP).
+- **Bug Fix:** SET team NIC count displayed blank for single-NIC teams — `.NetAdapterInterfaceDescription` property not wrapped in `@()` (09-SET).
+- **Bug Fix:** Deep disk cleanup reported "complete" even when DISM component store cleanup failed — `Dism.exe` exit code was not checked after execution (20-DiskCleanup).
+- **Bug Fix:** Batch configuration reported power plan set even when `powercfg` failed — exit code not checked, changes counter and session tracking ran unconditionally (50-EntryPoint).
+- **Bug Fix:** Profile apply reported power plan set even when `powercfg` failed — exit code not checked (45-ConfigExport).
+- 63 modules, 1854 tests
+
 ## v1.9.27
 
 - **Critical Bug Fix:** VHD dynamic-to-fixed conversion deleted the converted file — `Remove-Item` targeted the same path that `Move-Item` had just written to, destroying the just-converted fixed VHD. The function returned a path to a deleted file (41-VHDManagement).

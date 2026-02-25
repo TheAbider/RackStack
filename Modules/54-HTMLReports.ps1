@@ -753,7 +753,7 @@ function Export-HTMLTrendReport {
         return
     }
 
-    $files = Get-ChildItem -Path $metricsDir -Filter "*.json" -ErrorAction SilentlyContinue | Sort-Object Name
+    $files = @(Get-ChildItem -Path $metricsDir -Filter "*.json" -ErrorAction SilentlyContinue | Sort-Object Name)
     if ($files.Count -eq 0) {
         Write-OutputColor "  No snapshot files found." -color "Warning"
         return

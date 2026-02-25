@@ -137,7 +137,11 @@ function Invoke-DeepClean {
     # Component store cleanup
     Write-OutputColor "  Cleaning component store (DISM)..." -color "Info"
     $null = Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>&1
-    Write-OutputColor "  Component store cleanup complete." -color "Success"
+    if ($LASTEXITCODE -ne 0) {
+        Write-OutputColor "  Component store cleanup failed (exit code $LASTEXITCODE)." -color "Warning"
+    } else {
+        Write-OutputColor "  Component store cleanup complete." -color "Success"
+    }
 
     # Clear CBS logs
     if (Test-Path "C:\Windows\Logs\CBS") {

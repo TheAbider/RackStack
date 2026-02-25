@@ -220,7 +220,7 @@ function Find-FileServerFile {
         [string]$Extension
     )
 
-    $files = Get-FileServerFiles -FolderPath $FolderPath
+    $files = @(Get-FileServerFiles -FolderPath $FolderPath)
     if (-not $files -or $files.Count -eq 0) { return $null }
 
     $keywordMatch = $null

@@ -600,10 +600,15 @@ function Start-BatchMode {
                 Write-OutputColor "  [$stepNum/$totalSteps] Setting power plan to '$($Config.SetPowerPlan)'..." -color "Info"
                 $oldPlanGuid = $currentPlan.Guid
                 powercfg /setactive $script:PowerPlanGUID[$Config.SetPowerPlan] 2>&1 | Out-Null
-                Write-OutputColor "           Power plan set." -color "Success"
-                $changesApplied++
-                Add-SessionChange -Category "System" -Description "Set power plan to $($Config.SetPowerPlan)"
-                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert power plan to $($currentPlan.Name)"; Reversible = $true; UndoScript = [scriptblock]::Create("powercfg /setactive '$oldPlanGuid' 2>&1 | Out-Null") })
+                if ($LASTEXITCODE -ne 0) {
+                    Write-OutputColor "           Failed to set power plan (exit code $LASTEXITCODE)." -color "Warning"
+                    $skipped++
+                } else {
+                    Write-OutputColor "           Power plan set." -color "Success"
+                    $changesApplied++
+                    Add-SessionChange -Category "System" -Description "Set power plan to $($Config.SetPowerPlan)"
+                    $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert power plan to $($currentPlan.Name)"; Reversible = $true; UndoScript = [scriptblock]::Create("powercfg /setactive '$oldPlanGuid' 2>&1 | Out-Null") })
+                }
             }
         }
         else {

@@ -803,7 +803,7 @@ function Show-ClusterStatus {
         $resName = if ($res.Name.Length -gt 40) { $res.Name.Substring(0,37) + "..." } else { $res.Name }
         Write-OutputColor "  │$("  $resName - $($res.State)".PadRight(72))│" -color $color
     }
-    $totalResources = (Get-ClusterResource -ErrorAction SilentlyContinue).Count
+    $totalResources = @(Get-ClusterResource -ErrorAction SilentlyContinue).Count
     if ($totalResources -gt 10) {
         Write-OutputColor "  │$("  ... and $($totalResources - 10) more resources".PadRight(72))│" -color "Info"
     }
