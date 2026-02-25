@@ -30,10 +30,15 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.33
+    1.9.34
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.34
+    BUG FIXES:
+    - FIXED: VLAN IDs 5-9 silently not applied to custom vNICs in batch mode when JSON value is a quoted string — validation passed but execution-path comparison used string ordering ("5" > "4094") instead of numeric. Now casts to [int] before range check (50-EntryPoint)
+    - FIXED: iSCSI host numbers 3-9 silently skipped in batch mode when JSON value is a quoted string — same root cause as VLAN bug. Validation accepted the value but execution-path comparison failed on string ordering, falling through to "Could not determine host number" with no error (50-EntryPoint)
 
 .CHANGELOG v1.9.33
     BUG FIXES:

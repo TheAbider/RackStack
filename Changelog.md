@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9.34
+
+- **Bug Fix:** VLAN IDs with first digit 5-9 silently not applied to custom vNICs during batch mode when the JSON value was a quoted string (e.g., `"VLAN": "5"` instead of `"VLAN": 5`). The validation function correctly cast with `-as [int]` and accepted the value, but the execution path used the raw string in a numeric comparison — `"5" -le "4094"` becomes a string comparison where `"5" > "4"`, so the VLAN was silently dropped. VLANs 1-4 and 10+ happened to work due to string sort order. Now casts to `[int]` at point of use (50-EntryPoint).
+- **Bug Fix:** iSCSI host numbers 3-9 silently skipped during batch mode with the same quoted-string root cause. `"5" -le "24"` evaluates as `"5" > "2"` in string comparison, causing the entire iSCSI configuration step to be skipped with a misleading "Could not determine host number" message even though validation passed. Host numbers 1-2 and 10-24 happened to work. Now casts to `[int]` at point of use (50-EntryPoint).
+- 63 modules, 1854 tests
+
 ## v1.9.33
 
 - **Bug Fix:** BitLocker encryption method prompt accepted invalid input then falsely reported "BitLocker enabled" — typing anything other than 1, 2, or 3 at the encryption method selection silently skipped the actual `Enable-BitLocker` call but executed the success message and logged a session change, making the user believe the volume was encrypted when it was not (31-BitLocker).

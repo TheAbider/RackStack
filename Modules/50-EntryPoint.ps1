@@ -1094,7 +1094,7 @@ function Start-BatchMode {
 
                     Add-VMNetworkAdapter -ManagementOS -SwitchName $targetSwitch.Name -Name $vnicName -ErrorAction Stop
 
-                    $vlanId = $vnicDef.VLAN
+                    $vlanId = $vnicDef.VLAN -as [int]
                     if ($null -ne $vlanId -and $vlanId -ge 1 -and $vlanId -le 4094) {
                         Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vnicName -Access -VlanId $vlanId -ErrorAction SilentlyContinue
                     }
@@ -1137,7 +1137,7 @@ function Start-BatchMode {
         try {
             if ($storageBackend -eq "iSCSI") {
                 # iSCSI-specific configuration (preserved from v1.2.0)
-                $hostNum = $Config.iSCSIHostNumber
+                $hostNum = $Config.iSCSIHostNumber -as [int]
                 if ($null -eq $hostNum) {
                     $hostNum = Get-HostNumberFromHostname
                 }
