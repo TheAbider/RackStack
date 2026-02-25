@@ -70,7 +70,7 @@ function Export-VMWizard {
     if ([string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $defaultPath }
 
     # Ensure export directory exists
-    if (-not (Test-Path $exportPath)) {
+    if (-not (Test-Path -LiteralPath $exportPath)) {
         Write-OutputColor "  Creating export directory: $exportPath" -color "Info"
         $null = New-Item -Path $exportPath -ItemType Directory -Force
     }
@@ -185,7 +185,7 @@ function Import-VMWizard {
 
     $importPath = $importPath.Trim('"')
 
-    if (-not (Test-Path $importPath)) {
+    if (-not (Test-Path -LiteralPath $importPath)) {
         Write-OutputColor "  Path not found: $importPath" -color "Error"
         return
     }
@@ -196,7 +196,7 @@ function Import-VMWizard {
         $vmcxPath = $importPath
     }
     else {
-        $vmcxFiles = Get-ChildItem -Path $importPath -Filter "*.vmcx" -Recurse -ErrorAction SilentlyContinue
+        $vmcxFiles = Get-ChildItem -LiteralPath $importPath -Filter "*.vmcx" -Recurse -ErrorAction SilentlyContinue
         if ($vmcxFiles.Count -eq 1) {
             $vmcxPath = $vmcxFiles[0].FullName
         }

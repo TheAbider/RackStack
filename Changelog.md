@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.9.19
+
+- **Bug Fix:** Event log viewer crashed on events with null `Message` property — security audit and Hyper-V events commonly have no message text. Added null guard with "(no message)" fallback (29-EventLogViewer).
+- **Bug Fix:** Certificate viewer and exporter crashed on certificates with null `Subject` — self-signed, CNG, and auto-enrolled certs can lack a subject. Added null guard with "(no subject)" fallback at all 3 display points (55-QoLFeatures).
+- **Bug Fix:** When multiple external virtual switches existed, `Remove-VMSwitch` received an array of names and would delete ALL of them instead of just one. Added `Select-Object -First 1` to ensure single-switch handling (09-SET).
+- **Bug Fix:** VM export/import operations failed when VM names contained square brackets — `Test-Path` and `Get-ChildItem` treated `[]` as wildcard characters. Switched to `-LiteralPath` parameter (53-VMExportImport).
+- **Bug Fix:** SMB share connectivity test reported shares with brackets in their name as inaccessible. Switched to `-LiteralPath` (59-StorageBackends).
+- **Bug Fix:** iSCSI side comparison indexed into `$sides` without bounds check — single result caused string character indexing instead of array element access. Wrapped in `@()` and added `.Count -ge 2` guard (10-iSCSI).
+- 63 modules, 1854 tests
+
 ## v1.9.18
 
 - **Bug Fix:** SET team auto-detection failed on 2-NIC servers — single pipeline result from `Where-Object` has no `.Count` property in PS 5.1, so `.Count -gt 0` returned false. iSCSI candidate adapters were never identified. Wrapped pipeline results in `@()` array subexpression (09-SET).

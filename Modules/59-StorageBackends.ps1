@@ -660,11 +660,11 @@ function Test-SMB3SharePath {
     Write-OutputColor "  Testing connectivity to $sharePath..." -color "Info"
 
     try {
-        if (Test-Path $sharePath -ErrorAction Stop) {
+        if (Test-Path -LiteralPath $sharePath -ErrorAction Stop) {
             Write-OutputColor "  Share is accessible!" -color "Success"
 
             # Show share info
-            $items = Get-ChildItem $sharePath -ErrorAction SilentlyContinue | Measure-Object
+            $items = Get-ChildItem -LiteralPath $sharePath -ErrorAction SilentlyContinue | Measure-Object
             Write-OutputColor "  Items in share root: $($items.Count)" -color "Info"
         }
         else {
@@ -1086,7 +1086,7 @@ function Initialize-StorageBackendBatch {
             # SMB3 batch: test share path if provided
             $sharePath = $Config.SMB3SharePath
             if ($sharePath) {
-                if (Test-Path $sharePath -ErrorAction SilentlyContinue) {
+                if (Test-Path -LiteralPath $sharePath -ErrorAction SilentlyContinue) {
                     Write-OutputColor "           SMB share accessible: $sharePath" -color "Success"
                 }
                 else {

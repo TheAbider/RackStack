@@ -30,10 +30,19 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.18
+    1.9.19
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.19
+    BUG FIXES:
+    - FIXED: Event log viewer crashed on events with null Message property — common with security audit and Hyper-V events (29-EventLogViewer)
+    - FIXED: Certificate viewer/exporter crashed on certs with null Subject — self-signed and auto-enrolled certs (55-QoLFeatures)
+    - FIXED: Multiple external switches caused mass deletion — Remove-VMSwitch received array of names instead of single switch (09-SET)
+    - FIXED: VM export/import failed with bracket characters in VM names — Test-Path treated [] as wildcards (53-VMExportImport)
+    - FIXED: SMB share connectivity test failed on share names with brackets (59-StorageBackends)
+    - FIXED: iSCSI side comparison produced wrong results with single adapter result (10-iSCSI)
 
 .CHANGELOG v1.9.18
     BUG FIXES:

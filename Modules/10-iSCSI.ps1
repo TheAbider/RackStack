@@ -151,7 +151,7 @@ function Test-iSCSICabling {
     Write-OutputColor "" -color "Info"
 
     # Validation and warnings
-    $sides = $allResults | ForEach-Object { $_.Side }
+    $sides = @($allResults | ForEach-Object { $_.Side })
 
     if ($sides -contains "Both") {
         Write-OutputColor "  WARNING: An adapter reaches both A and B side targets." -color "Warning"
@@ -160,7 +160,7 @@ function Test-iSCSICabling {
         Write-OutputColor "" -color "Info"
     }
 
-    if ($sides[0] -eq $sides[1] -and $sides[0] -ne "None") {
+    if ($sides.Count -ge 2 -and $sides[0] -eq $sides[1] -and $sides[0] -ne "None") {
         Write-OutputColor "  WARNING: Both adapters reach the same side ($($sides[0]))." -color "Warning"
         Write-OutputColor "  Check cabling - they should be on different switches." -color "Warning"
         Write-OutputColor "" -color "Info"

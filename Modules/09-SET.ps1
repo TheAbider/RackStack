@@ -188,7 +188,7 @@ function New-SwitchEmbeddedTeam {
     }
 
     # Check for existing SET
-    $existingSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" }
+    $existingSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" } | Select-Object -First 1
 
     if ($existingSwitch) {
         Write-OutputColor "Existing external switch found: '$($existingSwitch.Name)'" -color "Warning"

@@ -1109,7 +1109,7 @@ function Show-CertificateMenu {
 
                     $certIndex = 1
                     foreach ($cert in $certs) {
-                        $subject = if ($cert.Subject.Length -gt 50) { $cert.Subject.Substring(0, 47) + "..." } else { "$($cert.Subject)" }
+                        $subject = if ($cert.Subject -and $cert.Subject.Length -gt 50) { $cert.Subject.Substring(0, 47) + "..." } elseif ($cert.Subject) { "$($cert.Subject)" } else { "(no subject)" }
                         $thumbprint = "$($cert.Thumbprint)"
                         $expiry = $cert.NotAfter.ToString("yyyy-MM-dd")
                         $isExpired = ($cert.NotAfter -lt (Get-Date))
@@ -1156,7 +1156,7 @@ function Show-CertificateMenu {
                 if ($expiringCerts.Count -gt 0) {
                     Write-OutputColor "" -color "Info"
                     foreach ($cert in $expiringCerts) {
-                        $subject = if ($cert.Subject.Length -gt 50) { $cert.Subject.Substring(0, 47) + "..." } else { "$($cert.Subject)" }
+                        $subject = if ($cert.Subject -and $cert.Subject.Length -gt 50) { $cert.Subject.Substring(0, 47) + "..." } elseif ($cert.Subject) { "$($cert.Subject)" } else { "(no subject)" }
                         $expiry = $cert.NotAfter.ToString("yyyy-MM-dd HH:mm")
                         $isExpired = ($cert.NotAfter -lt (Get-Date))
                         $daysLeft = [math]::Ceiling(($cert.NotAfter - (Get-Date)).TotalDays)
@@ -1191,7 +1191,7 @@ function Show-CertificateMenu {
 
                 $certIndex = 1
                 foreach ($cert in $certs) {
-                    $subject = if ($cert.Subject.Length -gt 50) { $cert.Subject.Substring(0, 47) + "..." } else { "$($cert.Subject)" }
+                    $subject = if ($cert.Subject -and $cert.Subject.Length -gt 50) { $cert.Subject.Substring(0, 47) + "..." } elseif ($cert.Subject) { "$($cert.Subject)" } else { "(no subject)" }
                     Write-OutputColor "  [$certIndex] $subject" -color "Info"
                     Write-OutputColor "       Thumbprint: $($cert.Thumbprint)" -color "Info"
                     $certIndex++
