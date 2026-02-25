@@ -30,10 +30,15 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.12
+    1.9.13
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.13
+    BUG FIXES:
+    - FIXED: VM deployment site detection .Count on single cluster node (missing array wrapping)
+    - FIXED: VM checkpoint list .Count on single checkpoint result (missing array wrapping)
 
 .CHANGELOG v1.9.12
     BUG FIXES:

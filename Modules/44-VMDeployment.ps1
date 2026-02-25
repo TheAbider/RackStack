@@ -752,8 +752,8 @@ function Set-DeploymentSiteNumber {
     }
     elseif ($script:VMDeploymentMode -eq "Cluster") {
         # Try first node
-        $nodes = Get-ClusterNode -Cluster $script:VMDeploymentTarget -ErrorAction SilentlyContinue
-        if ($nodes -and $nodes.Count -gt 0) {
+        $nodes = @(Get-ClusterNode -Cluster $script:VMDeploymentTarget -ErrorAction SilentlyContinue)
+        if ($nodes.Count -gt 0) {
             $detectedSite = Get-SiteNumberFromHostnameParam -Hostname $nodes[0].Name
         }
     }

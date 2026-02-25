@@ -13,7 +13,7 @@ function Get-VMCheckpointList {
     if ($VMName) { $params['VMName'] = $VMName }
 
     try {
-        $checkpoints = Get-VMCheckpoint @params -ErrorAction Stop | Sort-Object VMName, CreationTime
+        $checkpoints = @(Get-VMCheckpoint @params -ErrorAction Stop | Sort-Object VMName, CreationTime)
 
         if ($checkpoints.Count -eq 0) {
             return @{ Success = $true; Checkpoints = @(); Message = "No checkpoints found" }

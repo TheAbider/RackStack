@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9.13
+
+- **Bug Fix:** VM deployment site detection used `.Count` on unguarded `Get-ClusterNode` result — single-node clusters couldn't detect site. Wrapped in `@()`.
+- **Bug Fix:** VM checkpoint list used `.Count` on unguarded `Get-VMCheckpoint` pipeline — single-checkpoint VMs showed wrong count. Wrapped in `@()`.
+- 63 modules, 1854 tests
+
 ## v1.9.12
 
 - **Bug Fix:** BitLocker volume selection used `.Count` on unguarded `Get-BitLockerVolume` result — single-volume systems couldn't select their volume. Wrapped in `@()`.
