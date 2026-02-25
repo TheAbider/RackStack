@@ -30,10 +30,22 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.38
+    1.9.39
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.39
+    BUG FIXES:
+    - FIXED: 10 remaining -f format string calls in disk/partition/volume display converted to string interpolation — prevents FormatException on hardware names containing curly braces (38-StorageManager, 44-VMDeployment)
+    - FIXED: Test-WindowsServer returned true when WMI failed — null ProductType evaluated as $null -ne 1 = true, causing server-only features to be offered on workstations with broken WMI (05-SystemCheck)
+    - FIXED: 3 Get-NetFirewallProfile calls in firewall configuration missing -ErrorAction SilentlyContinue — threw terminating error when Windows Firewall service was unavailable (16-Firewall)
+    - FIXED: Get-SRGroup replication status query had no -ErrorAction — race condition if group removed between list and detail query caused unhandled exception (33-StorageReplica)
+    - FIXED: Get-BitLockerVolume recovery key lookup had no -ErrorAction — threw unhandled error when BitLocker not available, showed misleading "no key" message (31-BitLocker)
+    - FIXED: VHD copy progress bar received null source size when source file inaccessible — null Length passed to Write-ProgressBar caused display errors (41-VHDManagement)
+    - FIXED: Get-CimInstance in domain join check missing -ErrorAction SilentlyContinue — WMI failure threw raw PowerShell error instead of graceful handling (12-DomainJoin)
+    - FIXED: Batch config domain join attempted when WMI failed — null PartOfDomain evaluated as -not $null = true, triggering unwanted join attempt. Now defaults to skipping join on WMI failure (50-EntryPoint)
+    - FIXED: VM switch pre-flight check produced @($null) when Hyper-V unavailable — Get-VMSwitch returning null then .Name produced null inside @(), corrupting the switch presence check (44-VMDeployment)
 
 .CHANGELOG v1.9.38
     BUG FIXES:

@@ -237,7 +237,8 @@ function Show-BitLockerManagement {
                 $volNum = Read-Host "  Enter volume number"
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volumes.Count) {
                     $vol = $volumes[[int]$volNum - 1]
-                    $keys = (Get-BitLockerVolume -MountPoint $vol.MountPoint).KeyProtector | Where-Object { $_.RecoveryPassword }
+                    $blVolume = Get-BitLockerVolume -MountPoint $vol.MountPoint -ErrorAction SilentlyContinue
+                    $keys = if ($null -ne $blVolume) { $blVolume.KeyProtector | Where-Object { $_.RecoveryPassword } } else { $null }
                     if ($keys) {
                         Write-OutputColor "" -color "Info"
                         Write-OutputColor "  Recovery Key(s) for $($vol.MountPoint):" -color "Warning"

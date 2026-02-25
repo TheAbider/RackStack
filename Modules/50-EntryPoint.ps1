@@ -753,7 +753,8 @@ function Start-BatchMode {
 
     # Step 13: Join domain (prompts for credentials - do near end)
     $stepNum++
-    $isDomainJoined = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain
+    $csInfo = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $isDomainJoined = if ($null -ne $csInfo) { $csInfo.PartOfDomain } else { $true }
     if ($Config.DomainName -and -not $isDomainJoined) {
         Write-OutputColor "  [$stepNum/$totalSteps] Joining domain '$($Config.DomainName)'..." -color "Info"
         try {

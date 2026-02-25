@@ -2029,8 +2029,8 @@ function Show-ExistingVMs {
             }
 
             Write-OutputColor "$("$($vm.Name)".PadRight(30)) " -color "Info" -NoNewline
-            Write-OutputColor ("{0,-12} " -f $vm.State) -color $stateColor -NoNewline
-            Write-OutputColor ("{0,-8} {1,-10} {2}" -f $vm.ProcessorCount, $memoryDisplay, $uptimeDisplay) -color "Info"
+            Write-OutputColor "$("$($vm.State)".PadRight(12)) " -color $stateColor -NoNewline
+            Write-OutputColor "$("$($vm.ProcessorCount)".PadRight(8)) $($memoryDisplay.PadRight(10)) $uptimeDisplay" -color "Info"
         }
 
         Write-OutputColor ("=" * 80) -color "Info"
@@ -3002,7 +3002,10 @@ function Test-VMDeploymentPreFlight {
 
     # 4. VM switch check
     $existingSwitches = @()
-    try { $existingSwitches = @((Get-VMSwitch -ErrorAction SilentlyContinue).Name) } catch {}
+    try {
+        $vmSw = Get-VMSwitch -ErrorAction SilentlyContinue
+        $existingSwitches = if ($null -ne $vmSw) { @($vmSw.Name) } else { @() }
+    } catch { $existingSwitches = @() }
     $switchNames = @($VMConfigs | ForEach-Object { $_.NICs } | ForEach-Object { $_.SwitchName } | Where-Object { $_ } | Select-Object -Unique)
     $missingSwitches = @($switchNames | Where-Object { $_ -notin $existingSwitches })
     $switchStatus = if ($missingSwitches.Count -gt 0) { "FAIL" } else { "OK" }

@@ -158,7 +158,8 @@ function Show-StorageReplicaManagement {
                 $groups = Get-SRGroup -ErrorAction SilentlyContinue
                 if ($groups) {
                     foreach ($g in $groups) {
-                        $replStatus = (Get-SRGroup -Name $g.Name).Replicas
+                        $srGroup = Get-SRGroup -Name $g.Name -ErrorAction SilentlyContinue
+                        $replStatus = if ($null -ne $srGroup) { $srGroup.Replicas } else { $null }
                         Write-OutputColor "" -color "Info"
                         Write-OutputColor "  Group: $($g.Name)" -color "Info"
                         foreach ($r in $replStatus) {

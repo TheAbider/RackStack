@@ -92,14 +92,14 @@ function Show-AllDisks {
             default { "Info" }
         }
 
-        Write-OutputColor ("{0,-6} " -f $disk.Number) -color "Info" -NoNewline
-        Write-OutputColor ("{0,-12} " -f $disk.OperationalStatus) -color $statusColor -NoNewline
-        Write-OutputColor ("{0,-12} " -f $health) -color $healthColor -NoNewline
-        Write-OutputColor ("{0,-15} {1,-12} {2,-15} {3}" -f $size, $partStyle, $disk.NumberOfPartitions, $busType) -color "Info"
+        Write-OutputColor "$("$($disk.Number)".PadRight(6)) " -color "Info" -NoNewline
+        Write-OutputColor "$("$($disk.OperationalStatus)".PadRight(12)) " -color $statusColor -NoNewline
+        Write-OutputColor "$("$health".PadRight(12)) " -color $healthColor -NoNewline
+        Write-OutputColor "$($size.PadRight(15)) $($partStyle.PadRight(12)) $("$($disk.NumberOfPartitions)".PadRight(15)) $busType" -color "Info"
 
         # Show friendly name
         if ($disk.FriendlyName) {
-            Write-OutputColor ("       Model: {0}" -f $disk.FriendlyName) -color "Info"
+            Write-OutputColor "       Model: $($disk.FriendlyName)" -color "Info"
         }
     }
 
@@ -159,9 +159,9 @@ function Show-DiskPartitions {
             default { "Info" }
         }
 
-        Write-OutputColor ("{0,-8} {1,-8} {2,-15} " -f $part.PartitionNumber, $driveLetter, $size) -color "Info" -NoNewline
-        Write-OutputColor ("{0,-15} " -f $part.Type) -color $typeColor -NoNewline
-        Write-OutputColor ("{0,-12} {1}" -f $isActive, $offset) -color "Info"
+        Write-OutputColor "$("$($part.PartitionNumber)".PadRight(8)) $($driveLetter.PadRight(8)) $($size.PadRight(15)) " -color "Info" -NoNewline
+        Write-OutputColor "$("$($part.Type)".PadRight(15)) " -color $typeColor -NoNewline
+        Write-OutputColor "$($isActive.PadRight(12)) $offset" -color "Info"
     }
 
     Write-OutputColor ("=" * 95) -color "Info"
@@ -210,8 +210,8 @@ function Show-AllVolumes {
         }
 
         Write-OutputColor "$($driveLetter.PadRight(8)) $($label.PadRight(20)) $("$($vol.FileSystem)".PadRight(12)) $($size.PadRight(15)) $($free.PadRight(15)) " -color "Info" -NoNewline
-        Write-OutputColor ("{0,-10} " -f "$usedPercent%") -color $usageColor -NoNewline
-        Write-OutputColor ("{0}" -f $vol.HealthStatus) -color $healthColor
+        Write-OutputColor "$("$usedPercent%".PadRight(10)) " -color $usageColor -NoNewline
+        Write-OutputColor "$($vol.HealthStatus)" -color $healthColor
     }
 
     Write-OutputColor ("=" * 100) -color "Info"

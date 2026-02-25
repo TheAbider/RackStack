@@ -215,7 +215,8 @@ function Copy-VHDForVM {
             Copy-Item -Path $src -Destination $dst -Force -ErrorAction Stop
         } -ArgumentList $SourceVHDPath, $destPath
 
-        $sourceSize = (Get-Item $SourceVHDPath -ErrorAction SilentlyContinue).Length
+        $sourceItem = Get-Item $SourceVHDPath -ErrorAction SilentlyContinue
+        $sourceSize = if ($null -ne $sourceItem) { $sourceItem.Length } else { 0 }
         $copyElapsed = 0
         $lastCopySize = 0
         $lastCopySpeedCheck = 0

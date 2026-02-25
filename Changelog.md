@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.9.39
+
+- **Bug Fix:** 10 remaining `-f` format string operator calls in disk overview, partition details, and volume listing converted to string interpolation with `.PadRight()`. Same class of bug fixed in v1.9.38 — the `-f` operator throws `FormatException` when formatted values contain `{` or `}`. The `$disk.FriendlyName` case was highest risk (e.g., NVMe drives reporting as `Samsung SSD 990 PRO {NVMe}`), but all 10 instances in the Storage Manager and VM status display were converted for consistency (38-StorageManager, 44-VMDeployment).
+- **Bug Fix:** `Test-WindowsServer` returned `$true` when WMI was unavailable — `Get-CimInstance` with `-ErrorAction SilentlyContinue` returned `$null`, and `$null.ProductType -ne 1` evaluated as `$true`. This caused server-only features (like `Install-WindowsFeature`) to be offered on workstations with broken WMI. Now returns `$false` when WMI is unavailable (05-SystemCheck).
+- **Bug Fix:** Three `Get-NetFirewallProfile` calls in the firewall configuration function were missing `-ErrorAction SilentlyContinue` — if the Windows Firewall service was unavailable or stopped, these threw a terminating error that bypassed the outer try/catch. Also added `$null` guards so a failed query doesn't misread the profile state (16-Firewall).
+- **Bug Fix:** `Get-SRGroup` replication status detail query had no `-ErrorAction` — if a Storage Replica group was removed between the initial list query and the per-group detail query, the unguarded call threw an unhandled exception. Now uses `-ErrorAction SilentlyContinue` with a `$null` guard (33-StorageReplica).
+- **Bug Fix:** `Get-BitLockerVolume` recovery key lookup had no `-ErrorAction` — threw an unhandled error when BitLocker was not enabled on the selected volume, and displayed a misleading "No recovery password found" message instead of a proper error. Now uses `-ErrorAction SilentlyContinue` with a `$null` guard (31-BitLocker).
+- **Bug Fix:** VHD copy progress bar received `$null` for source size when the source file was inaccessible — `(Get-Item).Length` on a `$null` result passed `$null` to `Write-ProgressBar`, causing display errors. Now defaults to `0` when the source item can't be read (41-VHDManagement).
+- **Bug Fix:** `Get-CimInstance` in the domain join function was missing `-ErrorAction SilentlyContinue` — a WMI failure threw a raw PowerShell error to the user instead of being handled gracefully. Also added a `$null` guard so the domain status check doesn't fail on inaccessible WMI (12-DomainJoin).
+- **Bug Fix:** Batch config domain join step attempted to join when WMI failed — `$null` from `PartOfDomain` made `-not $null` evaluate as `$true`, triggering an unwanted domain join attempt. Now defaults to assuming already joined when WMI is unavailable, which is the safe fallback (50-EntryPoint).
+- **Bug Fix:** VM switch pre-flight check produced `@($null)` when Hyper-V was unavailable — `Get-VMSwitch` returning `$null` followed by `.Name` produced `$null`, and `@($null)` created a single-element array containing `$null` instead of an empty array. This corrupted the `-notin` switch presence check. Now properly returns an empty array when `Get-VMSwitch` returns nothing (44-VMDeployment).
+- 63 modules, 1854 tests
+
 ## v1.9.38
 
 - **Bug Fix:** Unescaped single quotes in network adapter name broke the batch config network undo scriptblock — same class of bug fixed in v1.9.33 for admin names, virtual switch names, and vNIC names, but the adapter name in the network IP configuration undo was missed. An adapter named `O'Brien NIC` would produce a malformed scriptblock via `[scriptblock]::Create()`. Now escapes `'` to `''` before interpolation (50-EntryPoint).

@@ -41,8 +41,8 @@ function Join-Domain {
     }
 
     # Check current domain status
-    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
-    if ($computerSystem.PartOfDomain) {
+    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    if ($null -ne $computerSystem -and $computerSystem.PartOfDomain) {
         Write-OutputColor "Server is already joined to domain: $($computerSystem.Domain)" -color "Warning"
         if (-not (Confirm-UserAction -Message "Do you want to join a different domain?")) {
             return

@@ -3,6 +3,7 @@
 function Test-WindowsServer {
     try {
         $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        if ($null -eq $osInfo) { return $false }
         return ($osInfo.ProductType -ne 1)  # 1 = Workstation, 2 = Domain Controller, 3 = Server
     }
     catch {
