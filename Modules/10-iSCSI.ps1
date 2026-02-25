@@ -539,7 +539,7 @@ function Set-iSCSIAdapter {
     Write-OutputColor "Status: $($nic.Status)" -color $(if ($nic.Status -eq "Up") { "Success" } else { "Warning" })
 
     # Get current configuration
-    $currentIP = Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    $currentIP = Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($currentIP) {
         Write-OutputColor "Current IP: $($currentIP.IPAddress)/$($currentIP.PrefixLength)" -color "Info"
     }

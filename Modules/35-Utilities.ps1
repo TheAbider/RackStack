@@ -14,6 +14,10 @@ function Compare-ConfigurationProfiles {
     if ($navResult.ShouldReturn) { return }
 
     $path1 = $path1.Trim('"')
+    if ([string]::IsNullOrWhiteSpace($path1)) {
+        Write-OutputColor "No path entered." -color "Error"
+        return
+    }
     if (-not (Test-Path $path1)) {
         Write-OutputColor "File not found: $path1" -color "Error"
         return
@@ -26,6 +30,10 @@ function Compare-ConfigurationProfiles {
     if ($navResult.ShouldReturn) { return }
 
     $path2 = $path2.Trim('"')
+    if ([string]::IsNullOrWhiteSpace($path2)) {
+        Write-OutputColor "No path entered." -color "Error"
+        return
+    }
     if (-not (Test-Path $path2)) {
         Write-OutputColor "File not found: $path2" -color "Error"
         return
@@ -476,6 +484,10 @@ function Invoke-RemoteProfileApply {
     if ($navResult.ShouldReturn) { return }
 
     $profilePath = $profilePath.Trim('"')
+    if ([string]::IsNullOrWhiteSpace($profilePath)) {
+        Write-OutputColor "No path entered." -color "Error"
+        return
+    }
     if (-not (Test-Path $profilePath)) {
         Write-OutputColor "Profile file not found: $profilePath" -color "Error"
         return

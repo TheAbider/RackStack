@@ -30,10 +30,18 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.35
+    1.9.36
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.36
+    BUG FIXES:
+    - FIXED: Config profile export saved SubnetCIDR as an array instead of integer when adapter had multiple IPv4 addresses — Get-NetIPAddress returned multiple objects, property unrolling produced [24, 16] instead of 24, which broke profile import with New-NetIPAddress -PrefixLength (45-ConfigExport)
+    - FIXED: Config drift detection falsely reported IP and gateway mismatch on adapters with multiple addresses — Get-NetIPAddress and Get-NetRoute returning arrays caused scalar-to-array comparisons to always return false (45-ConfigExport)
+    - FIXED: iSCSI adapter config displayed garbled IP when adapter had multiple IPv4 addresses — property unrolling on array produced concatenated output like "10.0.0.100 169.254.1.1/24 16" (10-iSCSI)
+    - FIXED: 6 Test-Path calls threw terminating error when user pressed Enter without typing a path — empty string from Read-Host flowed through Test-NavigationCommand and Trim() to Test-Path which cannot bind empty string (35-Utilities, 53-VMExportImport, 54-HTMLReports)
+    - FIXED: VM export default path resolved to root of C: drive when HostVMStoragePath was null — string interpolation of "$null\Exports" produced "\Exports" which resolved to C:\Exports (53-VMExportImport)
 
 .CHANGELOG v1.9.35
     BUG FIXES:

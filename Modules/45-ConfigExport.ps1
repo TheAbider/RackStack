@@ -286,7 +286,7 @@ function Save-ConfigurationProfile {
     $primaryDNS = $null
 
     if ($primaryAdapter) {
-        $primaryIP = Get-NetIPAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $primaryIP = Get-NetIPAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1
         $primaryDNS = Get-DnsClientServerAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
     }
 
@@ -857,9 +857,9 @@ function Compare-ConfigurationDrift {
     # Network
     $primaryAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
     if ($primaryAdapter) {
-        $currentIP = (Get-NetIPAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
+        $currentIP = (Get-NetIPAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1).IPAddress
         $currentDNS = (Get-DnsClientServerAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
-        $currentGW = (Get-NetRoute -InterfaceAlias $primaryAdapter.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue).NextHop
+        $currentGW = (Get-NetRoute -InterfaceAlias $primaryAdapter.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
 
         if ($savedProfile.Network) {
             if ($null -ne $savedProfile.Network.IPAddress -and $savedProfile.Network.IPAddress -ne "") {

@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.9.36
+
+- **Bug Fix:** Config profile export saved `SubnetCIDR` as a JSON array (e.g., `[24, 16]`) instead of a single integer when the primary adapter had multiple IPv4 addresses (e.g., static + APIPA 169.254.x.x). `Get-NetIPAddress` returned multiple objects, and PowerShell property unrolling produced an array. This corrupted the saved profile and caused `New-NetIPAddress -PrefixLength` to fail on import. Now filters out link-local (WellKnown) addresses and selects a single result (45-ConfigExport).
+- **Bug Fix:** Config drift detection falsely reported IP address and gateway mismatches on adapters with multiple IPv4 addresses or multiple default routes. `Get-NetIPAddress.IPAddress` and `Get-NetRoute.NextHop` returned arrays, and scalar `-eq` array comparisons always return `$false` in PowerShell. Now narrows to single result before comparison (45-ConfigExport).
+- **Bug Fix:** iSCSI adapter configuration displayed garbled IP info when the adapter had multiple IPv4 addresses — PowerShell property unrolling on the array produced concatenated output like `10.0.0.100 169.254.1.1/24 16` instead of `10.0.0.100/24`. Now selects first result (10-iSCSI).
+- **Bug Fix:** 6 `Test-Path` calls threw a terminating error ("Cannot bind argument to parameter 'Path' because it is an empty string") when the user pressed Enter without typing a path. Empty string from `Read-Host` passed through `Test-NavigationCommand` (which returns `ShouldReturn = $false` for empty input) and `.Trim('"')`, then reached `Test-Path ""` which threw. Now checks `[string]::IsNullOrWhiteSpace()` before `Test-Path` (35-Utilities, 53-VMExportImport, 54-HTMLReports).
+- **Bug Fix:** VM export default path resolved to root of C: drive when `$script:HostVMStoragePath` was null after a connection reset — string interpolation `"$null\Exports"` produced `\Exports` which resolved to `C:\Exports`. Now uses `Join-Path` with a guard fallback to `$script:TempPath` (53-VMExportImport).
+- 63 modules, 1854 tests
+
 ## v1.9.35
 
 - **Bug Fix:** 18 TUI box-drawing display lines overflowed their right border when variable-length content exceeded 72 characters. Affected: cluster node lists with 4+ nodes (27-FailoverClustering), CSV volume names with long paths (27-FailoverClustering), Storage Replica partnership lines with FQDNs (33-StorageReplica), iSCSI disk FriendlyName (10-iSCSI), Defender process exclusion paths and extension lists (17-DefenderExclusions), network adapter connectivity results (09-SET), profile comparison values (35-Utilities), FC/S2D/NVMe physical disk names (59-StorageBackends), storage pool and virtual disk names (59-StorageBackends), and AD forest query exception messages (61-ActiveDirectory). All now truncate with `...` ellipsis at 69 characters before `.PadRight(72)`.

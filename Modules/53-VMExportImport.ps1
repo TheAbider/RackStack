@@ -63,7 +63,7 @@ function Export-VMWizard {
     $selectedVM = $vmMap[$vmChoice]
 
     # Get export path
-    $defaultPath = "$script:HostVMStoragePath\Exports"
+    $defaultPath = if ($script:HostVMStoragePath) { Join-Path $script:HostVMStoragePath "Exports" } else { Join-Path $script:TempPath "VMExports" }
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Export destination (Enter for default: $defaultPath):" -color "Info"
     $exportPath = Read-Host "  "
@@ -186,6 +186,10 @@ function Import-VMWizard {
     if ($navResult.ShouldReturn) { return }
 
     $importPath = $importPath.Trim('"')
+    if ([string]::IsNullOrWhiteSpace($importPath)) {
+        Write-OutputColor "  No path entered." -color "Error"
+        return
+    }
 
     if (-not (Test-Path -LiteralPath $importPath)) {
         Write-OutputColor "  Path not found: $importPath" -color "Error"

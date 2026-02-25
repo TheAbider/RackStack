@@ -328,6 +328,10 @@ function Export-ProfileComparisonHTML {
     }
 
     $Profile1Path = $Profile1Path.Trim('"')
+    if ([string]::IsNullOrWhiteSpace($Profile1Path)) {
+        Write-OutputColor "  No path entered." -color "Error"
+        return
+    }
     if (-not (Test-Path $Profile1Path)) {
         Write-OutputColor "  File not found: $Profile1Path" -color "Error"
         return
@@ -342,6 +346,10 @@ function Export-ProfileComparisonHTML {
     }
 
     $Profile2Path = $Profile2Path.Trim('"')
+    if ([string]::IsNullOrWhiteSpace($Profile2Path)) {
+        Write-OutputColor "  No path entered." -color "Error"
+        return
+    }
     if (-not (Test-Path $Profile2Path)) {
         Write-OutputColor "  File not found: $Profile2Path" -color "Error"
         return
