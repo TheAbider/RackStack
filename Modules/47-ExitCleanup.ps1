@@ -146,13 +146,13 @@ function Exit-Script {
         else {
             Write-OutputColor "Remember to reboot later to apply all changes!" -color "Warning"
             Start-Sleep -Seconds 3
-            Exit
+            [Environment]::Exit(0)
         }
     }
     else {
         Write-OutputColor "No reboot needed. Exiting script..." -color "Success"
         Start-Sleep -Seconds 2
-        Exit
+        [Environment]::Exit(0)
     }
 }
 #endregion

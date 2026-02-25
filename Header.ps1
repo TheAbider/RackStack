@@ -30,10 +30,14 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.24
+    1.9.25
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.25
+    BUG FIXES:
+    - FIXED: Bare Exit statements caused "System error" dialog when running as compiled EXE — ps2exe requires [Environment]::Exit() instead of Exit (47-ExitCleanup, 50-EntryPoint)
 
 .CHANGELOG v1.9.24
     BUG FIXES:

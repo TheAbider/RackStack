@@ -1390,14 +1390,14 @@ if ($script:ScriptPath) {
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         if (-not $isAdmin) {
             Write-Host "ERROR: Batch mode requires administrator privileges." -ForegroundColor Red
-            Exit 1
+            [Environment]::Exit(1)
         }
         try {
             $batchConfig = Get-Content $batchConfigPath -Raw | ConvertFrom-Json
             $configHash = @{}
             $batchConfig.PSObject.Properties | ForEach-Object { $configHash[$_.Name] = $_.Value }
             Start-BatchMode -Config $configHash
-            Exit
+            [Environment]::Exit(0)
         }
         catch {
             Write-OutputColor "Failed to load batch config: $_" -color "Error"

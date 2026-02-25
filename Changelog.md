@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.25
+
+- **Bug Fix:** All bare `Exit` statements caused a "System error" dialog when running as the compiled EXE — ps2exe wraps `Exit` in a way that throws `BreakException`. Replaced with `[Environment]::Exit()` in both `Exit-Script` exit paths (47-ExitCleanup) and batch mode entry/exit (50-EntryPoint). Affects 4 code paths: normal exit, no-reboot exit, batch admin check failure, and batch completion.
+- 63 modules, 1854 tests
+
 ## v1.9.24
 
 - **Bug Fix:** Batch mode internet adapter detection failed with single adapter — `Where-Object` returned a scalar with no `.Count` property, so the `$internetAdapters.Count -ge 1` check was always false. Management NIC rename was silently skipped. Wrapped in `@()` (50-EntryPoint).
