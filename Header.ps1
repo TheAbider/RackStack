@@ -30,10 +30,21 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.25
+    1.9.26
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.26
+    BUG FIXES:
+    - FIXED: Disk cleanup byte counter included directory name lengths instead of file sizes — Get-ChildItem without -File counted DirectoryInfo.Length (name char count) as freed bytes (20-DiskCleanup)
+    - FIXED: NTP configuration reported success even when w32tm failed — native exe exit codes were piped to Out-Null and never checked (19-NTPConfiguration)
+    - FIXED: Detailed time status display broke on w32tm error output — ErrorRecord objects from 2>&1 lack .Length property, causing truncation logic to silently fail (19-NTPConfiguration)
+    - FIXED: Navigation commands (exit, help, back) ignored in Host IP Network and VM Network menus — missing Test-NavigationCommand call before switch statement (49-MenuRunner)
+    - FIXED: Firewall state check compared .Enabled to string "True" instead of boolean $true — also added null guard for missing firewall profiles (05-SystemCheck)
+    - FIXED: Current IP display garbled when adapter had multiple IPv4 addresses — Get-NetIPAddress can return multiple objects (07-IPConfiguration)
+    - FIXED: Cluster dashboard crashed on faulted/offline CSVs — SharedVolumeInfo.Partition is null when CSV is unavailable, causing division on null (51-ClusterDashboard)
+    - FIXED: NIC identification menu failed with single physical adapter — pipeline result not wrapped in @() for reliable .Count and array indexing (10-iSCSI)
 
 .CHANGELOG v1.9.25
     BUG FIXES:

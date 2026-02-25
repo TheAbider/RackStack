@@ -491,6 +491,10 @@ function Start-Show-HostNetworkIPMenu {
     while ($true) {
         $vmNetworkChoice = Show-Host-IPNetworkMenu -selectedAdapterName $selectedAdapterName
 
+        $navResult = Test-NavigationCommand -UserInput $vmNetworkChoice
+        if ($navResult.Action -eq "exit") { Exit-Script; return }
+        if ($navResult.Action -eq "back") { return }
+
         switch ($vmNetworkChoice) {
             "1" {
                 Set-VMIPAddress -selectedAdapterName $selectedAdapterName
@@ -537,6 +541,10 @@ function Start-Show-VM-NetworkMenu {
 
     while ($true) {
         $vmNetworkChoice = Show-VM-NetworkMenu -selectedAdapterName $selectedAdapterName
+
+        $navResult = Test-NavigationCommand -UserInput $vmNetworkChoice
+        if ($navResult.Action -eq "exit") { Exit-Script; return }
+        if ($navResult.Action -eq "back") { return }
 
         switch ($vmNetworkChoice) {
             "1" {

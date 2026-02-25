@@ -161,9 +161,9 @@ function Get-FirewallState {
         $publicProfile = Get-NetFirewallProfile -Profile Public -ErrorAction SilentlyContinue
 
         return @{
-            Domain = if ($domainProfile.Enabled -eq "True") { "Enabled" } else { "Disabled" }
-            Private = if ($privateProfile.Enabled -eq "True") { "Enabled" } else { "Disabled" }
-            Public = if ($publicProfile.Enabled -eq "True") { "Enabled" } else { "Disabled" }
+            Domain = if ($null -ne $domainProfile -and $domainProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
+            Private = if ($null -ne $privateProfile -and $privateProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
+            Public = if ($null -ne $publicProfile -and $publicProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
         }
     }
     catch {

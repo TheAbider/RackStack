@@ -98,20 +98,20 @@ function Invoke-QuickClean {
 
     # User temp
     if (Test-Path $env:TEMP) {
-        $files = Get-ChildItem $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue
+        $files = Get-ChildItem $env:TEMP -Recurse -Force -File -ErrorAction SilentlyContinue
         foreach ($file in $files) {
             $fileSize = $file.Length
-            Remove-Item $file.FullName -Force -Recurse -ErrorAction SilentlyContinue
+            Remove-Item $file.FullName -Force -ErrorAction SilentlyContinue
             if (-not (Test-Path $file.FullName)) { $cleaned += $fileSize }
         }
     }
 
     # Windows temp
     if (Test-Path "C:\Windows\Temp") {
-        $files = Get-ChildItem "C:\Windows\Temp" -Recurse -Force -ErrorAction SilentlyContinue
+        $files = Get-ChildItem "C:\Windows\Temp" -Recurse -Force -File -ErrorAction SilentlyContinue
         foreach ($file in $files) {
             $fileSize = $file.Length
-            Remove-Item $file.FullName -Force -Recurse -ErrorAction SilentlyContinue
+            Remove-Item $file.FullName -Force -ErrorAction SilentlyContinue
             if (-not (Test-Path $file.FullName)) { $cleaned += $fileSize }
         }
     }

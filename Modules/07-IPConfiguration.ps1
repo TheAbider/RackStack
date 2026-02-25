@@ -133,7 +133,7 @@ function Set-VMIPAddress {
     )
 
     # Get current IP configuration
-    $currentIP = Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    $currentIP = Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($currentIP) {
         Write-OutputColor "Current IP: $($currentIP.IPAddress)/$($currentIP.PrefixLength)" -color "Info"
     }

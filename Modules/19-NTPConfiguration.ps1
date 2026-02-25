@@ -109,10 +109,15 @@ function Set-NTPServer {
     try {
         if ($IsDomainType) {
             # Configure to sync with domain hierarchy
-            w32tm /config /syncfromflags:DOMHIER /update | Out-Null
+            $null = w32tm /config /syncfromflags:DOMHIER /update 2>&1
         } else {
             # Configure manual NTP server
-            w32tm /config /manualpeerlist:$Server /syncfromflags:manual /reliable:yes /update | Out-Null
+            $null = w32tm /config /manualpeerlist:$Server /syncfromflags:manual /reliable:yes /update 2>&1
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-OutputColor "  Failed to configure NTP server (exit code $LASTEXITCODE)." -color "Error"
+            return
         }
 
         # Restart time service
@@ -120,7 +125,10 @@ function Set-NTPServer {
         Start-Sleep -Seconds 2
 
         # Force sync
-        w32tm /resync /force | Out-Null
+        $null = w32tm /resync /force 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-OutputColor "  NTP configured but time sync failed (exit code $LASTEXITCODE)." -color "Warning"
+        }
 
         Write-OutputColor "  NTP server configured successfully." -color "Success"
         Add-SessionChange -Category "System" -Description "Configured NTP server: $Server"
@@ -139,8 +147,9 @@ function Show-DetailedTimeStatus {
 
     $status = w32tm /query /status 2>&1
     foreach ($line in $status) {
-        if ($line -and $line.ToString().Trim()) {
-            $displayLine = if ($line.Length -gt 68) { $line.Substring(0,65) + "..." } else { $line }
+        $lineStr = $line.ToString()
+        if ($lineStr.Trim()) {
+            $displayLine = if ($lineStr.Length -gt 68) { $lineStr.Substring(0,65) + "..." } else { $lineStr }
             Write-OutputColor "  │$("  $displayLine".PadRight(72))│" -color "Info"
         }
     }

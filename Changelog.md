@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.9.26
+
+- **Bug Fix:** Disk cleanup byte counter was corrupted by directory entries — `Get-ChildItem` without `-File` included directories, whose `.Length` returns name character count (not byte size). The "freed space" report was inflated with nonsense values. Added `-File` flag to both temp cleanup loops (20-DiskCleanup).
+- **Bug Fix:** NTP configuration reported "configured successfully" even when `w32tm /config` or `/resync` failed — native executables set `$LASTEXITCODE` but don't throw PowerShell exceptions, so the `try/catch` caught nothing. Now checks `$LASTEXITCODE` after each `w32tm` call (19-NTPConfiguration).
+- **Bug Fix:** Detailed time status display truncation logic was broken for `w32tm` error output — `2>&1` redirects stderr as `ErrorRecord` objects, not strings. Accessing `.Length` on `ErrorRecord` returns `$null`, making the `Substring` guard a no-op. Now converts to string first (19-NTPConfiguration).
+- **Bug Fix:** Navigation commands (`exit`, `help`, `back`, `b`/`B`) were silently ignored in two network menus — `Start-Show-HostNetworkIPMenu` and `Start-Show-VM-NetworkMenu` were missing the `Test-NavigationCommand` call that all other menu runners have. Typing "exit" fell into the "Invalid choice" handler (49-MenuRunner).
+- **Bug Fix:** Firewall state detection compared `.Enabled` (a `GpoBoolean` enum) to the string `"True"` instead of `$true` — worked by accident via type coercion but reported "Disabled" instead of using the catch-block "Unknown" when a profile was null (05-SystemCheck).
+- **Bug Fix:** Current IP display garbled output when adapter had multiple IPv4 addresses — `Get-NetIPAddress` can return multiple objects, causing `$currentIP.IPAddress` to concatenate array elements. Added `Select-Object -First 1` (07-IPConfiguration).
+- **Bug Fix:** Cluster dashboard and CSV health checks crashed or showed 0 GB for faulted/offline CSVs — `SharedVolumeInfo.Partition` is null when a CSV is unavailable, causing `$null / 1GB` to produce zeros. Added null guards with skip+warning in all three CSV iteration loops (51-ClusterDashboard).
+- **Bug Fix:** iSCSI NIC identification menu couldn't select adapters when only one physical NIC existed — pipeline result wasn't wrapped in `@()`, so `.Count` and array indexing failed on single objects. Wrapped all three `Get-NetAdapter` assignments (10-iSCSI).
+- 63 modules, 1854 tests
+
 ## v1.9.25
 
 - **Bug Fix:** All bare `Exit` statements caused a "System error" dialog when running as the compiled EXE — ps2exe wraps `Exit` in a way that throws `BreakException`. Replaced with `[Environment]::Exit()` in both `Exit-Script` exit paths (47-ExitCleanup) and batch mode entry/exit (50-EntryPoint). Affects 4 code paths: normal exit, no-reboot exit, batch admin check failure, and batch completion.

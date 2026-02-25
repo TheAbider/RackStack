@@ -1228,13 +1228,13 @@ function Start-Show-iSCSISANMenu {
             }
             "2" {
                 # NIC identification helper
-                $adapters = Get-NetAdapter | Where-Object {
+                $adapters = @(Get-NetAdapter | Where-Object {
                     $_.Name -notlike "vEthernet*" -and
                     $_.InterfaceDescription -notlike "*Hyper-V*" -and
                     $_.InterfaceDescription -notlike "*Virtual*"
-                }
+                })
 
-                if (-not $adapters -or $adapters.Count -eq 0) {
+                if ($adapters.Count -eq 0) {
                     Write-OutputColor "  No physical adapters found." -color "Error"
                     Write-PressEnter
                 }
@@ -1246,11 +1246,11 @@ function Start-Show-iSCSISANMenu {
                         }
                         elseif ($identifyChoice -match '^[Rr]$') {
                             # Refresh adapter list
-                            $adapters = Get-NetAdapter | Where-Object {
+                            $adapters = @(Get-NetAdapter | Where-Object {
                                 $_.Name -notlike "vEthernet*" -and
                                 $_.InterfaceDescription -notlike "*Hyper-V*" -and
                                 $_.InterfaceDescription -notlike "*Virtual*"
-                            }
+                            })
                             continue
                         }
                         elseif ($identifyChoice -match '^\d+$') {
@@ -1258,11 +1258,11 @@ function Start-Show-iSCSISANMenu {
                             if ($idx -ge 1 -and $idx -le $adapters.Count) {
                                 Disable-NICForIdentification -Adapter $adapters[$idx - 1]
                                 # Refresh after enable
-                                $adapters = Get-NetAdapter | Where-Object {
+                                $adapters = @(Get-NetAdapter | Where-Object {
                                     $_.Name -notlike "vEthernet*" -and
                                     $_.InterfaceDescription -notlike "*Hyper-V*" -and
                                     $_.InterfaceDescription -notlike "*Virtual*"
-                                }
+                                })
                             }
                         }
                     }

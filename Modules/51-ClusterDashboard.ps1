@@ -63,6 +63,10 @@ function Show-ClusterDashboard {
 
         foreach ($csv in $csvs) {
             $partition = $csv.SharedVolumeInfo.Partition
+            if (-not $partition) {
+                Write-OutputColor "  │$("  $($csv.Name) - Partition info unavailable".PadRight(72))│" -color "Warning"
+                continue
+            }
 
             $totalGB = [math]::Round($partition.Size / 1GB, 0)
             $freeGB = [math]::Round($partition.FreeSpace / 1GB, 0)
@@ -285,6 +289,12 @@ function Show-CSVHealth {
     foreach ($csv in $csvs) {
         $partition = $csv.SharedVolumeInfo.Partition
         $redirected = $csv.SharedVolumeInfo.FaultState
+        if (-not $partition) {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Warning"
+            Write-OutputColor "  │$("  $($csv.Name) - Partition info unavailable".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Warning"
+            continue
+        }
 
         $totalGB = [math]::Round($partition.Size / 1GB, 1)
         $freeGB = [math]::Round($partition.FreeSpace / 1GB, 1)
@@ -487,6 +497,13 @@ function Initialize-ClusterCSV {
     $issues = 0
     foreach ($csv in $csvs) {
         $partition = $csv.SharedVolumeInfo.Partition
+        if (-not $partition) {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Warning"
+            Write-OutputColor "  │$("  $($csv.Name) - Partition info unavailable".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Warning"
+            $issues++
+            continue
+        }
         $totalGB = [math]::Round($partition.Size / 1GB, 0)
         $freeGB = [math]::Round($partition.FreeSpace / 1GB, 0)
         $usedPct = if ($totalGB -gt 0) { [math]::Round(($totalGB - $freeGB) / $totalGB * 100, 0) } else { 0 }
