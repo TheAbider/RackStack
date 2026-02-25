@@ -913,6 +913,7 @@ function Start-MetricCollection {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
+    if ($IntervalMinutes -le 0) { $IntervalMinutes = 5 }
     $totalSnapshots = [math]::Ceiling($DurationMinutes / $IntervalMinutes)
     Write-OutputColor "  Collecting $totalSnapshots snapshots every $IntervalMinutes minute(s) for $DurationMinutes minutes." -color "Info"
     Write-OutputColor "  Press Ctrl+C to stop early." -color "Info"

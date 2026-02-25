@@ -3142,9 +3142,11 @@ function Test-VMPostDeployment {
         $rdp = $false
         try {
             $tcp = New-Object System.Net.Sockets.TcpClient
-            $connect = $tcp.BeginConnect($guestIP, 3389, $null, $null)
-            $rdp = $connect.AsyncWaitHandle.WaitOne(3000, $false)
-            $tcp.Close()
+            try {
+                $connect = $tcp.BeginConnect($guestIP, 3389, $null, $null)
+                $rdp = $connect.AsyncWaitHandle.WaitOne(3000, $false)
+            } catch {}
+            finally { $tcp.Close() }
         } catch {}
         $results += @{ Check = "RDP (3389)"; Status = if ($rdp) { "PASS" } else { "WARN" }; Detail = if ($rdp) { "Port open" } else { "Port closed/filtered" } }
     }

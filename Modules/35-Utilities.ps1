@@ -255,6 +255,7 @@ function Install-ScriptUpdate {
     }
     catch {
         Write-OutputColor "  Download failed: $($_.Exception.Message)" -color "Error"
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
         return
     }
 
@@ -634,10 +635,12 @@ function Test-RemoteReadiness {
                 $result.PSVersion.Detail = "Could not query PS version: $($_.Exception.Message)"
             }
 
-            Remove-PSSession $session -ErrorAction SilentlyContinue
         }
         catch {
             $result.Credential.Detail = "Session failed: $($_.Exception.Message)"
+        }
+        finally {
+            if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
         }
     }
     else {

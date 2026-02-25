@@ -677,16 +677,18 @@ function Get-SANTargetsForHost {
 
         # Find the assignment for this host mod value
         $assignment = $script:SANTargetPairings.HostAssignments | Where-Object { [int]$_.HostMod -eq $hostMod }
-        if (-not $assignment) {
+        if (-not $assignment -and $script:SANTargetPairings.HostAssignments.Count -gt 0) {
             # Fallback: use first assignment
             $assignment = $script:SANTargetPairings.HostAssignments[0]
         }
+        if (-not $assignment) { return @() }
 
         # Find primary pair by name
         $primaryPair = $script:SANTargetPairs | Where-Object { $_.Name -eq $assignment.PrimaryPair }
-        if (-not $primaryPair) {
+        if (-not $primaryPair -and $script:SANTargetPairs.Count -gt 0) {
             $primaryPair = $script:SANTargetPairs[0]
         }
+        if (-not $primaryPair) { return @() }
 
         if (-not $AllPairsInRetryOrder) {
             return $primaryPair
@@ -1296,6 +1298,11 @@ function Start-Show-iSCSISANMenu {
                 if ($hostNumber) {
                     # Show primary and retry order
                     $allPairs = Get-SANTargetsForHost -HostNumber $hostNumber -AllPairsInRetryOrder
+                    if (-not $allPairs -or @($allPairs).Count -eq 0) {
+                        Write-OutputColor "  No SAN target pairs configured for host #$hostNumber." -color "Warning"
+                        Write-PressEnter
+                        continue
+                    }
                     Write-OutputColor "" -color "Info"
                     Write-OutputColor "  Host #$hostNumber SAN target priority:" -color "Info"
                     $priority = 1

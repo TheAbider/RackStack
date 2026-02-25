@@ -36,7 +36,7 @@ function Show-MainMenu {
             @{
                 Caption = $caption
                 Uptime  = "$($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m"
-                MemPct  = [math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize) * 100)
+                MemPct  = if ($os.TotalVisibleMemorySize -gt 0) { [math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize) * 100) } else { 0 }
                 TotalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
             }
         } else { @{ Caption = "Unknown"; Uptime = "?"; MemPct = 0; TotalGB = 0 } }

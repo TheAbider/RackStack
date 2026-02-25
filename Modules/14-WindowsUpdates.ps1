@@ -114,10 +114,17 @@ function Install-WindowsUpdates {
             Complete-ProgressMessage -Activity "Update installation" -Status "Complete" -Success
         }
 
-        $null = Receive-Job $installJob -ErrorAction SilentlyContinue
+        $installResult = Receive-Job $installJob -ErrorAction SilentlyContinue
+        $installState = $installJob.State
         Remove-Job $installJob -Force -ErrorAction SilentlyContinue
 
-        Write-OutputColor "`nWindows updates installation complete!" -color "Success"
+        if ($installState -eq "Failed") {
+            Write-OutputColor "`nWindows update installation encountered errors." -color "Warning"
+            Write-OutputColor "Some updates may not have been installed. Check Windows Update settings." -color "Warning"
+        }
+        else {
+            Write-OutputColor "`nWindows updates installation complete!" -color "Success"
+        }
         Write-OutputColor "A reboot may be required to complete the installation." -color "Warning"
         $global:RebootNeeded = $true
         Add-SessionChange -Category "System" -Description "Installed $updateCount Windows update(s)"
@@ -125,6 +132,10 @@ function Install-WindowsUpdates {
     catch {
         Write-OutputColor "Failed to install updates: $_" -color "Error"
         Write-OutputColor "Tip: Try running Windows Update manually via Settings." -color "Warning"
+    }
+    finally {
+        if ($job) { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue }
+        if ($installJob) { Remove-Job -Job $installJob -Force -ErrorAction SilentlyContinue }
     }
 }
 #endregion

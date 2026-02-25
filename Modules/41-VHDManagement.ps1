@@ -336,6 +336,10 @@ function Copy-VHDForVM {
         Write-OutputColor "  Error during VHD copy/convert: $_" -color "Error"
         return $null
     }
+    finally {
+        if ($copyJob) { Remove-Job -Job $copyJob -Force -ErrorAction SilentlyContinue }
+        if ($convertJob) { Remove-Job -Job $convertJob -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 # Function to show VHD management menu

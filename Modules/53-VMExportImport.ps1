@@ -159,6 +159,9 @@ function Export-VMWizard {
     catch {
         Write-OutputColor "  Error exporting VM: $_" -color "Error"
     }
+    finally {
+        if ($exportJob) { Remove-Job -Job $exportJob -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 # Function to import VM

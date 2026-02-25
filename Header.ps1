@@ -30,10 +30,22 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.40
+    1.9.41
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.41
+    BUG FIXES:
+    - FIXED: VM export, VHD copy/convert, and Windows Update background jobs leaked on error — missing finally blocks left jobs running when exceptions occurred mid-operation (53-VMExportImport, 41-VHDManagement, 14-WindowsUpdates)
+    - FIXED: PSSession leaked in remote readiness test when session creation succeeded but subsequent commands threw (35-Utilities)
+    - FIXED: TcpClient socket leaked on RDP port check when BeginConnect threw — moved Close() to finally block (44-VMDeployment)
+    - FIXED: Agent installer job not cleaned up in finally block — leaked on unexpected errors after job completion (57-AgentInstaller)
+    - FIXED: Partial download file left in TEMP on failed self-update — now cleaned up in catch block (35-Utilities)
+    - FIXED: Windows Update install silently reported success when job failed — now checks job state and shows appropriate message (14-WindowsUpdates)
+    - FIXED: Division by zero in menu dashboard when WMI returned 0 for TotalVisibleMemorySize (48-MenuDisplay)
+    - FIXED: Array index out of bounds when SAN target pairs were empty — accessing [0] on empty array produced null cascading through iSCSI connection logic (10-iSCSI)
+    - FIXED: Metric collection interval parameter could be 0, causing division by zero — now defaults to 5 if <= 0 (54-HTMLReports)
 
 .CHANGELOG v1.9.40
     BUG FIXES:

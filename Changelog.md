@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.9.41
+
+- **Bug Fix:** VM export, VHD copy/convert, and Windows Update background jobs leaked when exceptions occurred mid-operation — `Receive-Job -ErrorAction Stop` or other code throwing after job creation skipped the `Remove-Job` call. Added `finally` blocks for deterministic cleanup in all three functions. VM export jobs hold file locks on the export path; VHD copy/convert jobs hold disk I/O; Windows Update install jobs consume significant system resources (53-VMExportImport, 41-VHDManagement, 14-WindowsUpdates).
+- **Bug Fix:** `PSSession` leaked in `Test-RemoteReadiness` when session creation succeeded but subsequent code threw before reaching `Remove-PSSession` — the outer catch handled the error but never closed the session. Moved cleanup to a `finally` block, which ensures the remote WinRM connection slot is always released (35-Utilities).
+- **Bug Fix:** `TcpClient` socket leaked on RDP port check when `BeginConnect` threw an exception (e.g., invalid IP format) — the `Close()` call was in the try block after the connect, so it was skipped on error. Moved `Close()` to a `finally` block (44-VMDeployment).
+- **Bug Fix:** Agent installer background job not cleaned up in the `finally` block — only the temp file was removed. If `Receive-Job` or subsequent code threw unexpectedly, the install job leaked. Added job cleanup to the existing `finally` block (57-AgentInstaller).
+- **Bug Fix:** Partial download file left in `%TEMP%` on failed self-update — if `Invoke-WebRequest` failed partway through (network timeout), the partial file remained. Now removed in the catch block before returning (35-Utilities).
+- **Bug Fix:** Windows Update installation silently reported "complete!" even when the install job failed — `$installJob.State` was never checked. Now checks job state and shows a warning if the job failed, instead of unconditionally claiming success (14-WindowsUpdates).
+- **Bug Fix:** Division by zero in menu dashboard when WMI returned 0 for `TotalVisibleMemorySize` — every other memory percentage calculation in the codebase already had a `> 0` guard, but the dashboard status bar was the lone exception (48-MenuDisplay).
+- **Bug Fix:** Array index out of bounds when SAN target pairs were empty — `$allPairs[0]` on an empty array returned `$null`, cascading through iSCSI connection logic with null target portal addresses. Added count checks and early returns (10-iSCSI).
+- **Bug Fix:** Metric collection `$IntervalMinutes` parameter could be 0, causing division by zero in `[math]::Ceiling($DurationMinutes / $IntervalMinutes)`. Now defaults to 5 if the value is <= 0 (54-HTMLReports).
+- 63 modules, 1854 tests
+
 ## v1.9.40
 
 - **Bug Fix:** 52 `.PadRight(72)` overflow bugs across 15 modules — when dynamic content (network adapter names, iSCSI IQN strings, FQDNs, VM names, user input, comma-joined lists, file paths, FSMO role holders) exceeded 72 characters, the `PadRight` call did nothing (it only pads, never truncates), causing the string to overflow past the TUI box-drawing border `│`. All 52 instances now extract the dynamic content, truncate at 69 characters with `...` ellipsis if needed, then apply `.PadRight(72)` to guarantee consistent box alignment. Affected modules: 09-SET (4), 10-iSCSI (4), 12-DomainJoin (1), 19-NTPConfiguration (1), 27-FailoverClustering (2), 37-HealthCheck (1), 44-VMDeployment (2), 51-ClusterDashboard (7), 55-QoLFeatures (2), 56-OperationsMenu (2), 57-AgentInstaller (9), 58-NetworkDiagnostics (4), 60-ServerRoleTemplates (1), 61-ActiveDirectory (11), 62-HyperVReplica (5).

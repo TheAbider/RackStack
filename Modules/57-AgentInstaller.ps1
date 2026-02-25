@@ -518,6 +518,7 @@ function Install-SelectedAgent {
         }
     }
     finally {
+        if ($installJob) { Remove-Job -Job $installJob -Force -ErrorAction SilentlyContinue }
         Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
     }
 }
