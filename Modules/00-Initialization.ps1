@@ -49,6 +49,9 @@ $script:AgentInstaller = @{
     TimeoutSeconds  = 300
 }
 
+# Additional agent installers (v1.8.0, override via defaults.json AdditionalAgents array)
+$script:AdditionalAgents = @()
+
 # Agent installer cache
 $script:AgentInstallerCache = $null
 $script:AgentInstallerCacheTime = $null
@@ -136,7 +139,7 @@ if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.7.1"
+$script:ScriptVersion = "1.8.0"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

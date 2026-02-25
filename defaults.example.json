@@ -200,6 +200,19 @@
         "_TimeoutSeconds_help": "How long to wait (in seconds) for the installer to finish. 300 = 5 minutes. Increase if your agent takes longer (large downloads, slow networks)."
     },
 
+    "AdditionalAgents": [
+        {
+            "ToolName": "ExampleRMM",
+            "FolderName": "Agents",
+            "FilePattern": "ExampleRMM.*\\.exe$",
+            "ServiceName": "ExampleRMM*",
+            "InstallArgs": "/s /norestart",
+            "InstallPaths": ["C:\\Program Files\\ExampleRMM"],
+            "SuccessExitCodes": [0],
+            "TimeoutSeconds": 300
+        }
+    ],
+
     "_section_vmnaming": "========== VM NAMING ==========",
 
     "VMNaming": {

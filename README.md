@@ -22,7 +22,7 @@
 
 ---
 
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Network configuration, Hyper-V deployment, SAN/iSCSI setup, domain join, licensing, VM creation, and dozens more tasks -- all through an interactive console UI with undo support, audit logging, and batch automation.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Think of it as **sconfig for the modern era** -- but instead of 15 options, you get 60+ automated tasks covering network configuration, Hyper-V deployment, SAN/iSCSI setup, domain join, licensing, VM creation, health monitoring, drift detection, and batch automation -- all through an interactive console UI with undo support, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
 
@@ -38,9 +38,15 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Security** -- RDP/NLA, firewall templates, Windows Defender exclusions, local admin with complexity enforcement, Windows licensing (GVLK 2008-2025, AVMA 2012R2-2025)
 
-**Automation** -- JSON-driven batch mode for unattended builds, Quick Setup Wizard, configuration export/import, HTML reports, JSON audit logging with rotation
+**Automation** -- JSON-driven batch mode (24 idempotent steps with transaction rollback), Quick Setup Wizard, configuration export/import, HTML reports, JSON audit logging with rotation
 
-**Monitoring** -- Health dashboard, performance metrics, event log viewer, service manager, network diagnostics (ping, traceroute, port test, subnet sweep, DNS, ARP)
+**Monitoring & Diagnostics** -- Health dashboard (disk I/O latency, NIC errors, memory pressure, Hyper-V guest health, top CPU processes), performance snapshots with trend reports and "days until full" estimates, event log viewer, service manager, network diagnostics (ping, traceroute, port test, subnet sweep, DNS, ARP)
+
+**Drift Detection** -- Save configuration baselines, compare snapshots over time, track setting changes across baselines, auto-baseline after batch mode
+
+**VM Deployment Safety** -- Pre-flight validation (disk, RAM, vCPU ratio, switches, VHDs) with OK/WARN/FAIL table, post-deploy smoke tests (heartbeat, NIC, IP, ping, RDP), batch queue with summary
+
+**Multi-Agent Support** -- Configure and manage multiple RMM/MSP agent installers from a single interface, batch install via `InstallAgents` config array
 
 **Remote Ops** -- Remote PowerShell sessions, remote health checks, remote service management
 
@@ -226,7 +232,8 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
 | `CustomVNICs` | Virtual NICs to create on the virtual switch during batch mode (`Name` + optional `VLAN`) |
 | `StoragePaths` | Default Hyper-V storage paths (VM storage, ISOs, VHD cache, cluster paths) |
 | `VMNaming` | VM naming pattern with tokens (`{Site}`, `{Prefix}`, `{Seq}`), site ID source and regex |
-| `AgentInstaller` | MSP agent installer config: tool name, service name, file pattern, install args, paths, exit codes |
+| `AgentInstaller` | Primary MSP agent installer config: tool name, service name, file pattern, install args, paths, exit codes |
+| `AdditionalAgents` | Array of additional agent installer configs (same schema as `AgentInstaller`) for multi-agent environments |
 | `FileServer` | File server / cloud storage for ISO/VHD downloads: nginx, Azure Blob, or static JSON (see [File Server Setup](docs/FileServer-Setup.md)) |
 | `DefenderExclusionPaths` / `DefenderCommonVMPaths` | Windows Defender exclusion paths for Hyper-V hosts and VM storage |
 | `CustomKMSKeys` / `CustomAVMAKeys` | Org-specific license keys, merged with built-in Microsoft GVLK/AVMA tables |
@@ -252,11 +259,15 @@ Automate full server builds with a JSON config file:
     "EnableRDP": true,
     "SetPowerPlan": "High Performance",
     "CreateLocalAdmin": true,
+    "InstallAgents": ["Kaseya", "ExampleRMM"],
+    "ValidateCluster": false,
     "AutoReboot": true
 }
 ```
 
-Place `batch_config.json` next to the script and it runs automatically on launch. Set fields to `null` to skip steps. Use `ConfigType: "HOST"` for Hyper-V hosts -- adds 6 extra steps (SET switch, custom vNICs, iSCSI with A/B auto-detect, MPIO, host storage, Defender exclusions) for a total of 22 automated steps.
+Place `batch_config.json` next to the script and it runs automatically on launch. Set fields to `null` to skip steps. All steps are idempotent -- re-running the same config safely skips already-completed items. Use `ConfigType: "HOST"` for Hyper-V hosts -- adds extra steps (SET switch, custom vNICs, iSCSI, MPIO, host storage, Defender exclusions, agent install, cluster validation) for a total of 24 automated steps with transaction rollback on failure.
+
+New in v1.8.0: `InstallAgents` array for multi-agent installs, `ValidateCluster` for cluster readiness checks.
 
 ## Project Structure
 
@@ -300,7 +311,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (1659 tests, ~2 minutes)
+# Full test suite (~1,834 tests, ~2 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 63 modules + monolithic)
@@ -336,6 +347,10 @@ The sync script matches `#region`/`#endregion` markers between modules and the m
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Acknowledgments
+
+Special thanks to Ravi -- whose existence provided the spite-fueled motivation to build this entire project from scratch. Every feature is a testament to what happens when someone says "you can't automate that."
 
 ## License
 

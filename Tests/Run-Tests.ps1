@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.7.1
+    Automated Test Runner for RackStack v1.8.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -5876,8 +5876,8 @@ try {
     Write-TestResult "36-BatchConfig: Show-BatchConfigMenu exists" ($bcContent -match 'function\s+Show-BatchConfigMenu')
     Write-TestResult "36-BatchConfig: Export-BatchConfigFromState exists" ($bcContent -match 'function\s+Export-BatchConfigFromState')
 
-    # EntryPoint: totalSteps is 22
-    Write-TestResult "50-EntryPoint: totalSteps is 22" ($epContent -match 'totalSteps\s*=\s*22')
+    # EntryPoint: totalSteps is 24
+    Write-TestResult "50-EntryPoint: totalSteps is 24" ($epContent -match 'totalSteps\s*=\s*24')
 
     # EntryPoint: step 14 mentions Server Role Template
     Write-TestResult "50-EntryPoint: step 14 is Server Role Template" ($epContent -match '14.*Server Role Template|14.*ServerRoleTemplate')
@@ -6166,7 +6166,7 @@ try {
     $batchContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
     Write-TestResult "50-EntryPoint: batch has CustomVNICs step" ($batchContent -match 'CustomVNICs')
     Write-TestResult "50-EntryPoint: batch step creates vNICs on SET" ($batchContent -match 'Custom vNICs[\s\S]*?Add-VMNetworkAdapter -ManagementOS')
-    Write-TestResult "50-EntryPoint: totalSteps is 22" ($batchContent -match '\$totalSteps = 22')
+    Write-TestResult "50-EntryPoint: totalSteps is 24" ($batchContent -match '\$totalSteps = 24')
 
     # Batch template has CustomVNICs
     $templateContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
@@ -7244,6 +7244,59 @@ try {
 
 } catch {
     Write-TestResult "Performance Trend Report Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 138: MULTI-AGENT SUPPORT (57-KaseyaInstaller.ps1 v1.8.0)
+# ============================================================================
+
+Write-SectionHeader "138" "MULTI-AGENT SUPPORT"
+
+try {
+    $agentContent = Get-Content "$modulesPath\57-KaseyaInstaller.ps1" -Raw
+    $initContent2 = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+
+    Write-TestResult "57-Agent: function Get-AllAgentConfigs exists" ($agentContent -match 'function\s+Get-AllAgentConfigs\b')
+    Write-TestResult "57-Agent: function Test-AgentInstalledByConfig exists" ($agentContent -match 'function\s+Test-AgentInstalledByConfig\b')
+    Write-TestResult "57-Agent: function Show-AgentManagement exists" ($agentContent -match 'function\s+Show-AgentManagement\b')
+    Write-TestResult "57-Agent: Get-AllAgentConfigs returns primary" ($agentContent -match 'IsPrimary.*true')
+    Write-TestResult "57-Agent: Get-AllAgentConfigs includes AdditionalAgents" ($agentContent -match 'AdditionalAgents.*Count.*-gt\s*0')
+    Write-TestResult "57-Agent: Test-AgentInstalledByConfig checks service" ($agentContent -match 'Get-Service.*AgentConfig\.ServiceName')
+    Write-TestResult "57-Agent: Test-AgentInstalledByConfig checks paths" ($agentContent -match 'AgentConfig\.InstallPaths')
+    Write-TestResult "57-Agent: Show-AgentManagement status display" ($agentContent -match 'AGENT MANAGEMENT|AGENT STATUS')
+    Write-TestResult "57-Agent: agent management has install all option" ($agentContent -match 'Install all missing agents')
+    Write-TestResult "57-Agent: falls back to original menu for single agent" ($agentContent -match 'allConfigs\.Count\s*-le\s*1')
+    Write-TestResult "00-Init: AdditionalAgents variable" ($initContent2 -match '\$script:AdditionalAgents\s*=\s*@\(\)')
+
+} catch {
+    Write-TestResult "Multi-Agent Support Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 139: CLUSTER CSV PREP (51-ClusterDashboard.ps1 v1.8.0)
+# ============================================================================
+
+Write-SectionHeader "139" "CLUSTER CSV PREP"
+
+try {
+    $clusterContent = Get-Content "$modulesPath\51-ClusterDashboard.ps1" -Raw
+
+    Write-TestResult "51-Cluster: function Test-ClusterReadiness exists" ($clusterContent -match 'function\s+Test-ClusterReadiness\b')
+    Write-TestResult "51-Cluster: function Initialize-ClusterCSV exists" ($clusterContent -match 'function\s+Initialize-ClusterCSV\b')
+    Write-TestResult "51-Cluster: readiness checks all nodes online" ($clusterContent -match '\$nodesUp.*Where-Object.*State.*-eq.*Up')
+    Write-TestResult "51-Cluster: readiness checks quorum" ($clusterContent -match '\$quorumOK\s*=.*null.*-ne.*quorum')
+    Write-TestResult "51-Cluster: readiness checks CSVs online" ($clusterContent -match '\$csvOK\s*=\s*\$csvOnline\s*-and')
+    Write-TestResult "51-Cluster: readiness checks redirected I/O" ($clusterContent -match 'FileSystemRedirectedIOReason|csvRedirected')
+    Write-TestResult "51-Cluster: readiness checks cluster networks" ($clusterContent -match '\$networksUp.*Where-Object.*State.*Up')
+    Write-TestResult "51-Cluster: readiness returns Ready flag" ($clusterContent -match 'Ready.*allOK')
+    Write-TestResult "51-Cluster: CSV validation reports space" ($clusterContent -match 'CSV VALIDATION.*FreeSpace|totalGB.*freeGB')
+    Write-TestResult "51-Cluster: CSV validation checks redirected I/O" ($clusterContent -match 'Redirected I/O.*FileSystemRedirectedIOReason')
+    Write-TestResult "51-Cluster: cluster ops menu has readiness check" ($clusterContent -match '\[5\].*Cluster Readiness')
+    Write-TestResult "51-Cluster: cluster ops menu has CSV validation" ($clusterContent -match '\[6\].*CSV Validation')
+    Write-TestResult "51-Cluster: logs session changes" ($clusterContent -match 'Add-SessionChange.*Cluster.*readiness|Add-SessionChange.*Cluster.*CSV')
+
+} catch {
+    Write-TestResult "Cluster CSV Prep Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

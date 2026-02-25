@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 ## Pull Request Checklist
 
-- [ ] All 1659+ tests pass (`Run-Tests.ps1` exits with code 0)
+- [ ] All 1,834+ tests pass (`Run-Tests.ps1` exits with code 0)
 - [ ] PSScriptAnalyzer reports 0 errors (`pssa-check.ps1`)
 - [ ] Monolithic synced (`sync-to-monolithic.ps1` shows 0 parse errors)
 - [ ] New functions follow PowerShell verb-noun naming (`Get-`, `Set-`, `Test-`, `Show-`)

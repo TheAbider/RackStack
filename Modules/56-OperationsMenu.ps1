@@ -563,6 +563,32 @@ function Import-Defaults {
         }
     }
 
+    # Override additional agents (v1.8.0)
+    if ($merged.AdditionalAgents -and $merged.AdditionalAgents -is [array]) {
+        $script:AdditionalAgents = @()
+        foreach ($agentDef in $merged.AdditionalAgents) {
+            if ($agentDef -is [PSCustomObject]) {
+                $agentConfig = @{}
+                foreach ($prop in $agentDef.PSObject.Properties) {
+                    if ($prop.Name -like '_*') { continue }
+                    if ($prop.Name -eq 'SuccessExitCodes' -and $prop.Value -is [array]) {
+                        $agentConfig[$prop.Name] = @($prop.Value | ForEach-Object { [int]$_ })
+                    }
+                    elseif ($prop.Name -eq 'InstallPaths' -and $prop.Value -is [array]) {
+                        $agentConfig[$prop.Name] = @($prop.Value)
+                    }
+                    elseif ($prop.Name -eq 'TimeoutSeconds') {
+                        $agentConfig[$prop.Name] = [int]$prop.Value
+                    }
+                    else {
+                        $agentConfig[$prop.Name] = $prop.Value
+                    }
+                }
+                $script:AdditionalAgents += $agentConfig
+            }
+        }
+    }
+
     # Merge custom DNS presets into the built-in presets
     $customDNS = $merged.DNSPresets
     if ($customDNS) {

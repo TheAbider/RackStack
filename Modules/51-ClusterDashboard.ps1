@@ -340,6 +340,8 @@ function Show-ClusterOperationsMenu {
         Write-MenuItem -Text "[2]  Drain Node (Pause + Migrate VMs)"
         Write-MenuItem -Text "[3]  Resume Node from Drain"
         Write-MenuItem -Text "[4]  CSV Health Status"
+        Write-MenuItem -Text "[5]  Cluster Readiness Check"
+        Write-MenuItem -Text "[6]  CSV Validation"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -366,6 +368,14 @@ function Show-ClusterOperationsMenu {
                 Show-CSVHealth
                 Write-PressEnter
             }
+            "5" {
+                $null = Test-ClusterReadiness
+                Write-PressEnter
+            }
+            "6" {
+                Initialize-ClusterCSV
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
@@ -374,5 +384,143 @@ function Show-ClusterOperationsMenu {
             }
         }
     }
+}
+
+# ============================================================================
+# CLUSTER READINESS & CSV VALIDATION (v1.8.0)
+# ============================================================================
+
+# Pre-flight cluster readiness check
+function Test-ClusterReadiness {
+    $cluster = Get-Cluster -ErrorAction SilentlyContinue
+    if (-not $cluster) {
+        Write-OutputColor "  Not a member of any cluster." -color "Warning"
+        return @{ Ready = $false; Checks = @() }
+    }
+
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                    CLUSTER READINESS CHECK").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $checks = @()
+
+    # 1. All nodes online
+    $nodes = Get-ClusterNode -ErrorAction SilentlyContinue
+    $nodesUp = @($nodes | Where-Object { $_.State -eq "Up" })
+    $nodesDown = @($nodes | Where-Object { $_.State -ne "Up" })
+    $nodeOK = ($nodesDown.Count -eq 0)
+    $checks += @{ Check = "All Nodes Online"; Status = if ($nodeOK) { "OK" } else { "FAIL" }; Detail = "$($nodesUp.Count)/$($nodes.Count) nodes up$(if ($nodesDown.Count -gt 0) { ' (down: ' + ($nodesDown.Name -join ', ') + ')' })" }
+
+    # 2. Quorum healthy
+    $quorum = Get-ClusterQuorum -ErrorAction SilentlyContinue
+    $quorumOK = ($null -ne $quorum)
+    $quorumDetail = if ($quorum) { "Type: $($quorum.QuorumType)" } else { "Unable to query" }
+    $checks += @{ Check = "Quorum Healthy"; Status = if ($quorumOK) { "OK" } else { "FAIL" }; Detail = $quorumDetail }
+
+    # 3. CSVs online (no redirected I/O)
+    $csvs = Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+    $csvOnline = $true
+    $csvRedirected = $false
+    if ($csvs) {
+        foreach ($csv in $csvs) {
+            if ($csv.State -ne "Online") { $csvOnline = $false }
+            $csvState = $csv | Get-ClusterSharedVolumeState -ErrorAction SilentlyContinue
+            if ($csvState -and $csvState.FileSystemRedirectedIOReason -ne "NotRedirected") { $csvRedirected = $true }
+        }
+    }
+    $csvOK = $csvOnline -and -not $csvRedirected
+    $csvDetail = if (-not $csvs) { "No CSVs found" } elseif (-not $csvOnline) { "Some CSVs offline" } elseif ($csvRedirected) { "Redirected I/O detected" } else { "$($csvs.Count) CSV(s) online, no redirected I/O" }
+    $checks += @{ Check = "CSVs Online"; Status = if ($csvOK) { "OK" } elseif ($csvRedirected) { "WARN" } else { "FAIL" }; Detail = $csvDetail }
+
+    # 4. Cluster networks up
+    $networks = Get-ClusterNetwork -ErrorAction SilentlyContinue
+    $networksUp = @($networks | Where-Object { $_.State -eq "Up" })
+    $netOK = ($networksUp.Count -eq $networks.Count)
+    $checks += @{ Check = "Cluster Networks"; Status = if ($netOK) { "OK" } else { "WARN" }; Detail = "$($networksUp.Count)/$($networks.Count) networks up" }
+
+    # Display results
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  READINESS CHECKS".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    $allOK = $true
+    foreach ($c in $checks) {
+        $icon = switch ($c.Status) { "OK" { "[OK]" }; "WARN" { "[!!]" }; "FAIL" { "[XX]" }; default { "[??]" } }
+        $color = switch ($c.Status) { "OK" { "Success" }; "WARN" { "Warning" }; "FAIL" { "Error" }; default { "Info" } }
+        if ($c.Status -ne "OK") { $allOK = $false }
+        $line = "  $icon $($c.Check.PadRight(22)) $($c.Detail)"
+        Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    if ($allOK) {
+        Write-OutputColor "  Cluster is READY. All checks passed." -color "Success"
+    }
+    else {
+        Write-OutputColor "  Cluster has issues. Review checks above." -color "Warning"
+    }
+
+    Add-SessionChange -Category "Cluster" -Description "Cluster readiness check ($(if ($allOK) { 'passed' } else { 'issues found' }))"
+
+    return @{ Ready = $allOK; Checks = $checks }
+}
+
+# Validate and report on existing CSVs
+function Initialize-ClusterCSV {
+    $csvs = Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+    if (-not $csvs) {
+        Write-OutputColor "  No Cluster Shared Volumes found." -color "Warning"
+        return
+    }
+
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                       CSV VALIDATION").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $issues = 0
+    foreach ($csv in $csvs) {
+        $partition = $csv.SharedVolumeInfo.Partition
+        $totalGB = [math]::Round($partition.Size / 1GB, 0)
+        $freeGB = [math]::Round($partition.FreeSpace / 1GB, 0)
+        $usedPct = [math]::Round(($totalGB - $freeGB) / $totalGB * 100, 0)
+        $fs = $partition.FileSystem
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  $($csv.Name)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        # State
+        $stateColor = if ($csv.State -eq "Online") { "Success" } else { "Error"; $issues++ }
+        Write-OutputColor "  │$("  State: $($csv.State)  |  Owner: $($csv.OwnerNode)".PadRight(72))│" -color $stateColor
+
+        # Space
+        $spaceColor = if ($usedPct -lt 70) { "Success" } elseif ($usedPct -lt 90) { "Warning" } else { "Error"; $issues++ }
+        Write-OutputColor "  │$("  Size: ${totalGB}GB  |  Free: ${freeGB}GB  |  Used: ${usedPct}%  |  FS: $fs".PadRight(72))│" -color $spaceColor
+
+        # Redirected I/O
+        $csvState = $csv | Get-ClusterSharedVolumeState -ErrorAction SilentlyContinue
+        if ($csvState -and $csvState.FileSystemRedirectedIOReason -ne "NotRedirected") {
+            Write-OutputColor "  │$("  WARNING: Redirected I/O - $($csvState.FileSystemRedirectedIOReason)".PadRight(72))│" -color "Error"
+            $issues++
+        }
+        else {
+            Write-OutputColor "  │$("  I/O: Direct (no redirection)".PadRight(72))│" -color "Success"
+        }
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+    }
+
+    $summaryColor = if ($issues -eq 0) { "Success" } else { "Warning" }
+    Write-OutputColor "  CSV VALIDATION: $($csvs.Count) volume(s) checked, $issues issue(s)" -color $summaryColor
+    Add-SessionChange -Category "Cluster" -Description "CSV validation: $($csvs.Count) volumes, $issues issues"
 }
 #endregion

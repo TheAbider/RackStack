@@ -791,4 +791,161 @@ function Install-KaseyaAgent {
         }
     }
 }
+
+# ============================================================================
+# MULTI-AGENT SUPPORT (v1.8.0)
+# ============================================================================
+
+# Get all agent configs (primary + additional agents from defaults.json)
+function Get-AllAgentConfigs {
+    $configs = @()
+
+    # Primary agent
+    $configs += @{
+        ToolName = $script:AgentInstaller.ToolName
+        FolderName = $script:AgentInstaller.FolderName
+        FilePattern = $script:AgentInstaller.FilePattern
+        ServiceName = $script:AgentInstaller.ServiceName
+        InstallArgs = $script:AgentInstaller.InstallArgs
+        InstallPaths = $script:AgentInstaller.InstallPaths
+        SuccessExitCodes = $script:AgentInstaller.SuccessExitCodes
+        TimeoutSeconds = $script:AgentInstaller.TimeoutSeconds
+        IsPrimary = $true
+    }
+
+    # Additional agents from defaults.json
+    if ($script:AdditionalAgents -and $script:AdditionalAgents.Count -gt 0) {
+        foreach ($agent in $script:AdditionalAgents) {
+            $configs += @{
+                ToolName = $agent.ToolName
+                FolderName = if ($agent.FolderName) { $agent.FolderName } else { "Agents" }
+                FilePattern = if ($agent.FilePattern) { $agent.FilePattern } else { "$($agent.ToolName).*\.exe$" }
+                ServiceName = if ($agent.ServiceName) { $agent.ServiceName } else { "$($agent.ToolName)*" }
+                InstallArgs = if ($agent.InstallArgs) { $agent.InstallArgs } else { "/s /norestart" }
+                InstallPaths = if ($agent.InstallPaths) { @($agent.InstallPaths) } else { @() }
+                SuccessExitCodes = if ($agent.SuccessExitCodes) { @($agent.SuccessExitCodes) } else { @(0) }
+                TimeoutSeconds = if ($agent.TimeoutSeconds) { $agent.TimeoutSeconds } else { 300 }
+                IsPrimary = $false
+            }
+        }
+    }
+
+    return $configs
+}
+
+# Generic agent installed check by config
+function Test-AgentInstalledByConfig {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$AgentConfig
+    )
+
+    # Check for agent service
+    $agentService = Get-Service -Name $AgentConfig.ServiceName -ErrorAction SilentlyContinue
+    if ($agentService) {
+        return @{ Installed = $true; Status = $agentService.Status; ServiceName = $agentService.Name }
+    }
+
+    # Check configured installation paths
+    foreach ($path in $AgentConfig.InstallPaths) {
+        $expandedPath = [Environment]::ExpandEnvironmentVariables($path)
+        if (Test-Path $expandedPath) {
+            return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
+        }
+    }
+
+    return @{ Installed = $false }
+}
+
+# Show agent management menu — status of all agents, install/uninstall per agent
+function Show-AgentManagement {
+    param([switch]$ReturnAfterInstall)
+
+    # If no additional agents configured, fall back to original menu
+    $allConfigs = Get-AllAgentConfigs
+    if ($allConfigs.Count -le 1) {
+        Install-KaseyaAgent -ReturnAfterInstall:$ReturnAfterInstall
+        return
+    }
+
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                       AGENT MANAGEMENT").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  AGENT STATUS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        $idx = 1
+        foreach ($config in $allConfigs) {
+            $status = Test-AgentInstalledByConfig -AgentConfig $config
+            $statusText = if ($status.Installed) {
+                if ($status.Status -eq "Running") { "Installed & Running" } else { "Installed ($($status.Status))" }
+            } else { "Not Installed" }
+            $color = if ($status.Installed -and $status.Status -eq "Running") { "Success" } elseif ($status.Installed) { "Warning" } else { "Error" }
+            $icon = if ($status.Installed) { "[OK]" } else { "[--]" }
+            $primary = if ($config.IsPrimary) { " (primary)" } else { "" }
+            $line = "  $icon [$idx] $($config.ToolName)$primary`: $statusText"
+            Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            $idx++
+        }
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        Write-OutputColor "  Enter agent number to install, or:" -color "Info"
+        Write-OutputColor "  [A] Install all missing agents" -color "Info"
+        Write-OutputColor "  [B] Back" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        if ($choice -eq 'A' -or $choice -eq 'a') {
+            foreach ($config in $allConfigs) {
+                $status = Test-AgentInstalledByConfig -AgentConfig $config
+                if (-not $status.Installed) {
+                    Write-OutputColor "  --- Installing $($config.ToolName) ---" -color "Info"
+                    if ($config.IsPrimary) {
+                        Install-KaseyaAgent -ReturnAfterInstall
+                    }
+                    else {
+                        Write-OutputColor "  $($config.ToolName) requires manual installation from FileServer." -color "Info"
+                        Write-OutputColor "  Service: $($config.ServiceName)" -color "Info"
+                    }
+                }
+            }
+            Write-PressEnter
+        }
+        elseif ($choice -match '^\d+$') {
+            $num = [int]$choice - 1
+            if ($num -ge 0 -and $num -lt $allConfigs.Count) {
+                $selectedConfig = $allConfigs[$num]
+                if ($selectedConfig.IsPrimary) {
+                    Install-KaseyaAgent -ReturnAfterInstall:$ReturnAfterInstall
+                    if ($ReturnAfterInstall) { return }
+                }
+                else {
+                    Write-OutputColor "  $($selectedConfig.ToolName) requires manual installation." -color "Info"
+                    Write-OutputColor "  Service: $($selectedConfig.ServiceName)" -color "Info"
+                    Write-PressEnter
+                }
+            }
+            else {
+                Write-OutputColor "  Invalid selection." -color "Error"
+                Start-Sleep -Seconds 1
+            }
+        }
+        elseif ($choice -eq 'b' -or $choice -eq 'B') {
+            return
+        }
+    }
+}
 #endregion

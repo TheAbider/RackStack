@@ -333,7 +333,7 @@ function Start-BatchMode {
     Write-OutputColor "" -color "Info"
 
     $stepNum = 0
-    $totalSteps = 22
+    $totalSteps = 24
     $changesApplied = 0
     $skipped = 0
     $errors = 0
@@ -1228,6 +1228,73 @@ function Start-BatchMode {
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Defender exclusions: skipped" -color "Debug"
+    }
+
+    # Step 23: Install agents (v1.8.0)
+    $stepNum++
+    $agentsToInstall = @()
+    if ($Config.InstallAgents -and $Config.InstallAgents -is [array]) {
+        # New array syntax: list of agent ToolNames to install
+        $allAgentConfigs = Get-AllAgentConfigs
+        foreach ($agentName in $Config.InstallAgents) {
+            $match = $allAgentConfigs | Where-Object { $_.ToolName -eq $agentName }
+            if ($match) { $agentsToInstall += $match }
+        }
+    }
+    elseif ($Config.InstallAgent) {
+        # Backward compat: boolean installs primary agent only
+        $agentsToInstall += $script:AgentInstaller
+    }
+
+    if ($agentsToInstall.Count -gt 0) {
+        foreach ($agentCfg in $agentsToInstall) {
+            $agentInstalled = Test-AgentInstalledByConfig -AgentConfig $agentCfg
+            if ($agentInstalled) {
+                Write-OutputColor "  [$stepNum/$totalSteps] $($agentCfg.ToolName) agent: already installed" -color "Debug"
+                $skipped++
+            }
+            else {
+                Write-OutputColor "  [$stepNum/$totalSteps] Installing $($agentCfg.ToolName) agent..." -color "Info"
+                try {
+                    Install-KaseyaAgent
+                    $changesApplied++
+                    Add-SessionChange -Category "Software" -Description "Installed $($agentCfg.ToolName) agent via batch mode"
+                }
+                catch {
+                    Write-OutputColor "           Failed: $_" -color "Error"
+                    $errors++
+                }
+            }
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] Agent install: skipped" -color "Debug"
+    }
+
+    # Step 24: Validate cluster (v1.8.0)
+    $stepNum++
+    if ($Config.ValidateCluster) {
+        Write-OutputColor "  [$stepNum/$totalSteps] Running cluster readiness check..." -color "Info"
+        try {
+            $readiness = Test-ClusterReadiness
+            if ($readiness.AllPassed) {
+                Write-OutputColor "           Cluster readiness: all checks passed" -color "Success"
+            }
+            else {
+                Write-OutputColor "           Cluster readiness: $($readiness.FailedChecks.Count) issue(s) found" -color "Warning"
+                foreach ($fc in $readiness.FailedChecks) {
+                    Write-OutputColor "             - $fc" -color "Warning"
+                }
+            }
+            $changesApplied++
+        }
+        catch {
+            Write-OutputColor "           Cluster check failed: $_" -color "Error"
+            $errors++
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] Cluster validation: skipped" -color "Debug"
     }
 
     # Undo prompt on errors
