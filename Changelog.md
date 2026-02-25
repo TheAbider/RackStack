@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.23
+
+- **Bug Fix:** Readiness score calculation crashed with division by zero if no checks were evaluated — `$ready / $total` with `$total = 0`. Added zero-guard on both `Show-ServerReadinessQuickCheck` and `Test-TemplateRequirement` score calculations (37-HealthCheck).
+- **Bug Fix:** HTML readiness report generation crashed with division by zero in the same pattern — `$ready / $total` unguarded (54-HTMLReports).
+- **Bug Fix:** Configuration drift comparison (`Compare-ConfigurationDrift`) crashed with unhandled exception when the profile JSON file was empty or malformed — `ConvertFrom-Json` was called outside any try/catch block. Now returns `$null` with error message instead of crashing (45-ConfigExport).
+- 63 modules, 1854 tests
+
 ## v1.9.22
 
 - **Bug Fix:** Storage Manager disk selection, initialization, volume display, and label functions all failed to detect empty results — `$null.Count -eq 0` is false in PS 5.1. Wrapped 6 pipeline results in `@()` across `Select-Disk`, `Show-AllDisks`, `Show-AllVolumes`, `Initialize-NewDisk`, and `Set-VolumeLabel` (38-StorageManager).

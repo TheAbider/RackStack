@@ -594,7 +594,7 @@ function Export-HTMLReadinessReport {
     if ($lic) { $ready++; $rows += Add-ReadinessRow -Cat "System" -Name "Windows License" -Value "Activated" -Status "ok" }
     else { $rows += Add-ReadinessRow -Cat "System" -Name "Windows License" -Value "Not Activated" -Status "warn" }
 
-    $pct = [math]::Round(($ready / $total) * 100)
+    $pct = if ($total -gt 0) { [math]::Round(($ready / $total) * 100) } else { 0 }
     $overallStatus = if ($pct -ge 80) { "good" } elseif ($pct -ge 50) { "warn" } else { "bad" }
     $overallText = if ($pct -ge 80) { "READY" } elseif ($pct -ge 50) { "PARTIALLY READY" } else { "NOT READY" }
 

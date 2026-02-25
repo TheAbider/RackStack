@@ -30,10 +30,16 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.22
+    1.9.23
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.23
+    BUG FIXES:
+    - FIXED: Division by zero in readiness score calculation when no checks were evaluated (37-HealthCheck, 2 functions)
+    - FIXED: Division by zero in HTML readiness report generation (54-HTMLReports)
+    - FIXED: Configuration drift comparison crashed on malformed or empty JSON profile — unhandled ConvertFrom-Json exception (45-ConfigExport)
 
 .CHANGELOG v1.9.22
     BUG FIXES:

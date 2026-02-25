@@ -415,7 +415,7 @@ function Show-ServerReadiness {
     Write-OutputColor "" -color "Info"
 
     # Score
-    $pct = [math]::Round(($ready / $total) * 100)
+    $pct = if ($total -gt 0) { [math]::Round(($ready / $total) * 100) } else { 0 }
     $scoreColor = if ($pct -ge 80) { "Success" } elseif ($pct -ge 50) { "Warning" } else { "Error" }
     $scoreBar = ("█" * [math]::Floor($pct / 5)).PadRight(20, "░")
 
@@ -777,7 +777,7 @@ function Show-RoleTemplates {
         $results += @{ Check = $check; Passed = $status }
     }
 
-    $pct = [math]::Round(($passed / $total) * 100)
+    $pct = if ($total -gt 0) { [math]::Round(($passed / $total) * 100) } else { 0 }
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Score: $passed/$total ($pct%)" -color $(if ($pct -ge 80) { "Success" } elseif ($pct -ge 50) { "Warning" } else { "Error" })
     Write-OutputColor "" -color "Info"

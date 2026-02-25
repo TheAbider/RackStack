@@ -829,7 +829,13 @@ function Compare-ConfigurationDrift {
         return $null
     }
 
-    $savedProfile = Get-Content $ProfilePath -Raw | ConvertFrom-Json
+    try {
+        $savedProfile = Get-Content $ProfilePath -Raw | ConvertFrom-Json
+    }
+    catch {
+        Write-OutputColor "  Failed to parse profile: $_" -color "Error"
+        return $null
+    }
     $results = [ordered]@{}
 
     # Hostname
