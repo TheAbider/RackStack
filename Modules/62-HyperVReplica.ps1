@@ -396,12 +396,6 @@ function Enable-VMReplicationWizard {
     Write-OutputColor "" -color "Info"
 
     $initChoice = Read-Host "  Select"
-    $initMethod = switch ($initChoice) {
-        "2" { "OverNetwork" }  # External media requires export first
-        "3" { "UseBackup" }
-        default { "OverNetwork" }
-    }
-
     # Confirm
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

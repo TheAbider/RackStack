@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.20
+
+- **Bug Fix:** Batch mode firewall undo was completely broken — scriptblock used `` `$$oldDomain `` which produced undefined variable references like `$Enabled` instead of actual True/False values. Undo silently failed, leaving firewall profiles disabled after batch undo (50-EntryPoint).
+- **Bug Fix:** VM deployment pre-flight switch validation was a no-op — checked `$_.SwitchName` on the top-level config object (always null) instead of `$_.NICs[].SwitchName`. Always reported "All present" even when switches were missing, allowing deployment to proceed and fail mid-creation (44-VMDeployment).
+- **Bug Fix:** Deleting a VM disk from the deployment queue used PowerShell hashtable value equality, which removed ALL disks with identical properties (same name/size/type) instead of just the selected disk. Changed to index-based removal (44-VMDeployment).
+- **Cleanup:** Removed dead `$initMethod` variable with incorrect `"OverNetwork"` mapping for external media choice in Hyper-V Replica (62-HyperVReplica).
+- 63 modules, 1854 tests
+
 ## v1.9.19
 
 - **Bug Fix:** Event log viewer crashed on events with null `Message` property — security audit and Hyper-V events commonly have no message text. Added null guard with "(no message)" fallback (29-EventLogViewer).

@@ -30,10 +30,17 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.19
+    1.9.20
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.20
+    BUG FIXES:
+    - FIXED: Batch undo firewall restore produced undefined variable references — undo silently failed, leaving firewall disabled (50-EntryPoint)
+    - FIXED: VM pre-flight switch validation always passed — checked non-existent top-level SwitchName instead of NICs[].SwitchName (44-VMDeployment)
+    - FIXED: Deleting a VM disk removed all disks with identical properties instead of just the selected one (44-VMDeployment)
+    - CLEANUP: Removed dead $initMethod variable with incorrect mapping in Hyper-V Replica initial replication (62-HyperVReplica)
 
 .CHANGELOG v1.9.19
     BUG FIXES:

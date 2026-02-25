@@ -1332,7 +1332,7 @@ function Set-VMConfigDisks {
                     $idx = [int]$deleteIndex - 1
                     if ($idx -ge 0 -and $idx -lt $Config.Disks.Count) {
                         $diskName = $Config.Disks[$idx].Name
-                        $Config.Disks = @($Config.Disks | Where-Object { $_ -ne $Config.Disks[$idx] })
+                        $Config.Disks = @(for ($j = 0; $j -lt $Config.Disks.Count; $j++) { if ($j -ne $idx) { $Config.Disks[$j] } })
                         Write-OutputColor "Deleted disk: $diskName" -color "Success"
                         Start-Sleep -Seconds 1
                     }
@@ -2985,7 +2985,7 @@ function Test-VMDeploymentPreFlight {
     # 4. VM switch check
     $existingSwitches = @()
     try { $existingSwitches = @((Get-VMSwitch -ErrorAction SilentlyContinue).Name) } catch {}
-    $switchNames = @($VMConfigs | ForEach-Object { $_.SwitchName } | Where-Object { $_ } | Select-Object -Unique)
+    $switchNames = @($VMConfigs | ForEach-Object { $_.NICs } | ForEach-Object { $_.SwitchName } | Where-Object { $_ } | Select-Object -Unique)
     $missingSwitches = @($switchNames | Where-Object { $_ -notin $existingSwitches })
     $switchStatus = if ($missingSwitches.Count -gt 0) { "FAIL" } else { "OK" }
     $results += @{

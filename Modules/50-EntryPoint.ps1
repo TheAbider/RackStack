@@ -572,7 +572,10 @@ function Start-BatchMode {
                 Write-OutputColor "           Firewall: Domain=Off Private=Off Public=On" -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Configured firewall profiles"
-                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore firewall profiles"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-NetFirewallProfile -Profile Domain -Enabled `$$oldDomain; Set-NetFirewallProfile -Profile Private -Enabled `$$oldPrivate; Set-NetFirewallProfile -Profile Public -Enabled `$$oldPublic") })
+                $undoDomain = if ($oldDomain -eq "Enabled") { "True" } else { "False" }
+                $undoPrivate = if ($oldPrivate -eq "Enabled") { "True" } else { "False" }
+                $undoPublic = if ($oldPublic -eq "Enabled") { "True" } else { "False" }
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore firewall profiles"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-NetFirewallProfile -Profile Domain -Enabled $undoDomain; Set-NetFirewallProfile -Profile Private -Enabled $undoPrivate; Set-NetFirewallProfile -Profile Public -Enabled $undoPublic") })
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
