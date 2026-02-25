@@ -245,7 +245,7 @@ function Install-ScriptUpdate {
     # Verify the download is not empty
     if (-not (Test-Path $tempPath) -or (Get-Item $tempPath).Length -lt 1000) {
         Write-OutputColor "  Downloaded file appears invalid." -color "Error"
-        Remove-Item $tempPath -ErrorAction SilentlyContinue
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
         return
     }
 
@@ -285,7 +285,7 @@ function Install-ScriptUpdate {
             Write-OutputColor "  SHA256 MISMATCH - download may be corrupted or tampered with!" -color "Error"
             Write-OutputColor "  Expected: $expectedHash" -color "Error"
             Write-OutputColor "  Actual:   $actualHash" -color "Error"
-            Remove-Item $tempPath -ErrorAction SilentlyContinue
+            Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
             return
         }
     }
@@ -331,7 +331,7 @@ del "%~f0"
         $targetPath = $script:ScriptPath
         try {
             Copy-Item -Path $tempPath -Destination $targetPath -Force -ErrorAction Stop
-            Remove-Item $tempPath -ErrorAction SilentlyContinue
+            Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  Updated to v$remoteVersion! Please restart the tool.".PadRight(72))│" -color "Success"
@@ -341,7 +341,7 @@ del "%~f0"
             # If the running script is locked, save alongside it
             $newPath = Join-Path $scriptDir "RackStack v$remoteVersion.ps1"
             Copy-Item -Path $tempPath -Destination $newPath -Force
-            Remove-Item $tempPath -ErrorAction SilentlyContinue
+            Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
             Write-OutputColor "  Could not replace running script." -color "Warning"
             Write-OutputColor "  New version saved as: $newPath" -color "Info"
         }

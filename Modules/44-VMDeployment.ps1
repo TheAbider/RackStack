@@ -2340,19 +2340,37 @@ function Test-DeploymentDiskSpace {
     $requiredGB = [math]::Round($requiredBytes / 1GB, 1)
 
     # Get free space on the target volume
-    $driveLetter = $StoragePath.Substring(0, 1)
-    $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
+    $freeBytes = $null
+    if ($StoragePath -like "*ClusterStorage*") {
+        # CSV paths (e.g., C:\ClusterStorage\Volume1) — drive letter points to OS drive, not CSV
+        try {
+            $csvs = Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+            foreach ($csv in $csvs) {
+                if ($null -ne $csv.SharedVolumeInfo -and $null -ne $csv.SharedVolumeInfo.FriendlyVolumeName) {
+                    if ($StoragePath -like "$($csv.SharedVolumeInfo.FriendlyVolumeName)*") {
+                        $freeBytes = $csv.SharedVolumeInfo.Partition.FreeSpace
+                        break
+                    }
+                }
+            }
+        } catch { }
+    }
+    if ($null -eq $freeBytes) {
+        $driveLetter = $StoragePath.Substring(0, 1)
+        $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
+        if ($volume) { $freeBytes = $volume.SizeRemaining }
+    }
 
-    if (-not $volume) {
+    if ($null -eq $freeBytes) {
         return @{
             HasSpace = $false
             RequiredGB = $requiredGB
             FreeGB = 0
-            Message = "Could not determine free space on $($driveLetter):"
+            Message = "Could not determine free space on storage path"
         }
     }
 
-    $freeGB = [math]::Round($volume.SizeRemaining / 1GB, 1)
+    $freeGB = [math]::Round($freeBytes / 1GB, 1)
     # Add 10% buffer
     $requiredWithBuffer = $requiredGB * 1.1
 

@@ -109,9 +109,9 @@ function Exit-Script {
             foreach ($p in $uniquePaths) {
                 $escapedPath = $p -replace "'", "''"
                 if (Test-Path $p -PathType Container) {
-                    $cleanupCommands += "Remove-Item -Path '$escapedPath' -Recurse -Force -ErrorAction SilentlyContinue`n"
+                    $cleanupCommands += "Remove-Item -LiteralPath '$escapedPath' -Recurse -Force -ErrorAction SilentlyContinue`n"
                 } else {
-                    $cleanupCommands += "Remove-Item -Path '$escapedPath' -Force -ErrorAction SilentlyContinue`n"
+                    $cleanupCommands += "Remove-Item -LiteralPath '$escapedPath' -Force -ErrorAction SilentlyContinue`n"
                 }
             }
             $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($script:ToolName)Cleanup' -Confirm:`$false -ErrorAction SilentlyContinue"

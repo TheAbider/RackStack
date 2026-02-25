@@ -74,7 +74,7 @@ function Add-SessionChange {
     $logFile = Join-Path $logDir "session-log.txt"
     $datestamp = Get-Date -Format "yyyy-MM-dd"
     $line = "$datestamp $timestamp [$Category] $Description"
-    Add-Content -Path $logFile -Value $line -ErrorAction SilentlyContinue
+    Add-Content -Path $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
 
     # JSON audit log (one JSON object per line for easy parsing)
     $auditFile = Join-Path $logDir "audit-log.jsonl"
@@ -85,7 +85,7 @@ function Add-SessionChange {
         category = $Category
         action   = $Description
     } | ConvertTo-Json -Compress
-    Add-Content -Path $auditFile -Value $auditEntry -ErrorAction SilentlyContinue
+    Add-Content -Path $auditFile -Value $auditEntry -Encoding UTF8 -ErrorAction SilentlyContinue
 
     # Rotate audit log if over 10MB
     $auditInfo = Get-Item $auditFile -ErrorAction SilentlyContinue

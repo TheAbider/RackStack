@@ -619,7 +619,10 @@ function Test-FileIntegrity {
     }
 
     # Compare hashes if remote hash was found
-    if ($result.RemoteHash) {
+    if (-not $result.Hash) {
+        $result.Valid = $false
+        $result.Error = "Failed to compute local SHA256 hash"
+    } elseif ($result.RemoteHash) {
         if ($result.Hash -eq $result.RemoteHash) {
             $result.HashMatch = $true
         } else {
@@ -632,7 +635,7 @@ function Test-FileIntegrity {
     # Save local .sha256 file for future re-verification
     $hashFilePath = "$FilePath.sha256"
     try {
-        "$($result.Hash)  $(Split-Path $FilePath -Leaf)" | Set-Content -Path $hashFilePath -Force -ErrorAction SilentlyContinue
+        "$($result.Hash)  $(Split-Path $FilePath -Leaf)" | Set-Content -Path $hashFilePath -Encoding UTF8 -Force -ErrorAction SilentlyContinue
     }
     catch {
         # Non-fatal: just skip saving hash file

@@ -30,10 +30,22 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.29
+    1.9.30
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.30
+    BUG FIXES:
+    - FIXED: File integrity check crashed when hash computation failed — .Substring() called on null hash value, throwing "cannot call method on null" (39-FileServer)
+    - FIXED: VM deployment disk space check reported wrong free space for Cluster Shared Volumes — drive letter extraction pointed to OS drive instead of the CSV (44-VMDeployment)
+    - FIXED: Self-update temp files not cleaned up when read-only — Remove-Item missing -Force flag on 4 cleanup paths (35-Utilities)
+    - FIXED: Audit log (JSONL) written in system-default encoding instead of UTF-8 — non-ASCII characters in VM names/hostnames produced corrupt JSON records (04-Navigation)
+    - FIXED: Session log written in system-default encoding instead of UTF-8 (04-Navigation)
+    - FIXED: Core logging function wrote in system-default encoding instead of UTF-8 (02-Logging)
+    - FIXED: SHA256 hash file written without UTF-8 encoding — filenames with non-ASCII characters could cause hash verification mismatches (39-FileServer)
+    - FIXED: First-boot script written to offline VHD without UTF-8 encoding — could cause parse errors on systems with different locale (43-OfflineVHD)
+    - FIXED: Post-reboot cleanup task used -Path instead of -LiteralPath — paths with bracket characters silently failed to delete (47-ExitCleanup)
 
 .CHANGELOG v1.9.29
     BUG FIXES:

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.9.30
+
+- **Bug Fix:** File integrity check crashed with "cannot call a method on a null-valued expression" when local hash computation failed — `.Substring(0,16)` called on a null hash value with no null guard (39-FileServer).
+- **Bug Fix:** VM deployment disk space check reported wrong free space for Cluster Shared Volumes — `$StoragePath.Substring(0,1)` extracted the drive letter `C` from `C:\ClusterStorage\Volume1`, returning the OS drive's free space instead of the CSV's actual capacity (44-VMDeployment).
+- **Bug Fix:** Self-update temporary files not cleaned up when marked read-only — `Remove-Item` missing `-Force` flag on all 4 temp file cleanup paths in the update flow (35-Utilities).
+- **Bug Fix:** Audit log (JSONL) written in system-default encoding (Windows-1252) instead of UTF-8 — non-ASCII characters in VM names, hostnames, or domain names produced corrupt JSON records that fail standard JSON parsers. Affects 211 call sites across 45 modules (04-Navigation).
+- **Bug Fix:** Session log written in system-default encoding instead of UTF-8 — non-portable across different OS locales (04-Navigation).
+- **Bug Fix:** Core logging function `Write-LogMessage` wrote in system-default encoding instead of UTF-8 (02-Logging).
+- **Bug Fix:** SHA256 hash file written without explicit UTF-8 encoding — filenames with non-ASCII characters could cause hash verification mismatches and unnecessary re-downloads (39-FileServer).
+- **Bug Fix:** First-boot PowerShell script written to offline VHD without UTF-8 encoding — could cause parse errors when the target system has a different locale than the authoring system (43-OfflineVHD).
+- **Bug Fix:** Post-reboot cleanup scheduled task used `-Path` instead of `-LiteralPath` — paths containing bracket characters (`[`, `]`) were interpreted as wildcard patterns, silently failing to delete orphaned files (47-ExitCleanup).
+- 63 modules, 1854 tests
+
 ## v1.9.29
 
 - **Bug Fix:** RDP status falsely reported "Enabled" when the registry key was inaccessible — `$null -eq 0` evaluates to `$true` in PowerShell, so a failed `Get-ItemProperty` with `-ErrorAction SilentlyContinue` always matched the "enabled" condition (05-SystemCheck).

@@ -233,7 +233,7 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
             $psScriptPath = "$scriptFolder\$($script:ToolName)FirstBoot.ps1"
 
             # Write the PowerShell script
-            Set-Content -Path $psScriptPath -Value $firstBootScript -Force -ErrorAction SilentlyContinue
+            Set-Content -Path $psScriptPath -Value $firstBootScript -Encoding UTF8 -Force -ErrorAction SilentlyContinue
 
             # Write SetupComplete.cmd to call our PowerShell script
             $cmdContent = "@echo off`r`npowershell.exe -ExecutionPolicy Bypass -File `"$($psScriptPath.Replace($windowsDrive, '%SystemDrive%'))`""
