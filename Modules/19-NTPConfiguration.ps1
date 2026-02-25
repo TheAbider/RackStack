@@ -24,7 +24,9 @@ function Set-NTPConfiguration {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  CURRENT TIME CONFIGURATION".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │$("  Current Time Source: $currentSource".PadRight(72))│" -color "Info"
+        $lineStr = "  Current Time Source: $currentSource"
+        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  Current Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')".PadRight(72))│" -color "Info"
 
         $isDomainJoined = (Get-CimInstance -ClassName Win32_ComputerSystem).PartOfDomain

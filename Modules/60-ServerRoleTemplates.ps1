@@ -210,7 +210,9 @@ function Install-ServerRoleTemplate {
     Clear-Host
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                INSTALL: $fullName").PadRight(72))║" -color "Info"
+    $lineStr = "                INSTALL: $fullName"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  ║$($lineStr.PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  $($template.Description)" -color "Info"

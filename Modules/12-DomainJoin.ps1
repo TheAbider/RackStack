@@ -12,7 +12,9 @@ function Join-Domain {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  $($agentToolName.ToUpper()) AGENT NOT INSTALLED".PadRight(72))│" -color "Warning"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │$("  $agentToolName Agent should be installed before joining the domain.".PadRight(72))│" -color "Info"
+        $lineStr = "  $agentToolName Agent should be installed before joining the domain."
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  This ensures the server checks in properly after domain join.".PadRight(72))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"

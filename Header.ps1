@@ -30,10 +30,14 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.39
+    1.9.40
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.40
+    BUG FIXES:
+    - FIXED: 52 PadRight(72) overflow bugs across 15 modules — dynamic content (adapter names, IQN strings, FQDNs, VM names, user input, joined lists) could exceed 72 chars, breaking TUI box-drawing borders. All instances now truncate at 69 chars with ellipsis before padding (09-SET, 10-iSCSI, 12-DomainJoin, 19-NTPConfiguration, 27-FailoverClustering, 37-HealthCheck, 44-VMDeployment, 51-ClusterDashboard, 55-QoLFeatures, 56-OperationsMenu, 57-AgentInstaller, 58-NetworkDiagnostics, 60-ServerRoleTemplates, 61-ActiveDirectory, 62-HyperVReplica)
 
 .CHANGELOG v1.9.39
     BUG FIXES:

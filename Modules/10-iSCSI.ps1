@@ -381,6 +381,7 @@ function Set-iSCSIAutoConfiguration {
         $adapterList += @{ Index = $index; Adapter = $adapter }
         $status = if ($adapter.Status -eq "Up") { "[UP]" } else { "[DOWN]" }
         $line = "  [$index] $($adapter.Name) - $($adapter.InterfaceDescription) $status"
+        if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
         $color = if ($adapter.Status -eq "Up") { "Success" } else { "Warning" }
         Write-OutputColor "  │$($line.PadRight(72))│" -color $color
         $index++
@@ -449,8 +450,12 @@ function Set-iSCSIAutoConfiguration {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  CONFIGURATION SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  A-side: $($aSideAdapter.Name) -> $ip1/24".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  B-side: $($bSideAdapter.Name) -> $ip2/24".PadRight(72))│" -color "Success"
+    $lineStr = "  A-side: $($aSideAdapter.Name) -> $ip1/24"
+    if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
+    $lineStr = "  B-side: $($bSideAdapter.Name) -> $ip2/24"
+    if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  Gateway: None (iSCSI isolated network)".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  IPv6: Will be disabled".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -1013,6 +1018,7 @@ function Show-iSCSIStatus {
     if ($sessions) {
         foreach ($session in $sessions) {
             $line = "  $($session.TargetNodeAddress)"
+            if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($line.PadRight(72))│" -color "Success"
             Write-OutputColor "  │$("    Portal: $($session.TargetPortalAddress):$($session.TargetPortalPortNumber)".PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("    Persistent: $($session.IsPersistent) | Connected: $($session.IsConnected)".PadRight(72))│" -color "Info"

@@ -238,7 +238,9 @@ function Invoke-RemoteHealthCheck {
         } -ErrorAction Stop
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  REMOTE HEALTH: $($health.Hostname) ($target)".PadRight(72))│" -color "Info"
+        $lineStr = "  REMOTE HEALTH: $($health.Hostname) ($target)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-MenuItem "  OS:          $($health.OS)"
         Write-MenuItem "  Uptime:      $($health.Uptime)"
@@ -290,7 +292,9 @@ function Invoke-RemoteServiceManager {
             Select-Object -First 40
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  SERVICES: $target".PadRight(72))│" -color "Info"
+        $lineStr = "  SERVICES: $target"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         $header = "  Status".PadRight(12) + "Name".PadRight(22) + "Display Name"
         Write-Host "  │  " -NoNewline -ForegroundColor Cyan; Write-Host $header.PadRight(70) -NoNewline -ForegroundColor Yellow; Write-Host "│" -ForegroundColor Cyan

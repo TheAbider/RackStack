@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.40
+
+- **Bug Fix:** 52 `.PadRight(72)` overflow bugs across 15 modules — when dynamic content (network adapter names, iSCSI IQN strings, FQDNs, VM names, user input, comma-joined lists, file paths, FSMO role holders) exceeded 72 characters, the `PadRight` call did nothing (it only pads, never truncates), causing the string to overflow past the TUI box-drawing border `│`. All 52 instances now extract the dynamic content, truncate at 69 characters with `...` ellipsis if needed, then apply `.PadRight(72)` to guarantee consistent box alignment. Affected modules: 09-SET (4), 10-iSCSI (4), 12-DomainJoin (1), 19-NTPConfiguration (1), 27-FailoverClustering (2), 37-HealthCheck (1), 44-VMDeployment (2), 51-ClusterDashboard (7), 55-QoLFeatures (2), 56-OperationsMenu (2), 57-AgentInstaller (9), 58-NetworkDiagnostics (4), 60-ServerRoleTemplates (1), 61-ActiveDirectory (11), 62-HyperVReplica (5).
+- 63 modules, 1854 tests
+
 ## v1.9.39
 
 - **Bug Fix:** 10 remaining `-f` format string operator calls in disk overview, partition details, and volume listing converted to string interpolation with `.PadRight()`. Same class of bug fixed in v1.9.38 — the `-f` operator throws `FormatException` when formatted values contain `{` or `}`. The `$disk.FriendlyName` case was highest risk (e.g., NVMe drives reporting as `Samsung SSD 990 PRO {NVMe}`), but all 10 instances in the Storage Manager and VM status display were converted for consistency (38-StorageManager, 44-VMDeployment).

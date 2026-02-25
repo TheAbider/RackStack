@@ -2408,6 +2408,7 @@ function Show-DeploymentQueue {
             foreach ($disk in $config.Disks) { if ($disk.SizeGB) { $diskTotal += $disk.SizeGB } }
             $totalDiskGB += $diskTotal
             $vmLine = "  [$num] $($config.VMName)  |  $($config.vCPU)vCPU  $($config.MemoryGB)GB RAM  |  ${diskTotal}GB disk  |  $osSource"
+            if ($vmLine.Length -gt 69) { $vmLine = $vmLine.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($vmLine.PadRight(72))│" -color "Success"
             $num++
         }
@@ -2519,6 +2520,7 @@ function Start-BatchDeployment {
 
         Write-OutputColor "" -color "Info"
         $vmProgressLine = "  VM $vmNum of ${totalVMs}: $($config.VMName)"
+        if ($vmProgressLine.Length -gt 69) { $vmProgressLine = $vmProgressLine.Substring(0, 69) + "..." }
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$($vmProgressLine.PadRight(72))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"

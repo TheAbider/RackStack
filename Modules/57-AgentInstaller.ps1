@@ -270,11 +270,14 @@ function Show-AgentInstallerList {
         } else {
             $header = "  AVAILABLE $($toolName.ToUpper()) AGENTS ($($displayAgents.Count) total) - Page $($currentPage + 1) of $totalPages"
         }
+        if ($header.Length -gt 69) { $header = $header.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($header.PadRight(72))│" -color "Success"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         if ($displayAgents.Count -eq 0) {
-            Write-OutputColor "  │$("  No agents match '$searchFilter'".PadRight(72))│" -color "Warning"
+            $lineStr = "  No agents match '$searchFilter'"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
         } else {
             for ($i = $startIdx; $i -le $endIdx; $i++) {
                 $agent = $displayAgents[$i]
@@ -359,7 +362,9 @@ function Install-SelectedAgent {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Site Name:    $($Agent.SiteName)".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Site Numbers: $($Agent.SiteNumbers -join ', ')".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  File:         $($Agent.FileName)".PadRight(72))│" -color "Info"
+    $lineStr = "  File:         $($Agent.FileName)"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -491,7 +496,9 @@ function Install-SelectedAgent {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  INSTALLATION RESULT".PadRight(72))│" -color $overallColor
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │$("  Agent:     $($Agent.DisplayName)".PadRight(72))│" -color "Info"
+        $lineStr = "  Agent:     $($Agent.DisplayName)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  Install:   $exitDesc".PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  Service:   $serviceStatus".PadRight(72))│" -color $serviceColor
         Write-OutputColor "  │$("  Status:    $overallStatus".PadRight(72))│" -color $overallColor
@@ -681,8 +688,12 @@ function Install-Agent {
                 Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
                 Write-OutputColor "  │$("  MATCHING AGENT".PadRight(72))│" -color "Success"
                 Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-                Write-OutputColor "  │$("  Site Numbers:   $($agent.SiteNumbers -join ', ')".PadRight(72))│" -color "Info"
-                Write-OutputColor "  │$("  Site Name:      $($agent.SiteName)".PadRight(72))│" -color "Info"
+                $lineStr = "  Site Numbers:   $($agent.SiteNumbers -join ', ')"
+                if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+                $lineStr = "  Site Name:      $($agent.SiteName)"
+                if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
                 Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
                 Write-OutputColor "" -color "Info"
 
@@ -853,9 +864,13 @@ function Install-Agent {
                     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
                     Write-OutputColor "  │$("  NO MATCHING AGENTS FOUND".PadRight(72))│" -color "Warning"
                     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-                    Write-OutputColor "  │$("  Search term: $searchTerm".PadRight(72))│" -color "Info"
+                    $lineStr = "  Search term: $searchTerm"
+                    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
                     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-                    Write-OutputColor "  │$("  If this is a new site, please contact $($script:SupportContact) to add the agent".PadRight(72))│" -color "Info"
+                    $lineStr = "  If this is a new site, please contact $($script:SupportContact) to add the agent"
+                    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
                     Write-OutputColor "  │$("  to the FileServer $($script:AgentInstaller.FolderName) folder.".PadRight(72))│" -color "Info"
                     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
                     Write-PressEnter
@@ -984,6 +999,7 @@ function Show-AgentManagement {
             $icon = if ($status.Installed) { "[OK]" } else { "[--]" }
             $primary = if ($config.IsPrimary) { " (primary)" } else { "" }
             $line = "  $icon [$idx] $($config.ToolName)$primary`: $statusText"
+            if ($line.Length -gt 69) { $line = $line.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($line.PadRight(72))│" -color $color
             $idx++
         }

@@ -948,7 +948,9 @@ function Set-SNMPConfiguration {
                     foreach ($cName in $commNames) {
                         $cPermVal = $commProps.$cName
                         $cPermStr = if ($cPermVal -eq 4) { "READ ONLY" } elseif ($cPermVal -eq 8) { "READ WRITE" } else { "Permission=$cPermVal" }
-                        Write-OutputColor "  │$("    $cName ($cPermStr)".PadRight(72))│" -color "Info"
+                        $lineStr = "    $cName ($cPermStr)"
+                        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
                     }
                 }
                 else {
@@ -967,7 +969,9 @@ function Set-SNMPConfiguration {
                     }
                     else {
                         foreach ($mName in $mgrNames) {
-                            Write-OutputColor "  │$("    $($mgrProps.$mName)".PadRight(72))│" -color "Info"
+                            $lineStr = "    $($mgrProps.$mName)"
+                            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
                         }
                     }
                 }

@@ -291,7 +291,9 @@ function New-SwitchEmbeddedTeam {
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             Write-OutputColor "  │$("  The following adapters were not used for SET (no internet):".PadRight(72))│" -color "Info"
             foreach ($candidate in $script:iSCSICandidateAdapters) {
-                Write-OutputColor "  │$("    - $($candidate.Name)".PadRight(72))│" -color "Warning"
+                $lineStr = "    - $($candidate.Name)"
+                if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
             }
             Write-OutputColor "  │$("  These may be your iSCSI adapters for SAN connectivity.".PadRight(72))│" -color "Info"
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -509,7 +511,9 @@ function Add-MultipleVNICs {
         Write-OutputColor "  │$("  SUMMARY: Created $($createdVNICs.Count) virtual NIC(s)".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         foreach ($name in $createdVNICs) {
-            Write-OutputColor "  │$("  - $name".PadRight(72))│" -color "Success"
+            $lineStr = "  - $name"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
         }
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     }
@@ -697,7 +701,11 @@ function Show-VirtualSwitches {
             default    { "Info" }
         }
 
-        Write-OutputColor "  │$("  $($sw.Name)".PadRight(40))$($typeLabel.PadRight(32))│" -color $color
+        $swName = "  $($sw.Name)"
+        if ($swName.Length -gt 40) { $swName = $swName.Substring(0, 37) + "..." }
+        $typeLbl = $typeLabel
+        if ($typeLbl.Length -gt 32) { $typeLbl = $typeLbl.Substring(0, 29) + "..." }
+        Write-OutputColor "  │$($swName.PadRight(40))$($typeLbl.PadRight(32))│" -color $color
 
         # Show management adapters on this switch
         $mgmtAdapters = Get-VMNetworkAdapter -ManagementOS -SwitchName $sw.Name -ErrorAction SilentlyContinue
@@ -705,7 +713,9 @@ function Show-VirtualSwitches {
             foreach ($adapter in $mgmtAdapters) {
                 $vlanInfo = Get-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $adapter.Name -ErrorAction SilentlyContinue
                 $vlanStr = if ($null -ne $vlanInfo -and $vlanInfo.AccessVlanId -gt 0) { " VLAN $($vlanInfo.AccessVlanId)" } else { "" }
-                Write-OutputColor "  │$("    └ vEthernet ($($adapter.Name))$vlanStr".PadRight(72))│" -color "Info"
+                $lineStr = "    └ vEthernet ($($adapter.Name))$vlanStr"
+                if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
             }
         }
     }

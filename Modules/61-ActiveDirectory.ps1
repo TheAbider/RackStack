@@ -107,6 +107,7 @@ function Show-ADDSPrerequisiteResults {
         $status = if ($check.Passed) { "[PASS]" } else { "[FAIL]" }
         $statusColor = if ($check.Passed) { "Success" } else { "Error" }
         $line = "  $status  $($check.Name): $($check.Detail)"
+        if ($line.Length -gt 69) { $line = $line.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($line.PadRight(72))│" -color $statusColor
     }
 
@@ -338,7 +339,9 @@ function Install-NewForest {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  NEW FOREST CONFIGURATION SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  Domain Name:      $domainName".PadRight(72))│" -color "Info"
+    $lineStr = "  Domain Name:      $domainName"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  NetBIOS Name:     $netbiosName".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Forest Mode:      $levelDisplay".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Domain Mode:      $levelDisplay".PadRight(72))│" -color "Info"
@@ -466,7 +469,9 @@ function Install-AdditionalDC {
     Write-OutputColor "  │$("  ADDITIONAL DC CONFIGURATION SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Domain:           $domainName".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Credentials:      $($credential.UserName)".PadRight(72))│" -color "Info"
+    $lineStr = "  Credentials:      $($credential.UserName)"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Site:             $siteName".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Install DNS:      Yes".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Database Path:    C:\Windows\NTDS".PadRight(72))│" -color "Info"
@@ -600,7 +605,9 @@ function Install-ReadOnlyDC {
     Write-OutputColor "  │$("  READ-ONLY DC CONFIGURATION SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Domain:           $domainName".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Credentials:      $($credential.UserName)".PadRight(72))│" -color "Info"
+    $lineStr = "  Credentials:      $($credential.UserName)"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Site:             $siteName".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Read-Only:        Yes".PadRight(72))│" -color "Info"
     if (-not [string]::IsNullOrWhiteSpace($delegatedAdmin)) {
@@ -719,16 +726,22 @@ function Show-ADDSStatus {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  FOREST / DOMAIN INFORMATION".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │$("  Forest Name:       $($forest.Name)".PadRight(72))│" -color "Info"
+        $lineStr = "  Forest Name:       $($forest.Name)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  Forest Mode:       $($forest.ForestMode)".PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  Domain Name:       $($domain.Name)".PadRight(72))│" -color "Info"
+        $lineStr = "  Domain Name:       $($domain.Name)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  Domain Mode:       $($domain.DomainMode)".PadRight(72))│" -color "Info"
 
         $dcList = $domain.DomainControllers | ForEach-Object { $_.Name }
         $dcCount = @($dcList).Count
         Write-OutputColor "  │$("  Domain Controllers: $dcCount".PadRight(72))│" -color "Info"
         foreach ($dc in $dcList) {
-            Write-OutputColor "  │$("    - $dc".PadRight(72))│" -color "Info"
+            $lineStr = "    - $dc"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         }
 
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -756,13 +769,23 @@ function Show-ADDSStatus {
         $domainInfo = Get-ADDomain -ErrorAction SilentlyContinue
 
         if ($null -ne $forestInfo) {
-            Write-OutputColor "  │$("  Schema Master:       $($forestInfo.SchemaMaster)".PadRight(72))│" -color "Info"
-            Write-OutputColor "  │$("  Domain Naming:       $($forestInfo.DomainNamingMaster)".PadRight(72))│" -color "Info"
+            $lineStr = "  Schema Master:       $($forestInfo.SchemaMaster)"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+            $lineStr = "  Domain Naming:       $($forestInfo.DomainNamingMaster)"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         }
         if ($null -ne $domainInfo) {
-            Write-OutputColor "  │$("  PDC Emulator:        $($domainInfo.PDCEmulator)".PadRight(72))│" -color "Info"
-            Write-OutputColor "  │$("  RID Master:          $($domainInfo.RIDMaster)".PadRight(72))│" -color "Info"
-            Write-OutputColor "  │$("  Infrastructure:      $($domainInfo.InfrastructureMaster)".PadRight(72))│" -color "Info"
+            $lineStr = "  PDC Emulator:        $($domainInfo.PDCEmulator)"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+            $lineStr = "  RID Master:          $($domainInfo.RIDMaster)"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+            $lineStr = "  Infrastructure:      $($domainInfo.InfrastructureMaster)"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         }
 
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -794,7 +817,9 @@ function Show-ADDSStatus {
             $lastResult = if ($partner.LastReplicationResult -eq 0) { "Success" } else { "Error ($($partner.LastReplicationResult))" }
             $resultColor = if ($partner.LastReplicationResult -eq 0) { "Success" } else { "Error" }
 
-            Write-OutputColor "  │$("  Partner: $partnerName".PadRight(72))│" -color "Info"
+            $lineStr = "  Partner: $partnerName"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("    Last Success: $lastRepl  Result: $lastResult".PadRight(72))│" -color $resultColor
         }
 

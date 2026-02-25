@@ -413,7 +413,9 @@ function Show-ServerReadiness {
             Write-OutputColor "  │$("  $currentCategory".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         }
-        $line = "  $($item.Symbol) $($item.Name):".PadRight(28) + $item.Value
+        $valStr = $item.Value
+        if ($valStr.Length -gt 44) { $valStr = $valStr.Substring(0, 41) + "..." }
+        $line = "  $($item.Symbol) $($item.Name):".PadRight(28) + $valStr
         Write-OutputColor "  │$($line.PadRight(72))│" -color $item.Color
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"

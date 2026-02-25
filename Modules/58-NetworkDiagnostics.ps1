@@ -69,8 +69,10 @@ function Invoke-PingHost {
 
     try {
         $results = Test-Connection -ComputerName $target -Count 4 -ErrorAction Stop
+        $lineStr = "  PING RESULTS: $target"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  PING RESULTS: $target".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         foreach ($r in $results) {
             $addr = if ($r.IPV4Address) { $r.IPV4Address.ToString() } elseif ($r.Address) { $r.Address } else { "N/A" }
@@ -120,8 +122,10 @@ function Invoke-PortTest {
         $status = if ($result.TcpTestSucceeded) { "OPEN" } else { "CLOSED/FILTERED" }
         $statusColor = if ($result.TcpTestSucceeded) { "Success" } else { "Error" }
 
+        $lineStr = "  PORT TEST: ${target}:${port}"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  PORT TEST: ${target}:${port}".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-MenuItem -Text "  Target:       $target"
         Write-MenuItem -Text "  Remote IP:    $($result.RemoteAddress)"
@@ -150,8 +154,10 @@ function Invoke-TraceRoute {
 
     try {
         $result = Test-NetConnection -ComputerName $target -TraceRoute -WarningAction SilentlyContinue
+        $lineStr = "  TRACE ROUTE: $target ($($result.RemoteAddress))"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  TRACE ROUTE: $target ($($result.RemoteAddress))".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         $hop = 1
@@ -271,8 +277,10 @@ function Invoke-DnsLookup {
     try {
         $results = Resolve-DnsName -Name $target -ErrorAction Stop
 
+        $lineStr = "  DNS RESULTS: $target"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  DNS RESULTS: $target".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         foreach ($r in $results) {

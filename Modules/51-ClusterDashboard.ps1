@@ -49,6 +49,7 @@ function Show-ClusterDashboard {
         }
         $stateDetail = if ($node.State -eq "Paused") { "Paused" } else { $node.State.ToString() }
         $nodeLine = "  $statusSymbol $($node.Name.PadRight(20)) $($stateDetail.PadRight(12)) VMs: $vmCount"
+        if ($nodeLine.Length -gt 69) { $nodeLine = $nodeLine.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($nodeLine.PadRight(72))│" -color $stateColor
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -64,7 +65,9 @@ function Show-ClusterDashboard {
         foreach ($csv in $csvs) {
             $partition = $csv.SharedVolumeInfo.Partition
             if (-not $partition) {
-                Write-OutputColor "  │$("  $($csv.Name) - Partition info unavailable".PadRight(72))│" -color "Warning"
+                $lineStr = "  $($csv.Name) - Partition info unavailable"
+                if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
                 continue
             }
 
@@ -290,8 +293,10 @@ function Show-CSVHealth {
         $partition = $csv.SharedVolumeInfo.Partition
         $redirected = $csv.SharedVolumeInfo.FaultState
         if (-not $partition) {
+            $lineStr = "  $($csv.Name) - Partition info unavailable"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Warning"
-            Write-OutputColor "  │$("  $($csv.Name) - Partition info unavailable".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Warning"
             continue
         }
@@ -301,8 +306,10 @@ function Show-CSVHealth {
         $usedGB = $totalGB - $freeGB
         $usedPct = if ($totalGB -gt 0) { [math]::Round(($usedGB / $totalGB) * 100, 1) } else { 0 }
 
+        $lineStr = "  $($csv.Name)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  $($csv.Name)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         # State
@@ -461,6 +468,7 @@ function Test-ClusterReadiness {
         $color = switch ($c.Status) { "OK" { "Success" }; "WARN" { "Warning" }; "FAIL" { "Error" }; default { "Info" } }
         if ($c.Status -ne "OK") { $allOK = $false }
         $line = "  $icon $($c.Check.PadRight(22)) $($c.Detail)"
+        if ($line.Length -gt 69) { $line = $line.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($line.PadRight(72))│" -color $color
     }
 
@@ -498,8 +506,10 @@ function Initialize-ClusterCSV {
     foreach ($csv in $csvs) {
         $partition = $csv.SharedVolumeInfo.Partition
         if (-not $partition) {
+            $lineStr = "  $($csv.Name) - Partition info unavailable"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Warning"
-            Write-OutputColor "  │$("  $($csv.Name) - Partition info unavailable".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Warning"
             $issues++
             continue
@@ -509,8 +519,10 @@ function Initialize-ClusterCSV {
         $usedPct = if ($totalGB -gt 0) { [math]::Round(($totalGB - $freeGB) / $totalGB * 100, 0) } else { 0 }
         $fs = $partition.FileSystem
 
+        $lineStr = "  $($csv.Name)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  $($csv.Name)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         # State

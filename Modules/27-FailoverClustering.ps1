@@ -211,7 +211,9 @@ function New-ClusterWizard {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Name: $clusterName".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  IP: $clusterIP".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Nodes: $($nodes -join ', ')".PadRight(72))│" -color "Info"
+    $lineStr = "  Nodes: $($nodes -join ', ')"
+    if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -655,7 +657,9 @@ function Set-ClusterQuorum {
     Write-OutputColor "  │$("  Cluster: $($cluster.Name)".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Quorum Type: $($quorum.QuorumType)".PadRight(72))│" -color "Info"
     if ($quorum.QuorumResource) {
-        Write-OutputColor "  │$("  Quorum Resource: $($quorum.QuorumResource.Name)".PadRight(72))│" -color "Info"
+        $lineStr = "  Quorum Resource: $($quorum.QuorumResource.Name)"
+        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"

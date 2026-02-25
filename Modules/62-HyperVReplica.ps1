@@ -124,7 +124,9 @@ function Enable-ReplicaServer {
         Write-OutputColor "  │$("  REPLICA SERVER ALREADY ENABLED".PadRight(72))│" -color "Success"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-OutputColor "  │$("  Authentication: $($replicaConfig.AllowedAuthenticationType)".PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  Storage Location: $($replicaConfig.DefaultStorageLocation)".PadRight(72))│" -color "Info"
+        $lineStr = "  Storage Location: $($replicaConfig.DefaultStorageLocation)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
 
         $httpEnabled = if ($replicaConfig.HttpPort) { "Port $($replicaConfig.HttpPort)" } else { "Disabled" }
         $httpsEnabled = if ($replicaConfig.HttpsPort) { "Port $($replicaConfig.HttpsPort)" } else { "Disabled" }
@@ -209,9 +211,13 @@ function Enable-ReplicaServer {
     Write-OutputColor "  │$("  CONFIGURATION SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Authentication: $authType".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Storage Path: $storagePath".PadRight(72))│" -color "Info"
+    $lineStr = "  Storage Path: $storagePath"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     if ($script:ReplicaAllowedServers.Count -gt 0) {
-        Write-OutputColor "  │$("  Allowed Servers: $($script:ReplicaAllowedServers -join ', ')".PadRight(72))│" -color "Info"
+        $lineStr = "  Allowed Servers: $($script:ReplicaAllowedServers -join ', ')"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     }
     else {
         Write-OutputColor "  │$("  Allowed Servers: Any authenticated server".PadRight(72))│" -color "Info"
@@ -402,7 +408,9 @@ function Enable-VMReplicationWizard {
     Write-OutputColor "  │$("  REPLICATION CONFIGURATION SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  VM: $vmName".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Replica Server: $replicaServer".PadRight(72))│" -color "Info"
+    $lineStr = "  Replica Server: $replicaServer"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Authentication: $authType (port $port)".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Frequency: $freqDisplay".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -542,7 +550,9 @@ function Show-ReplicationStatus {
                 }
                 else { "N/A" }
 
-                Write-OutputColor "  │$("  $($repl.VMName)".PadRight(72))│" -color "Info"
+                $lineStr = "  $($repl.VMName)"
+                if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
                 Write-OutputColor "  │$("    Pending: $pendingSize | Avg Size: $avgSize | Avg Latency: $avgLatency".PadRight(72))│" -color "Info"
             }
         }
