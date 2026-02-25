@@ -398,7 +398,7 @@ function Initialize-NewDisk {
                     Set-Disk -Number $offDisk.Number -IsOffline $false -ErrorAction Stop
                     Set-Disk -Number $offDisk.Number -IsReadOnly $false -ErrorAction SilentlyContinue
                     # Verify read-only was cleared
-                    $diskState = Get-Disk -Number $offDisk.Number
+                    $diskState = Get-Disk -Number $offDisk.Number -ErrorAction Stop
                     if ($diskState.IsReadOnly) {
                         Write-OutputColor "  Disk $($offDisk.Number) is online but still read-only (may need firmware/driver update)." -color "Warning"
                     }
@@ -960,7 +960,7 @@ function Format-DiskVolume {
         if ($newDriveLetter) {
             Set-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber -NewDriveLetter $newDriveLetter -ErrorAction SilentlyContinue
             # Verify drive letter was actually assigned
-            $verifyPartition = Get-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber
+            $verifyPartition = Get-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber -ErrorAction Stop
             if ($verifyPartition.DriveLetter -eq $newDriveLetter) {
                 $driveLetter = "$newDriveLetter`:"
             }
@@ -970,7 +970,7 @@ function Format-DiskVolume {
         }
 
         # Get the partition again to get any updated drive letter
-        $partition = Get-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber
+        $partition = Get-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber -ErrorAction Stop
 
         # Format using partition
         $formatParams = @{

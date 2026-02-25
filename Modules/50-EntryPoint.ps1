@@ -440,7 +440,7 @@ function Start-BatchMode {
                 if ($Config.DNS1) { $dnsServers += $Config.DNS1 }
                 if ($Config.DNS2) { $dnsServers += $Config.DNS2 }
                 if ($dnsServers.Count -gt 0) {
-                    Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers
+                    Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers -ErrorAction Stop
                 }
 
                 Write-OutputColor "           IP: $($Config.IPAddress)/$cidr  GW: $($Config.Gateway)" -color "Success"
@@ -1022,7 +1022,7 @@ function Start-BatchMode {
                 "External" {
                     $adapterName = $Config.VirtualSwitchAdapter
                     if (-not $adapterName) {
-                        $firstAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Name -notlike "vEthernet*" } | Select-Object -First 1
+                        $firstAdapter = Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq "Up" -and $_.Name -notlike "vEthernet*" } | Select-Object -First 1
                         if ($firstAdapter) { $adapterName = $firstAdapter.Name }
                     }
                     if ($adapterName) {

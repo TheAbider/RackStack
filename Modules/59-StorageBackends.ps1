@@ -186,7 +186,7 @@ function Invoke-FCScan {
         $null = Get-Disk -ErrorAction SilentlyContinue
         Write-OutputColor "  FC storage rescan complete." -color "Success"
 
-        $fcDisks = @(Get-Disk | Where-Object { $_.BusType -eq "Fibre Channel" })
+        $fcDisks = @(Get-Disk -ErrorAction Stop | Where-Object { $_.BusType -eq "Fibre Channel" })
         Write-OutputColor "  Found $($fcDisks.Count) FC disk(s)." -color "Info"
     }
     catch {

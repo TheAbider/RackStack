@@ -42,8 +42,8 @@ function Set-OfflineVHDConfiguration {
         Start-Sleep -Seconds 3
 
         # Get the drive letter assigned to the mounted VHD
-        $disk = $mountedVHD | Get-Disk
-        $partitions = $disk | Get-Partition | Where-Object { $_.DriveLetter }
+        $disk = $mountedVHD | Get-Disk -ErrorAction Stop
+        $partitions = $disk | Get-Partition -ErrorAction Stop | Where-Object { $_.DriveLetter }
 
         # Find the Windows partition (the one with \Windows folder)
         $windowsDrive = $null

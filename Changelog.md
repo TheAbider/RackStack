@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.9.32
+
+- **Bug Fix:** 11 cmdlets inside `try/catch` blocks were missing `-ErrorAction Stop`, causing non-terminating errors to be silently swallowed instead of caught by the catch block:
+  - `Set-DnsClientServerAddress` silently failed during config profile apply and batch mode — IP address was configured successfully but DNS was left unconfigured, with the tool reporting "Network configured" (45-ConfigExport, 50-EntryPoint).
+  - `Get-Partition` returned stale partition data after `Set-Partition` changed the drive letter — subsequent `Format-Volume` could operate on stale partition object (38-StorageManager).
+  - `Get-Disk`, `Get-Service`, `Get-NetAdapter`, `Get-WindowsFeature` failures silently swallowed — produced misleading "not found" or "none installed" messages instead of the actual error (15-RDP, 38-StorageManager, 43-OfflineVHD, 45-ConfigExport, 50-EntryPoint, 59-StorageBackends, 60-ServerRoleTemplates, 09-SET).
+- **Bug Fix:** `WebClient` not disposed when `DownloadFile()` throws (network timeout, HTTP 404, disk full) — TCP connection leaked on every failed download attempt. Since FileServer downloads retry up to 3 times, a failing large file download could leak 3 TCP connections (39-FileServer).
+- **Bug Fix:** `StreamReader` and `WebResponse` not disposed when `ReadToEnd()` throws during SHA256 hash file download — resources leaked on mid-stream network failures. Moved cleanup to `finally` block (39-FileServer).
+- **Bug Fix:** IP sweep job array used `$jobs += Start-Job` inside a 1-254 iteration loop, creating O(n^2) array copies (~32K element copies for a full /24 sweep). Replaced with `List[object]` for linear O(n) performance (58-NetworkDiagnostics).
+- 63 modules, 1854 tests
+
 ## v1.9.31
 
 - **Bug Fix:** `Confirm-UserAction` rejected valid "yes"/"y" responses when the user typed with leading or trailing whitespace — `Read-Host` was not trimmed before the regex match, so `" y"` or `"y "` failed the `'^(y|yes)$'` pattern. Affects all ~175 confirmation prompts across the tool (03-InputValidation).

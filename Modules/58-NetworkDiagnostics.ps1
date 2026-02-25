@@ -215,14 +215,14 @@ function Invoke-SubnetSweep {
     $total = $end - $start + 1
 
     # Use parallel jobs for speed
-    $jobs = @()
+    $jobs = [System.Collections.Generic.List[object]]::new()
     for ($i = $start; $i -le $end; $i++) {
         $ip = "$subnet.$i"
-        $jobs += Start-Job -ScriptBlock {
+        $jobs.Add((Start-Job -ScriptBlock {
             param($IP)
             $result = Test-Connection -ComputerName $IP -Count 1 -Quiet -ErrorAction SilentlyContinue
             [PSCustomObject]@{ IP = $IP; Alive = $result }
-        } -ArgumentList $ip
+        } -ArgumentList $ip))
     }
 
     Write-OutputColor "  Waiting for $($jobs.Count) pings to complete..." -color "Info"

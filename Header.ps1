@@ -30,10 +30,20 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.31
+    1.9.32
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.32
+    BUG FIXES:
+    - FIXED: 11 cmdlets inside try/catch blocks missing -ErrorAction Stop — non-terminating errors silently swallowed instead of caught:
+      * Set-DnsClientServerAddress silently failed during config apply and batch mode — IP configured but DNS left unconfigured with success reported (45-ConfigExport, 50-EntryPoint)
+      * Get-Partition returned stale data after Set-Partition — Format-Volume could format based on stale partition object (38-StorageManager)
+      * Get-Disk, Get-Service, Get-NetAdapter, Get-WindowsFeature failed silently — misleading "not found" messages instead of actual errors (15-RDP, 38-StorageManager, 43-OfflineVHD, 45-ConfigExport, 50-EntryPoint, 59-StorageBackends, 60-ServerRoleTemplates, 09-SET)
+    - FIXED: WebClient not disposed on download failure — TCP connection leaked on network timeout, 404, or disk full errors during FileServer downloads (39-FileServer)
+    - FIXED: StreamReader and WebResponse not disposed on mid-stream network failure — resources leaked when reading SHA256 hash files (39-FileServer)
+    - FIXED: IP sweep created O(n^2) array copies — $jobs += inside 254-iteration loop replaced with List<object> for linear performance (58-NetworkDiagnostics)
 
 .CHANGELOG v1.9.31
     BUG FIXES:

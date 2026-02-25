@@ -333,8 +333,8 @@ function Get-FileServerFile {
             # Background job using WebClient (closes connection immediately, no hang)
             $downloadJob = Start-Job -ScriptBlock {
                 param($url, $headersJson, $destPath)
+                $webClient = New-Object System.Net.WebClient
                 try {
-                    $webClient = New-Object System.Net.WebClient
                     if ($headersJson) {
                         $hdrs = $headersJson | ConvertFrom-Json
                         foreach ($prop in $hdrs.PSObject.Properties) {
@@ -342,11 +342,13 @@ function Get-FileServerFile {
                         }
                     }
                     $webClient.DownloadFile($url, $destPath)
-                    $webClient.Dispose()
                     return @{ Success = $true; Error = $null }
                 }
                 catch {
                     return @{ Success = $false; Error = $_.Exception.Message }
+                }
+                finally {
+                    $webClient.Dispose()
                 }
             } -ArgumentList $downloadUrl, ($downloadHeaders | ConvertTo-Json -Compress), $destFile
 
@@ -553,9 +555,13 @@ function Get-FileServerHashFile {
 
         $response = $request.GetResponse()
         $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
-        $content = $reader.ReadToEnd().Trim()
-        $reader.Close()
-        $response.Close()
+        try {
+            $content = $reader.ReadToEnd().Trim()
+        }
+        finally {
+            $reader.Close()
+            $response.Close()
+        }
 
         # SHA256 file format: "hash  filename" or just "hash"
         $hash = ($content -split '\s+')[0].ToUpper()

@@ -585,7 +585,7 @@ function New-StandardVSwitch {
                     Write-OutputColor "  Select a physical adapter for the External switch:" -color "Info"
                     Write-OutputColor "" -color "Info"
 
-                    $adapters = @(Get-NetAdapter | Where-Object {
+                    $adapters = @(Get-NetAdapter -ErrorAction Stop | Where-Object {
                         $_.Status -eq "Up" -and
                         $_.Name -notlike "vEthernet*" -and
                         $_.InterfaceDescription -notlike "*Hyper-V*" -and

@@ -199,7 +199,7 @@ function Enable-PowerShellRemoting {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Verifying configuration..." -color "Info"
 
-        $winrmService = Get-Service -Name WinRM
+        $winrmService = Get-Service -Name WinRM -ErrorAction Stop
         if ($winrmService.Status -eq "Running") {
             Write-OutputColor "  WinRM Service: Running" -color "Success"
         }

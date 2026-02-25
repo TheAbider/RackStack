@@ -76,7 +76,7 @@ function Export-ServerConfiguration {
 
         # Network Configuration
         $config += "### NETWORK CONFIGURATION ###"
-        $adapters = Get-NetAdapter
+        $adapters = Get-NetAdapter -ErrorAction Stop
         # Batch all network queries upfront (avoids N+1 query pattern per adapter)
         $allIPv4 = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
         $allDNS = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
@@ -555,7 +555,7 @@ function Import-ConfigurationProfile {
 
                 $dnsServers = @($configProfile.Network.DNS1)
                 if ($configProfile.Network.DNS2) { $dnsServers += $configProfile.Network.DNS2 }
-                Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers
+                Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers -ErrorAction Stop
 
                 $changesApplied++
                 Write-OutputColor "        Network configured." -color "Success"
