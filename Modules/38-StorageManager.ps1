@@ -386,7 +386,7 @@ function Initialize-NewDisk {
     Write-OutputColor "" -color "Info"
 
     # Check for offline disks first - they must be brought online before initialization
-    $offlineDisks = Get-Disk | Where-Object { $_.OperationalStatus -eq "Offline" }
+    $offlineDisks = @(Get-Disk | Where-Object { $_.OperationalStatus -eq "Offline" })
     if ($offlineDisks.Count -gt 0) {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  $($offlineDisks.Count) disk(s) are currently offline." -color "Warning"

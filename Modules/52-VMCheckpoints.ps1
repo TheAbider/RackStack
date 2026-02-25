@@ -95,7 +95,7 @@ function New-VMCheckpointWizard {
     if ($Credential) { $vmParams['Credential'] = $Credential }
 
     try {
-        $vms = Get-VM @vmParams -ErrorAction Stop | Where-Object { $_.State -eq 'Running' -or $_.State -eq 'Off' } | Sort-Object Name
+        $vms = @(Get-VM @vmParams -ErrorAction Stop | Where-Object { $_.State -eq 'Running' -or $_.State -eq 'Off' } | Sort-Object Name)
     }
     catch {
         Write-OutputColor "  Error getting VMs: $_" -color "Error"

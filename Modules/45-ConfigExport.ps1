@@ -425,9 +425,12 @@ function Import-ConfigurationProfile {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │  PROFILE INFO                                                        │" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │  Source:   $($configProfile._ProfileInfo.CreatedFrom.PadRight(60))│" -color "Info"
-        Write-OutputColor "  │  Created:  $($configProfile._ProfileInfo.CreatedAt.PadRight(60))│" -color "Info"
-        Write-OutputColor "  │  Version:  $($configProfile._ProfileInfo.ScriptVersion.PadRight(60))│" -color "Info"
+        $piSource = if ($configProfile._ProfileInfo.CreatedFrom) { $configProfile._ProfileInfo.CreatedFrom } else { "Unknown" }
+        $piCreated = if ($configProfile._ProfileInfo.CreatedAt) { $configProfile._ProfileInfo.CreatedAt } else { "Unknown" }
+        $piVersion = if ($configProfile._ProfileInfo.ScriptVersion) { $configProfile._ProfileInfo.ScriptVersion } else { "Unknown" }
+        Write-OutputColor "  │  Source:   $($piSource.PadRight(60))│" -color "Info"
+        Write-OutputColor "  │  Created:  $($piCreated.PadRight(60))│" -color "Info"
+        Write-OutputColor "  │  Version:  $($piVersion.PadRight(60))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 

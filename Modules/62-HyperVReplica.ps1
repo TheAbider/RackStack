@@ -259,7 +259,7 @@ function Enable-VMReplicationWizard {
     # Step 1: List VMs
     Write-OutputColor "  Gathering virtual machines..." -color "Info"
     try {
-        $vms = Get-VM -ErrorAction Stop | Sort-Object Name
+        $vms = @(Get-VM -ErrorAction Stop | Sort-Object Name)
     }
     catch {
         Write-OutputColor "  Error getting VMs: $_" -color "Error"

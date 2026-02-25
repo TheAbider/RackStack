@@ -186,7 +186,7 @@ function Invoke-FCScan {
         $null = Get-Disk -ErrorAction SilentlyContinue
         Write-OutputColor "  FC storage rescan complete." -color "Success"
 
-        $fcDisks = Get-Disk | Where-Object { $_.BusType -eq "Fibre Channel" }
+        $fcDisks = @(Get-Disk | Where-Object { $_.BusType -eq "Fibre Channel" })
         Write-OutputColor "  Found $($fcDisks.Count) FC disk(s)." -color "Info"
     }
     catch {
@@ -387,7 +387,7 @@ function Enable-S2DOnCluster {
     catch { }
 
     # Check eligible disks
-    $eligibleDisks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.CanPool -eq $true }
+    $eligibleDisks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.CanPool -eq $true })
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Cluster: $($cluster.Name)" -color "Info"
     Write-OutputColor "  Eligible disks for pooling: $($eligibleDisks.Count)" -color "Info"
@@ -1048,8 +1048,8 @@ function Initialize-StorageBackendBatch {
             # FC batch: rescan + MPIO
             Write-OutputColor "           Scanning for Fibre Channel storage..." -color "Info"
             Update-HostStorageCache -ErrorAction SilentlyContinue
-            $fcDisks = Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "Fibre Channel" }
-            if ($fcDisks) {
+            $fcDisks = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "Fibre Channel" })
+            if ($fcDisks.Count -gt 0) {
                 Write-OutputColor "           Found $($fcDisks.Count) FC disk(s)." -color "Success"
             }
             else {
@@ -1099,8 +1099,8 @@ function Initialize-StorageBackendBatch {
             # NVMe-oF batch: rescan
             Write-OutputColor "           Scanning for NVMe-oF storage..." -color "Info"
             Update-HostStorageCache -ErrorAction SilentlyContinue
-            $nvmeDisks = Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "NVMe" }
-            if ($nvmeDisks) {
+            $nvmeDisks = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "NVMe" })
+            if ($nvmeDisks.Count -gt 0) {
                 Write-OutputColor "           Found $($nvmeDisks.Count) NVMe disk(s)." -color "Success"
             }
             else {

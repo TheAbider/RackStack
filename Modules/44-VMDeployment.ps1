@@ -151,7 +151,7 @@ function Test-ClusterConnection {
 
         if ($cluster) {
             # Get cluster nodes
-            $nodes = Get-ClusterNode -Cluster $cluster.Name -ErrorAction SilentlyContinue
+            $nodes = @(Get-ClusterNode -Cluster $cluster.Name -ErrorAction SilentlyContinue)
 
             return @{
                 Success = $true
@@ -1359,8 +1359,8 @@ function Set-VMConfigNICs {
     )
 
     # Get available switches
-    $switches = Get-AvailableVirtualSwitches -ComputerName $(if ($script:VMDeploymentMode -eq "Standalone") { $script:VMDeploymentTarget } else { $null }) `
-                                              -Credential $script:VMDeploymentCredential
+    $switches = @(Get-AvailableVirtualSwitches -ComputerName $(if ($script:VMDeploymentMode -eq "Standalone") { $script:VMDeploymentTarget } else { $null }) `
+                                              -Credential $script:VMDeploymentCredential)
 
     if ($switches.Count -eq 0) {
         Write-OutputColor "" -color "Info"
@@ -1990,7 +1990,7 @@ function Show-ExistingVMs {
             }
         }
 
-        $vms = Get-VM @params | Sort-Object Name
+        $vms = @(Get-VM @params | Sort-Object Name)
 
         if ($vms.Count -eq 0) {
             Write-OutputColor "" -color "Info"

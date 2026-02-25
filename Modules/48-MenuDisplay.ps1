@@ -157,7 +157,7 @@ function Show-ConfigureServerMenu {
     # Compute summary counts for submenu status (exclude agent if not configured)
     $roleItems = @($hypervStatus, $mpioStatus, $clusterStatus)
     if ($agentConfigured) { $roleItems += $agentStatus }
-    $rolesOK = @($roleItems) | Where-Object { $_ -eq "Installed" }
+    $rolesOK = @(@($roleItems) | Where-Object { $_ -eq "Installed" })
     $rolesTotal = if ($agentConfigured) { 4 } else { 3 }
     $rolesSummary = "$($rolesOK.Count)/$rolesTotal Installed"
     $rolesColor = if ($rolesOK.Count -eq $rolesTotal) { "Success" } elseif ($rolesOK.Count -ge 2) { "Info" } else { "Warning" }

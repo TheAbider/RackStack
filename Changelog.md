@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.9.27
+
+- **Critical Bug Fix:** VHD dynamic-to-fixed conversion deleted the converted file — `Remove-Item` targeted the same path that `Move-Item` had just written to, destroying the just-converted fixed VHD. The function returned a path to a deleted file (41-VHDManagement).
+- **Bug Fix:** VM import failed when exactly one `.vmcx` file existed — `Get-ChildItem` result not wrapped in `@()`, so `.Count` returned `$null` and `[0]` indexing failed on a single `FileInfo` object. The import reported "No .vmcx file found" (53-VMExportImport).
+- **Bug Fix:** VM checkpoint and export menus reported "No VMs available" when exactly one VM existed — `Get-VM` pipeline result not wrapped in `@()`, so `.Count` was `$null` on single objects (52-VMCheckpoints, 53-VMExportImport).
+- **Bug Fix:** Agent installer always showed the multi-agent management menu even with only one agent configured — `Get-AllAgentConfigs` returned a single hashtable (unwrapped from array), and `.Count` on a hashtable returns the number of keys (~9), not 1 (57-AgentInstaller).
+- **Bug Fix:** Agent auto-match by hostname routed a single matching agent into the multi-agent selection branch — `Search-AgentInstaller` result not wrapped in `@()` (57-AgentInstaller).
+- **Bug Fix:** Profile import crashed with "Cannot call a method on a null-valued expression" on JSON files missing `_ProfileInfo` metadata — `.PadRight(60)` called directly on null property values without null guards (45-ConfigExport).
+- **Bug Fix:** VM deployment cluster discovery reported wrong `NodeCount` for single-node clusters — `Get-ClusterNode` not wrapped in `@()` (44-VMDeployment).
+- **Bug Fix:** VM deployment couldn't select a virtual switch when only one existed — `.Count` on a single `VMSwitch` object returned `$null`, causing index validation to always fail (44-VMDeployment).
+- **Bug Fix:** "Total VMs" count displayed blank with exactly one VM in VM management — `Get-VM` result not wrapped in `@()` (44-VMDeployment).
+- **Bug Fix:** Storage backend FC/NVMe/eligible disk counts displayed blank with a single disk — pipeline results from `Get-Disk | Where-Object` not wrapped in `@()` across 4 code paths (59-StorageBackends).
+- **Bug Fix:** Offline disk detection and count display failed with a single offline disk — `Get-Disk | Where-Object` not wrapped in `@()` (38-StorageManager).
+- **Bug Fix:** Roles & Features submenu summary showed wrong installed count when exactly one role was installed — `Where-Object` result not wrapped in `@()` (48-MenuDisplay).
+- **Bug Fix:** Hyper-V Replica VM selection reported "No virtual machines found" with exactly one VM — `Get-VM` result not wrapped in `@()` (62-HyperVReplica).
+- 63 modules, 1854 tests
+
 ## v1.9.26
 
 - **Bug Fix:** Disk cleanup byte counter was corrupted by directory entries — `Get-ChildItem` without `-File` included directories, whose `.Length` returns name character count (not byte size). The "freed space" report was inflated with nonsense values. Added `-File` flag to both temp cleanup loops (20-DiskCleanup).

@@ -308,13 +308,11 @@ function Copy-VHDForVM {
             return $destPath
         }
 
-        # Move the fixed file to the final name (the clean name without _fixed)
+        # Move the fixed file to the final name (overwrites the dynamic copy)
         $finalPath = Join-Path $DestinationFolder $destFileName
         Move-Item -Path $fixedPath -Destination $finalPath -Force -ErrorAction SilentlyContinue
 
         if (Test-Path $finalPath) {
-            # Delete the dynamic copy only after move succeeded
-            Remove-Item $destPath -Force -ErrorAction SilentlyContinue
             $finalSize = (Get-Item $finalPath).Length
             $sizeGB = [math]::Round($finalSize / 1GB, 2)
             Write-OutputColor "  Conversion complete! Fixed VHD: ${sizeGB} GB" -color "Success"

@@ -658,7 +658,7 @@ function Install-Agent {
     if ($detectedSite) {
         Write-OutputColor "  Checking for agents matching site $detectedSite..." -color "Info"
         $agents = Get-AgentInstallerList
-        $matchingAgents = Search-AgentInstaller -SearchTerm $detectedSite -Agents $agents
+        $matchingAgents = @(Search-AgentInstaller -SearchTerm $detectedSite -Agents $agents)
 
         if ($matchingAgents.Count -gt 0) {
             Clear-Host
@@ -954,7 +954,7 @@ function Show-AgentManagement {
     param([switch]$ReturnAfterInstall)
 
     # If no additional agents configured, fall back to original menu
-    $allConfigs = Get-AllAgentConfigs
+    $allConfigs = @(Get-AllAgentConfigs)
     if ($allConfigs.Count -le 1) {
         Install-Agent -ReturnAfterInstall:$ReturnAfterInstall
         return

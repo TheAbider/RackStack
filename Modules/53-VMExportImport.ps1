@@ -19,7 +19,7 @@ function Export-VMWizard {
     if ($Credential) { $vmParams['Credential'] = $Credential }
 
     try {
-        $vms = Get-VM @vmParams -ErrorAction Stop | Sort-Object Name
+        $vms = @(Get-VM @vmParams -ErrorAction Stop | Sort-Object Name)
     }
     catch {
         Write-OutputColor "  Error getting VMs: $_" -color "Error"
@@ -196,7 +196,7 @@ function Import-VMWizard {
         $vmcxPath = $importPath
     }
     else {
-        $vmcxFiles = Get-ChildItem -LiteralPath $importPath -Filter "*.vmcx" -Recurse -ErrorAction SilentlyContinue
+        $vmcxFiles = @(Get-ChildItem -LiteralPath $importPath -Filter "*.vmcx" -Recurse -ErrorAction SilentlyContinue)
         if ($vmcxFiles.Count -eq 1) {
             $vmcxPath = $vmcxFiles[0].FullName
         }

@@ -30,10 +30,26 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.26
+    1.9.27
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.27
+    BUG FIXES:
+    - CRITICAL: VHD conversion deleted the converted fixed VHD — Remove-Item targeted the same path as Move-Item destination, destroying the just-converted file (41-VHDManagement)
+    - FIXED: VM import failed with single .vmcx file — Get-ChildItem result not wrapped in @(), .Count and array indexing broken on single FileInfo object (53-VMExportImport)
+    - FIXED: VM checkpoint and export menus reported "No VMs available" with exactly one VM — pipeline result .Count failed on single objects (52-VMCheckpoints, 53-VMExportImport)
+    - FIXED: Agent installer always showed multi-agent menu even with one agent — Get-AllAgentConfigs return value unwrapped from single-element array, .Count returned hashtable key count (57-AgentInstaller)
+    - FIXED: Agent auto-match routed single match to multi-agent branch — Search-AgentInstaller result not wrapped in @() (57-AgentInstaller)
+    - FIXED: Profile import crashed on old/manual JSON files missing _ProfileInfo — .PadRight() called on null property values (45-ConfigExport)
+    - FIXED: VM deployment cluster discovery reported wrong NodeCount for single-node clusters — Get-ClusterNode not wrapped in @() (44-VMDeployment)
+    - FIXED: VM deployment couldn't select virtual switch when only one existed — .Count on single VMSwitch was null, blocking index validation (44-VMDeployment)
+    - FIXED: VM management "Total VMs" count blank with one VM — Get-VM result not wrapped in @() (44-VMDeployment)
+    - FIXED: Storage backend disk counts displayed blank with single FC/NVMe/eligible disk — pipeline results not wrapped in @() (59-StorageBackends)
+    - FIXED: Offline disk detection failed with single offline disk — Get-Disk pipeline not wrapped in @() (38-StorageManager)
+    - FIXED: Roles & Features summary showed wrong installed count — Where-Object result not wrapped in @() (48-MenuDisplay)
+    - FIXED: Hyper-V Replica VM selection reported "No VMs found" with one VM — Get-VM not wrapped in @() (62-HyperVReplica)
 
 .CHANGELOG v1.9.26
     BUG FIXES:
