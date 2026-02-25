@@ -40,21 +40,48 @@ function Stop-ScriptTranscript {
 # Clean up old transcript files (older than 30 days)
 function Remove-OldTranscripts {
     param(
-        [int]$DaysToKeep = 30
+        [int]$DaysToKeep = 30,
+        [long]$MaxDirectorySizeMB = 500
     )
 
     $tempPath = $script:TempPath
     if (-not (Test-Path $tempPath)) { return }
 
     try {
+        $logFilter = "$($script:ToolName)Config_*.log"
+        $allLogs = Get-ChildItem -Path $tempPath -Filter $logFilter -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime
+
+        if (-not $allLogs) { return }
+
+        # Age-based cleanup: remove logs older than DaysToKeep
         $cutoffDate = (Get-Date).AddDays(-$DaysToKeep)
-        $oldLogs = Get-ChildItem -Path $tempPath -Filter "$($script:ToolName)Config_*.log" -ErrorAction SilentlyContinue |
-            Where-Object { $_.LastWriteTime -lt $cutoffDate }
+        $oldLogs = $allLogs | Where-Object { $_.LastWriteTime -lt $cutoffDate }
 
         if ($oldLogs) {
             $count = $oldLogs.Count
             $oldLogs | Remove-Item -Force -ErrorAction SilentlyContinue
             Write-OutputColor "Cleaned up $count old transcript(s) (older than $DaysToKeep days)" -color "Debug"
+        }
+
+        # Size-based safety: if transcript directory exceeds MaxDirectorySizeMB, remove oldest first
+        $remainingLogs = Get-ChildItem -Path $tempPath -Filter $logFilter -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime
+        if ($remainingLogs) {
+            $totalSize = ($remainingLogs | Measure-Object -Property Length -Sum).Sum
+            $maxBytes = $MaxDirectorySizeMB * 1MB
+            if ($totalSize -gt $maxBytes) {
+                $sizeCount = 0
+                foreach ($log in $remainingLogs) {
+                    if ($totalSize -le $maxBytes) { break }
+                    $totalSize -= $log.Length
+                    Remove-Item $log.FullName -Force -ErrorAction SilentlyContinue
+                    $sizeCount++
+                }
+                if ($sizeCount -gt 0) {
+                    Write-OutputColor "Cleaned up $sizeCount transcript(s) (directory exceeded ${MaxDirectorySizeMB}MB)" -color "Debug"
+                }
+            }
         }
     }
     catch {
