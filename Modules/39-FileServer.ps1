@@ -304,7 +304,7 @@ function Get-FileServerFile {
             if ($destDrive) {
                 $driveLetter = $destDrive.TrimEnd(':')
                 $vol = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
-                if ($vol -and $vol.SizeRemaining -gt 0) {
+                if ($vol) {
                     $requiredSpace = [long]($expectedSize * 1.1)  # 10% buffer
                     if ($vol.SizeRemaining -lt $requiredSpace) {
                         $freeGB = [math]::Round($vol.SizeRemaining / 1GB, 1)

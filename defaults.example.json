@@ -28,6 +28,9 @@
     "TempPath": "C:\\Temp",
     "_TempPath_help": "Folder where RackStack saves transcripts, HTML reports, and exported configs. Created automatically if it doesn't exist. Default: 'C:\\Temp'.",
 
+    "TimeZoneRegion": "",
+    "_TimeZoneRegion_help": "Skip the timezone continent picker and jump straight to a region. Options: 'North America', 'South America', 'Europe', 'Africa', 'Asia', 'Oceania/Pacific', 'UTC/Manual'. Leave empty to show picker.",
+
     "_section_dns": "========== DNS PRESETS ==========",
 
     "DNSPresets": {

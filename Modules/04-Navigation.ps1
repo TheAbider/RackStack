@@ -92,7 +92,12 @@ function Add-SessionChange {
     if ($auditInfo -and $auditInfo.Length -gt 10MB) {
         $archiveName = "audit-log-$(Get-Date -Format 'yyyyMMdd-HHmmss').jsonl"
         $archivePath = Join-Path $logDir $archiveName
-        Move-Item -Path $auditFile -Destination $archivePath -Force -ErrorAction SilentlyContinue
+        try {
+            Move-Item -Path $auditFile -Destination $archivePath -Force -ErrorAction Stop
+        }
+        catch {
+            Write-LogMessage "Failed to rotate audit log: $_"
+        }
     }
 }
 
