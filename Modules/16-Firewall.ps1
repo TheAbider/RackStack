@@ -10,10 +10,11 @@ function Disable-WindowsFirewallDomainPrivate {
     Write-OutputColor "Current firewall status:" -color "Info"
     foreach ($fwProfile in $profiles) {
         $state = (Get-NetFirewallProfile -Profile $fwProfile -ErrorAction SilentlyContinue).Enabled
-        $stateText = if ($state) { "Enabled" } else { "Disabled" }
+        $isEnabled = ($state -eq "True")
+        $stateText = if ($isEnabled) { "Enabled" } else { "Disabled" }
         $color = switch ($fwProfile) {
-            "Public" { if ($state) { "Success" } else { "Warning" } }
-            default { if ($state) { "Warning" } else { "Success" } }
+            "Public" { if ($isEnabled) { "Success" } else { "Warning" } }
+            default { if ($isEnabled) { "Warning" } else { "Success" } }
         }
         Write-OutputColor "  $fwProfile : $stateText" -color $color
     }
@@ -32,7 +33,7 @@ function Disable-WindowsFirewallDomainPrivate {
     try {
         # Disable Domain profile
         $domainProfile = Get-NetFirewallProfile -Profile Domain
-        if ($domainProfile.Enabled) {
+        if ($domainProfile.Enabled -eq "True") {
             Set-NetFirewallProfile -Profile Domain -Enabled False -ErrorAction Stop
             Write-OutputColor "Domain firewall disabled." -color "Success"
         }
@@ -42,7 +43,7 @@ function Disable-WindowsFirewallDomainPrivate {
 
         # Disable Private profile
         $privateProfile = Get-NetFirewallProfile -Profile Private
-        if ($privateProfile.Enabled) {
+        if ($privateProfile.Enabled -eq "True") {
             Set-NetFirewallProfile -Profile Private -Enabled False -ErrorAction Stop
             Write-OutputColor "Private firewall disabled." -color "Success"
         }
@@ -52,7 +53,7 @@ function Disable-WindowsFirewallDomainPrivate {
 
         # Enable Public profile
         $publicProfile = Get-NetFirewallProfile -Profile Public
-        if (-not $publicProfile.Enabled) {
+        if ($publicProfile.Enabled -ne "True") {
             Set-NetFirewallProfile -Profile Public -Enabled True -ErrorAction Stop
             Write-OutputColor "Public firewall enabled." -color "Success"
         }

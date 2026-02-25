@@ -512,7 +512,7 @@ function Set-iSCSIAutoConfiguration {
     if (Confirm-UserAction -Message "Test SAN target connectivity now?") {
         Write-OutputColor "" -color "Info"
         $sanResults = Test-SANTargetConnectivity
-        $reachableCount = ($sanResults | Where-Object { $_.Reachable }).Count
+        $reachableCount = @($sanResults | Where-Object { $_.Reachable }).Count
 
         Write-OutputColor "" -color "Info"
         if ($reachableCount -gt 0) {

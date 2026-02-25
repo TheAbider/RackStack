@@ -147,7 +147,7 @@ function Start-ClusterNodeDrain {
     $index = 1
     $nodeMap = @{}
     foreach ($node in $nodes) {
-        $vmCount = (Get-ClusterGroup -Cluster $cluster.Name |
+        $vmCount = @(Get-ClusterGroup -Cluster $cluster.Name |
             Where-Object { $_.GroupType -eq 'VirtualMachine' -and $_.OwnerNode -eq $node.Name }).Count
         $nodeLine = "[$index]  $($node.Name.PadRight(30)) VMs: $vmCount"
         Write-OutputColor "  │  $($nodeLine.PadRight(68))│" -color "Success"

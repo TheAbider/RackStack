@@ -3011,8 +3011,8 @@ function Test-VMDeploymentPreFlight {
         Status = $vhdStatus
     }
 
-    $hasFail = ($results | Where-Object { $_.Status -eq "FAIL" }).Count -gt 0
-    $hasWarn = ($results | Where-Object { $_.Status -eq "WARN" }).Count -gt 0
+    $hasFail = @($results | Where-Object { $_.Status -eq "FAIL" }).Count -gt 0
+    $hasWarn = @($results | Where-Object { $_.Status -eq "WARN" }).Count -gt 0
 
     return @{
         Results = $results
@@ -3129,8 +3129,8 @@ function Test-VMPostDeployment {
         $results += @{ Check = "RDP (3389)"; Status = "SKIP"; Detail = "No IP available" }
     }
 
-    $passed = ($results | Where-Object { $_.Status -eq "PASS" }).Count
-    $failed = ($results | Where-Object { $_.Status -eq "FAIL" }).Count
+    $passed = @($results | Where-Object { $_.Status -eq "PASS" }).Count
+    $failed = @($results | Where-Object { $_.Status -eq "FAIL" }).Count
 
     return @{
         VMName = $VMName
@@ -3183,12 +3183,12 @@ function Show-SmokeSummary {
 
     Write-OutputColor "  └──────────────────────┴──────────┴──────────┴──────────┴────────────────┘" -color "Info"
 
-    $allPassed = ($SmokeResults | Where-Object { $_.Failed -gt 0 }).Count -eq 0
+    $allPassed = @($SmokeResults | Where-Object { $_.Failed -gt 0 }).Count -eq 0
     if ($allPassed) {
         Write-OutputColor "  All VMs passed smoke tests." -color "Success"
     }
     else {
-        $failCount = ($SmokeResults | Where-Object { $_.Failed -gt 0 }).Count
+        $failCount = @($SmokeResults | Where-Object { $_.Failed -gt 0 }).Count
         Write-OutputColor "  $failCount VM(s) have failed checks. Review above." -color "Warning"
     }
 }

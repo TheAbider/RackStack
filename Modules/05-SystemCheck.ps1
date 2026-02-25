@@ -161,9 +161,9 @@ function Get-FirewallState {
         $publicProfile = Get-NetFirewallProfile -Profile Public -ErrorAction SilentlyContinue
 
         return @{
-            Domain = if ($domainProfile.Enabled) { "Enabled" } else { "Disabled" }
-            Private = if ($privateProfile.Enabled) { "Enabled" } else { "Disabled" }
-            Public = if ($publicProfile.Enabled) { "Enabled" } else { "Disabled" }
+            Domain = if ($domainProfile.Enabled -eq "True") { "Enabled" } else { "Disabled" }
+            Private = if ($privateProfile.Enabled -eq "True") { "Enabled" } else { "Disabled" }
+            Public = if ($publicProfile.Enabled -eq "True") { "Enabled" } else { "Disabled" }
         }
     }
     catch {
@@ -231,8 +231,8 @@ function Test-AllConnectivity {
     Write-OutputColor ("-" * 50) -color "Info"
 
     # Summary
-    $okCount = ($results | Where-Object { $_.Status -eq "OK" }).Count
-    $failCount = ($results | Where-Object { $_.Status -eq "FAIL" }).Count
+    $okCount = @($results | Where-Object { $_.Status -eq "OK" }).Count
+    $failCount = @($results | Where-Object { $_.Status -eq "FAIL" }).Count
 
     if ($failCount -eq 0) {
         Write-OutputColor "All connectivity tests passed!" -color "Success"

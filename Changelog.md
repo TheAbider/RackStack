@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.15
+
+- **Bug Fix:** Firewall profile status always showed "Enabled" regardless of actual state — GpoBoolean enum (value 2 for False) is non-zero/truthy. Changed to explicit `-eq "True"` comparison (05-SystemCheck, 16-Firewall).
+- **Bug Fix:** Firewall configuration function never enabled Public profile when disabled — `-not $publicProfile.Enabled` always false due to GpoBoolean truthiness (16-Firewall).
+- **Bug Fix:** Multiple `.Count` on unguarded `Where-Object` results — single matches return scalar (no `.Count` in PS 5.1). Wrapped in `@()` across 5 modules: connectivity test summary (05-SystemCheck), iSCSI SAN reachability (10-iSCSI), VM deployment preflight/smoke tests (44-VMDeployment), cluster node VM count (51-ClusterDashboard), AD prerequisite check (61-ActiveDirectory).
+- 63 modules, 1854 tests
+
 ## v1.9.14
 
 - **Bug Fix:** Cluster dashboard VM count displayed blank for nodes with 0 or 1 VMs — wrapped `Where-Object` pipeline in `@()` for consistent `.Count`.

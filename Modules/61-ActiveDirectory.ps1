@@ -83,7 +83,7 @@ function Test-ADDSPrerequisites {
         Detail = if ($isNotDC) { "Server is not a Domain Controller" } else { "Server is already a Domain Controller" }
     }
 
-    $allPassed = ($checks | Where-Object { -not $_.Passed }).Count -eq 0
+    $allPassed = @($checks | Where-Object { -not $_.Passed }).Count -eq 0
 
     return @{
         Passed = $allPassed

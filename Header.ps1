@@ -30,10 +30,22 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.14
+    1.9.15
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.15
+    BUG FIXES:
+    - FIXED: Firewall profile status always showed "Enabled" due to GpoBoolean enum truthiness (05-SystemCheck, 16-Firewall)
+    - FIXED: Firewall configuration function never enabled Public profile when disabled (16-Firewall)
+    - FIXED: Connectivity test summary showed wrong pass/fail counts for single-result filters (05-SystemCheck)
+    - FIXED: iSCSI SAN reachability count showed 0 when exactly 1 target reachable (10-iSCSI)
+    - FIXED: VM deployment preflight check missed single-item failures/warnings (44-VMDeployment)
+    - FIXED: VM smoke test pass/fail counts null for single-result filters (44-VMDeployment)
+    - FIXED: Smoke test summary always reported failures when all VMs passed (44-VMDeployment)
+    - FIXED: Cluster dashboard VM count blank in node selection menu (51-ClusterDashboard)
+    - FIXED: AD prerequisite check reported failures even when all checks passed (61-ActiveDirectory)
 
 .CHANGELOG v1.9.14
     BUG FIXES:
