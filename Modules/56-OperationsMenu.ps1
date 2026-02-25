@@ -373,7 +373,7 @@ function Initialize-SANTargetPairs {
         # Default: build pairs from consecutive mapping entries (A, B alternating)
         $mappings = $script:SANTargetMappings
         $script:SANTargetPairs = @()
-        for ($i = 0; $i -lt $mappings.Count - 1; $i += 2) {
+        for ($i = 0; $i + 1 -lt $mappings.Count; $i += 2) {
             $script:SANTargetPairs += @{
                 Index  = [int]($i / 2)
                 A      = "$sub.$($mappings[$i].Suffix)"

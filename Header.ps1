@@ -30,10 +30,15 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.15
+    1.9.16
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.16
+    BUG FIXES:
+    - FIXED: SAN target pairing loop skipped last entry on odd-count custom mappings (56-OperationsMenu)
+    - FIXED: Batch mode virtual switch undo registered even when creation failed (50-EntryPoint)
 
 .CHANGELOG v1.9.15
     BUG FIXES:

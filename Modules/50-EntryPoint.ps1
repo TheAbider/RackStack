@@ -1048,13 +1048,13 @@ function Start-BatchMode {
                     Write-OutputColor "           Unknown switch type '$vSwitchType'." -color "Warning"
                 }
             }
+            $undoSwitchName = $vSwitchName
+            $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove virtual switch '$undoSwitchName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMSwitch -Name '$undoSwitchName' -Force -ErrorAction SilentlyContinue") })
         }
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
         }
-        $undoSwitchName = $vSwitchName
-        $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove virtual switch '$undoSwitchName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMSwitch -Name '$undoSwitchName' -Force -ErrorAction SilentlyContinue") })
         }
     }
     else {

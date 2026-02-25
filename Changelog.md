@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9.16
+
+- **Bug Fix:** SAN target pairing loop used `$i -lt $mappings.Count - 1` which skips the last entry when custom mappings have odd count. Changed to `$i + 1 -lt $mappings.Count`.
+- **Bug Fix:** Batch mode virtual switch undo entry was registered outside the try/catch — if switch creation failed, a phantom undo was added to the stack. Moved undo registration inside the try block.
+- 63 modules, 1854 tests
+
 ## v1.9.15
 
 - **Bug Fix:** Firewall profile status always showed "Enabled" regardless of actual state — GpoBoolean enum (value 2 for False) is non-zero/truthy. Changed to explicit `-eq "True"` comparison (05-SystemCheck, 16-Firewall).
