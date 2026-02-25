@@ -216,7 +216,7 @@ function Invoke-SubnetSweep {
     $results = $jobs | Wait-Job -Timeout 30 | Receive-Job
     $jobs | Remove-Job -Force
 
-    $alive = $results | Where-Object { $_.Alive } | Sort-Object { [version]$_.IP }
+    $alive = $results | Where-Object { $_.Alive } | Sort-Object { ($_.IP -split '\.') | ForEach-Object { [int]$_ } }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

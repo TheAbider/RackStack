@@ -128,7 +128,8 @@ function ConvertFrom-AgentFilename {
 
     $baseName = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
     if ($baseName -match '^(\d+)') {
-        $result.SiteNumbers = @($matches[1])
+        $regexMatches = $matches
+        $result.SiteNumbers = @($regexMatches[1])
         $result.SiteName = $baseName
         $result.DisplayName = $baseName
         $result.Valid = $true

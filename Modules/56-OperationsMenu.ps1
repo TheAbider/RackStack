@@ -117,9 +117,19 @@ function Show-OperationsMenu {
                 Write-OutputColor "  Interval (minutes, default 5):" -color "Info"
                 $interval = Read-Host "  "
                 if ([string]::IsNullOrWhiteSpace($interval)) { $interval = "5" }
+                if ($interval -notmatch '^\d+$') {
+                    Write-OutputColor "  Invalid interval." -color "Error"
+                    Write-PressEnter
+                    continue
+                }
                 Write-OutputColor "  Duration (minutes, default 60):" -color "Info"
                 $duration = Read-Host "  "
                 if ([string]::IsNullOrWhiteSpace($duration)) { $duration = "60" }
+                if ($duration -notmatch '^\d+$') {
+                    Write-OutputColor "  Invalid duration." -color "Error"
+                    Write-PressEnter
+                    continue
+                }
                 Start-MetricCollection -IntervalMinutes ([int]$interval) -DurationMinutes ([int]$duration)
                 Write-PressEnter
             }

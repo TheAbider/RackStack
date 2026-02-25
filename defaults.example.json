@@ -145,7 +145,7 @@
     ],
     "_DefenderCommonVMPaths_help": "Auto-generated from your selected host drive when not specified here. Override only if you need specific custom paths beyond what Host Storage Setup configures. Example: if you store VMs on multiple drives, list all paths here.",
 
-    "_section_storage": "========== HYPER-V STORAGE PATHS ==========",
+    "_section_hyperv_storage": "========== HYPER-V STORAGE PATHS ==========",
 
     "StoragePaths": {
         "_comment": "Default folder paths for Hyper-V VM storage. These are used when deploying VMs and downloading ISOs/VHDs. The Host Storage Setup menu can change the drive letter automatically.",
@@ -199,6 +199,8 @@
         "TimeoutSeconds": 300,
         "_TimeoutSeconds_help": "How long to wait (in seconds) for the installer to finish. 300 = 5 minutes. Increase if your agent takes longer (large downloads, slow networks)."
     },
+
+    "_AdditionalAgents_help": "Define extra monitoring/management agents beyond the primary AgentInstaller. Each entry uses the same fields as AgentInstaller (ToolName, FolderName, FilePattern, etc). All agents appear in the Agent Management menu.",
 
     "AdditionalAgents": [
         {

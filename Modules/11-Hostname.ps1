@@ -10,8 +10,8 @@ function Set-HostName {
 
     Write-OutputColor "Hostname requirements:" -color "Info"
     Write-OutputColor "  - 1-15 characters" -color "Info"
-    Write-OutputColor "  - Start with a letter" -color "Info"
-    Write-OutputColor "  - Letters, numbers, and hyphens only" -color "Info"
+    Write-OutputColor "  - Start with a letter or digit" -color "Info"
+    Write-OutputColor "  - Letters, digits, and hyphens only" -color "Info"
     Write-OutputColor "  - Cannot end with a hyphen" -color "Info"
     Write-OutputColor "" -color "Info"
 

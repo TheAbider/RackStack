@@ -168,7 +168,11 @@ function Show-Favorites {
             if ($delNum -notmatch '^\d+$') { return }
             $delIndex = [int]$delNum - 1
             if ($delIndex -ge 0 -and $delIndex -lt $script:Favorites.Count) {
-                $script:Favorites = @($script:Favorites | Where-Object { $script:Favorites.IndexOf($_) -ne $delIndex })
+                $tempFavorites = @()
+                for ($i = 0; $i -lt $script:Favorites.Count; $i++) {
+                    if ($i -ne $delIndex) { $tempFavorites += $script:Favorites[$i] }
+                }
+                $script:Favorites = $tempFavorites
                 Export-Favorites
                 Write-OutputColor "  Favorite deleted." -color "Success"
                 Start-Sleep -Seconds 1

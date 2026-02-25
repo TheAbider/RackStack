@@ -163,7 +163,8 @@ function Show-StorageReplicaManagement {
                             $syncPct = if ($r.NumOfBytesRemaining -and $r.PartitionSize) {
                                 [math]::Round((1 - ($r.NumOfBytesRemaining / $r.PartitionSize)) * 100, 1)
                             } else { "N/A" }
-                            Write-OutputColor "    $($r.DataVolume): Sync: $syncPct%, Remaining: $([math]::Round($r.NumOfBytesRemaining / 1GB, 2)) GB" -color "Info"
+                            $syncDisplay = if ($syncPct -eq "N/A") { "N/A" } else { "$syncPct%" }
+                            Write-OutputColor "    $($r.DataVolume): Sync: $syncDisplay, Remaining: $([math]::Round($r.NumOfBytesRemaining / 1GB, 2)) GB" -color "Info"
                         }
                     }
                 }

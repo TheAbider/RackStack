@@ -183,9 +183,9 @@ function Set-VMIPAddress {
         $previousRoute = Get-NetRoute -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
             Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' }
 
-        # Remove existing IP configuration
-        Remove-NetIPAddress -InterfaceAlias $selectedAdapterName -Confirm:$false -ErrorAction SilentlyContinue
-        Remove-NetRoute -InterfaceAlias $selectedAdapterName -Confirm:$false -ErrorAction SilentlyContinue
+        # Remove existing IPv4 configuration only
+        Remove-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-NetRoute -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
 
         # Apply new configuration
         try {

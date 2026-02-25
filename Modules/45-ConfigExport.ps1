@@ -309,7 +309,7 @@ function Save-ConfigurationProfile {
         }
         "Domain" = [ordered]@{
             "JoinDomain" = $computerSystem.PartOfDomain
-            "DomainName" = if ($computerSystem.PartOfDomain) { $computerSystem.Domain } else { $domain }
+            "DomainName" = if ($computerSystem.PartOfDomain) { $computerSystem.Domain } else { $script:Domain }
             "_Note" = "Domain join will prompt for credentials when applied"
         }
         "Timezone" = $timezone.Id
@@ -339,8 +339,8 @@ function Save-ConfigurationProfile {
         }
         "LocalAdmin" = [ordered]@{
             "CreateAccount" = $false
-            "AccountName" = $localadminaccountname
-            "FullName" = $FullName
+            "AccountName" = $script:LocalAdminAccountName
+            "FullName" = $script:FullName
             "_Note" = "Set CreateAccount to true - will prompt for password when applying"
         }
         "BuiltInAdmin" = [ordered]@{

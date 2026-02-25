@@ -492,7 +492,8 @@ function Add-MultipleVNICs {
         # Check what was just created (by looking at session changes)
         $lastChange = $script:SessionChanges | Select-Object -Last 1
         if ($null -ne $lastChange -and $lastChange.Description -match "Added vNIC '([^']+)'") {
-            $createdVNICs += $matches[1]
+            $regexMatches = $matches
+            $createdVNICs += $regexMatches[1]
         }
 
         Write-OutputColor "" -color "Info"

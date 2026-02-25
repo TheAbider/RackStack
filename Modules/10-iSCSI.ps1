@@ -745,7 +745,7 @@ function Find-ReachableSANTargets {
     $attemptNum = 1
     foreach ($pair in $allPairs) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  Attempt $attemptNum/4: Testing $($pair.Labels) ($($pair.A), $($pair.B))..." -color "Info"
+        Write-OutputColor "  Attempt $attemptNum/$($allPairs.Count): Testing $($pair.Labels) ($($pair.A), $($pair.B))..." -color "Info"
 
         # Test A-side
         Write-Host "    Pinging A-side ($($pair.A))... " -NoNewline
@@ -1087,7 +1087,7 @@ function Show-iSCSIStatus {
     Write-OutputColor "  │$("  DISK MAPPINGS".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-    $iscsiDisks = Get-Disk | Where-Object { $_.BusType -eq "iSCSI" } -ErrorAction SilentlyContinue
+    $iscsiDisks = Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "iSCSI" }
     if ($iscsiDisks) {
         foreach ($disk in $iscsiDisks) {
             $sizeGB = [math]::Round($disk.Size / 1GB, 1)
@@ -1106,7 +1106,7 @@ function Disconnect-iSCSITargets {
     Clear-Host
     Write-CenteredOutput "Disconnect iSCSI Targets" -color "Info"
 
-    $sessions = Get-IscsiSession -ErrorAction SilentlyContinue
+    $sessions = @(Get-IscsiSession -ErrorAction SilentlyContinue)
 
     if (-not $sessions) {
         Write-OutputColor "" -color "Info"

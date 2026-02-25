@@ -250,8 +250,8 @@ function Show-Changelog {
 
     # Changelog content (extracted from script header comments)
     $changelog = @"
-v1.0.0 (Current)
-================
+v1.0.0
+======
 RackStack - White-Label & Open Source:
 - Configurable tool identity via defaults.json (ToolName, ToolFullName, SupportContact)
 - All UI banners, filenames, scheduled tasks, and reports use configurable names

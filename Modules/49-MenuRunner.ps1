@@ -71,12 +71,7 @@ function Start-Show-Mainmenu {
                 return
             }
             { $_ -eq "U" -or $_ -eq "u" } {
-                if ($script:UpdateAvailable) {
-                    Test-ScriptUpdate
-                }
-                else {
-                    Test-ScriptUpdate
-                }
+                Test-ScriptUpdate
             }
             "help" {
                 Show-Help
@@ -469,7 +464,7 @@ function Start-Show-VirtualSwitchMenu {
         if ($navResult.Action -eq "back") { return }
 
         switch ($choice) {
-            "1" { New-SwitchEmbeddedTeam -SwitchName $SwitchName -ManagementName $ManagementName; Write-PressEnter }
+            "1" { New-SwitchEmbeddedTeam -SwitchName $script:SwitchName -ManagementName $script:ManagementName; Write-PressEnter }
             "2" { New-StandardVSwitch -SwitchType "External"; Write-PressEnter }
             "3" { New-StandardVSwitch -SwitchType "Internal"; Write-PressEnter }
             "4" { New-StandardVSwitch -SwitchType "Private"; Write-PressEnter }

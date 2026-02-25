@@ -736,7 +736,7 @@ function Set-ClusterQuorum {
             $accessKeySecure = Read-Host "  Access Key" -AsSecureString
             $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($accessKeySecure)
             try {
-                $accessKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                $accessKey = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
             } finally {
                 [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
             }
@@ -748,6 +748,9 @@ function Set-ClusterQuorum {
                 }
                 catch {
                     Write-OutputColor "  Failed: $_" -color "Error"
+                }
+                finally {
+                    $accessKey = $null
                 }
             }
         }

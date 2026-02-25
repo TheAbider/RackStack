@@ -184,7 +184,14 @@ function Show-BitLockerManagement {
                     try {
                         if (Test-WindowsServer) {
                             # Server: backup to Active Directory
-                            Backup-BitLockerKeyProtector -MountPoint $vol.MountPoint -KeyProtectorId (Get-BitLockerVolume -MountPoint $vol.MountPoint).KeyProtector[0].KeyProtectorId -ErrorAction Stop
+                            $blVolInfo = Get-BitLockerVolume -MountPoint $vol.MountPoint
+                            $recoveryProtector = $blVolInfo.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" } | Select-Object -First 1
+                            if ($null -eq $recoveryProtector) {
+                                Write-OutputColor "  No recovery password key protector found." -color "Error"
+                                Write-PressEnter
+                                continue
+                            }
+                            Backup-BitLockerKeyProtector -MountPoint $vol.MountPoint -KeyProtectorId $recoveryProtector.KeyProtectorId -ErrorAction Stop
                             Write-OutputColor "  Recovery key backed up to Active Directory." -color "Success"
                         } else {
                             # Client: save to file

@@ -9,7 +9,7 @@ function ConvertFrom-SecureStringToPlainText {
     $bstr = [IntPtr]::Zero
     try {
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureString)
-        return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+        return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
     }
     finally {
         # Always free the BSTR to prevent memory leaks

@@ -53,9 +53,20 @@ function Join-Domain {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Default domain: $domain" -color "Info"
+    if ([string]::IsNullOrWhiteSpace($domain)) {
+        Write-OutputColor "  No default domain configured." -color "Warning"
+        Write-OutputColor "Enter domain name (e.g., corp.local):" -color "Info"
+        $targetDomain = Read-Host
 
-    if (Confirm-UserAction -Message "Use default domain ($domain)?" -DefaultYes) {
+        $navResult = Test-NavigationCommand -UserInput $targetDomain
+        if ($navResult.ShouldReturn) { return }
+
+        if ([string]::IsNullOrWhiteSpace($targetDomain)) {
+            Write-OutputColor "No domain entered. Cancelled." -color "Warning"
+            return
+        }
+    }
+    elseif (Confirm-UserAction -Message "Use default domain ($domain)?" -DefaultYes) {
         $targetDomain = $domain
     }
     else {

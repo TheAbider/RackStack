@@ -108,6 +108,7 @@ function Install-WindowsUpdates {
 
         if ($installJob.State -eq "Running") {
             Write-OutputColor "Installation timed out after $([math]::Floor($maxInstallTime / 60)) minutes. Stopping job." -color "Warning"
+            Stop-Job $installJob -ErrorAction SilentlyContinue
         }
         else {
             Complete-ProgressMessage -Activity "Update installation" -Status "Complete" -Success

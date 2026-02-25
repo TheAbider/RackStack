@@ -53,7 +53,7 @@ function Compare-ConfigurationProfiles {
     # Compare properties
     $allProps = @()
     $profile1.PSObject.Properties | ForEach-Object { $allProps += $_.Name }
-    $profile2.PSObject.Properties | ForEach-Object { if ($_ -notin $allProps) { $allProps += $_.Name } }
+    $profile2.PSObject.Properties | ForEach-Object { if ($_.Name -notin $allProps) { $allProps += $_.Name } }
     $allProps = $allProps | Where-Object { $_ -notlike "_*" } | Sort-Object -Unique
 
     $differences = 0

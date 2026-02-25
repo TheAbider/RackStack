@@ -62,13 +62,12 @@ function Show-ClusterDashboard {
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         foreach ($csv in $csvs) {
-            $null = $csv | Get-ClusterSharedVolumeState
             $partition = $csv.SharedVolumeInfo.Partition
 
             $totalGB = [math]::Round($partition.Size / 1GB, 0)
             $freeGB = [math]::Round($partition.FreeSpace / 1GB, 0)
             $usedGB = $totalGB - $freeGB
-            $usedPct = [math]::Round(($usedGB / $totalGB) * 100, 0)
+            $usedPct = if ($totalGB -gt 0) { [math]::Round(($usedGB / $totalGB) * 100, 0) } else { 0 }
 
             # Create mini progress bar
             $barWidth = 10
@@ -142,7 +141,7 @@ function Start-ClusterNodeDrain {
     }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  SELECT NODE TO DRAIN").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  SELECT NODE TO DRAIN".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $index = 1
@@ -290,7 +289,7 @@ function Show-CSVHealth {
         $totalGB = [math]::Round($partition.Size / 1GB, 1)
         $freeGB = [math]::Round($partition.FreeSpace / 1GB, 1)
         $usedGB = $totalGB - $freeGB
-        $usedPct = [math]::Round(($usedGB / $totalGB) * 100, 1)
+        $usedPct = if ($totalGB -gt 0) { [math]::Round(($usedGB / $totalGB) * 100, 1) } else { 0 }
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  $($csv.Name)".PadRight(72))│" -color "Info"
@@ -490,7 +489,7 @@ function Initialize-ClusterCSV {
         $partition = $csv.SharedVolumeInfo.Partition
         $totalGB = [math]::Round($partition.Size / 1GB, 0)
         $freeGB = [math]::Round($partition.FreeSpace / 1GB, 0)
-        $usedPct = [math]::Round(($totalGB - $freeGB) / $totalGB * 100, 0)
+        $usedPct = if ($totalGB -gt 0) { [math]::Round(($totalGB - $freeGB) / $totalGB * 100, 0) } else { 0 }
         $fs = $partition.FileSystem
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

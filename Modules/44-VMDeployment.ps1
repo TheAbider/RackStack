@@ -318,7 +318,8 @@ function Get-NextAvailableVMName {
     $seqFormat = ""
     # Extract Seq format if specified: {Seq:00} -> "00" format string
     if ($namePattern -match '\{Seq:([^}]+)\}') {
-        $seqFormat = $matches[1]
+        $regexMatches = $matches
+        $seqFormat = $regexMatches[1]
         $namePattern = $namePattern -replace '\{Seq:[^}]+\}', '{Seq}'
     }
 

@@ -52,16 +52,26 @@ function Test-HyperVInstalled {
 
 # Function to check if reboot is pending
 function Test-RebootPending {
-    $rebootChecks = @(
+    $rebootKeys = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired",
-        "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\PendingFileRenameOperations"
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
     )
 
-    foreach ($path in $rebootChecks) {
+    foreach ($path in $rebootKeys) {
         if (Test-Path $path) {
             return $true
         }
+    }
+
+    # PendingFileRenameOperations is a registry value, not a key — Test-Path won't find it
+    try {
+        $pfro = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" -Name PendingFileRenameOperations -ErrorAction SilentlyContinue
+        if ($null -ne $pfro) {
+            return $true
+        }
+    }
+    catch {
+        # Ignore errors
     }
 
     # Check for pending computer rename

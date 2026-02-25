@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.8.3
+
+- **Bug Fix Sweep:** Fixed 29 bugs across 18 modules identified during full codebase audit
+- **Reboot Detection Fixed:** `Test-RebootPending` now correctly detects pending file renames via registry value lookup (was checking for registry key, always returned false)
+- **Property Dedup Fixed:** Profile comparison in Utilities and HTML Reports now correctly deduplicates properties by name (was comparing PSPropertyInfo objects against strings)
+- **Scope Fixes:** Virtual switch creation uses explicit `$script:` prefix for switch/management names; config export uses scoped variables for domain, local admin, and display name
+- **Windows Update Timeout Fixed:** Timed-out update jobs now properly stopped (was logging "Stopping job" without calling Stop-Job)
+- **IPv4-Safe IP Removal:** IP reconfiguration now specifies `-AddressFamily IPv4` to prevent accidental IPv6 removal
+- **Empty Domain Guard:** Domain join no longer offers empty default when no domain is configured
+- **BitLocker Key Backup Fixed:** Backup to AD now filters for RecoveryPassword key protector type (was using hardcoded index)
+- **SecureString Handling:** BSTR pointers now use correct `PtrToStringBSTR` method; cloud witness access key cleared from memory after use
+- **Division-by-Zero Guards:** Cluster dashboard CSV percentage calculations protected against zero-size partitions
+- **IP Sort Fixed:** Network sweep results sorted by proper octet comparison instead of fragile `[version]` cast
+- **Favorite Deletion Fixed:** Uses index-based removal instead of reference equality on deserialized objects
+- **Input Validation:** Metric collection interval/duration validated before `[int]` cast
+- **Dead Code Removed:** Eliminated no-op branch in update check, unused CSV state query
+- **Convention Compliance:** `$matches` → `$regexMatches` in 4 modules (09-SET, 44-VMDeployment, 57-KaseyaInstaller)
+- **UI Fixes:** Hostname help text corrected (digits valid as first char), box border PadRight fixed in Cluster Dashboard, hardcoded retry count now dynamic, undo stack uses RemoveAt(), StorageReplica sync display shows "N/A" instead of "N/A%"
+- **Documentation Updated:** README version references, test counts, and line counts updated; CONTRIBUTING.md test count corrected; duplicate JSON key fixed in defaults.example.json; AdditionalAgents help text added; Changelog stats footers added for v1.4.0/v1.4.1; embedded changelog "(Current)" label removed
+- 63 modules, 1787 tests, backward compatible with all existing configs
+
 ## v1.8.2
 
 - **Pre-release History:** Added detailed changelog entries for 11 pre-release versions (v0.1.0 through v0.10.0) covering the tool's development history before the v1.0.0 open-source release — iSCSI auto-configuration, VM deployment system, storage manager, batch mode, configuration profiles, licensing, and more
@@ -121,7 +142,7 @@
 - **Fixed:** Bare `Exit` replaced with `[Environment]::Exit(0)` for ps2exe EXE compatibility (caused "System error" dialog)
 - **Fixed:** Per-adapter internet detection on PS 5.x uses `ping.exe -S` for source-bound ping (all adapters reported true if any had internet)
 - **Fixed:** NIC disable for identification now checks for default route and warns before disabling management NIC (could disconnect remote sessions)
-- 63 modules, backward compatible with all existing configs
+- 63 modules, 1388 tests, backward compatible with all existing configs
 
 ## v1.4.0
 
@@ -137,7 +158,7 @@
 - **Fixed:** Command history never recording (added `Add-CommandHistory` function)
 - **Fixed:** `$localadminaccountname` missing `$script:` prefix in batch mode
 - **Fixed:** `Test-Connection -Source` failing on PowerShell < 6 (Server 2012 R2)
-- 63 modules (was 60), backward compatible with all existing configs
+- 63 modules (was 60), 1388 tests, backward compatible with all existing configs
 
 ## v1.3.0
 
