@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.9.9
+    Automated Test Runner for RackStack v1.9.10
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -4037,8 +4037,8 @@ Write-SectionHeader "SECTION 61: BUG FIX VERIFICATION TESTS"
 # Firewall readiness check logic (was inverted)
 try {
     $hcContent = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
-    $correctLogic = $hcContent -match 'fwCorrect' -and $hcContent -match '-not \$fwState\.Domain'
-    Write-TestResult "37-HealthCheck: firewall readiness checks Domain=Off (not inverted)" $correctLogic
+    $correctLogic = $hcContent -match 'fwCorrect' -and $hcContent -match 'fwState\.Domain -eq "Disabled"'
+    Write-TestResult "37-HealthCheck: firewall readiness checks Domain=Off (string comparison)" $correctLogic
 } catch {
     Write-TestResult "37-HealthCheck: firewall logic" $false $_.Exception.Message
 }

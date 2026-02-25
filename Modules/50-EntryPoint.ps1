@@ -556,7 +556,7 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.ConfigureFirewall) {
         $fwState = Get-FirewallState
-        if (-not $fwState.Domain -and -not $fwState.Private -and $fwState.Public) {
+        if ($fwState.Domain -eq "Disabled" -and $fwState.Private -eq "Disabled" -and $fwState.Public -eq "Enabled") {
             Write-OutputColor "  [$stepNum/$totalSteps] Firewall: already configured (Domain=Off Private=Off Public=On)" -color "Debug"
             $skipped++
         }

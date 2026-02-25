@@ -349,12 +349,12 @@ function Show-ServerReadiness {
     # --- NETWORK ---
     $total++
     $fwState = Get-FirewallState
-    $fwCorrect = (-not $fwState.Domain -and -not $fwState.Private -and $fwState.Public)
+    $fwCorrect = ($fwState.Domain -eq "Disabled" -and $fwState.Private -eq "Disabled" -and $fwState.Public -eq "Enabled")
     if ($fwCorrect) {
         $ready++
         $items += @{ Category = "NETWORK"; Name = "Firewall"; Value = "Domain=Off Private=Off Public=On"; Color = "Success"; Symbol = "[OK]" }
     } else {
-        $status = "Domain=$(if($fwState.Domain){'On'}else{'Off'}) Private=$(if($fwState.Private){'On'}else{'Off'}) Public=$(if($fwState.Public){'On'}else{'Off'})"
+        $status = "Domain=$(if($fwState.Domain -eq 'Enabled'){'On'}else{'Off'}) Private=$(if($fwState.Private -eq 'Enabled'){'On'}else{'Off'}) Public=$(if($fwState.Public -eq 'Enabled'){'On'}else{'Off'})"
         $items += @{ Category = "NETWORK"; Name = "Firewall"; Value = $status; Color = "Warning"; Symbol = "[--]" }
     }
 

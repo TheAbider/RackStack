@@ -30,10 +30,16 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.9
+    1.9.10
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.10
+    BUG FIXES:
+    - FIXED: Firewall readiness check compared strings as booleans (always showed incorrect state)
+    - FIXED: Batch mode firewall idempotency check had same string/boolean comparison bug
+    - FIXED: Defender exclusion count fails on single-item lists (missing array wrapping)
 
 .CHANGELOG v1.9.9
     BUG FIXES:

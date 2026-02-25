@@ -28,8 +28,8 @@ function Set-DefenderExclusions {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $prefs = Get-MpPreference
-    $pathExclusions = $prefs.ExclusionPath
-    $processExclusions = $prefs.ExclusionProcess
+    $pathExclusions = @($prefs.ExclusionPath)
+    $processExclusions = @($prefs.ExclusionProcess)
     $null = $prefs.ExclusionExtension  # Suppress unused warning
 
     if ($pathExclusions) {
