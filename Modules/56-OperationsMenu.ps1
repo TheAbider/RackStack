@@ -505,6 +505,7 @@ function Import-Defaults {
         }
         iSCSISubnet        = "172.16.1"
         StorageBackendType = "iSCSI"
+        TimeZoneRegion     = ""
     }
 
     # Start with built-in defaults
@@ -611,6 +612,11 @@ function Import-Defaults {
     # Override temp path
     if ($merged.TempPath) {
         $script:TempPath = $merged.TempPath
+    }
+
+    # Override timezone region
+    if ($merged.TimeZoneRegion) {
+        $script:TimeZoneRegion = $merged.TimeZoneRegion
     }
 
     # Override SAN target mappings
@@ -966,6 +972,7 @@ function Export-Defaults {
         CustomVMTemplates    = $script:CustomVMTemplates
         CustomVMDefaults     = $script:CustomVMDefaults
         CustomRoleTemplates  = $script:CustomRoleTemplates
+        TimeZoneRegion       = $script:TimeZoneRegion
     }
 
     # Include SANTargetPairings only if custom pairings are configured
@@ -1027,6 +1034,11 @@ function Show-EditDefaults {
         Write-MenuItem "[8]  Storage Backend" -Status $script:StorageBackendType -StatusColor "Info"
         $companyDisplay = if ($script:CompanyDefaultsName) { $script:CompanyDefaultsName } else { "(none)" }
         Write-MenuItem "[9]  Company Defaults" -Status $companyDisplay -StatusColor "Info"
+        $autoUpdateDisplay = if ($script:AutoUpdate) { "On" } else { "Off" }
+        Write-MenuItem "[10] Auto-Update" -Status $autoUpdateDisplay -StatusColor "Info"
+        Write-MenuItem "[11] Temp Path" -Status $script:TempPath -StatusColor "Info"
+        $tzRegionDisplay = if ($script:TimeZoneRegion) { $script:TimeZoneRegion } else { "(show picker)" }
+        Write-MenuItem "[12] Timezone Region" -Status $tzRegionDisplay -StatusColor "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -1187,6 +1199,39 @@ function Show-EditDefaults {
                     }
                 }
             }
+            "10" {
+                $script:AutoUpdate = -not $script:AutoUpdate
+                $stateWord = if ($script:AutoUpdate) { "enabled" } else { "disabled" }
+                Write-OutputColor "  Auto-update $stateWord." -color "Success"
+                Start-Sleep -Seconds 1
+            }
+            "11" {
+                Write-OutputColor "  Enter temp path (current: $($script:TempPath)):" -color "Info"
+                $val = Read-Host "  Path"
+                if (-not [string]::IsNullOrWhiteSpace($val)) {
+                    $script:TempPath = $val
+                    Write-OutputColor "  Temp path set to $val" -color "Success"
+                }
+                Start-Sleep -Seconds 1
+            }
+            "12" {
+                Write-OutputColor "  Select timezone region:" -color "Info"
+                Write-OutputColor "  [0] Show picker (default)" -color "Info"
+                $regionKeys = @("North America", "South America", "Europe", "Africa", "Asia", "Oceania/Pacific", "UTC/Manual")
+                for ($ri = 0; $ri -lt $regionKeys.Count; $ri++) {
+                    Write-OutputColor "  [$($ri + 1)] $($regionKeys[$ri])" -color "Info"
+                }
+                $val = Read-Host "  Select"
+                if ($val -eq "0" -or [string]::IsNullOrWhiteSpace($val)) {
+                    $script:TimeZoneRegion = ""
+                    Write-OutputColor "  Timezone region cleared (will show picker)." -color "Success"
+                }
+                elseif ($val -match '^\d+$' -and [int]$val -ge 1 -and [int]$val -le $regionKeys.Count) {
+                    $script:TimeZoneRegion = $regionKeys[[int]$val - 1]
+                    Write-OutputColor "  Timezone region set to $($script:TimeZoneRegion)." -color "Success"
+                }
+                Start-Sleep -Seconds 1
+            }
             "S" {
                 Export-Defaults
                 Write-OutputColor "Defaults saved to $($script:DefaultsPath)" -color "Success"
@@ -1202,6 +1247,9 @@ function Show-EditDefaults {
                     $BackupName = "Backup"; $script:BackupName = "Backup"
                     $script:iSCSISubnet = "172.16.1"
                     $script:StorageBackendType = "iSCSI"
+                    $script:AutoUpdate = $false
+                    $script:TempPath = "C:\Temp"
+                    $script:TimeZoneRegion = ""
 
                     # Remove custom DNS presets
                     $toRemove = @()
@@ -1396,48 +1444,46 @@ function Show-FirstRunWizard {
     Write-OutputColor "  ║$(("                    FIRST-RUN CONFIGURATION").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
+
+    # Check for company defaults files — auto-adopt if present
+    $companyFiles = @(Get-CompanyDefaultsFiles)
+    if ($companyFiles.Count -gt 0) {
+        if ($companyFiles.Count -eq 1) {
+            # Single company file: auto-adopt without prompting
+            $script:CompanyDefaultsName = $companyFiles[0].Name
+            $script:CompanyDefaultsPath = $companyFiles[0].Path
+            Write-OutputColor "  Company defaults loaded: $($script:CompanyDefaultsName)" -color "Success"
+        }
+        else {
+            # Multiple company files: show picker
+            Write-OutputColor "  Multiple company defaults files detected:" -color "Info"
+            foreach ($cf in $companyFiles) {
+                Write-OutputColor "    - $($cf.Name).defaults.json" -color "Info"
+            }
+            Write-OutputColor "" -color "Info"
+            $picked = Show-CompanyDefaultsPicker
+            if ($null -ne $picked -and $picked -ne "__skip__") {
+                $script:CompanyDefaultsName = $picked.Name
+                $script:CompanyDefaultsPath = $picked.Path
+                Write-OutputColor "  Company defaults loaded: $($script:CompanyDefaultsName)" -color "Success"
+            }
+        }
+
+        if ($script:CompanyDefaultsPath) {
+            # Save minimal defaults.json so wizard doesn't run again
+            Export-Defaults
+            Write-OutputColor "  Configuration saved. Customize anytime in Settings > Edit Environment Defaults." -color "Info"
+            Start-Sleep -Seconds 2
+            return
+        }
+    }
+
+    # No company defaults — offer interactive setup or generic defaults
     Write-OutputColor "  Welcome! No environment defaults file was found." -color "Info"
     Write-OutputColor "  You can configure company-specific settings now, or use generic defaults." -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Settings can be changed later from: Settings > Edit Environment Defaults" -color "Debug"
     Write-OutputColor "" -color "Info"
-
-    # Check for company defaults files
-    $companyFiles = @(Get-CompanyDefaultsFiles)
-    if ($companyFiles.Count -gt 0) {
-        Write-OutputColor "  Company defaults file(s) detected:" -color "Success"
-        foreach ($cf in $companyFiles) {
-            Write-OutputColor "    - $($cf.Name).defaults.json" -color "Info"
-        }
-        Write-OutputColor "" -color "Info"
-
-        if ($companyFiles.Count -eq 1) {
-            if (Confirm-UserAction -Message "Use '$($companyFiles[0].Name)' company defaults as your base configuration?" -DefaultYes) {
-                $script:CompanyDefaultsName = $companyFiles[0].Name
-                $script:CompanyDefaultsPath = $companyFiles[0].Path
-            }
-        }
-        else {
-            $picked = Show-CompanyDefaultsPicker
-            if ($null -ne $picked -and $picked -ne "__skip__") {
-                $script:CompanyDefaultsName = $picked.Name
-                $script:CompanyDefaultsPath = $picked.Path
-            }
-        }
-
-        if ($script:CompanyDefaultsPath) {
-            Write-OutputColor "  Company defaults loaded: $($script:CompanyDefaultsName)" -color "Success"
-            Write-OutputColor "" -color "Info"
-
-            if (-not (Confirm-UserAction -Message "Customize personal overrides now?")) {
-                Export-Defaults
-                Write-OutputColor "  Minimal defaults.json saved with company base." -color "Success"
-                Write-OutputColor "  You can customize later in Settings." -color "Info"
-                Start-Sleep -Seconds 2
-                return
-            }
-        }
-    }
 
     if (-not (Confirm-UserAction -Message "Configure environment defaults now?")) {
         # User declined - save generic defaults so wizard won't run again
