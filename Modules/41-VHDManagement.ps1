@@ -200,7 +200,13 @@ function Copy-VHDForVM {
 
     # Ensure destination directory exists
     if (-not (Test-Path $DestinationFolder)) {
-        New-Item -Path $DestinationFolder -ItemType Directory -Force | Out-Null
+        try {
+            New-Item -Path $DestinationFolder -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        }
+        catch {
+            Write-OutputColor "  Failed to create destination directory: $_" -color "Error"
+            return $null
+        }
     }
 
     Write-OutputColor "  Copying base VHD to VM folder..." -color "Info"
@@ -311,7 +317,12 @@ function Copy-VHDForVM {
 
         # Move the fixed file to the final name (overwrites the dynamic copy)
         $finalPath = Join-Path $DestinationFolder $destFileName
-        Move-Item -Path $fixedPath -Destination $finalPath -Force -ErrorAction SilentlyContinue
+        try {
+            Move-Item -Path $fixedPath -Destination $finalPath -Force -ErrorAction Stop
+        }
+        catch {
+            Write-OutputColor "  Warning: Could not rename converted VHD: $_" -color "Warning"
+        }
 
         if (Test-Path $finalPath) {
             $finalSize = (Get-Item $finalPath).Length

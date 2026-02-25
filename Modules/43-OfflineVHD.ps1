@@ -225,7 +225,7 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
 "@
             $scriptFolder = "$windowsDrive\Windows\Setup\Scripts"
             if (-not (Test-Path $scriptFolder)) {
-                New-Item -Path $scriptFolder -ItemType Directory -Force | Out-Null
+                New-Item -Path $scriptFolder -ItemType Directory -Force -ErrorAction Stop | Out-Null
             }
 
             # SetupComplete.cmd runs automatically after Windows Setup/Sysprep completes
@@ -233,11 +233,11 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
             $psScriptPath = "$scriptFolder\$($script:ToolName)FirstBoot.ps1"
 
             # Write the PowerShell script
-            Set-Content -Path $psScriptPath -Value $firstBootScript -Encoding UTF8 -Force -ErrorAction SilentlyContinue
+            Set-Content -Path $psScriptPath -Value $firstBootScript -Encoding UTF8 -Force
 
             # Write SetupComplete.cmd to call our PowerShell script
             $cmdContent = "@echo off`r`npowershell.exe -ExecutionPolicy Bypass -File `"$($psScriptPath.Replace($windowsDrive, '%SystemDrive%'))`""
-            Set-Content -Path $setupCompletePath -Value $cmdContent -Force -ErrorAction SilentlyContinue
+            Set-Content -Path $setupCompletePath -Value $cmdContent -Force
 
             Write-OutputColor "  First-boot script created at: $scriptFolder" -color "Success"
         }

@@ -194,7 +194,7 @@ function Enable-ReplicaServer {
     if ([string]::IsNullOrWhiteSpace($storagePath)) { $storagePath = $defaultStorage }
 
     # Ensure storage directory exists
-    if (-not (Test-Path $storagePath)) {
+    if (-not (Test-Path -LiteralPath $storagePath)) {
         try {
             New-Item -Path $storagePath -ItemType Directory -Force | Out-Null
             Write-OutputColor "  Created directory: $storagePath" -color "Info"

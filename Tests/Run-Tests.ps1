@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.9.41
+    Automated Test Runner for RackStack v1.9.42
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -4634,8 +4634,8 @@ try {
     # 00-Initialization.ps1 has $script:TempPath constant
     Write-TestResult "00-Initialization: TempPath constant defined" ($initContent -match '\$script:TempPath')
 
-    # 35-Utilities.ps1 uses $script:TempPath (not hardcoded C:\Temp)
-    Write-TestResult "35-Utilities: uses TempPath constant" ($utilContent -match '\$script:TempPath')
+    # 35-Utilities.ps1 queries remote temp path (not hardcoded or local-biased)
+    Write-TestResult "35-Utilities: queries remote temp path" ($utilContent -match 'remoteTempDir|env:TEMP')
 } catch {
     Write-TestResult "Shared Helper Deduplication" $false $_.Exception.Message
 }
@@ -5783,7 +5783,7 @@ try {
     Write-TestResult "45-ConfigExport: profile records CreatedFrom hostname" ($ceContent -match '"CreatedFrom"\s*=\s*\$env:COMPUTERNAME')
 
     # Import profile validates file path
-    Write-TestResult "45-ConfigExport: import checks file exists" ($ceContent -match 'Test-Path\s+\$profilePath')
+    Write-TestResult "45-ConfigExport: import checks file exists" ($ceContent -match 'Test-Path\s+(-LiteralPath\s+)?\$profilePath')
     Write-TestResult "45-ConfigExport: import uses navigation check" ($ceContent -match 'Test-NavigationCommand\s+-UserInput\s+\$profilePath')
 
     # Import profile applies 13 configuration steps

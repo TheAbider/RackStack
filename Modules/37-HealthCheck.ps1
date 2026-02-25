@@ -303,9 +303,9 @@ function Show-ServerReadiness {
 
     $total++
     $winrmState = Get-WinRMState
-    if ($winrmState -eq "Running") {
+    if ($winrmState -eq "Enabled") {
         $ready++
-        $items += @{ Category = "REMOTE ACCESS"; Name = "WinRM"; Value = "Running"; Color = "Success"; Symbol = "[OK]" }
+        $items += @{ Category = "REMOTE ACCESS"; Name = "WinRM"; Value = "Enabled"; Color = "Success"; Symbol = "[OK]" }
     } else {
         $items += @{ Category = "REMOTE ACCESS"; Name = "WinRM"; Value = $winrmState; Color = "Warning"; Symbol = "[--]" }
     }

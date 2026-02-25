@@ -2,7 +2,12 @@
 # Initialize QoL directories and files
 function Initialize-AppConfigDir {
     if (-not (Test-Path $script:AppConfigDir)) {
-        $null = New-Item -Path $script:AppConfigDir -ItemType Directory -Force
+        try {
+            $null = New-Item -Path $script:AppConfigDir -ItemType Directory -Force -ErrorAction Stop
+        }
+        catch {
+            Write-OutputColor "  Warning: Could not create config directory: $($_.Exception.Message)" -color "Warning"
+        }
     }
 }
 
@@ -15,6 +20,7 @@ function Import-Favorites {
             if (-not $script:Favorites) { $script:Favorites = @() }
         }
         catch {
+            Write-OutputColor "  Warning: Favorites file could not be loaded and has been reset." -color "Warning"
             $script:Favorites = @()
         }
     }
@@ -233,6 +239,7 @@ function Import-CommandHistory {
             if (-not $script:CommandHistory) { $script:CommandHistory = @() }
         }
         catch {
+            Write-OutputColor "  Warning: Command history file could not be loaded and has been reset." -color "Warning"
             $script:CommandHistory = @()
         }
     }
@@ -554,7 +561,8 @@ function Set-PagefileConfiguration {
                 if ($null -ne $pagefileUsage -and $pagefileUsage.Count -gt 0) {
                     $pfName = "$($pagefileUsage[0].Name)"
                     if ($pfName -match '^([A-Z]:)') {
-                        $currentDrive = $matches[0]
+                        $regexMatches = $matches
+                        $currentDrive = $regexMatches[1]
                     }
                 }
                 $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$currentDrive'" -ErrorAction SilentlyContinue
@@ -766,7 +774,14 @@ function Set-SNMPConfiguration {
                 # Add community string
                 $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\SNMP\Parameters\ValidCommunities"
                 if (-not (Test-Path $regPath)) {
-                    $null = New-Item -Path $regPath -Force -ErrorAction SilentlyContinue
+                    try {
+                        $null = New-Item -Path $regPath -Force -ErrorAction Stop
+                    }
+                    catch {
+                        Write-OutputColor "  Failed to create SNMP registry key: $_" -color "Error"
+                        Write-PressEnter
+                        continue
+                    }
                 }
 
                 Write-OutputColor "" -color "Info"
@@ -863,7 +878,14 @@ function Set-SNMPConfiguration {
                 # Configure permitted managers
                 $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\SNMP\Parameters\PermittedManagers"
                 if (-not (Test-Path $regPath)) {
-                    $null = New-Item -Path $regPath -Force -ErrorAction SilentlyContinue
+                    try {
+                        $null = New-Item -Path $regPath -Force -ErrorAction Stop
+                    }
+                    catch {
+                        Write-OutputColor "  Failed to create SNMP registry key: $_" -color "Error"
+                        Write-PressEnter
+                        continue
+                    }
                 }
 
                 # Show current permitted managers

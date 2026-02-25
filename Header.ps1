@@ -30,10 +30,31 @@
     7h3 4b1d3r
 
 .VERSION
-    1.9.41
+    1.9.42
 
 .LAST UPDATED
     02/25/2026
+
+.CHANGELOG v1.9.42
+    BUG FIXES:
+    - FIXED: Firewall profile .Enabled property compared to string "True" instead of boolean $true — GpoBoolean enum comparison was fragile across PowerShell versions and inconsistent with 05-SystemCheck (16-Firewall)
+    - FIXED: Admin account status display used redundant string comparison fallback — removed unnecessary -eq "True" check since Get-LocalUser.Enabled returns native boolean (48-MenuDisplay)
+    - FIXED: Export-VM background job did not pass $Credential parameter — remote exports with explicit credentials failed with authentication error inside the job (53-VMExportImport)
+    - FIXED: Get-VHD called without -ComputerName when listing remote VMs — VHD sizes showed "N/A" for all VMs on remote Hyper-V hosts (53-VMExportImport)
+    - FIXED: Remote profile push used local $script:TempPath as remote file path — path could be wrong if remote server had different temp directory. Now queries remote $env:TEMP first (35-Utilities)
+    - FIXED: User-provided file paths used -Path instead of -LiteralPath in profile comparison, HTML report comparison, config export/import, drift analysis, and baseline comparison — paths containing brackets or wildcards would silently fail (35-Utilities, 45-ConfigExport, 54-HTMLReports, 62-HyperVReplica)
+    - FIXED: New-Item for directory creation outside try/catch in VHD copy, VM export, and app config initialization — failures produced cascading confusing errors instead of clear messages (41-VHDManagement, 53-VMExportImport, 55-QoLFeatures)
+    - FIXED: Move-Item on converted VHD used -ErrorAction SilentlyContinue — critical file rename failure was silently swallowed, potentially returning wrong path to downstream code (41-VHDManagement)
+    - FIXED: First-boot script Set-Content calls used -ErrorAction SilentlyContinue inside try/catch — write failures were suppressed so catch block never fired, user saw "success" when scripts weren't actually written (43-OfflineVHD)
+    - FIXED: New-Item for first-boot Scripts directory missing -ErrorAction Stop — error not caught by enclosing try/catch due to default Continue preference (43-OfflineVHD)
+    - FIXED: SNMP registry key creation used -ErrorAction SilentlyContinue — if key creation failed, subsequent New-ItemProperty threw unclear "path not found" error (55-QoLFeatures)
+    - FIXED: Favorites and command history silently reset to empty array on corrupt JSON — no warning shown to user when their saved data was lost due to file corruption (55-QoLFeatures)
+    - FIXED: Format-Volume pipeline output leaked to console — volume object displayed interleaved with user-facing messages (38-StorageManager)
+    - FIXED: NTP source string split assumed colon present — w32tm output without colon caused index-out-of-range error on exotic locales (19-NTPConfiguration)
+    - FIXED: Subnet sweep IP split assumed 4 octets — non-IPv4 address in adapter list caused index-out-of-range (58-NetworkDiagnostics)
+    - FIXED: WinRM readiness check compared against "Running" but Get-WinRMState returns "Enabled" — WinRM always showed as incomplete in server readiness checks and HTML readiness reports (37-HealthCheck, 54-HTMLReports)
+    - FIXED: DSRM password comparison used PtrToStringAuto instead of PtrToStringBSTR for SecureStringToBSTR pointer — violates BSTR API contract, could silently truncate passwords with embedded null characters (61-ActiveDirectory)
+    - FIXED: Pagefile drive detection used $matches directly instead of codebase-standard $regexMatches pattern — fragile if code is later inserted between -match and $matches access (55-QoLFeatures)
 
 .CHANGELOG v1.9.41
     BUG FIXES:

@@ -995,7 +995,7 @@ function Format-DiskVolume {
             $formatParams.Full = $true
         }
 
-        Format-Volume @formatParams
+        $null = Format-Volume @formatParams
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Volume formatted successfully!" -color "Success"

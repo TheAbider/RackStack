@@ -332,7 +332,7 @@ function Export-ProfileComparisonHTML {
         Write-OutputColor "  No path entered." -color "Error"
         return
     }
-    if (-not (Test-Path $Profile1Path)) {
+    if (-not (Test-Path -LiteralPath $Profile1Path)) {
         Write-OutputColor "  File not found: $Profile1Path" -color "Error"
         return
     }
@@ -350,14 +350,14 @@ function Export-ProfileComparisonHTML {
         Write-OutputColor "  No path entered." -color "Error"
         return
     }
-    if (-not (Test-Path $Profile2Path)) {
+    if (-not (Test-Path -LiteralPath $Profile2Path)) {
         Write-OutputColor "  File not found: $Profile2Path" -color "Error"
         return
     }
 
     try {
-        $profile1 = Get-Content $Profile1Path -Raw | ConvertFrom-Json
-        $profile2 = Get-Content $Profile2Path -Raw | ConvertFrom-Json
+        $profile1 = Get-Content -LiteralPath $Profile1Path -Raw | ConvertFrom-Json
+        $profile2 = Get-Content -LiteralPath $Profile2Path -Raw | ConvertFrom-Json
     }
     catch {
         Write-OutputColor "  Error parsing JSON files: $_" -color "Error"
@@ -536,7 +536,7 @@ function Export-HTMLReadinessReport {
     # WinRM
     $total++
     $winrm = Get-WinRMState
-    if ($winrm -eq "Running") { $ready++; $rows += Add-ReadinessRow -Cat "Remote Access" -Name "WinRM" -Value "Running" -Status "ok" }
+    if ($winrm -eq "Enabled") { $ready++; $rows += Add-ReadinessRow -Cat "Remote Access" -Name "WinRM" -Value "Enabled" -Status "ok" }
     else { $rows += Add-ReadinessRow -Cat "Remote Access" -Name "WinRM" -Value $winrm -Status "warn" }
 
     # Agent (only if configured)

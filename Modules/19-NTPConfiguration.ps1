@@ -15,7 +15,8 @@ function Set-NTPConfiguration {
             $w32tmQuery = w32tm /query /status 2>&1
             $sourceLine = $w32tmQuery | Select-String "Source:"
             if ($null -ne $sourceLine) {
-                $currentSource = $sourceLine.ToString().Split(":", 2)[1].Trim()
+                $splitParts = $sourceLine.ToString().Split(":", 2)
+                if ($splitParts.Count -ge 2) { $currentSource = $splitParts[1].Trim() }
             }
         } catch {
             $currentSource = "Unable to query (Windows Time service may not be running)"

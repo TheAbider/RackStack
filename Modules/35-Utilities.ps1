@@ -18,7 +18,7 @@ function Compare-ConfigurationProfiles {
         Write-OutputColor "No path entered." -color "Error"
         return
     }
-    if (-not (Test-Path $path1)) {
+    if (-not (Test-Path -LiteralPath $path1)) {
         Write-OutputColor "File not found: $path1" -color "Error"
         return
     }
@@ -34,14 +34,14 @@ function Compare-ConfigurationProfiles {
         Write-OutputColor "No path entered." -color "Error"
         return
     }
-    if (-not (Test-Path $path2)) {
+    if (-not (Test-Path -LiteralPath $path2)) {
         Write-OutputColor "File not found: $path2" -color "Error"
         return
     }
 
     try {
-        $profile1 = Get-Content $path1 -Raw | ConvertFrom-Json
-        $profile2 = Get-Content $path2 -Raw | ConvertFrom-Json
+        $profile1 = Get-Content -LiteralPath $path1 -Raw | ConvertFrom-Json
+        $profile2 = Get-Content -LiteralPath $path2 -Raw | ConvertFrom-Json
     }
     catch {
         Write-OutputColor "Error parsing JSON files: $_" -color "Error"
@@ -541,17 +541,19 @@ function Invoke-RemoteProfileApply {
 
     try {
         # Read profile content
-        $profileContent = Get-Content $profilePath -Raw
+        $profileContent = Get-Content -LiteralPath $profilePath -Raw
 
-        # Copy profile to remote
+        # Copy profile to remote - use remote machine's temp path, not local
         Write-OutputColor "Copying profile to remote server..." -color "Info"
-        $remotePath = "$($script:TempPath)\$($script:ToolName)ConfigProfile_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
+        $remoteTempDir = Invoke-Command -Session $session -ScriptBlock { $env:TEMP } -ErrorAction SilentlyContinue
+        if ([string]::IsNullOrWhiteSpace($remoteTempDir)) { $remoteTempDir = "C:\Windows\Temp" }
+        $remotePath = "$remoteTempDir\$($script:ToolName)ConfigProfile_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
 
         Invoke-Command -Session $session -ScriptBlock {
             param($path, $content, $tempDir)
             if (-not (Test-Path $tempDir)) { New-Item -Path $tempDir -ItemType Directory -Force | Out-Null }
             $content | Out-File -FilePath $path -Encoding UTF8 -Force
-        } -ArgumentList $remotePath, $profileContent, $script:TempPath
+        } -ArgumentList $remotePath, $profileContent, $remoteTempDir
 
         Write-OutputColor "Profile copied to: $remotePath" -color "Success"
         Write-OutputColor "" -color "Info"

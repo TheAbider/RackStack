@@ -187,7 +187,7 @@ function Invoke-SubnetSweep {
     $adapter = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1
     $defaultSubnet = if ($adapter) {
         $parts = $adapter.IPAddress.Split('.')
-        "$($parts[0]).$($parts[1]).$($parts[2])"
+        if ($parts.Count -ge 3) { "$($parts[0]).$($parts[1]).$($parts[2])" } else { "" }
     } else { "" }
 
     $prompt = "  Enter subnet base (e.g., 192.168.1)"

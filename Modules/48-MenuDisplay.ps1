@@ -351,7 +351,7 @@ function Show-SecurityAccessMenu {
 
     $rdpColor = if ($rdpState -eq "Enabled") { "Success" } else { "Warning" }
     $winrmColor = if ($winrmState -eq "Enabled") { "Success" } else { "Warning" }
-    $adminDisplay = if ($adminEnabled -eq $true -or $adminEnabled -eq "True") { "Enabled" } else { "Disabled" }
+    $adminDisplay = if ($adminEnabled -eq $true) { "Enabled" } else { "Disabled" }
     $adminColor = if ($adminDisplay -eq "Disabled") { "Success" } else { "Warning" }
     $fwColor = if ($firewallStates.Domain -eq "Disabled" -and $firewallStates.Private -eq "Disabled" -and $firewallStates.Public -eq "Enabled") { "Success" } else { "Warning" }
     $fwDisplay = "D:$($firewallStates.Domain) Pr:$($firewallStates.Private) Pu:$($firewallStates.Public)"

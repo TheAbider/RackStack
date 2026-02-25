@@ -219,8 +219,8 @@ function Read-DSRMPassword {
     $bstr1 = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($dsrmPassword)
     $bstr2 = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($dsrmConfirm)
     try {
-        $plain1 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr1)
-        $plain2 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr2)
+        $plain1 = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr1)
+        $plain2 = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr2)
 
         if ($plain1 -ne $plain2) {
             Write-OutputColor "  Passwords do not match." -color "Error"

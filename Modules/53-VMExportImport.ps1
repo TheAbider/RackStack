@@ -40,7 +40,7 @@ function Export-VMWizard {
     $vmMap = @{}
     foreach ($vm in $vms) {
         $stateColor = if ($vm.State -eq 'Running') { "Success" } elseif ($vm.State -eq 'Off') { "Warning" } else { "Info" }
-        $vhdSizes = ($vm.HardDrives | ForEach-Object { (Get-VHD $_.Path -ErrorAction SilentlyContinue).FileSize } | Measure-Object -Sum)
+        $vhdSizes = ($vm.HardDrives | ForEach-Object { (Get-VHD $_.Path @vmParams -ErrorAction SilentlyContinue).FileSize } | Measure-Object -Sum)
         $sizeStr = if ($null -ne $vhdSizes.Sum -and $vhdSizes.Sum -gt 0) { "{0:N0}GB" -f ($vhdSizes.Sum / 1GB) } else { "N/A" }
         $vmDisplay = "[$vmIndex]  $($vm.Name.PadRight(35)) $($vm.State.ToString().PadRight(10)) $sizeStr"
         Write-OutputColor "  │  $($vmDisplay.PadRight(68))│" -color $stateColor
@@ -74,7 +74,13 @@ function Export-VMWizard {
     # Ensure export directory exists
     if (-not (Test-Path -LiteralPath $exportPath)) {
         Write-OutputColor "  Creating export directory: $exportPath" -color "Info"
-        $null = New-Item -Path $exportPath -ItemType Directory -Force
+        try {
+            $null = New-Item -Path $exportPath -ItemType Directory -Force -ErrorAction Stop
+        }
+        catch {
+            Write-OutputColor "  Failed to create export directory: $_" -color "Error"
+            return
+        }
     }
 
     # Warning if VM is running
@@ -97,13 +103,12 @@ function Export-VMWizard {
     try {
         # Use a job for background progress
         $exportJob = Start-Job -ScriptBlock {
-            param($VMName, $Path, $Computer)
-            if ($Computer) {
-                Export-VM -Name $VMName -Path $Path -ComputerName $Computer
-            } else {
-                Export-VM -Name $VMName -Path $Path
-            }
-        } -ArgumentList $selectedVM.Name, $exportPath, $ComputerName
+            param($VMName, $Path, $Computer, [System.Management.Automation.PSCredential]$RemoteCred)
+            $params = @{ Name = $VMName; Path = $Path }
+            if ($Computer) { $params['ComputerName'] = $Computer }
+            if ($RemoteCred) { $params['Credential'] = $RemoteCred }
+            Export-VM @params
+        } -ArgumentList $selectedVM.Name, $exportPath, $ComputerName, $Credential
 
         # Wait with progress indication - track export folder size
         $spinChars = @('|', '/', '-', '\')

@@ -413,13 +413,13 @@ function Import-ConfigurationProfile {
         return
     }
 
-    if (-not (Test-Path $profilePath)) {
+    if (-not (Test-Path -LiteralPath $profilePath)) {
         Write-OutputColor "File not found: $profilePath" -color "Error"
         return
     }
 
     try {
-        $configProfile = Get-Content $profilePath -Raw | ConvertFrom-Json
+        $configProfile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -831,13 +831,13 @@ function Compare-ConfigurationDrift {
         [string]$ProfilePath
     )
 
-    if (-not (Test-Path $ProfilePath)) {
+    if (-not (Test-Path -LiteralPath $ProfilePath)) {
         Write-OutputColor "  Profile not found: $ProfilePath" -color "Error"
         return $null
     }
 
     try {
-        $savedProfile = Get-Content $ProfilePath -Raw | ConvertFrom-Json
+        $savedProfile = Get-Content -LiteralPath $ProfilePath -Raw | ConvertFrom-Json
     }
     catch {
         Write-OutputColor "  Failed to parse profile: $_" -color "Error"
@@ -1050,7 +1050,7 @@ function Start-DriftCheck {
         return
     }
 
-    if (-not (Test-Path $profilePath)) {
+    if (-not (Test-Path -LiteralPath $profilePath)) {
         Write-OutputColor "  File not found: $profilePath" -color "Error"
         return
     }
@@ -1206,14 +1206,14 @@ function Compare-DriftHistory {
         [string]$Baseline2Path
     )
 
-    if (-not (Test-Path $Baseline1Path) -or -not (Test-Path $Baseline2Path)) {
+    if (-not (Test-Path -LiteralPath $Baseline1Path) -or -not (Test-Path -LiteralPath $Baseline2Path)) {
         Write-OutputColor "  One or both baseline files not found." -color "Error"
         return $null
     }
 
     try {
-        $b1 = Get-Content $Baseline1Path -Raw | ConvertFrom-Json
-        $b2 = Get-Content $Baseline2Path -Raw | ConvertFrom-Json
+        $b1 = Get-Content -LiteralPath $Baseline1Path -Raw | ConvertFrom-Json
+        $b2 = Get-Content -LiteralPath $Baseline2Path -Raw | ConvertFrom-Json
 
         $changes = @()
         $skipKeys = @("_BaselineInfo", "NetworkAdapters", "VMSwitches", "InstalledFeatures")
