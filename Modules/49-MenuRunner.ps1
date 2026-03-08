@@ -48,9 +48,12 @@ function Start-Show-Mainmenu {
                         # Back to main menu
                     }
                     default {
+                        $navResult = Test-NavigationCommand -UserInput $batchChoice
+                        if ($navResult.Action -eq "exit") { Exit-Script; return }
+                        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
                         if ($batchChoice) {
-                            Write-OutputColor "Invalid choice. Please enter 1, 2, or B." -color "Error"
-                            Start-Sleep -Seconds 2
+                            Write-OutputColor "  Invalid choice. Enter 1, 2, or B." -color "Error"
+                            Start-Sleep -Seconds 1
                         }
                     }
                 }
@@ -73,20 +76,23 @@ function Start-Show-Mainmenu {
             { $_ -eq "U" -or $_ -eq "u" } {
                 Test-ScriptUpdate
             }
+            { $_ -eq "V" -or $_ -eq "v" } {
+                Show-QuickSessionChanges
+                Write-PressEnter
+            }
             "help" {
                 Show-Help
                 Write-PressEnter
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter a number between 1 and 8." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-8, [U]pdate, or [V]iew changes." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
 }
 
 # Function to run the Configure Server menu
-# Function to run the Configure Server menu (reorganized with submenus)
 function Start-Show-ConfigureServerMenu {
     while ($true) {
         if ($global:ReturnToMainMenu) {
@@ -156,8 +162,8 @@ function Start-Show-ConfigureServerMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-10, Q, or B to go back." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-10, Q, or B to go back." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -185,8 +191,8 @@ function Start-Show-SystemConfigMenu {
             "7" { Set-ServerPowerPlan; Write-PressEnter }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-7 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -211,8 +217,8 @@ function Start-Show-RolesFeaturesMenu {
             "4" { Install-Agent; Write-PressEnter }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-4 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -243,8 +249,8 @@ function Start-Show-SecurityAccessMenu {
             "10" { Show-LocalAccountAudit; Write-PressEnter }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-10 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -278,8 +284,8 @@ function Start-Show-ToolsUtilitiesMenu {
             "13" { Show-ScheduledTaskManager }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-13 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -306,8 +312,8 @@ function Start-Show-StorageClusteringMenu {
             "6" { Show-HyperVReplicaMenu }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-6 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -350,8 +356,8 @@ function Start-Show-NetworkMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-2 or B to go back." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-2 or B to go back." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -360,6 +366,7 @@ function Start-Show-NetworkMenu {
 # Function to run the host network configuration menu
 function Start-Show-HostNetworkMenu {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         # Check if a reboot is pending
         if (Test-RebootPending) {
             Clear-Host
@@ -376,23 +383,13 @@ function Start-Show-HostNetworkMenu {
             Write-OutputColor "Hyper-V is not installed." -color "Warning"
 
             if (Confirm-UserAction -Message "Install Hyper-V now?") {
-                Write-OutputColor "Installing Hyper-V..." -color "Info"
-                try {
-                    $result = Install-WindowsFeature -Name Hyper-V -IncludeManagementTools -ErrorAction Stop
-                    if ($result.RestartNeeded -eq "Yes") {
-                        $global:RebootNeeded = $true
-                        Add-SessionChange -Category "Roles" -Description "Installed Hyper-V (reboot required)"
-                        Write-OutputColor "Hyper-V installed. A reboot is required." -color "Success"
-                        Write-PressEnter
-                    } else {
-                        Add-SessionChange -Category "Roles" -Description "Installed Hyper-V"
-                        Write-OutputColor "Hyper-V installed successfully." -color "Success"
-                        Write-PressEnter
-                    }
-                } catch {
-                    Write-OutputColor "Failed to install Hyper-V: $_" -color "Error"
-                    Write-PressEnter
+                $installResult = Install-WindowsFeatureWithTimeout -FeatureName "Hyper-V" -DisplayName "Hyper-V" -IncludeManagementTools
+                if ($installResult.Success) {
+                    $global:RebootNeeded = $true
+                    Add-SessionChange -Category "Roles" -Description "Installed Hyper-V (reboot required)"
+                    Write-OutputColor "A reboot is required." -color "Warning"
                 }
+                Write-PressEnter
                 return
             }
             else {
@@ -446,8 +443,8 @@ function Start-Show-HostNetworkMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-6, B, or M." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-6, B, or M." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -474,8 +471,8 @@ function Start-Show-VirtualSwitchMenu {
             "6" { Remove-VirtualSwitch; Write-PressEnter }
             "back" { return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-6 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -491,6 +488,7 @@ function Start-Show-HostNetworkIPMenu {
     }
 
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         $vmNetworkChoice = Show-Host-IPNetworkMenu -selectedAdapterName $selectedAdapterName
 
         $navResult = Test-NavigationCommand -UserInput $vmNetworkChoice
@@ -525,8 +523,8 @@ function Start-Show-HostNetworkIPMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-4, B, or M." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -542,6 +540,7 @@ function Start-Show-VM-NetworkMenu {
     }
 
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         $vmNetworkChoice = Show-VM-NetworkMenu -selectedAdapterName $selectedAdapterName
 
         $navResult = Test-NavigationCommand -UserInput $vmNetworkChoice
@@ -576,8 +575,8 @@ function Start-Show-VM-NetworkMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-4, B, or M." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }

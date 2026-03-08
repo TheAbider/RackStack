@@ -19,6 +19,9 @@ function Export-ServerConfiguration {
     else {
         Write-OutputColor "Enter export path (full path with filename):" -color "Info"
         $exportPath = Read-Host
+        $navResult = Test-NavigationCommand -UserInput $exportPath
+        if ($navResult.ShouldReturn) { return }
+        if (-not [string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $exportPath.Trim('"') }
         if ([string]::IsNullOrWhiteSpace($exportPath)) {
             $exportPath = $defaultPath
         }
@@ -280,8 +283,8 @@ function Export-ServerConfiguration {
                 }
             }
 
-            $vms = Get-VM -ErrorAction SilentlyContinue
-            if ($vms) {
+            $vms = @(Get-VM -ErrorAction SilentlyContinue)
+            if ($vms.Count -gt 0) {
                 $config += ""
                 $config += "  Virtual Machines: $($vms.Count) total"
                 foreach ($vm in $vms | Sort-Object Name) {
@@ -312,7 +315,7 @@ function Export-ServerConfiguration {
         $config += "=" * 80
 
         # Write to file
-        $config | Out-File -FilePath $exportPath -Encoding UTF8 -Force
+        $config | Out-File -LiteralPath $exportPath -Encoding UTF8 -Force
 
         Write-OutputColor "`nConfiguration exported successfully!" -color "Success"
         Write-OutputColor "File: $exportPath" -color "Info"
@@ -335,7 +338,7 @@ function Save-ConfigurationProfile {
     # Gather current configuration
     Write-OutputColor "Gathering current configuration..." -color "Info"
 
-    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
+    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
     $timezone = Get-TimeZone
     $powerPlan = Get-CurrentPowerPlan
 
@@ -426,13 +429,16 @@ function Save-ConfigurationProfile {
     else {
         Write-OutputColor "Enter save path (full path with filename):" -color "Info"
         $savePath = Read-Host
+        $navResult = Test-NavigationCommand -UserInput $savePath
+        if ($navResult.ShouldReturn) { return }
+        if (-not [string]::IsNullOrWhiteSpace($savePath)) { $savePath = $savePath.Trim('"') }
         if ([string]::IsNullOrWhiteSpace($savePath)) {
             $savePath = $defaultPath
         }
     }
 
     try {
-        $configProfile | ConvertTo-Json -Depth 10 | Out-File -FilePath $savePath -Encoding UTF8 -Force
+        $configProfile | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Configuration profile saved successfully!" -color "Success"
@@ -467,6 +473,7 @@ function Import-ConfigurationProfile {
         return
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($profilePath)) { $profilePath = $profilePath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($profilePath)) {
         Write-OutputColor "No path entered." -color "Warning"
         return
@@ -632,7 +639,7 @@ function Import-ConfigurationProfile {
         if ($configProfile.Timezone) {
             Write-OutputColor "  [3/13] Setting timezone to '$($configProfile.Timezone)'..." -color "Info"
             try {
-                Set-TimeZone -Id $configProfile.Timezone -ErrorAction Stop
+                Microsoft.PowerShell.Management\Set-TimeZone -Id $configProfile.Timezone -ErrorAction Stop
                 $changesApplied++
                 Write-OutputColor "        Timezone set." -color "Success"
                 Add-SessionChange -Category "System" -Description "Set timezone to $($configProfile.Timezone)"
@@ -1104,6 +1111,7 @@ function Start-DriftCheck {
     $navResult = Test-NavigationCommand -UserInput $profilePath
     if ($navResult.ShouldReturn) { return }
 
+    if (-not [string]::IsNullOrWhiteSpace($profilePath)) { $profilePath = $profilePath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($profilePath)) {
         Write-OutputColor "  No path entered." -color "Warning"
         return
@@ -1169,11 +1177,13 @@ function Save-DriftBaseline {
         $rdpState = Get-RDPState
         $winrmState = Get-WinRMState
 
-        # Network adapters
+        # Network adapters (batch queries to avoid N+1)
         $adapters = @()
+        $allIPv4 = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $allDns = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
         foreach ($adapter in (Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })) {
-            $ip = Get-NetIPAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
-            $dns = (Get-DnsClientServerAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
+            $ip = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.Name } | Select-Object -First 1
+            $dns = ($allDns | Where-Object { $_.InterfaceAlias -eq $adapter.Name }).ServerAddresses
             $adapters += @{
                 Name = $adapter.Name
                 IP = if ($ip) { $ip.IPAddress } else { $null }
@@ -1219,7 +1229,7 @@ function Save-DriftBaseline {
             VMSwitches = $switches
         }
 
-        $baseline | ConvertTo-Json -Depth 5 | Out-File -FilePath $baselinePath -Encoding UTF8 -Force
+        $baseline | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $baselinePath -Encoding UTF8 -Force
         Add-SessionChange -Category "Drift" -Description "Saved drift baseline to $baselinePath"
         return $baselinePath
     }
@@ -1311,7 +1321,7 @@ function Compare-DriftHistory {
 
 # Show drift trend — timeline of setting changes across baselines
 function Show-DriftTrend {
-    $baselines = Get-DriftBaselines
+    $baselines = @(Get-DriftBaselines)
     if ($baselines.Count -lt 2) {
         Write-OutputColor "  Need at least 2 baselines to show trends. Currently have $($baselines.Count)." -color "Warning"
         return
@@ -1325,7 +1335,7 @@ function Show-DriftTrend {
     Write-OutputColor "" -color "Info"
 
     # Compare each consecutive pair
-    $sortedBaselines = $baselines | Sort-Object { $_.CapturedAt }
+    $sortedBaselines = @($baselines | Sort-Object { $_.CapturedAt })
 
     for ($i = 1; $i -lt $sortedBaselines.Count; $i++) {
         $prev = $sortedBaselines[$i - 1]
@@ -1383,6 +1393,8 @@ function Show-DriftDetectionMenu {
             "2" {
                 Write-OutputColor "  Enter description (optional):" -color "Info"
                 $desc = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $desc
+                if ($navResult.ShouldReturn) { continue }
                 $path = Save-DriftBaseline -Description $desc
                 if ($path) {
                     Write-OutputColor "  Baseline saved: $path" -color "Success"
@@ -1390,7 +1402,7 @@ function Show-DriftDetectionMenu {
                 Write-PressEnter
             }
             "3" {
-                $baselines = Get-DriftBaselines
+                $baselines = @(Get-DriftBaselines)
                 if ($baselines.Count -eq 0) {
                     Write-OutputColor "  No baselines found." -color "Warning"
                 }
@@ -1406,7 +1418,7 @@ function Show-DriftDetectionMenu {
                 Write-PressEnter
             }
             "4" {
-                $baselines = Get-DriftBaselines
+                $baselines = @(Get-DriftBaselines)
                 if ($baselines.Count -lt 2) {
                     Write-OutputColor "  Need at least 2 baselines to compare." -color "Warning"
                     Write-PressEnter
@@ -1420,7 +1432,11 @@ function Show-DriftDetectionMenu {
                 }
                 Write-OutputColor "" -color "Info"
                 $first = Read-Host "  First baseline number"
+                $navResult = Test-NavigationCommand -UserInput $first
+                if ($navResult.ShouldReturn) { continue }
                 $second = Read-Host "  Second baseline number"
+                $navResult = Test-NavigationCommand -UserInput $second
+                if ($navResult.ShouldReturn) { continue }
                 if ($first -notmatch '^\d+$' -or $second -notmatch '^\d+$') {
                     Write-OutputColor "  Invalid input — enter numeric baseline numbers." -color "Error"
                     Write-PressEnter

@@ -310,7 +310,9 @@ function Set-iSCSIAutoConfiguration {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  HOST DETECTION".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  Hostname: $hostname".PadRight(72))│" -color "Info"
+    $hostLine = "  Hostname: $hostname"
+    if ($hostLine.Length -gt 72) { $hostLine = $hostLine.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($hostLine.PadRight(72))│" -color "Info"
 
     if ($null -eq $hostNumber) {
         Write-OutputColor "  │$("  Host Number: NOT DETECTED".PadRight(72))│" -color "Warning"
@@ -638,7 +640,7 @@ function Set-iSCSIConfiguration {
             return
         }
         default {
-            Write-OutputColor "Invalid selection." -color "Error"
+            Write-OutputColor "  Invalid selection." -color "Error"
         }
     }
 }
@@ -677,7 +679,7 @@ function Get-SANTargetsForHost {
 
         # Find the assignment for this host mod value
         $assignment = $script:SANTargetPairings.HostAssignments | Where-Object { [int]$_.HostMod -eq $hostMod }
-        if (-not $assignment -and $script:SANTargetPairings.HostAssignments.Count -gt 0) {
+        if (-not $assignment -and @($script:SANTargetPairings.HostAssignments).Count -gt 0) {
             # Fallback: use first assignment
             $assignment = $script:SANTargetPairings.HostAssignments[0]
         }
@@ -685,7 +687,7 @@ function Get-SANTargetsForHost {
 
         # Find primary pair by name
         $primaryPair = $script:SANTargetPairs | Where-Object { $_.Name -eq $assignment.PrimaryPair }
-        if (-not $primaryPair -and $script:SANTargetPairs.Count -gt 0) {
+        if (-not $primaryPair -and @($script:SANTargetPairs).Count -gt 0) {
             $primaryPair = $script:SANTargetPairs[0]
         }
         if (-not $primaryPair) { return @() }
@@ -1277,6 +1279,7 @@ function Start-Show-iSCSISANMenu {
                 }
                 else {
                     while ($true) {
+                        if ($global:ReturnToMainMenu) { return }
                         $identifyChoice = Show-NICIdentificationMenu -Adapters $adapters
                         if ($identifyChoice -match '^[Bb]$') {
                             break
@@ -1347,6 +1350,8 @@ function Start-Show-iSCSISANMenu {
                     Write-OutputColor "" -color "Info"
 
                     $connectChoice = Read-Host "  Select"
+                    $navResult = Test-NavigationCommand -UserInput $connectChoice
+                    if ($navResult.ShouldReturn) { return }
 
                     switch -Regex ($connectChoice) {
                         '^[Aa]$' {
@@ -1363,6 +1368,8 @@ function Start-Show-iSCSISANMenu {
                             Write-OutputColor "" -color "Info"
                             Write-OutputColor "  Enter target portal IPs (comma-separated):" -color "Warning"
                             $manualTargets = Read-Host
+                            $navResult = Test-NavigationCommand -UserInput $manualTargets
+                            if ($navResult.ShouldReturn) { return }
                             if (-not [string]::IsNullOrWhiteSpace($manualTargets)) {
                                 $targetList = $manualTargets -split ',' | ForEach-Object { $_.Trim() }
                                 Connect-iSCSITargets -TargetPortalAddresses $targetList
@@ -1386,6 +1393,8 @@ function Start-Show-iSCSISANMenu {
 
                     Write-OutputColor "  Enter host number manually (1-24) or target IPs:" -color "Warning"
                     $manualInput = Read-Host
+                    $navResult = Test-NavigationCommand -UserInput $manualInput
+                    if ($navResult.ShouldReturn) { return }
 
                     if ($manualInput -match '^\d+$' -and [int]$manualInput -ge 1 -and [int]$manualInput -le 24) {
                         # User entered a host number
@@ -1423,7 +1432,7 @@ function Start-Show-iSCSISANMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-8, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

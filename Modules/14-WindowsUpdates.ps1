@@ -5,10 +5,10 @@ function Install-WindowsUpdates {
     Write-CenteredOutput "Windows Updates" -color "Info"
 
     # Check network connectivity
-    Write-OutputColor "Checking network connectivity..." -color "Info"
+    Write-OutputColor "  Checking network connectivity..." -color "Info"
     if (-not (Test-NetworkConnectivity)) {
-        Write-OutputColor "No network connectivity detected. Cannot check for updates." -color "Error"
-        Write-OutputColor "Tip: Verify network configuration and DNS settings." -color "Warning"
+        Write-OutputColor "  No network connectivity detected. Cannot check for updates." -color "Error"
+        Write-OutputColor "  Tip: Verify network configuration and DNS settings." -color "Warning"
         return
     }
 

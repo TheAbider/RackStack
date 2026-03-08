@@ -57,7 +57,7 @@ function Join-Domain {
     Write-OutputColor "" -color "Info"
     if ([string]::IsNullOrWhiteSpace($domain)) {
         Write-OutputColor "  No default domain configured." -color "Warning"
-        Write-OutputColor "Enter domain name (e.g., corp.local):" -color "Info"
+        Write-OutputColor "  Enter domain name (e.g., corp.local):" -color "Info"
         $targetDomain = Read-Host
 
         $navResult = Test-NavigationCommand -UserInput $targetDomain
@@ -72,7 +72,7 @@ function Join-Domain {
         $targetDomain = $domain
     }
     else {
-        Write-OutputColor "Enter domain name (e.g., corp.local):" -color "Info"
+        Write-OutputColor "  Enter domain name (e.g., corp.local):" -color "Info"
         $targetDomain = Read-Host
 
         $navResult = Test-NavigationCommand -UserInput $targetDomain

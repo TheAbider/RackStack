@@ -278,14 +278,11 @@ function Install-ServerRoleTemplate {
     $failCount = 0
 
     foreach ($featureName in $featuresToInstall) {
-        Write-OutputColor "  Installing $featureName..." -color "Info"
-        try {
-            $null = Install-WindowsFeature -Name $featureName -IncludeManagementTools -ErrorAction Stop
-            Write-OutputColor "    $featureName installed successfully." -color "Success"
+        $installResult = Install-WindowsFeatureWithTimeout -FeatureName $featureName -DisplayName $featureName -IncludeManagementTools
+        if ($installResult.Success) {
             $successCount++
         }
-        catch {
-            Write-OutputColor "    Failed to install ${featureName}: $_" -color "Error"
+        else {
             $failCount++
         }
     }

@@ -75,6 +75,8 @@ function Disable-WindowsFirewallDomainPrivate {
             }
             Write-OutputColor "" -color "Info"
             $profileChoice = Read-Host "  Select (1-3)"
+            $navResult = Test-NavigationCommand -UserInput $profileChoice
+            if ($navResult.ShouldReturn) { return }
 
             $selectedProfile = switch ($profileChoice) {
                 "1" { "Domain" }
@@ -84,7 +86,7 @@ function Disable-WindowsFirewallDomainPrivate {
             }
 
             if (-not $selectedProfile) {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-3." -color "Error"
                 return
             }
 
@@ -151,6 +153,8 @@ function Show-FirewallRuleSearch {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Enter search term (supports wildcards: *sql*, *rdp*):" -color "Info"
                 $searchTerm = Read-Host "  Search"
+                $navResult = Test-NavigationCommand -UserInput $searchTerm
+                if ($navResult.ShouldReturn) { return }
                 if ([string]::IsNullOrWhiteSpace($searchTerm)) { continue }
                 if ($searchTerm -notlike "*`**") { $searchTerm = "*$searchTerm*" }
                 $title = "Rules matching '$searchTerm'"
@@ -170,6 +174,8 @@ function Show-FirewallRuleSearch {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Enter port number (e.g., 443, 3389, 5985):" -color "Info"
                 $portStr = Read-Host "  Port"
+                $navResult = Test-NavigationCommand -UserInput $portStr
+                if ($navResult.ShouldReturn) { return }
                 if ($portStr -notmatch '^\d+$') {
                     Write-OutputColor "  Invalid port number." -color "Error"
                     Start-Sleep -Seconds 1
@@ -233,7 +239,9 @@ function Show-FirewallRuleSearch {
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  $title ($(@($rules).Count) results)".PadRight(72))│" -color "Info"
+        $titleLine = "  $title ($(@($rules).Count) results)"
+        if ($titleLine.Length -gt 72) { $titleLine = $titleLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($titleLine.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         if ($null -eq $rules -or @($rules).Count -eq 0) {
@@ -252,7 +260,9 @@ function Show-FirewallRuleSearch {
                 Write-OutputColor "  │$($line.PadRight(72))│" -color $actColor
             }
             if (@($rules).Count -gt 40) {
-                Write-OutputColor "  │$("  ... and $(@($rules).Count - 40) more rules".PadRight(72))│" -color "Info"
+                $moreLine = "  ... and $(@($rules).Count - 40) more rules"
+                if ($moreLine.Length -gt 72) { $moreLine = $moreLine.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($moreLine.PadRight(72))│" -color "Info"
             }
         }
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"

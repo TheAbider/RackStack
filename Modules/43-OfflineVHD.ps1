@@ -338,6 +338,8 @@ function Show-OfflineCustomizationPrompt {
     Write-OutputColor "" -color "Info"
 
     $tzChoice = Read-Host "  Select timezone"
+    $navResult = Test-NavigationCommand -UserInput $tzChoice
+    if ($navResult.ShouldReturn) { return $false }
 
     $timezone = switch ($tzChoice) {
         "1" { "Eastern Standard Time" }

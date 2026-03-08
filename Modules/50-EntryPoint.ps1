@@ -543,12 +543,12 @@ function Start-BatchMode {
             Write-OutputColor "  [$stepNum/$totalSteps] Setting timezone to '$($Config.Timezone)'..." -color "Info"
             try {
                 $oldTimezone = (Get-TimeZone).Id
-                Set-TimeZone -Id $Config.Timezone -ErrorAction Stop
+                Microsoft.PowerShell.Management\Set-TimeZone -Id $Config.Timezone -ErrorAction Stop
                 Write-OutputColor "           Timezone set." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Set timezone to $($Config.Timezone)"
                 $oldTimezoneEsc = $oldTimezone -replace "'", "''"
-                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert timezone to $oldTimezone"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-TimeZone -Id '$oldTimezoneEsc'") })
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert timezone to $oldTimezone"; Reversible = $true; UndoScript = [scriptblock]::Create("Microsoft.PowerShell.Management\Set-TimeZone -Id '$oldTimezoneEsc'") })
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"

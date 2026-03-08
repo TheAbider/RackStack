@@ -112,7 +112,7 @@ function Get-ValidatedInput {
             $attempts++
             $remaining = $MaxAttempts - $attempts
             if ($remaining -gt 0) {
-                Write-OutputColor "Input cannot be empty. ($remaining attempt(s) remaining)" -color "Error"
+                Write-OutputColor "  Input cannot be empty. ($remaining attempt(s) remaining)" -color "Error"
             }
             continue
         }
@@ -124,11 +124,11 @@ function Get-ValidatedInput {
         $attempts++
         $remaining = $MaxAttempts - $attempts
         if ($remaining -gt 0) {
-            Write-OutputColor "$ErrorMessage ($remaining attempt(s) remaining)" -color "Error"
+            Write-OutputColor "  $ErrorMessage ($remaining attempt(s) remaining)" -color "Error"
         }
     }
 
-    Write-OutputColor "Maximum attempts reached." -color "Critical"
+    Write-OutputColor "  Maximum attempts reached." -color "Critical"
     return $null
 }
 #endregion

@@ -82,7 +82,7 @@ function Select-PhysicalAdaptersSmart {
     if ($choice -match '^[Aa]$') {
         # Auto-detect mode
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Testing adapter internet connectivity..." -color "Info"
+        Write-OutputColor "  Testing adapter internet connectivity..." -color "Info"
 
         $results = @(Test-AdapterInternetConnectivity)
 
@@ -147,7 +147,7 @@ function Select-PhysicalAdaptersSmart {
         return Select-PhysicalAdapters
     }
     else {
-        Write-OutputColor "Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection." -color "Error"
         return $null
     }
 }
@@ -357,6 +357,8 @@ function Add-CustomVNIC {
         }
         Write-OutputColor "" -color "Info"
         $swChoice = Read-Host "  Select switch"
+        $navResult = Test-NavigationCommand -UserInput $swChoice
+        if ($navResult.ShouldReturn) { return }
         if ($swChoice -match '^\d+$' -and [int]$swChoice -ge 1 -and [int]$swChoice -le $externalSwitches.Count) {
             $existingSwitch = $externalSwitches[[int]$swChoice - 1]
         } else {
@@ -409,6 +411,8 @@ function Add-CustomVNIC {
             "5" {
                 Write-OutputColor "  Enter vNIC name:" -color "Info"
                 $vnicName = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $vnicName
+                if ($navResult.ShouldReturn) { return }
                 if ([string]::IsNullOrWhiteSpace($vnicName)) {
                     Write-OutputColor "  Name cannot be empty." -color "Error"
                     return
@@ -455,6 +459,8 @@ function Add-CustomVNIC {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Set a VLAN ID? (Enter to skip, or 1-4094):" -color "Info"
     $vlanInput = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $vlanInput
+    if ($navResult.ShouldReturn) { return }
     if ($vlanInput -match '^\d+$') {
         $vlanId = [int]$vlanInput
         if ($vlanId -ge 1 -and $vlanId -le 4094) {
@@ -475,6 +481,8 @@ function Add-CustomVNIC {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Configure IP address now? (Y/N, default N):" -color "Info"
     $ipChoice = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $ipChoice
+    if ($navResult.ShouldReturn) { return }
     if ($ipChoice -match '^[Yy]') {
         $ipResult = Get-IPAddressAndSubnet -Prompt "Enter IP address (e.g., 10.0.100.1/24)"
         if ($null -ne $ipResult) {
@@ -585,6 +593,8 @@ function New-StandardVSwitch {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Enter switch name (default: $defaultName):" -color "Info"
         $userInput = Read-Host "  "
+        $navResult = Test-NavigationCommand -UserInput $userInput
+        if ($navResult.ShouldReturn) { return }
         $SwitchName = if ([string]::IsNullOrWhiteSpace($userInput)) { $defaultName } else { $userInput }
     }
 
@@ -630,6 +640,8 @@ function New-StandardVSwitch {
                     Write-OutputColor "" -color "Info"
 
                     $adChoice = Read-Host "  Select adapter"
+                    $navResult = Test-NavigationCommand -UserInput $adChoice
+                    if ($navResult.ShouldReturn) { return }
                     if ($adChoice -match '^\d+$' -and [int]$adChoice -ge 1 -and [int]$adChoice -le $adapters.Count) {
                         $AdapterName = $adapters[[int]$adChoice - 1].Name
                     } else {

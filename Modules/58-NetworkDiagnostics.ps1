@@ -50,7 +50,7 @@ function Show-NetworkDiagnostics {
             "m" { $global:ReturnToMainMenu = $true; return }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -90,7 +90,7 @@ function Invoke-PingHost {
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         if ($latencies.Count -gt 0) {
-            $sorted = $latencies | Sort-Object
+            $sorted = @($latencies | Sort-Object)
             $minMs = $sorted[0]
             $maxMs = $sorted[-1]
             $avgMs = [math]::Round(($latencies | Measure-Object -Average).Average, 1)
@@ -156,6 +156,8 @@ function Invoke-PortTest {
     if ([string]::IsNullOrWhiteSpace($target)) { return }
 
     $portInput = Read-Host "  Enter port number (e.g., 80, 443, 3389)"
+    $navResult = Test-NavigationCommand -UserInput $portInput
+    if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($portInput)) { return }
     $port = 0
     if (-not [int]::TryParse($portInput, [ref]$port)) {
@@ -247,6 +249,8 @@ function Invoke-SubnetSweep {
     $prompt = "  Enter subnet base (e.g., 192.168.1)"
     if ($defaultSubnet) { $prompt += " [$defaultSubnet]" }
     $subnet = Read-Host $prompt
+    $navResult = Test-NavigationCommand -UserInput $subnet
+    if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($subnet) -and $defaultSubnet) { $subnet = $defaultSubnet }
     if ([string]::IsNullOrWhiteSpace($subnet)) { return }
     if ($subnet -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}$') {
@@ -256,7 +260,11 @@ function Invoke-SubnetSweep {
     }
 
     $startInput = Read-Host "  Start IP (last octet) [1]"
+    $navResult = Test-NavigationCommand -UserInput $startInput
+    if ($navResult.ShouldReturn) { return }
     $endInput = Read-Host "  End IP (last octet) [254]"
+    $navResult = Test-NavigationCommand -UserInput $endInput
+    if ($navResult.ShouldReturn) { return }
     $startVal = 0
     $endVal = 0
     if ([string]::IsNullOrWhiteSpace($startInput)) { $startVal = 1 }

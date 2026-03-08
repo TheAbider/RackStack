@@ -20,17 +20,14 @@ function Show-DeduplicationManagement {
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
         switch ($choice) {
             { $_ -eq "I" -or $_ -eq "i" } {
                 if (-not (Confirm-UserAction -Message "Install Data Deduplication feature?")) { return }
-                try {
-                    Write-OutputColor "  Installing Data Deduplication..." -color "Info"
-                    Install-WindowsFeature -Name FS-Data-Deduplication -IncludeManagementTools -ErrorAction Stop
-                    Write-OutputColor "  Data Deduplication installed." -color "Success"
+                $installResult = Install-WindowsFeatureWithTimeout -FeatureName "FS-Data-Deduplication" -DisplayName "Data Deduplication" -IncludeManagementTools
+                if ($installResult.Success) {
                     Add-SessionChange -Category "System" -Description "Installed Data Deduplication"
-                }
-                catch {
-                    Write-OutputColor "  Failed: $_" -color "Error"
                 }
                 Write-PressEnter
             }
@@ -101,6 +98,8 @@ function Show-DeduplicationManagement {
         switch ($choice) {
             "1" {
                 $volNum = Read-Host "  Enter volume number to enable dedup"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volList.Count) {
                     $vol = $volList[[int]$volNum - 1]
                     Write-OutputColor "" -color "Info"
@@ -109,6 +108,8 @@ function Show-DeduplicationManagement {
                     Write-OutputColor "  [2] Hyper-V (VHD files)" -color "Info"
                     Write-OutputColor "  [3] Backup (backup applications)" -color "Info"
                     $usageType = Read-Host "  Select type"
+                    $navResult = Test-NavigationCommand -UserInput $usageType
+                    if ($navResult.ShouldReturn) { return }
 
                     $usage = switch ($usageType) {
                         "1" { "Default" }
@@ -129,6 +130,8 @@ function Show-DeduplicationManagement {
             }
             "2" {
                 $volNum = Read-Host "  Enter volume number to disable dedup"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volList.Count) {
                     $vol = $volList[[int]$volNum - 1]
                     if (Confirm-UserAction -Message "Disable deduplication on $($vol.DriveLetter):?") {
@@ -145,6 +148,8 @@ function Show-DeduplicationManagement {
             }
             "3" {
                 $volNum = Read-Host "  Enter volume number to optimize"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volList.Count) {
                     $vol = $volList[[int]$volNum - 1]
                     try {
@@ -159,6 +164,8 @@ function Show-DeduplicationManagement {
             }
             "4" {
                 $volNum = Read-Host "  Enter volume number"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volList.Count) {
                     $vol = $volList[[int]$volNum - 1]
                     $stats = Get-DedupStatus -Volume "$($vol.DriveLetter):" -ErrorAction SilentlyContinue
@@ -177,7 +184,8 @@ function Show-DeduplicationManagement {
                     }
                 }
             }
-            "b" { return }
+            { $_ -eq "b" -or $_ -eq "B" } { return }
+            default { Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter

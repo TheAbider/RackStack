@@ -247,7 +247,7 @@ function Start-FCSANMenu {
             "4" { Show-StorageBackendStatus; Write-PressEnter }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-4, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -475,6 +475,8 @@ function New-S2DVirtualDisk {
     # Get size
     Write-OutputColor "  Enter size in GB (available: $freeGB GB):" -color "Warning"
     $sizeInput = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $sizeInput
+    if ($navResult.ShouldReturn) { return }
     $sizeGB = 0
     if (-not ($sizeInput -match '^\d+$') -or -not [int]::TryParse($sizeInput, [ref]$sizeGB) -or $sizeGB -lt 1) {
         Write-OutputColor "  Invalid size." -color "Error"
@@ -489,6 +491,8 @@ function New-S2DVirtualDisk {
     Write-OutputColor "  [3] Parity (space efficient, slower writes)" -color "Info"
     Write-OutputColor "  [4] Simple (no redundancy, testing only)" -color "Info"
     $resChoice = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $resChoice
+    if ($navResult.ShouldReturn) { return }
 
     $resiliency = switch ($resChoice) {
         "1" { "Mirror" }
@@ -579,7 +583,7 @@ function Start-S2DMenu {
             "4" { Show-StorageBackendStatus; Write-PressEnter }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-4, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -663,6 +667,7 @@ function Test-SMB3SharePath {
     $navResult = Test-NavigationCommand -UserInput $sharePath
     if ($navResult.ShouldReturn) { return }
 
+    if (-not [string]::IsNullOrWhiteSpace($sharePath)) { $sharePath = $sharePath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($sharePath)) {
         Write-OutputColor "  No path entered." -color "Error"
         return
@@ -728,7 +733,7 @@ function Start-SMB3Menu {
             "3" { Show-StorageBackendStatus; Write-PressEnter }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-3, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-3, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -833,7 +838,7 @@ function Start-NVMeoFMenu {
             "3" { Show-StorageBackendStatus; Write-PressEnter }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-3, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-3, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -1037,7 +1042,7 @@ function Start-StorageSANMenu {
             "0" { Set-StorageBackendType; Write-PressEnter }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "Invalid choice. Please enter 0-3, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 0-3, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

@@ -99,7 +99,7 @@ function Show-EventLogViewer {
                 Write-PressEnter
                 continue
             }
-            default { Write-OutputColor "  Invalid choice." -color "Error"; Start-Sleep -Seconds 1; continue }
+            default { Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"; Start-Sleep -Seconds 1; continue }
         }
 
         if ($choice -eq "8") { continue }
@@ -147,22 +147,30 @@ function Show-EventLogCustomSearch {
     Write-OutputColor "  Log name [System/Application/Security/or custom]:" -color "Info"
     Write-OutputColor "  (Press Enter for System)" -color "Info"
     $logName = Read-Host "  Log"
+    $navResult = Test-NavigationCommand -UserInput $logName
+    if ($navResult.ShouldReturn) { return $null }
     if (-not $logName) { $logName = "System" }
 
     # Keyword filter
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Keyword filter (source or message substring, blank for none):" -color "Info"
     $keyword = Read-Host "  Keyword"
+    $navResult = Test-NavigationCommand -UserInput $keyword
+    if ($navResult.ShouldReturn) { return $null }
 
     # Event ID filter
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Event ID filter (blank for none):" -color "Info"
     $eventIdStr = Read-Host "  Event ID"
+    $navResult = Test-NavigationCommand -UserInput $eventIdStr
+    if ($navResult.ShouldReturn) { return $null }
 
     # Time range
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Time range:  [1] 1h  [2] 6h  [3] 24h  [4] 7d  [5] All" -color "Info"
     $timeChoice = Read-Host "  Range"
+    $navResult = Test-NavigationCommand -UserInput $timeChoice
+    if ($navResult.ShouldReturn) { return $null }
     $startTime = switch ($timeChoice) {
         "1" { (Get-Date).AddHours(-1) }
         "2" { (Get-Date).AddHours(-6) }

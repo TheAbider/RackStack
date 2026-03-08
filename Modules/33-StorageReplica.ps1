@@ -33,6 +33,8 @@ function Show-StorageReplicaManagement {
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
         switch ($choice) {
             { $_ -eq "I" -or $_ -eq "i" } {
                 if (-not (Confirm-UserAction -Message "Install Storage Replica feature?")) { return }
@@ -120,12 +122,26 @@ function Show-StorageReplicaManagement {
                 Write-OutputColor "" -color "Info"
 
                 $srcServer = Read-Host "  Source server name"
+                $navResult = Test-NavigationCommand -UserInput $srcServer
+                if ($navResult.ShouldReturn) { return }
                 $srcVol = Read-Host "  Source data volume (e.g., E:)"
+                $navResult = Test-NavigationCommand -UserInput $srcVol
+                if ($navResult.ShouldReturn) { return }
                 $srcLog = Read-Host "  Source log volume (e.g., F:)"
+                $navResult = Test-NavigationCommand -UserInput $srcLog
+                if ($navResult.ShouldReturn) { return }
                 $destServer = Read-Host "  Destination server name"
+                $navResult = Test-NavigationCommand -UserInput $destServer
+                if ($navResult.ShouldReturn) { return }
                 $destVol = Read-Host "  Destination data volume (e.g., E:)"
+                $navResult = Test-NavigationCommand -UserInput $destVol
+                if ($navResult.ShouldReturn) { return }
                 $destLog = Read-Host "  Destination log volume (e.g., F:)"
+                $navResult = Test-NavigationCommand -UserInput $destLog
+                if ($navResult.ShouldReturn) { return }
                 $rgName = Read-Host "  Replication group name"
+                $navResult = Test-NavigationCommand -UserInput $rgName
+                if ($navResult.ShouldReturn) { return }
 
                 # Validate all required fields
                 if ([string]::IsNullOrWhiteSpace($srcServer) -or [string]::IsNullOrWhiteSpace($destServer) -or
@@ -133,7 +149,7 @@ function Show-StorageReplicaManagement {
                     [string]::IsNullOrWhiteSpace($srcLog) -or [string]::IsNullOrWhiteSpace($destLog) -or
                     [string]::IsNullOrWhiteSpace($rgName)) {
                     Write-OutputColor "  All fields are required. Partnership creation cancelled." -color "Error"
-                    break
+                    continue
                 }
 
                 # Validate volume format (drive letter with colon)
@@ -144,7 +160,7 @@ function Show-StorageReplicaManagement {
                         $validVolumes = $false
                     }
                 }
-                if (-not $validVolumes) { break }
+                if (-not $validVolumes) { continue }
 
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  [1] Synchronous (zero data loss)" -color "Info"
@@ -156,7 +172,7 @@ function Show-StorageReplicaManagement {
                     continue
                 }
                 $repMode = if ($mode -eq "1") { "Synchronous" } elseif ($mode -eq "2") { "Asynchronous" } else {
-                    Write-OutputColor "  Invalid selection. Please enter 1 or 2." -color "Error"
+                    Write-OutputColor "  Invalid choice. Enter 1 or 2." -color "Error"
                     Start-Sleep -Seconds 1
                     continue
                 }
@@ -180,9 +196,17 @@ function Show-StorageReplicaManagement {
             "2" {
                 Write-OutputColor "" -color "Info"
                 $srcServer = Read-Host "  Source server"
+                $navResult = Test-NavigationCommand -UserInput $srcServer
+                if ($navResult.ShouldReturn) { return }
                 $destServer = Read-Host "  Destination server"
+                $navResult = Test-NavigationCommand -UserInput $destServer
+                if ($navResult.ShouldReturn) { return }
                 $srcVol = Read-Host "  Source volume"
+                $navResult = Test-NavigationCommand -UserInput $srcVol
+                if ($navResult.ShouldReturn) { return }
                 $destVol = Read-Host "  Destination volume"
+                $navResult = Test-NavigationCommand -UserInput $destVol
+                if ($navResult.ShouldReturn) { return }
 
                 Write-OutputColor "  Testing replication topology..." -color "Info"
                 try {
@@ -227,6 +251,8 @@ function Show-StorageReplicaManagement {
                         $idx++
                     }
                     $pNum = Read-Host "  Select partnership to remove"
+                    $navResult = Test-NavigationCommand -UserInput $pNum
+                    if ($navResult.ShouldReturn) { return }
                     if ($pNum -match '^\d+$' -and [int]$pNum -ge 1 -and [int]$pNum -le $partnerships.Count) {
                         $sel = $partnerships[[int]$pNum - 1]
                         if (Confirm-UserAction -Message "Remove this partnership?") {
@@ -241,7 +267,8 @@ function Show-StorageReplicaManagement {
                     }
                 }
             }
-            "b" { return }
+            { $_ -eq "b" -or $_ -eq "B" } { return }
+            default { Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter

@@ -62,7 +62,9 @@ function Show-ServiceManager {
                 }
                 $dn = if ($service.DisplayName) { $service.DisplayName } elseif ($svc.DisplayName) { $svc.DisplayName } else { $svc.Name }
                 $displayName = if ($dn.Length -gt 35) { $dn.Substring(0,32) + "..." } else { $dn }
-                Write-OutputColor "  │$("  [$idx] $displayName : $status [$startTag]".PadRight(72))│" -color $color
+                $svcLine = "  [$idx] $displayName : $status [$startTag]"
+                if ($svcLine.Length -gt 72) { $svcLine = $svcLine.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($svcLine.PadRight(72))│" -color $color
                 $serviceList += $service
                 $idx++
             }
@@ -91,12 +93,21 @@ function Show-ServiceManager {
         switch -Regex ($choice) {
             "^[Ss]$" {
                 $num = Read-Host "  Enter service number to start"
+                $navResult = Test-NavigationCommand -UserInput $num
+                if ($navResult.ShouldReturn) { return }
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
                     try {
+                        $prevStatus = $svc.Status
                         Start-Service -Name $svc.Name -ErrorAction Stop
                         Write-OutputColor "  Started $($svc.DisplayName)" -color "Success"
                         Add-SessionChange -Category "System" -Description "Started service: $($svc.Name)"
+                        if ($prevStatus -eq 'Stopped') {
+                            Add-UndoAction -Category "System" -Description "Started service: $($svc.Name)" -UndoScript {
+                                param($SvcName)
+                                Stop-Service -Name $SvcName -Force -ErrorAction SilentlyContinue
+                            }.GetNewClosure() -UndoParams @{ SvcName = $svc.Name }
+                        }
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
@@ -105,6 +116,8 @@ function Show-ServiceManager {
             }
             "^[Tt]$" {
                 $num = Read-Host "  Enter service number to stop"
+                $navResult = Test-NavigationCommand -UserInput $num
+                if ($navResult.ShouldReturn) { return }
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
                     # Warn about dependent services
@@ -123,6 +136,10 @@ function Show-ServiceManager {
                         Stop-Service -Name $svc.Name -Force -ErrorAction Stop
                         Write-OutputColor "  Stopped $($svc.DisplayName)" -color "Success"
                         Add-SessionChange -Category "System" -Description "Stopped service: $($svc.Name)"
+                        Add-UndoAction -Category "System" -Description "Stopped service: $($svc.Name)" -UndoScript {
+                            param($SvcName)
+                            Start-Service -Name $SvcName -ErrorAction SilentlyContinue
+                        }.GetNewClosure() -UndoParams @{ SvcName = $svc.Name }
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
@@ -131,6 +148,8 @@ function Show-ServiceManager {
             }
             "^[Rr]$" {
                 $num = Read-Host "  Enter service number to restart"
+                $navResult = Test-NavigationCommand -UserInput $num
+                if ($navResult.ShouldReturn) { return }
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
                     # Warn about dependent services
@@ -157,6 +176,8 @@ function Show-ServiceManager {
             }
             "^[Cc]$" {
                 $num = Read-Host "  Enter service number to change startup type"
+                $navResult = Test-NavigationCommand -UserInput $num
+                if ($navResult.ShouldReturn) { return }
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
                     Write-OutputColor "" -color "Info"
@@ -168,6 +189,8 @@ function Show-ServiceManager {
                     Write-OutputColor "  [3] Disabled" -color "Info"
                     Write-OutputColor "" -color "Info"
                     $typeChoice = Read-Host "  Select new startup type"
+                    $navResult = Test-NavigationCommand -UserInput $typeChoice
+                    if ($navResult.ShouldReturn) { return }
                     $newType = switch ($typeChoice) {
                         "1" { "Automatic" }
                         "2" { "Manual" }
@@ -177,9 +200,14 @@ function Show-ServiceManager {
                     if ($null -ne $newType) {
                         if (-not (Confirm-UserAction -Message "Set '$($svc.DisplayName)' startup to $newType`?")) { continue }
                         try {
+                            $prevStartType = $svc.StartType
                             Set-Service -Name $svc.Name -StartupType $newType -ErrorAction Stop
                             Write-OutputColor "  Set $($svc.DisplayName) startup type to $newType" -color "Success"
                             Add-SessionChange -Category "System" -Description "Changed service startup: $($svc.Name) -> $newType"
+                            Add-UndoAction -Category "System" -Description "Changed $($svc.Name) startup to $newType" -UndoScript {
+                                param($SvcName, $OldType)
+                                Set-Service -Name $SvcName -StartupType $OldType -ErrorAction SilentlyContinue
+                            }.GetNewClosure() -UndoParams @{ SvcName = $svc.Name; OldType = $prevStartType.ToString() }
                         }
                         catch {
                             Write-OutputColor "  Failed: $_" -color "Error"
@@ -189,6 +217,8 @@ function Show-ServiceManager {
             }
             "^[Aa]$" {
                 $search = Read-Host "  Enter service name to search"
+                $navResult = Test-NavigationCommand -UserInput $search
+                if ($navResult.ShouldReturn) { return }
                 if ($search) {
                     $found = Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$search*" -or $_.DisplayName -like "*$search*" } | Select-Object -First 10
                     if ($found) {
@@ -206,11 +236,14 @@ function Show-ServiceManager {
             }
             "^[Dd]$" {
                 $num = Read-Host "  Enter service number to view dependencies"
+                $navResult = Test-NavigationCommand -UserInput $num
+                if ($navResult.ShouldReturn) { return }
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
                     Write-OutputColor "" -color "Info"
                     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
                     $treeHeader = "  DEPENDENCY TREE: $($svc.DisplayName)"
+                    if ($treeHeader.Length -gt 72) { $treeHeader = $treeHeader.Substring(0, 69) + "..." }
                     Write-OutputColor "  │$($treeHeader.PadRight(72))│" -color "Info"
                     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 

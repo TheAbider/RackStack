@@ -229,13 +229,15 @@ function Install-ScriptUpdate {
     $scriptName = Split-Path $script:ScriptPath -Leaf
 
     # Find the right asset to download
-    $assetName = if ($isExe) { "RackStack.exe" } else { "RackStack.v$remoteVersion.ps1" }
+    $assetName = if ($isExe) { "RackStack.exe" } else { "RackStack v$remoteVersion.ps1" }
     $asset = $Release.assets | Where-Object { $_.name -eq $assetName }
 
-    # Fallback: try the monolithic ps1 if exe not found
-    if (-not $asset -and $isExe) {
-        Write-OutputColor "  No .exe found in release assets." -color "Warning"
-        Write-OutputColor "  Looking for .ps1 alternative..." -color "Info"
+    # Fallback: try wildcard match if exact name not found
+    if (-not $asset) {
+        if ($isExe) {
+            Write-OutputColor "  No .exe found in release assets." -color "Warning"
+            Write-OutputColor "  Looking for .ps1 alternative..." -color "Info"
+        }
         $asset = $Release.assets | Where-Object { $_.name -like "RackStack*.ps1" } | Select-Object -First 1
     }
 
@@ -272,7 +274,8 @@ function Install-ScriptUpdate {
         # Parse SHA256 hash from release notes (format: "abcdef123...  filename")
         $hashPattern = '([0-9a-fA-F]{64})\s+' + [regex]::Escape($asset.name)
         if ($Release.body -match $hashPattern) {
-            $expectedHash = $Matches[1].ToUpper()
+            $regexMatches = $Matches
+            $expectedHash = $regexMatches[1].ToUpper()
         }
     }
 
@@ -554,7 +557,7 @@ function Invoke-RemoteProfileApply {
         Invoke-Command -Session $session -ScriptBlock {
             param($path, $content, $tempDir)
             if (-not (Test-Path $tempDir)) { New-Item -Path $tempDir -ItemType Directory -Force | Out-Null }
-            $content | Out-File -FilePath $path -Encoding UTF8 -Force
+            $content | Out-File -LiteralPath $path -Encoding UTF8 -Force
         } -ArgumentList $remotePath, $profileContent, $remoteTempDir -ErrorAction Stop
 
         Write-OutputColor "Profile copied to: $remotePath" -color "Success"
@@ -750,7 +753,8 @@ function Get-StoredCredential {
             $storedUser = ""
             foreach ($line in $cmdkeyOutput) {
                 if ($line -match "User:\s*(.+)$") {
-                    $storedUser = $Matches[1].Trim()
+                    $regexMatches = $Matches
+                    $storedUser = $regexMatches[1].Trim()
                     break
                 }
             }
@@ -785,7 +789,9 @@ function Show-CredentialManager {
     foreach ($target in $credentials) {
         $cmdkeyOutput = cmdkey /list:$target 2>&1 | Out-String
         if ($cmdkeyOutput -match "Target: $target") {
-            Write-OutputColor "  │$("  $target".PadRight(72))│" -color "Success"
+            $tgtLine = "  $target"
+            if ($tgtLine.Length -gt 72) { $tgtLine = $tgtLine.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($tgtLine.PadRight(72))│" -color "Success"
             $found = $true
         }
     }
@@ -804,6 +810,8 @@ function Show-CredentialManager {
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return }
 
     switch ($choice) {
         "1" {
@@ -1100,6 +1108,8 @@ function Show-InstalledSoftware {
     Write-OutputColor "  [B] ◄ Back" -color "Info"
     Write-OutputColor "" -color "Info"
     $choice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return }
 
     switch ($choice) {
         "1" {
@@ -1119,6 +1129,8 @@ function Show-InstalledSoftware {
         "2" {
             Write-OutputColor "  Enter search term:" -color "Info"
             $term = Read-Host "  Search"
+            $navResult = Test-NavigationCommand -UserInput $term
+            if ($navResult.ShouldReturn) { return }
             if ([string]::IsNullOrWhiteSpace($term)) { return }
             $matches_ = @($software | Where-Object { $_.Name -like "*$term*" -or $_.Publisher -like "*$term*" })
             Clear-Host
@@ -1289,14 +1301,17 @@ function Show-VSSWriterStatus {
     foreach ($line in $vssOutput) {
         $lineStr = "$line".Trim()
         if ($lineStr -match "^Writer name:\s*'(.+)'") {
+            $regexMatches = $Matches
             if ($null -ne $currentWriter) { $writers += $currentWriter }
-            $currentWriter = @{ Name = $Matches[1]; State = "Unknown"; LastError = "No error" }
+            $currentWriter = @{ Name = $regexMatches[1]; State = "Unknown"; LastError = "No error" }
         }
         elseif ($lineStr -match "^\s*State:\s*\[(\d+)\]\s*(.+)") {
-            if ($null -ne $currentWriter) { $currentWriter.State = $Matches[2].Trim() }
+            $regexMatches = $Matches
+            if ($null -ne $currentWriter) { $currentWriter.State = $regexMatches[2].Trim() }
         }
         elseif ($lineStr -match "^\s*Last error:\s*(.+)") {
-            if ($null -ne $currentWriter) { $currentWriter.LastError = $Matches[1].Trim() }
+            $regexMatches = $Matches
+            if ($null -ne $currentWriter) { $currentWriter.LastError = $regexMatches[1].Trim() }
         }
     }
     if ($null -ne $currentWriter) { $writers += $currentWriter }

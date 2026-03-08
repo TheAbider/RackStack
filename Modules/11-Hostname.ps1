@@ -5,10 +5,10 @@ function Set-HostName {
     Write-CenteredOutput "Set Hostname" -color "Info"
 
     $currentHostname = $env:COMPUTERNAME
-    Write-OutputColor "Current hostname: $currentHostname" -color "Info"
+    Write-OutputColor "  Current hostname: $currentHostname" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "Hostname requirements:" -color "Info"
+    Write-OutputColor "  Hostname requirements:" -color "Info"
     Write-OutputColor "  - 1-15 characters" -color "Info"
     Write-OutputColor "  - Start with a letter or digit" -color "Info"
     Write-OutputColor "  - Letters, digits, and hyphens only" -color "Info"
@@ -71,6 +71,10 @@ function Set-HostName {
         Write-OutputColor "Hostname changed to '$newHostname'. Reboot required!" -color "Success"
         $global:RebootNeeded = $true
         Add-SessionChange -Category "System" -Description "Changed hostname from '$currentHostname' to '$newHostname'"
+        Add-UndoAction -Category "System" -Description "Changed hostname to '$newHostname'" -UndoScript {
+            param($OldName)
+            Rename-Computer -NewName $OldName -Force -ErrorAction SilentlyContinue
+        }.GetNewClosure() -UndoParams @{ OldName = $currentHostname }
     }
     catch {
         Write-OutputColor "Failed to change hostname: $_" -color "Error"

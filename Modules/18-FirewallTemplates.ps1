@@ -37,9 +37,8 @@ function Set-FirewallRuleTemplates {
             "5" { Enable-iSCSIFirewallRules }
             "6" { Enable-SMBFirewallRules }
             "7" { Show-HyperVClusterFirewallRules }
-            "b" { return }
-            "B" { return }
-            default { Write-OutputColor "  Invalid choice." -color "Error"; Start-Sleep -Seconds 1 }
+            { $_ -eq "b" -or $_ -eq "B" } { return }
+            default { Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -65,6 +64,11 @@ function Enable-HyperVFirewallRules {
         Write-OutputColor "  Hyper-V rules partially enabled ($fwErrors group(s) unavailable)." -color "Warning"
     }
     Add-SessionChange -Category "Security" -Description "Enabled Hyper-V firewall rules"
+    Add-UndoAction -Category "Security" -Description "Enabled Hyper-V firewall rules" -UndoScript {
+        foreach ($group in @("Hyper-V", "Hyper-V Management Clients", "Hyper-V Replica HTTP", "Hyper-V Replica HTTPS")) {
+            Disable-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Enable-ClusterFirewallRules {
@@ -95,6 +99,12 @@ function Enable-ClusterFirewallRules {
     }
     Write-OutputColor "  Failover Cluster firewall rules enabled." -color "Success"
     Add-SessionChange -Category "Security" -Description "Enabled Failover Cluster firewall rules"
+    Add-UndoAction -Category "Security" -Description "Enabled Failover Cluster firewall rules" -UndoScript {
+        Disable-NetFirewallRule -DisplayGroup "Failover Clusters" -ErrorAction SilentlyContinue
+        foreach ($name in @("Cluster-RPC", "Cluster-RPC-Dynamic", "Cluster-UDP")) {
+            Remove-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Enable-ReplicaFirewallRules {
@@ -116,6 +126,14 @@ function Enable-ReplicaFirewallRules {
     }
     Write-OutputColor "  Hyper-V Replica firewall rules enabled." -color "Success"
     Add-SessionChange -Category "Security" -Description "Enabled Hyper-V Replica firewall rules"
+    Add-UndoAction -Category "Security" -Description "Enabled Hyper-V Replica firewall rules" -UndoScript {
+        foreach ($group in @("Hyper-V Replica HTTP", "Hyper-V Replica HTTPS")) {
+            Disable-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue
+        }
+        foreach ($name in @("Hyper-V Replica HTTP 80", "Hyper-V Replica HTTPS 443")) {
+            Remove-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Enable-LiveMigrationFirewallRules {
@@ -135,6 +153,12 @@ function Enable-LiveMigrationFirewallRules {
     }
     Write-OutputColor "  Live Migration firewall rules enabled." -color "Success"
     Add-SessionChange -Category "Security" -Description "Enabled Live Migration firewall rules"
+    Add-UndoAction -Category "Security" -Description "Enabled Live Migration firewall rules" -UndoScript {
+        foreach ($group in @("Hyper-V", "File and Printer Sharing")) {
+            Disable-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue
+        }
+        Remove-NetFirewallRule -DisplayName "Hyper-V Live Migration" -ErrorAction SilentlyContinue
+    }
 }
 
 function Enable-iSCSIFirewallRules {
@@ -151,6 +175,10 @@ function Enable-iSCSIFirewallRules {
     }
     Write-OutputColor "  iSCSI firewall rules enabled." -color "Success"
     Add-SessionChange -Category "Security" -Description "Enabled iSCSI firewall rules"
+    Add-UndoAction -Category "Security" -Description "Enabled iSCSI firewall rules" -UndoScript {
+        Disable-NetFirewallRule -DisplayGroup "iSCSI Service" -ErrorAction SilentlyContinue
+        Remove-NetFirewallRule -DisplayName "iSCSI Target" -ErrorAction SilentlyContinue
+    }
 }
 
 function Enable-SMBFirewallRules {
@@ -162,6 +190,11 @@ function Enable-SMBFirewallRules {
     }
     Write-OutputColor "  SMB/File Sharing firewall rules enabled." -color "Success"
     Add-SessionChange -Category "Security" -Description "Enabled SMB firewall rules"
+    Add-UndoAction -Category "Security" -Description "Enabled SMB firewall rules" -UndoScript {
+        foreach ($group in @("File and Printer Sharing", "Netlogon Service")) {
+            Disable-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Show-HyperVClusterFirewallRules {
@@ -187,6 +220,5 @@ function Show-HyperVClusterFirewallRules {
     }
 
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-PressEnter
 }
 #endregion

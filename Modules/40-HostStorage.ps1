@@ -116,7 +116,8 @@ function Move-OpticalDriveFromD {
             $volGuid = $null
             $mountvolOutput = mountvol D: /L 2>$null
             if ($mountvolOutput -match '(\\\\\?\\Volume\{[a-f0-9-]+\}\\)') {
-                $volGuid = $Matches[1]
+                $regexMatches = $Matches
+                $volGuid = $regexMatches[1]
             }
 
             if (-not $volGuid) {
@@ -378,6 +379,11 @@ function Initialize-HostStorage {
 
             if ($changed) {
                 Add-SessionChange -Category "Host Storage" -Description "Set Hyper-V default paths to $targetVMPath"
+                Add-UndoAction -Category "Host Storage" -Description "Set Hyper-V default paths to $targetVMPath" -UndoScript {
+                    param($OldVM, $OldVHD)
+                    Set-VMHost -VirtualMachinePath $OldVM -ErrorAction SilentlyContinue
+                    Set-VMHost -VirtualHardDiskPath $OldVHD -ErrorAction SilentlyContinue
+                }.GetNewClosure() -UndoParams @{ OldVM = $currentVMPath; OldVHD = $currentVHDPath }
             }
         }
         else {

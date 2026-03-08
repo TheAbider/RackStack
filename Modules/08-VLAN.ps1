@@ -109,7 +109,7 @@ function Set-AdapterVLAN {
             Write-OutputColor "  Reserved: 0 (system), 1 (default/native), 4095 (system)" -color "Debug"
             Write-OutputColor "  Legacy reserved: 1002-1005 (FDDI/Token Ring)" -color "Debug"
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "Enter VLAN ID:" -color "Info"
+            Write-OutputColor "  Enter VLAN ID:" -color "Info"
             $vlanIdInput = Read-Host
 
             # Check for navigation
@@ -119,7 +119,7 @@ function Set-AdapterVLAN {
             }
 
             if (-not (Test-ValidVLANId -VLANId $vlanIdInput)) {
-                Write-OutputColor "Invalid VLAN ID. Must be between 1 and 4094." -color "Error"
+                Write-OutputColor "  Invalid VLAN ID. Must be between 1 and 4094." -color "Error"
                 return
             }
 
@@ -142,9 +142,18 @@ function Set-AdapterVLAN {
             }
 
             try {
+                $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Access -VlanId $vlanId -ErrorAction Stop
                 Write-OutputColor "VLAN $vlanId configured successfully on $selectedAdapterName" -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set VLAN $vlanId on $selectedAdapterName"
+                Add-UndoAction -Category "Network" -Description "Set VLAN $vlanId on $selectedAdapterName" -UndoScript {
+                    param($AdapterName, $OldVlanId)
+                    if ($OldVlanId -gt 0) {
+                        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $AdapterName -Access -VlanId $OldVlanId -ErrorAction SilentlyContinue
+                    } else {
+                        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $AdapterName -Untagged -ErrorAction SilentlyContinue
+                    }
+                }.GetNewClosure() -UndoParams @{ AdapterName = $vmAdapterName; OldVlanId = $prevVlanId }
             }
             catch {
                 Write-OutputColor "Failed to set VLAN: $_" -color "Error"
@@ -153,9 +162,16 @@ function Set-AdapterVLAN {
         }
         "2" {
             try {
+                $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Untagged -ErrorAction Stop
                 Write-OutputColor "VLAN removed. Adapter is now untagged." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Removed VLAN from $selectedAdapterName"
+                if ($prevVlanId -gt 0) {
+                    Add-UndoAction -Category "Network" -Description "Removed VLAN from $selectedAdapterName" -UndoScript {
+                        param($AdapterName, $OldVlanId)
+                        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $AdapterName -Access -VlanId $OldVlanId -ErrorAction SilentlyContinue
+                    }.GetNewClosure() -UndoParams @{ AdapterName = $vmAdapterName; OldVlanId = $prevVlanId }
+                }
             }
             catch {
                 Write-OutputColor "Failed to remove VLAN: $_" -color "Error"

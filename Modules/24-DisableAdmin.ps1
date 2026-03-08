@@ -63,6 +63,9 @@ function Disable-BuiltInAdminAccount {
             Write-OutputColor "Built-in Administrator account has been disabled." -color "Success"
             $global:DisabledAdminReboot = $true
             Add-SessionChange -Category "Security" -Description "Disabled built-in Administrator account"
+            Add-UndoAction -Category "Security" -Description "Disabled built-in Administrator account" -UndoScript {
+                Enable-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue
+            }
             Clear-MenuCache  # Invalidate cache after change
         }
         else {

@@ -43,7 +43,7 @@ function Export-VMWizard {
         $vhdSizes = ($vm.HardDrives | ForEach-Object { (Get-VHD $_.Path @vmParams -ErrorAction SilentlyContinue).FileSize } | Measure-Object -Sum)
         $sizeStr = if ($null -ne $vhdSizes.Sum -and $vhdSizes.Sum -gt 0) { "{0:N0}GB" -f ($vhdSizes.Sum / 1GB) } else { "N/A" }
         $vmDisplay = "[$vmIndex]  $($vm.Name.PadRight(35)) $($vm.State.ToString().PadRight(10)) $sizeStr"
-        Write-OutputColor "  │  $($vmDisplay.PadRight(68))│" -color $stateColor
+        Write-OutputColor "  │  $($vmDisplay.PadRight(70))│" -color $stateColor
         $vmMap["$vmIndex"] = $vm
         $vmIndex++
     }
@@ -69,6 +69,7 @@ function Export-VMWizard {
     $exportPath = Read-Host "  "
     $navResult = Test-NavigationCommand -UserInput $exportPath
     if ($navResult.ShouldReturn) { return }
+    if (-not [string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $exportPath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $defaultPath }
 
     # Ensure export directory exists
@@ -248,7 +249,9 @@ function Import-VMWizard {
                 $vmcxMap["$index"] = $f.FullName
                 $index++
             }
-            $vchoice = Read-Host "  Enter number"
+            $vchoice = Read-Host "  Select"
+            $navResult = Test-NavigationCommand -UserInput $vchoice
+            if ($navResult.ShouldReturn) { return }
             if ($vmcxMap.ContainsKey($vchoice)) {
                 $vmcxPath = $vmcxMap[$vchoice]
             }
@@ -273,6 +276,8 @@ function Import-VMWizard {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
     $modeChoice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $modeChoice
+    if ($navResult.ShouldReturn) { return }
     $copyMode = $modeChoice -ne "2"
 
     if ($copyMode) {
@@ -280,6 +285,9 @@ function Import-VMWizard {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Destination for VM files (Enter for default: $script:HostVMStoragePath):" -color "Info"
         $destPath = Read-Host "  "
+        $navResult = Test-NavigationCommand -UserInput $destPath
+        if ($navResult.ShouldReturn) { return }
+        if (-not [string]::IsNullOrWhiteSpace($destPath)) { $destPath = $destPath.Trim('"') }
         if ([string]::IsNullOrWhiteSpace($destPath)) { $destPath = $script:HostVMStoragePath }
     }
 

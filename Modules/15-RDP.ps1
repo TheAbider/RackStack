@@ -67,6 +67,12 @@ function Enable-RDP {
         }
 
         Add-SessionChange -Category "System" -Description "Enabled Remote Desktop"
+        if (-not $rdpAlreadyEnabled) {
+            Add-UndoAction -Category "System" -Description "Enabled Remote Desktop" -UndoScript {
+                Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 1 -ErrorAction SilentlyContinue
+                Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+            }
+        }
         Clear-MenuCache  # Invalidate cache after change
     }
     catch {
@@ -84,7 +90,7 @@ function Enable-PowerShellRemoting {
     $winrmStatus = if ($null -ne $winrmService -and $winrmService.Status -eq "Running") { "Running" } else { "Stopped" }
     $winrmStartup = if ($null -ne $winrmService) { $winrmService.StartType } else { "Unknown" }
 
-    Write-OutputColor "Current WinRM Status:" -color "Info"
+    Write-OutputColor "  Current WinRM Status:" -color "Info"
     Write-OutputColor "  Service: $winrmStatus" -color $(if ($winrmStatus -eq "Running") { "Success" } else { "Warning" })
     Write-OutputColor "  Startup: $winrmStartup" -color "Info"
 
@@ -297,6 +303,13 @@ function Enable-PowerShellRemoting {
         Write-OutputColor "  Invoke-Command -ComputerName $env:COMPUTERNAME -ScriptBlock { ... }" -color "Success"
 
         Add-SessionChange -Category "System" -Description "Enabled PowerShell Remoting (WinRM)"
+        if ($winrmStatus -ne "Running") {
+            Add-UndoAction -Category "System" -Description "Enabled PowerShell Remoting (WinRM)" -UndoScript {
+                Disable-PSRemoting -Force -ErrorAction SilentlyContinue
+                Stop-Service -Name WinRM -Force -ErrorAction SilentlyContinue
+                Set-Service -Name WinRM -StartupType Manual -ErrorAction SilentlyContinue
+            }
+        }
         Clear-MenuCache  # Invalidate cache after change
     }
     catch {

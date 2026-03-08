@@ -347,7 +347,7 @@ function Register-ServerLicense {
                 return $productKey.ToUpper()
             }
             else {
-                Write-OutputColor "Invalid product key format. Please enter a valid 25-character key." -color "Error"
+                Write-OutputColor "  Invalid product key format. Enter a valid 25-character key." -color "Error"
                 $attempts++
                 if ($attempts -lt $script:MaxRetryAttempts) {
                     Write-OutputColor "Attempts remaining: $($script:MaxRetryAttempts - $attempts)" -color "Warning"

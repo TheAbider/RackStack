@@ -12,6 +12,8 @@ function Add-LocalAdminAccount {
     if (-not (Confirm-UserAction -Message "Use default account name ($localadminaccountname)?" -DefaultYes)) {
         Write-OutputColor "Enter account name (alphanumeric, 1-20 chars):" -color "Info"
         $customName = Read-Host
+        $navResult = Test-NavigationCommand -UserInput $customName
+        if ($navResult.ShouldReturn) { return }
 
         if (-not [string]::IsNullOrWhiteSpace($customName)) {
             if ($customName -match '^[a-zA-Z][a-zA-Z0-9_-]{0,19}$') {
@@ -19,10 +21,12 @@ function Add-LocalAdminAccount {
 
                 Write-OutputColor "Enter full name for the account:" -color "Info"
                 $customFullName = Read-Host
+                $navResult = Test-NavigationCommand -UserInput $customFullName
+                if ($navResult.ShouldReturn) { return }
                 $accountFullName = if ([string]::IsNullOrWhiteSpace($customFullName)) { $accountName } else { $customFullName }
             }
             else {
-                Write-OutputColor "Invalid account name. Using default." -color "Warning"
+                Write-OutputColor "  Invalid account name. Using default." -color "Warning"
             }
         }
     }
@@ -62,6 +66,7 @@ function Add-LocalAdminAccount {
             Write-OutputColor "Account '$accountName' created, but group membership could not be verified." -color "Warning"
         }
         Add-SessionChange -Category "Security" -Description "Created local admin account '$accountName'"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "Failed to create account: $_" -color "Error"

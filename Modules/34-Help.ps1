@@ -50,7 +50,8 @@ function Show-Help {
     Write-OutputColor "  │$(("  [3] Roles & Features        Hyper-V, MPIO, Clustering, $($script:AgentInstaller.ToolName)").PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [4] Security & Access       RDP, PS Remoting, Firewall, Defender".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("      > [1] RDP  [2] PS Remoting  [3] Firewall  [4] FW Templates".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("      > [5] Defender Exclusions  [6] Add Local Admin  [7] Disable".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("      > [5] FW Search  [6] Defender Exclusions  [7] Defender Status".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("      > [8] Add Local Admin  [9] Disable Admin  [10] Account Audit".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  [5] Tools & Utilities       NTP, Cleanup, Perf, Events, Services".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("      > [6] Network Diagnostics  [7] Server Readiness  [8] Roles".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  [6] Storage & Clustering    Disks, BitLocker, Dedup, Replica".PadRight(72))│" -color "Success"
@@ -155,20 +156,25 @@ function Show-Help {
     Write-OutputColor "  │$("  [7] Server Readiness         [8] Role Templates".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [9] Pagefile Configuration   [10] SNMP Configuration".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [11] Windows Server Backup   [12] Certificate Management".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [13] Scheduled Task Manager".PadRight(72))│" -color "Success"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Operations (Configure Server > [7])
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  OPERATIONS (Configure Server > [7])".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  OPERATIONS (Configure Server > [7])  — use [/] to search".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  [1] VM Checkpoints    [2] VM Export/Import".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [3] Cluster Dashboard [4] Cluster Drain/Resume".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [5] Remote PowerShell Session".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [6] Remote Server Health Check".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [7] Remote Service Manager".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [8]-[10] HTML Reports: Health, Readiness, Profile Comparison".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [11] Network Diagnostics".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  VM:      [1] Checkpoints  [2] Export/Import".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  Cluster: [3] Dashboard    [4] Drain/Resume".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  Remote:  [5] PS Session   [6] Health Check  [7] Service Mgr".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  Reports: [8] Health HTML  [9] Readiness     [10] Profile Compare".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  Tools:   [11] Net Diag    [12] Drift        [13] Perf Snapshot".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("           [14] Trend Report [15] Metrics     [16] Task Viewer".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  Audit:   [17] SMB Shares  [18] Software     [19] Cert Expiry".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("           [20] VSS Writers  [21] Event Alerts [22] Uptime".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("           [23] Drivers      [24] Disk Space  [25] WU Status".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("           [26] Ports        [27] Sched Tasks [28] FW Rules".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("           [29] Reboot Pending [30] Memory Pressure".PadRight(72))│" -color "Success"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -230,9 +236,14 @@ function Set-ColorTheme {
     if ($navResult.ShouldReturn) { return }
 
     if ($themeMap.ContainsKey($choice)) {
+        $prevTheme = $script:ColorTheme
         $script:ColorTheme = $themeMap[$choice]
         Write-OutputColor "Theme changed to: $($script:ColorTheme)" -color "Success"
         Add-SessionChange -Category "System" -Description "Changed color theme to $($script:ColorTheme)"
+        Add-UndoAction -Category "System" -Description "Changed color theme to $($script:ColorTheme)" -UndoScript {
+            param($OldTheme)
+            $script:ColorTheme = $OldTheme
+        }.GetNewClosure() -UndoParams @{ OldTheme = $prevTheme }
     }
     else {
         Write-OutputColor "Theme not changed." -color "Info"
@@ -386,7 +397,6 @@ function Start-Show-SettingsMenu {
             }
             "6" {
                 Test-ScriptUpdate
-                Write-PressEnter
             }
             "7" {
                 Show-CredentialManager
@@ -422,7 +432,7 @@ function Start-Show-SettingsMenu {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

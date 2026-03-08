@@ -120,6 +120,8 @@ function Get-ServerISO {
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return $null }
 
         switch ($choice) {
             "1" {

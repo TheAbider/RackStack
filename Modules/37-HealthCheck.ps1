@@ -71,8 +71,9 @@ function Show-SystemHealthCheck {
     # Network Adapters
     Write-OutputColor "=== NETWORK ADAPTERS ===" -color "Success"
     $allAdapters = Get-NetAdapter -ErrorAction SilentlyContinue
+    $allIPv4 = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
     foreach ($adapter in ($allAdapters | Where-Object { $_.Status -eq "Up" })) {
-        $ip = Get-NetIPAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+        $ip = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.Name } | Select-Object -First 1
         $ipStr = if ($ip) { $ip.IPAddress } else { "No IP" }
         Write-OutputColor "  $($adapter.Name): $ipStr ($($adapter.LinkSpeed))" -color "Success"
     }
@@ -149,30 +150,19 @@ function Show-SystemHealthCheck {
     }
     Write-OutputColor "" -color "Info"
 
-    # Summary
-    Write-OutputColor "=== SUMMARY ===" -color "Success"
+    # Collect issues for end-of-check summary (captures all checks, not just early ones)
     $issues = @()
-    if ($cpuLoad -gt 80) { $issues += "High CPU usage" }
-    if ($memPercent -gt 90) { $issues += "High memory usage" }
+    if ($cpuLoad -gt 80) { $issues += "High CPU usage ($([math]::Round($cpuLoad, 0))%)" }
+    if ($memPercent -gt 90) { $issues += "High memory usage ($memPercent%)" }
     foreach ($disk in $disks) {
         $usedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
-        if ($usedPercent -gt 90) { $issues += "Low disk space on $($disk.DeviceID)" }
+        if ($usedPercent -gt 90) { $issues += "Low disk space on $($disk.DeviceID) ($usedPercent%)" }
     }
     if (Test-RebootPending) { $issues += "Reboot pending" }
     $expiredCertCount = @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter -le (Get-Date) }).Count
     $expiringCertCount = @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter -lt (Get-Date).AddDays(30) -and $_.NotAfter -gt (Get-Date) }).Count
     if ($expiredCertCount -gt 0) { $issues += "$expiredCertCount expired certificate(s)" }
     if ($expiringCertCount -gt 0) { $issues += "$expiringCertCount certificate(s) expiring within 30 days" }
-
-    if ($issues.Count -eq 0) {
-        Write-OutputColor "  System health: GOOD - No issues detected" -color "Success"
-    }
-    else {
-        Write-OutputColor "  System health: ATTENTION NEEDED" -color "Warning"
-        foreach ($issue in $issues) {
-            Write-OutputColor "    - $issue" -color "Warning"
-        }
-    }
 
     # Disk I/O Latency (v1.7.0, enhanced v1.9.46)
     Write-OutputColor "=== DISK I/O LATENCY ===" -color "Success"
@@ -206,6 +196,7 @@ function Show-SystemHealthCheck {
 
             if ($degradedDisks.Count -gt 0) {
                 Write-OutputColor "  Disk Performance: DEGRADED ($($degradedDisks.Count) disk(s) above threshold)" -color "Error"
+                $issues += "High disk I/O latency on $($degradedDisks.Count) disk(s)"
             } elseif (@($diskData.Values | ForEach-Object { $_.Values } | Where-Object { $_ -gt 10 }).Count -gt 0) {
                 Write-OutputColor "  Disk Performance: FAIR (some latency above 10ms)" -color "Warning"
             } else {
@@ -298,7 +289,101 @@ function Show-SystemHealthCheck {
     }
     Write-OutputColor "" -color "Info"
 
-    Add-SessionChange -Category "System" -Description "Ran system health check"
+    # Time Sync Status
+    Write-OutputColor "=== TIME SYNC ===" -color "Success"
+    try {
+        $w32tmStatus = w32tm /query /status 2>&1
+        $timeSource = "Unknown"
+        $timeOffset = $null
+        foreach ($statusLine in $w32tmStatus) {
+            $lineText = $statusLine.ToString()
+            if ($lineText -match 'Source:\s*(.+)') {
+                $regexMatches = $matches
+                $timeSource = $regexMatches[1].Trim()
+            }
+            if ($lineText -match 'Phase Offset:\s*([\-\d\.]+)s') {
+                $regexMatches = $matches
+                $timeOffset = [double]$regexMatches[1]
+            }
+        }
+        $sourceDisplay = if ($timeSource.Length -gt 50) { $timeSource.Substring(0, 47) + "..." } else { $timeSource }
+        Write-OutputColor "  Source: $sourceDisplay" -color "Info"
+        if ($null -ne $timeOffset) {
+            $absOffset = [math]::Abs($timeOffset)
+            $offsetColor = if ($absOffset -gt 30) { "Error" } elseif ($absOffset -gt 1) { "Warning" } else { "Success" }
+            Write-OutputColor "  Offset: $([math]::Round($absOffset * 1000, 1))ms" -color $offsetColor
+            if ($absOffset -gt 30) { $issues += "Critical time skew (${timeOffset}s)" }
+            elseif ($absOffset -gt 5) { $issues += "Time skew detected (${timeOffset}s)" }
+        }
+        if ($timeSource -eq "Free-Running System Clock" -or $timeSource -eq "Local CMOS Clock") {
+            Write-OutputColor "  No external time source configured" -color "Warning"
+            $issues += "No NTP time source configured"
+        }
+    }
+    catch {
+        Write-OutputColor "  Time sync check unavailable." -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+
+    # Recent Critical Events (last 24h)
+    Write-OutputColor "=== RECENT CRITICAL EVENTS (24h) ===" -color "Success"
+    try {
+        $critEvents = @(Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction SilentlyContinue)
+        if ($critEvents.Count -eq 0) {
+            Write-OutputColor "  No critical or error events in the last 24 hours." -color "Success"
+        }
+        else {
+            $eventColor = if ($critEvents.Count -ge 5) { "Error" } else { "Warning" }
+            Write-OutputColor "  Found $($critEvents.Count)+ critical/error event(s):" -color $eventColor
+            foreach ($evt in $critEvents | Select-Object -First 5) {
+                $evtMsg = if ($evt.Message -and $evt.Message.Length -gt 55) { $evt.Message.Substring(0, 52) + "..." } elseif ($evt.Message) { $evt.Message } else { "(no message)" }
+                $evtMsg = $evtMsg -replace "`r`n|`n", " "
+                $evtTime = if ($evt.TimeCreated) { $evt.TimeCreated.ToString("MM-dd HH:mm") } else { "N/A" }
+                Write-OutputColor "  [$evtTime] $evtMsg" -color $eventColor
+            }
+            if ($critEvents.Count -ge 5) { $issues += "$($critEvents.Count)+ critical/error events in last 24h" }
+        }
+    }
+    catch {
+        if ($_.Exception.Message -notlike "*No events were found*") {
+            Write-OutputColor "  Event log check unavailable: $_" -color "Debug"
+        } else {
+            Write-OutputColor "  No critical or error events in the last 24 hours." -color "Success"
+        }
+    }
+    Write-OutputColor "" -color "Info"
+
+    # Firewall Status
+    Write-OutputColor "=== FIREWALL STATUS ===" -color "Success"
+    try {
+        $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+        foreach ($fwProfile in $fwProfiles) {
+            $fwEnabled = $fwProfile.Enabled -eq $true
+            $fwColor = if ($fwEnabled) { "Success" } else { "Warning" }
+            $fwStatus = if ($fwEnabled) { "Enabled" } else { "Disabled" }
+            Write-OutputColor "  $($fwProfile.Name): $fwStatus" -color $fwColor
+            if (-not $fwEnabled) { $issues += "Firewall $($fwProfile.Name) profile disabled" }
+        }
+    }
+    catch {
+        Write-OutputColor "  Firewall status unavailable." -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+
+    # Final Summary (at end, captures all issues from all checks)
+    Write-OutputColor "=== HEALTH SUMMARY ===" -color "Success"
+    if ($issues.Count -eq 0) {
+        Write-OutputColor "  System health: GOOD - No issues detected" -color "Success"
+    }
+    else {
+        Write-OutputColor "  System health: ATTENTION NEEDED ($($issues.Count) issue(s))" -color "Warning"
+        foreach ($issue in $issues) {
+            Write-OutputColor "    - $issue" -color "Warning"
+        }
+    }
+    Write-OutputColor "" -color "Info"
+
+    Add-SessionChange -Category "System" -Description "Ran system health check ($($issues.Count) issue(s))"
 }
 
 # Function to display server configuration readiness at a glance
@@ -422,7 +507,19 @@ function Show-ServerReadiness {
     $adaptersUp = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })
     if ($adaptersUp.Count -gt 0) {
         $ready++
-        $items += @{ Category = "NETWORK"; Name = "Network Adapters"; Value = "$($adaptersUp.Count) adapter(s) up"; Color = "Success"; Symbol = "[OK]" }
+        # Check for adapters at <1Gbps (potential cable/negotiation issue)
+        $slowCount = 0
+        foreach ($adp in $adaptersUp) {
+            if ($adp.LinkSpeed -match '(\d+)\s*Mbps') {
+                $regexMatches = $matches
+                if ([int]$regexMatches[1] -lt 1000) { $slowCount++ }
+            }
+        }
+        if ($slowCount -gt 0) {
+            $items += @{ Category = "NETWORK"; Name = "Network Adapters"; Value = "$($adaptersUp.Count) up, $slowCount below 1Gbps"; Color = "Warning"; Symbol = "[--]" }
+        } else {
+            $items += @{ Category = "NETWORK"; Name = "Network Adapters"; Value = "$($adaptersUp.Count) adapter(s) up"; Color = "Success"; Symbol = "[OK]" }
+        }
     } else {
         $items += @{ Category = "NETWORK"; Name = "Network Adapters"; Value = "No adapters up"; Color = "Error"; Symbol = "[!!]" }
     }
@@ -546,6 +643,77 @@ function Show-ServerReadiness {
         $items += @{ Category = "SECURITY"; Name = "Certificates"; Value = "Check failed"; Color = "Warning"; Symbol = "[--]" }
     }
 
+    # --- STORAGE ---
+    $total++
+    try {
+        $cVol = Get-Volume -DriveLetter C -ErrorAction Stop
+        if ($null -ne $cVol -and $cVol.Size -gt 0) {
+            $freeGB = [math]::Round($cVol.SizeRemaining / 1GB, 1)
+            $totalGB = [math]::Round($cVol.Size / 1GB, 1)
+            $usedPct = [math]::Round((($cVol.Size - $cVol.SizeRemaining) / $cVol.Size) * 100)
+            if ($freeGB -lt 5) {
+                $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "${freeGB}GB free of ${totalGB}GB ($usedPct% used)"; Color = "Error"; Symbol = "[!!]" }
+            } elseif ($freeGB -lt 20) {
+                $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "${freeGB}GB free of ${totalGB}GB ($usedPct% used)"; Color = "Warning"; Symbol = "[--]" }
+            } else {
+                $ready++
+                $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "${freeGB}GB free of ${totalGB}GB"; Color = "Success"; Symbol = "[OK]" }
+            }
+        } else {
+            $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "Unable to read"; Color = "Warning"; Symbol = "[--]" }
+        }
+    } catch {
+        $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "Check failed"; Color = "Warning"; Symbol = "[--]" }
+    }
+
+    # --- DNS RESOLUTION ---
+    $total++
+    try {
+        $dnsResult = Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
+        if ($dnsResult) {
+            $ready++
+            $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "Working"; Color = "Success"; Symbol = "[OK]" }
+        } else {
+            $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "No response"; Color = "Warning"; Symbol = "[--]" }
+        }
+    } catch {
+        $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "Failed"; Color = "Error"; Symbol = "[!!]" }
+    }
+
+    # --- TIME SYNC ---
+    $total++
+    try {
+        $w32tmOut = w32tm /query /status 2>&1
+        $tsSource = "Unknown"
+        foreach ($tsLine in $w32tmOut) {
+            $tsText = $tsLine.ToString()
+            if ($tsText -match 'Source:\s*(.+)') { $regexMatches = $matches; $tsSource = $regexMatches[1].Trim() }
+        }
+        if ($tsSource -match 'Free-Running|Local CMOS') {
+            $items += @{ Category = "SYSTEM"; Name = "Time Sync"; Value = "No external source"; Color = "Warning"; Symbol = "[--]" }
+        } else {
+            $ready++
+            $displaySource = if ($tsSource.Length -gt 35) { $tsSource.Substring(0, 32) + "..." } else { $tsSource }
+            $items += @{ Category = "SYSTEM"; Name = "Time Sync"; Value = $displaySource; Color = "Success"; Symbol = "[OK]" }
+        }
+    } catch {
+        $items += @{ Category = "SYSTEM"; Name = "Time Sync"; Value = "Check failed"; Color = "Warning"; Symbol = "[--]" }
+    }
+
+    # --- DEFENDER ---
+    $total++
+    try {
+        $mpStat = Get-MpComputerStatus -ErrorAction Stop
+        if ($mpStat.RealTimeProtectionEnabled) {
+            $ready++
+            $items += @{ Category = "SECURITY"; Name = "Defender Real-Time"; Value = "Enabled"; Color = "Success"; Symbol = "[OK]" }
+        } else {
+            $items += @{ Category = "SECURITY"; Name = "Defender Real-Time"; Value = "DISABLED"; Color = "Error"; Symbol = "[!!]" }
+        }
+    } catch {
+        $items += @{ Category = "SECURITY"; Name = "Defender Real-Time"; Value = "Unavailable"; Color = "Warning"; Symbol = "[--]" }
+    }
+
     # --- RENDER ---
     $currentCategory = ""
     foreach ($item in $items) {
@@ -612,9 +780,13 @@ function Show-QuickSetupWizard {
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     if ($isDefault) {
-        Write-OutputColor "  │$("  Current:  $hostname (DEFAULT - needs configuration)".PadRight(72))│" -color "Error"
+        $hostLine = "  Current:  $hostname (DEFAULT - needs configuration)"
+        if ($hostLine.Length -gt 72) { $hostLine = $hostLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($hostLine.PadRight(72))│" -color "Error"
     } else {
-        Write-OutputColor "  │$("  Current:  $hostname".PadRight(72))│" -color "Success"
+        $hostLine = "  Current:  $hostname"
+        if ($hostLine.Length -gt 72) { $hostLine = $hostLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($hostLine.PadRight(72))│" -color "Success"
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -648,10 +820,12 @@ function Show-QuickSetupWizard {
     Write-OutputColor "  ────────────────────────────────────────────" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem
+    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     if ($cs.PartOfDomain) {
-        Write-OutputColor "  │$("  Current:  Joined to $($cs.Domain)".PadRight(72))│" -color "Success"
+        $domLine = "  Current:  Joined to $($cs.Domain)"
+        if ($domLine.Length -gt 72) { $domLine = $domLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($domLine.PadRight(72))│" -color "Success"
     } else {
         Write-OutputColor "  │$("  Current:  WORKGROUP (not domain-joined)".PadRight(72))│" -color "Warning"
     }
@@ -759,7 +933,9 @@ function Show-QuickSetupWizard {
     if ($powerPlan.Name -eq "High performance") {
         Write-OutputColor "  │$("  Current:  High Performance".PadRight(72))│" -color "Success"
     } else {
-        Write-OutputColor "  │$("  Current:  $($powerPlan.Name)".PadRight(72))│" -color "Warning"
+        $ppLine = "  Current:  $($powerPlan.Name)"
+        if ($ppLine.Length -gt 72) { $ppLine = $ppLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($ppLine.PadRight(72))│" -color "Warning"
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -870,7 +1046,7 @@ function Show-RoleTemplates {
             $templateName = "HYPER-V HOST"
             $checks = @(
                 @{ Name = "Hostname Set";              Test = { $env:COMPUTERNAME -notmatch '^WIN-|^DESKTOP-|^YOURSERVERNAME' }; Action = "Set-HostName"; Category = "Identity" }
-                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
+                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
                 @{ Name = "RDP Enabled";               Test = { (Get-RDPState) -eq "Enabled" }; Action = "Enable-RDP"; Category = "Access" }
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
                 @{ Name = "Hyper-V Installed";         Test = { Test-HyperVInstalled }; Action = "Install-HyperVRole"; Category = "Roles" }
@@ -883,7 +1059,7 @@ function Show-RoleTemplates {
             $templateName = "STANDALONE SERVER"
             $checks = @(
                 @{ Name = "Hostname Set";              Test = { $env:COMPUTERNAME -notmatch '^WIN-|^DESKTOP-|^YOURSERVERNAME' }; Action = "Set-HostName"; Category = "Identity" }
-                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
+                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
                 @{ Name = "RDP Enabled";               Test = { (Get-RDPState) -eq "Enabled" }; Action = "Enable-RDP"; Category = "Access" }
                 @{ Name = "WinRM Enabled";             Test = { (Get-WinRMState) -match "Enabled|Running" }; Action = "Enable-PSRemoting"; Category = "Access" }
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
@@ -895,7 +1071,7 @@ function Show-RoleTemplates {
             $templateName = "CLUSTER NODE"
             $checks = @(
                 @{ Name = "Hostname Set";              Test = { $env:COMPUTERNAME -notmatch '^WIN-|^DESKTOP-|^YOURSERVERNAME' }; Action = "Set-HostName"; Category = "Identity" }
-                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
+                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
                 @{ Name = "RDP Enabled";               Test = { (Get-RDPState) -eq "Enabled" }; Action = "Enable-RDP"; Category = "Access" }
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
                 @{ Name = "Hyper-V Installed";         Test = { Test-HyperVInstalled }; Action = "Install-HyperVRole"; Category = "Roles" }
@@ -906,7 +1082,7 @@ function Show-RoleTemplates {
             if (Test-AgentInstallerConfigured) { $checks += @{ Name = "$($script:AgentInstaller.ToolName) Agent"; Test = { (Test-AgentInstalled).Installed }; Action = "Install-Agent"; Category = "Software" } }
         }
         default {
-            Write-OutputColor "Invalid selection." -color "Warning"
+            Write-OutputColor "  Invalid selection." -color "Warning"
             return
         }
     }
@@ -949,6 +1125,8 @@ function Show-RoleTemplates {
     Write-OutputColor "" -color "Info"
 
     $action = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $action
+    if ($navResult.ShouldReturn) { return }
 
     if ($action -ne "A" -and $action -ne "a") { return }
 

@@ -1,6 +1,7 @@
 ﻿#region ===== NETWORK ADAPTER FUNCTIONS =====
 function Select-PhysicalAdapters {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select Physical Adapters" -color "Info"
 
@@ -12,7 +13,7 @@ function Select-PhysicalAdapters {
         }
 
         if ($null -eq $adapters -or @($adapters).Count -eq 0) {
-            Write-OutputColor "No physical adapters found." -color "Error"
+            Write-OutputColor "  No physical adapters found." -color "Error"
             return $null
         }
 
@@ -26,8 +27,8 @@ function Select-PhysicalAdapters {
 
         Show-AdaptersTable -adapters $adapters -columnWidths $columnWidths
 
-        Write-OutputColor "Enter adapter index numbers separated by commas (e.g., 1,2) or type 'all' for all adapters:" -color "Warning"
-        Write-OutputColor "(Type 'R' to refresh, 'back' to cancel)" -color "Debug"
+        Write-OutputColor "  Enter adapter index numbers separated by commas (e.g., 1,2) or type 'all' for all adapters:" -color "Warning"
+        Write-OutputColor "  (Type 'R' to refresh, 'back' to cancel)" -color "Debug"
         $selection = Read-Host
 
         # Check for refresh
@@ -65,6 +66,7 @@ function Select-PhysicalAdapters {
 # Function to select a host network adapter (vEthernet adapters)
 function Select-Host-Network-Adapter {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select Host Network Adapter" -color "Info"
 
@@ -105,7 +107,7 @@ function Select-Host-Network-Adapter {
         }
 
         if ($selection -notmatch '^\d+$') {
-            Write-OutputColor "Invalid selection. Press Enter to try again..." -color "Error"
+            Write-OutputColor "  Invalid selection. Press Enter to try again..." -color "Error"
             Read-Host
             continue
         }
@@ -113,7 +115,7 @@ function Select-Host-Network-Adapter {
         $selectedAdapter = $adapters | Where-Object { $_.InterfaceIndex -eq [int]$selection }
 
         if ($null -eq $selectedAdapter) {
-            Write-OutputColor "Invalid selection. Press Enter to try again..." -color "Error"
+            Write-OutputColor "  Invalid selection. Press Enter to try again..." -color "Error"
             Read-Host
             continue
         }
@@ -125,6 +127,7 @@ function Select-Host-Network-Adapter {
 # Function to select a VM network adapter (non-vEthernet adapters)
 function Select-VM-Network-Adapter {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select VM Network Adapter" -color "Info"
 
@@ -165,7 +168,7 @@ function Select-VM-Network-Adapter {
         }
 
         if ($selection -notmatch '^\d+$') {
-            Write-OutputColor "Invalid selection. Press Enter to try again..." -color "Error"
+            Write-OutputColor "  Invalid selection. Press Enter to try again..." -color "Error"
             Read-Host
             continue
         }
@@ -173,7 +176,7 @@ function Select-VM-Network-Adapter {
         $selectedAdapter = $adapters | Where-Object { $_.InterfaceIndex -eq [int]$selection }
 
         if ($null -eq $selectedAdapter) {
-            Write-OutputColor "Invalid selection. Press Enter to try again..." -color "Error"
+            Write-OutputColor "  Invalid selection. Press Enter to try again..." -color "Error"
             Read-Host
             continue
         }
@@ -185,6 +188,7 @@ function Select-VM-Network-Adapter {
 # Function to select iSCSI adapters (shows all adapters including down)
 function Select-iSCSI-Adapters {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select iSCSI Adapters" -color "Info"
 

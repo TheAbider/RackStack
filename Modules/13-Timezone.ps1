@@ -172,6 +172,7 @@ function Show-RegionTimezones {
             $tz = $timezones[$i]
             $marker = if ($tz.Id -eq $currentTz.Id) { " <-- Current" } else { "" }
             $label = "  [$($i + 1)]  $($tz.Display)$marker"
+            if ($label.Length -gt 72) { $label = $label.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($label.PadRight(72))│" -color "Info"
         }
 
@@ -210,7 +211,7 @@ function Show-RegionTimezones {
 
 # Browse all system timezones with pagination
 function Show-AllSystemTimezones {
-    $allTz = Get-TimeZone -ListAvailable | Sort-Object BaseUtcOffset
+    $allTz = @(Get-TimeZone -ListAvailable | Sort-Object BaseUtcOffset)
     $currentTz = Get-TimeZone
     $pageSize = 20
     $page = 0
@@ -238,7 +239,7 @@ function Show-AllSystemTimezones {
             $marker = if ($tz.Id -eq $currentTz.Id) { " <-- Current" } else { "" }
             $num = $i + 1
             $label = "  [$num]  $offsetStr  $($tz.Id)$marker"
-            if ($label.Length -gt 74) { $label = $label.Substring(0, 71) + "..." }
+            if ($label.Length -gt 72) { $label = $label.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($label.PadRight(72))│" -color "Info"
         }
 
@@ -303,10 +304,15 @@ function Set-SelectedTimezone {
 
     try {
         # Use the full cmdlet path to avoid recursion
+        $prevTzId = $currentTz.Id
         Microsoft.PowerShell.Management\Set-TimeZone -Id $TimezoneId -ErrorAction Stop
         $newTz = Get-TimeZone
         Write-OutputColor "  Timezone set to: $($newTz.DisplayName)" -color "Success"
         Add-SessionChange -Category "System" -Description "Set timezone to $($newTz.DisplayName)"
+        Add-UndoAction -Category "System" -Description "Set timezone to $($newTz.DisplayName)" -UndoScript {
+            param($OldTzId)
+            Microsoft.PowerShell.Management\Set-TimeZone -Id $OldTzId -ErrorAction SilentlyContinue
+        }.GetNewClosure() -UndoParams @{ OldTzId = $prevTzId }
 
         # Sync time (with pre-flight check)
         $w32timeSvc = Get-Service -Name W32Time -ErrorAction SilentlyContinue

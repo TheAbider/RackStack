@@ -75,6 +75,8 @@ function Set-NTPConfiguration {
             "4" {
                 Write-OutputColor "" -color "Info"
                 $customNTP = Read-Host "  Enter NTP server address"
+                $navResult = Test-NavigationCommand -UserInput $customNTP
+                if ($navResult.ShouldReturn) { return }
                 if ($customNTP -and $customNTP -match '^[a-zA-Z0-9][a-zA-Z0-9\.\-]*[a-zA-Z0-9]$') {
                     Set-NTPServer -Server $customNTP
                 } elseif ($customNTP) {
@@ -96,7 +98,7 @@ function Set-NTPConfiguration {
             }
             "b" { return }
             "B" { return }
-            default { Write-OutputColor "  Invalid choice." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -113,6 +115,10 @@ function Set-NTPServer {
     Write-OutputColor "  Configuring NTP server: $Server" -color "Info"
 
     try {
+        # Capture previous NTP config for undo
+        $prevNTPConfig = w32tm /query /configuration 2>&1
+        $prevSource = ($prevNTPConfig | Where-Object { $_ -match 'NtpServer:' }) -replace '.*NtpServer:\s*', '' -replace '\s*\(.*', ''
+
         if ($IsDomainType) {
             # Configure to sync with domain hierarchy
             $null = w32tm /config /syncfromflags:DOMHIER /update 2>&1
@@ -138,6 +144,13 @@ function Set-NTPServer {
 
         Write-OutputColor "  NTP server configured successfully." -color "Success"
         Add-SessionChange -Category "System" -Description "Configured NTP server: $Server"
+        if ($prevSource -and -not $IsDomainType) {
+            Add-UndoAction -Category "System" -Description "Configured NTP server: $Server" -UndoScript {
+                param($OldServer)
+                w32tm /config /manualpeerlist:$OldServer /syncfromflags:manual /reliable:yes /update 2>&1
+                Restart-Service w32time -Force -ErrorAction SilentlyContinue
+            }.GetNewClosure() -UndoParams @{ OldServer = $prevSource }
+        }
     }
     catch {
         Write-OutputColor "  Failed to configure NTP: $_" -color "Error"
@@ -194,7 +207,5 @@ function Show-DetailedTimeStatus {
             Write-OutputColor "  Clock offset: ${offsetMs}ms — excellent synchronization" -color "Success"
         }
     }
-
-    Write-PressEnter
 }
 #endregion

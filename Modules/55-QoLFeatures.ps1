@@ -109,104 +109,113 @@ function Add-Favorite {
 
 # Function to show favorites menu
 function Show-Favorites {
-    Import-Favorites
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+        Import-Favorites
 
-    Clear-Host
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                          FAVORITES").PadRight(72))║" -color "Info"
-    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
-    Write-OutputColor "" -color "Info"
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                          FAVORITES").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    if ($script:Favorites.Count -eq 0) {
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  No favorites saved yet.".PadRight(72))│" -color "Warning"
-        Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  To add a favorite, use [F] Add Favorite from Settings menu.".PadRight(72))│" -color "Info"
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    }
-    else {
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  YOUR FAVORITES".PadRight(72))│" -color "Info"
-        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-
-        $index = 1
-        foreach ($fav in $script:Favorites) {
-            if ($null -eq $fav.Name) { $fav.Name = "Unknown" }
-            if ($null -eq $fav.MenuPath) { $fav.MenuPath = "" }
-            $favName = if ($fav.Name.Length -gt 40) { $fav.Name.Substring(0,37) + "..." } else { $fav.Name.PadRight(40) }
-            $favPath = if ($fav.MenuPath.Length -gt 25) { $fav.MenuPath.Substring(0,22) + "..." } else { $fav.MenuPath.PadRight(25) }
-            Write-OutputColor "  │  [$index]  $favName $favPath│" -color "Success"
-            $index++
+        if ($script:Favorites.Count -eq 0) {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  No favorites saved yet.".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  To add a favorite, use [A] below.".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         }
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    }
+        else {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  YOUR FAVORITES".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [A] Add Favorite    [D] Delete Favorite    [C] Clear All" -color "Info"
-    Write-OutputColor "  [B] ◄ Back" -color "Info"
-    Write-OutputColor "" -color "Info"
-
-    $choice = Read-Host "  Select"
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
-
-    switch -Regex ($choice) {
-        '^[Aa]$' {
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  Enter favorite name:" -color "Info"
-            $name = Read-Host "  "
-            if ([string]::IsNullOrWhiteSpace($name)) { return }
-
-            Write-OutputColor "  Enter menu path (e.g., 'Configure Server > Network > SET'):" -color "Info"
-            $path = Read-Host "  "
-            if ([string]::IsNullOrWhiteSpace($path)) { return }
-
-            Add-Favorite -Name $name -MenuPath $path
-            Write-OutputColor "  Favorite added!" -color "Success"
-            Start-Sleep -Seconds 1
+            $index = 1
+            foreach ($fav in $script:Favorites) {
+                if ($null -eq $fav.Name) { $fav.Name = "Unknown" }
+                if ($null -eq $fav.MenuPath) { $fav.MenuPath = "" }
+                $favName = if ($fav.Name.Length -gt 40) { $fav.Name.Substring(0,37) + "..." } else { $fav.Name.PadRight(40) }
+                $favPath = if ($fav.MenuPath.Length -gt 25) { $fav.MenuPath.Substring(0,22) + "..." } else { $fav.MenuPath.PadRight(25) }
+                Write-OutputColor "  │  [$index]  $favName $favPath│" -color "Success"
+                $index++
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         }
-        '^[Dd]$' {
-            if ($script:Favorites.Count -eq 0) { return }
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  Enter number to delete:" -color "Info"
-            $delNum = Read-Host "  "
-            if ($delNum -notmatch '^\d+$') { return }
-            $delIndex = [int]$delNum - 1
-            if ($delIndex -ge 0 -and $delIndex -lt $script:Favorites.Count) {
-                $tempFavorites = @()
-                for ($i = 0; $i -lt $script:Favorites.Count; $i++) {
-                    if ($i -ne $delIndex) { $tempFavorites += $script:Favorites[$i] }
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [A] Add Favorite    [D] Delete Favorite    [C] Clear All" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        switch -Regex ($choice) {
+            '^[Aa]$' {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Enter favorite name:" -color "Info"
+                $name = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $name
+                if ($navResult.ShouldReturn) { continue }
+                if ([string]::IsNullOrWhiteSpace($name)) { continue }
+
+                Write-OutputColor "  Enter menu path (e.g., 'Configure Server > Network > SET'):" -color "Info"
+                $path = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $path
+                if ($navResult.ShouldReturn) { continue }
+                if ([string]::IsNullOrWhiteSpace($path)) { continue }
+
+                Add-Favorite -Name $name -MenuPath $path
+                Write-OutputColor "  Favorite added!" -color "Success"
+                Start-Sleep -Seconds 1
+            }
+            '^[Dd]$' {
+                if ($script:Favorites.Count -eq 0) { continue }
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Enter number to delete:" -color "Info"
+                $delNum = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $delNum
+                if ($navResult.ShouldReturn) { continue }
+                if ($delNum -notmatch '^\d+$') { continue }
+                $delIndex = [int]$delNum - 1
+                if ($delIndex -ge 0 -and $delIndex -lt $script:Favorites.Count) {
+                    $tempFavorites = @()
+                    for ($i = 0; $i -lt $script:Favorites.Count; $i++) {
+                        if ($i -ne $delIndex) { $tempFavorites += $script:Favorites[$i] }
+                    }
+                    $script:Favorites = $tempFavorites
+                    Export-Favorites
+                    Write-OutputColor "  Favorite deleted." -color "Success"
+                    Start-Sleep -Seconds 1
                 }
-                $script:Favorites = $tempFavorites
-                Export-Favorites
-                Write-OutputColor "  Favorite deleted." -color "Success"
-                Start-Sleep -Seconds 1
             }
-        }
-        '^[Cc]$' {
-            if (Confirm-UserAction -Message "Clear all favorites?") {
-                $script:Favorites = @()
-                Export-Favorites
-                Write-OutputColor "  All favorites cleared." -color "Success"
-                Start-Sleep -Seconds 1
+            '^[Cc]$' {
+                if (Confirm-UserAction -Message "Clear all favorites?") {
+                    $script:Favorites = @()
+                    Export-Favorites
+                    Write-OutputColor "  All favorites cleared." -color "Success"
+                    Start-Sleep -Seconds 1
+                }
             }
-        }
-        '^[Bb]$' { return }
-        '^\d+$' {
-            $favIndex = [int]$choice - 1
-            if ($favIndex -ge 0 -and $favIndex -lt $script:Favorites.Count) {
-                $selectedFav = $script:Favorites[$favIndex]
-                $funcName = $selectedFav.FunctionName
-                if ($funcName -and (Get-Command $funcName -ErrorAction SilentlyContinue)) {
-                    & $funcName
+            '^[Bb]$' { return }
+            '^\d+$' {
+                $favIndex = [int]$choice - 1
+                if ($favIndex -ge 0 -and $favIndex -lt $script:Favorites.Count) {
+                    $selectedFav = $script:Favorites[$favIndex]
+                    $funcName = $selectedFav.FunctionName
+                    if ($funcName -and (Get-Command $funcName -ErrorAction SilentlyContinue)) {
+                        & $funcName
+                    } else {
+                        Write-OutputColor "  Navigate to: $($selectedFav.MenuPath)" -color "Info"
+                        Write-PressEnter
+                    }
                 } else {
-                    Write-OutputColor "  Navigate to: $($selectedFav.MenuPath)" -color "Info"
-                    Write-PressEnter
+                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Start-Sleep -Seconds 1
                 }
-            } else {
-                Write-OutputColor "  Invalid selection." -color "Error"
-                Start-Sleep -Seconds 1
             }
         }
     }
@@ -262,60 +271,67 @@ function Export-CommandHistory {
 
 # Function to show command history
 function Show-CommandHistory {
-    Import-CommandHistory
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+        Import-CommandHistory
 
-    Clear-Host
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                       COMMAND HISTORY").PadRight(72))║" -color "Info"
-    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
-    Write-OutputColor "" -color "Info"
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                       COMMAND HISTORY").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    if ($script:CommandHistory.Count -eq 0) {
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  No command history yet.".PadRight(72))│" -color "Warning"
-        Write-OutputColor "  │$("  History is recorded as you use the tool.".PadRight(72))│" -color "Info"
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    }
-    else {
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  RECENT COMMANDS (last 20)".PadRight(72))│" -color "Info"
-        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-
-        # Show last 20
-        $recentHistory = $script:CommandHistory | Select-Object -Last 20
-        $index = 1
-        foreach ($cmd in $recentHistory) {
-            $cmdName = if ($cmd.Command) { $cmd.Command } else { "(unknown)" }
-            $cmdStr = if ($cmdName.Length -gt 40) { $cmdName.Substring(0,37) + "..." } else { $cmdName.PadRight(40) }
-            $timeStr = if ($cmd.Timestamp -and $cmd.Timestamp.Length -ge 16) { $cmd.Timestamp.Substring(5,11) } else { "           " }
-            Write-OutputColor "  │  [$($index.ToString().PadLeft(2))] $cmdStr $timeStr│" -color "Info"
-            $index++
+        if ($script:CommandHistory.Count -eq 0) {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  No command history yet.".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$("  History is recorded as you use the tool.".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         }
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        else {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  RECENT COMMANDS (last 20)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+            # Show last 20
+            $recentHistory = $script:CommandHistory | Select-Object -Last 20
+            $index = 1
+            foreach ($cmd in $recentHistory) {
+                $cmdName = if ($cmd.Command) { $cmd.Command } else { "(unknown)" }
+                $cmdStr = if ($cmdName.Length -gt 40) { $cmdName.Substring(0,37) + "..." } else { $cmdName.PadRight(40) }
+                $timeStr = if ($cmd.Timestamp -and $cmd.Timestamp.Length -ge 16) { $cmd.Timestamp.Substring(5,11) } else { "           " }
+                Write-OutputColor "  │  [$($index.ToString().PadLeft(2))] $cmdStr $timeStr│" -color "Info"
+                $index++
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Total history entries: $($script:CommandHistory.Count)" -color "Info"
+        }
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  Total history entries: $($script:CommandHistory.Count)" -color "Info"
-    }
+        Write-OutputColor "  [C] Clear History    [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [C] Clear History    [B] ◄ Back" -color "Info"
-    Write-OutputColor "" -color "Info"
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
 
-    $choice = Read-Host "  Select"
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
-
-    switch ("$choice".ToUpper()) {
-        "C" {
-            if (Confirm-UserAction -Message "Clear all command history?") {
-                $script:CommandHistory = @()
-                Export-CommandHistory
-                Write-OutputColor "  History cleared." -color "Success"
+        switch ("$choice".ToUpper()) {
+            "C" {
+                if (Confirm-UserAction -Message "Clear all command history?") {
+                    $script:CommandHistory = @()
+                    Export-CommandHistory
+                    Write-OutputColor "  History cleared." -color "Success"
+                    Start-Sleep -Seconds 1
+                }
+            }
+            "B" { return }
+            default {
+                Write-OutputColor "  Invalid choice. Enter C or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
-        "B" { return }
     }
 }
 
@@ -417,6 +433,7 @@ function Restore-SessionState {
 function Set-PagefileConfiguration {
     # --- Section: Main Configuration Loop ---
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"
@@ -521,6 +538,8 @@ function Set-PagefileConfiguration {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Enter initial size in MB (minimum 1024):" -color "Info"
                 $initialInput = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $initialInput
+                if ($navResult.ShouldReturn) { continue }
                 if (-not ($initialInput -match '^\d+$')) {
                     Write-OutputColor "  Invalid input. Must be a number." -color "Error"
                     Write-PressEnter
@@ -540,6 +559,8 @@ function Set-PagefileConfiguration {
 
                 Write-OutputColor "  Enter maximum size in MB (must be >= initial size):" -color "Info"
                 $maxInput = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $maxInput
+                if ($navResult.ShouldReturn) { continue }
                 if (-not ($maxInput -match '^\d+$')) {
                     Write-OutputColor "  Invalid input. Must be a number." -color "Error"
                     Write-PressEnter
@@ -635,6 +656,8 @@ function Set-PagefileConfiguration {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Select target drive number:" -color "Info"
                 $driveChoice = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $driveChoice
+                if ($navResult.ShouldReturn) { continue }
                 if (-not ($driveChoice -match '^\d+$') -or [int]$driveChoice -lt 1 -or [int]$driveChoice -gt $drives.Count) {
                     Write-OutputColor "  Invalid selection." -color "Error"
                     Write-PressEnter
@@ -689,8 +712,8 @@ function Set-PagefileConfiguration {
             }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Please enter 1-3 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-3 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -789,6 +812,8 @@ function Set-SNMPConfiguration {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Enter community string name:" -color "Info"
                 $communityName = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $communityName
+                if ($navResult.ShouldReturn) { continue }
                 if ([string]::IsNullOrWhiteSpace($communityName)) {
                     Write-OutputColor "  Community string name cannot be empty." -color "Error"
                     Write-PressEnter
@@ -800,6 +825,8 @@ function Set-SNMPConfiguration {
                 Write-OutputColor "  [1] READ ONLY  (4)  - Recommended for monitoring" -color "Info"
                 Write-OutputColor "  [2] READ WRITE (8)" -color "Info"
                 $permChoice = Read-Host "  Select"
+                $navResult = Test-NavigationCommand -UserInput $permChoice
+                if ($navResult.ShouldReturn) { return }
 
                 $permValue = switch ($permChoice) {
                     "1" { 4 }
@@ -853,7 +880,9 @@ function Set-SNMPConfiguration {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Enter number to remove (or B to cancel):" -color "Info"
                 $removeChoice = Read-Host "  "
-                if ("$removeChoice".ToUpper() -eq "B" -or [string]::IsNullOrWhiteSpace($removeChoice)) { continue }
+                $navResult = Test-NavigationCommand -UserInput $removeChoice
+                if ($navResult.ShouldReturn) { continue }
+                if ([string]::IsNullOrWhiteSpace($removeChoice)) { continue }
 
                 if (-not ($removeChoice -match '^\d+$') -or [int]$removeChoice -lt 1 -or [int]$removeChoice -gt $propNames.Count) {
                     Write-OutputColor "  Invalid selection." -color "Error"
@@ -908,11 +937,15 @@ function Set-SNMPConfiguration {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  [A] Add Manager    [R] Remove All    [B] Back" -color "Info"
                 $mgrChoice = Read-Host "  Select"
+                $navResult = Test-NavigationCommand -UserInput $mgrChoice
+                if ($navResult.ShouldReturn) { return }
 
                 switch ("$mgrChoice".ToUpper()) {
                     "A" {
                         Write-OutputColor "  Enter manager IP or hostname:" -color "Info"
                         $mgrHost = Read-Host "  "
+                        $navResult = Test-NavigationCommand -UserInput $mgrHost
+                        if ($navResult.ShouldReturn) { continue }
                         if ([string]::IsNullOrWhiteSpace($mgrHost)) { continue }
                         # Validate hostname/IP format
                         if ($mgrHost -notmatch '^[a-zA-Z0-9._-]+$') {
@@ -1011,8 +1044,8 @@ function Set-SNMPConfiguration {
             }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Please enter 1-4 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
@@ -1244,7 +1277,9 @@ function Show-CertificateMenu {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Enter certificate number to export (or B to cancel):" -color "Info"
                 $certChoice = Read-Host "  "
-                if ("$certChoice".ToUpper() -eq "B" -or [string]::IsNullOrWhiteSpace($certChoice)) { continue }
+                $navResult = Test-NavigationCommand -UserInput $certChoice
+                if ($navResult.ShouldReturn) { continue }
+                if ([string]::IsNullOrWhiteSpace($certChoice)) { continue }
 
                 if (-not ($certChoice -match '^\d+$') -or [int]$certChoice -lt 1 -or [int]$certChoice -gt $certs.Count) {
                     Write-OutputColor "  Invalid selection." -color "Error"
@@ -1281,8 +1316,8 @@ function Show-CertificateMenu {
             }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Please enter 1-3 or B." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-3 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }

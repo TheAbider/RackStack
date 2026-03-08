@@ -30,10 +30,22 @@
     7h3 4b1d3r
 
 .VERSION
-    1.20.9
+    1.21.0
 
 .LAST UPDATED
-    03/05/2026
+    03/06/2026
+
+.CHANGELOG v1.21.0
+    RESILIENCE, UX, BUG FIXES:
+    - NEW: Performance Dashboard Copy to Clipboard — [C] key copies full system snapshot to clipboard (Performance Dashboard)
+    - FIX: OS detection uses registry-first approach — immune to WMI/CIM service hangs (Initialization, System Check)
+    - FIX: Firewall state detection uses registry-first approach — prevents hang when CIM is unresponsive (System Check)
+    - FIX: Drag-and-drop paths auto-trim surrounding quotes across 12+ modules (Defender Exclusions, Failover Clustering, Batch Config, Config Export, VM Export/Import, BitLocker, Storage Backends, Hyper-V Replica, Scheduled Tasks, Operations Menu)
+    - FIX: PS 5.1 pipeline .Count bug — single pipeline results wrapped with @() for consistent counting (VM Deployment, Config Export, Agent Installer)
+    - FIX: Agent Installer single-match auto-install was broken on PS 5.1 — search results now properly wrapped (Agent Installer)
+    - FIX: Quorum witness share path navigation uses return instead of break (Failover Clustering)
+    - FIX: VM Import destination path supports navigation commands (VM Export/Import)
+    64 modules, 2087 tests
 
 .CHANGELOG v1.20.9
     BUG FIXES — ERROR HANDLING, CONFIRM PROMPTS, STATE ROLLBACK:

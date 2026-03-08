@@ -1,4 +1,34 @@
 ﻿#region ===== SESSION SUMMARY =====
+# Quick inline view of session changes (accessible from main menu via [V])
+function Show-QuickSessionChanges {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  SESSION CHANGES".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    if ($script:SessionChanges.Count -eq 0) {
+        Write-OutputColor "  │$("  No changes made this session.".PadRight(72))│" -color "Info"
+    } else {
+        $categories = @($script:SessionChanges | Group-Object -Property Category)
+        foreach ($cat in $categories) {
+            $catLine = "  $($cat.Name) ($($cat.Count))"
+            if ($catLine.Length -gt 72) { $catLine = $catLine.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($catLine.PadRight(72))│" -color "Info"
+            foreach ($change in $cat.Group) {
+                $changeLine = "    $($change.Description)"
+                if ($changeLine.Length -gt 72) { $changeLine = $changeLine.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($changeLine.PadRight(72))│" -color "Success"
+            }
+        }
+    }
+
+    $runtime = (Get-Date) - $script:ScriptStartTime
+    $totalLine = "  Total: $($script:SessionChanges.Count) change(s)  |  Session: $($runtime.Hours)h $($runtime.Minutes)m"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    Write-OutputColor "  │$($totalLine.PadRight(72))│" -color "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+}
+
 # Function to show session summary
 function Show-SessionSummary {
     Clear-Host
@@ -50,7 +80,7 @@ function Show-SessionSummary {
                 foreach ($change in $script:SessionChanges) {
                     $summaryLines += "[$($change.Timestamp)] [$($change.Category)] $($change.Description)"
                 }
-                $summaryLines | Out-File -FilePath $summaryPath -Encoding UTF8 -Force
+                $summaryLines | Out-File -LiteralPath $summaryPath -Encoding UTF8 -Force
                 Write-OutputColor "  Summary exported to: $summaryPath" -color "Success"
             }
             catch {
@@ -69,7 +99,7 @@ function Show-SessionSummary {
                         Changes = @($script:SessionChanges | ForEach-Object {
                             @{ Timestamp = $_.Timestamp; Category = $_.Category; Description = $_.Description }
                         })
-                    } | ConvertTo-Json -Depth 5 | Out-File -FilePath $jsonPath -Encoding UTF8 -Force
+                    } | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $jsonPath -Encoding UTF8 -Force
                     Write-OutputColor "  JSON export: $jsonPath" -color "Success"
                 }
                 catch {

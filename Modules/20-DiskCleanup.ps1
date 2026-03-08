@@ -85,7 +85,7 @@ function Start-DiskCleanup {
             }
             "b" { return }
             "B" { return }
-            default { Write-OutputColor "  Invalid choice." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -151,8 +151,8 @@ function Invoke-DeepClean {
     }
 
     # Clear CBS logs
-    if (Test-Path "$env:SystemRoot\Logs\CBS") {
-        Get-ChildItem "$env:SystemRoot\Logs\CBS\*.log" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath "$env:SystemRoot\Logs\CBS") {
+        Get-ChildItem -Path "$env:SystemRoot\Logs\CBS\*.log" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
         Write-OutputColor "  CBS logs cleared." -color "Success"
     }
 

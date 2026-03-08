@@ -160,7 +160,7 @@ function Start-ClusterNodeDrain {
         $vmCount = @(Get-ClusterGroup -Cluster $cluster.Name |
             Where-Object { $_.GroupType -eq 'VirtualMachine' -and $_.OwnerNode -eq $node.Name }).Count
         $nodeLine = "[$index]  $($node.Name.PadRight(30)) VMs: $vmCount"
-        Write-OutputColor "  │  $($nodeLine.PadRight(68))│" -color "Success"
+        Write-OutputColor "  │  $($nodeLine.PadRight(70))│" -color "Success"
         $nodeMap["$index"] = $node.Name
         $index++
     }
@@ -230,7 +230,7 @@ function Resume-ClusterNodeFromDrain {
     $nodeMap = @{}
     foreach ($node in $pausedNodes) {
         $nodeLine = "[$index]  $($node.Name.PadRight(50)) PAUSED"
-        Write-OutputColor "  │  $($nodeLine.PadRight(68))│" -color "Warning"
+        Write-OutputColor "  │  $($nodeLine.PadRight(70))│" -color "Warning"
         $nodeMap["$index"] = $node.Name
         $index++
     }

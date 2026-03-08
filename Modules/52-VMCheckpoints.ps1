@@ -117,7 +117,7 @@ function New-VMCheckpointWizard {
     foreach ($vm in $vms) {
         $stateColor = if ($vm.State -eq 'Running') { "Success" } else { "Warning" }
         $vmDisplay = "[$vmIndex]  $($vm.Name.PadRight(40)) $($vm.State)"
-        Write-OutputColor "  │  $($vmDisplay.PadRight(68))│" -color $stateColor
+        Write-OutputColor "  │  $($vmDisplay.PadRight(70))│" -color $stateColor
         $vmMap["$vmIndex"] = $vm
         $vmIndex++
     }
@@ -153,6 +153,8 @@ function New-VMCheckpointWizard {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
     $typeChoice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $typeChoice
+    if ($navResult.ShouldReturn) { return }
     $cpType = if ($typeChoice -eq "2") { "Standard" } else { "Production" }
 
     # Confirm

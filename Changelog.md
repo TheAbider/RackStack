@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.21.0
+
+- **New Feature:** Performance Dashboard Copy to Clipboard — press `[C]` to copy a full system snapshot (CPU, memory, disk, network, top processes) to clipboard for sharing or documentation (28-PerformanceDashboard).
+- **Resilience:** OS detection uses registry-first approach — immune to WMI/CIM service hangs that can occur under heavy system load (00-Initialization, 05-SystemCheck).
+- **Resilience:** Firewall state detection uses registry-first approach with cmdlet fallback — prevents indefinite hang when CIM is unresponsive (05-SystemCheck).
+- **Bug Fix:** Drag-and-drop file paths auto-trim surrounding double quotes across 12+ modules — paths dragged from Explorer no longer fail with "path not found" (17-DefenderExclusions, 27-FailoverClustering, 31-BitLocker, 36-BatchConfig, 45-ConfigExport, 53-VMExportImport, 56-OperationsMenu, 59-StorageBackends, 62-HyperVReplica, 63-ScheduledTasks).
+- **Bug Fix:** PS 5.1 pipeline `.Count` — single pipeline results wrapped with `@()` for consistent counting. Fixes broken auto-install-on-single-match in Agent Installer and unreliable baseline counting in Config Export (44-VMDeployment, 45-ConfigExport, 57-AgentInstaller).
+- **Bug Fix:** Quorum witness file share path navigation uses `return` instead of `break` — prevents accidentally exiting the enclosing while loop (27-FailoverClustering).
+- **Bug Fix:** VM Import destination path supports navigation commands — `home`, `back`, and `exit` now work during import (53-VMExportImport).
+- 64 modules, 2087 tests
+
 ## v1.20.9
 
 - **Bug Fix:** Remote directory creation in VM deployment uses `-ErrorAction Stop` — prevents silent failure and confusing Hyper-V errors when WinRM fails (44-VMDeployment).

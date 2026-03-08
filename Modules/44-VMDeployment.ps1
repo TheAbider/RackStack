@@ -506,6 +506,8 @@ function Connect-StandaloneHost {
             # Remote connection
             Write-OutputColor "" -color "Info"
             $remoteHost = Read-Host "Enter remote server name or IP"
+            $navResult = Test-NavigationCommand -UserInput $remoteHost
+            if ($navResult.ShouldReturn) { return $false }
 
             if ([string]::IsNullOrWhiteSpace($remoteHost)) {
                 Write-OutputColor "No server specified." -color "Warning"
@@ -567,7 +569,7 @@ function Connect-StandaloneHost {
             return $false
         }
         default {
-            Write-OutputColor "Invalid choice." -color "Error"
+            Write-OutputColor "  Invalid choice. Enter 1-3." -color "Error"
             return $false
         }
     }
@@ -786,7 +788,7 @@ function Set-DeploymentSiteNumber {
         return $true
     }
     else {
-        Write-OutputColor "Invalid site identifier. Use letters, digits, or hyphens." -color "Error"
+        Write-OutputColor "  Invalid site identifier. Use letters, digits, or hyphens." -color "Error"
     }
 
     return $false
@@ -965,7 +967,7 @@ function Show-StandardVMTemplates {
         }
     }
 
-    Write-OutputColor "Invalid choice." -color "Error"
+    Write-OutputColor "  Invalid selection." -color "Error"
     return $null
 }
 
@@ -1134,37 +1136,40 @@ function Set-VMConfigCPU {
         [hashtable]$Config
     )
 
-    Clear-Host
-    Write-CenteredOutput "CPU Configuration" -color "Info"
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return $false }
+        Clear-Host
+        Write-CenteredOutput "CPU Configuration" -color "Info"
 
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "Current setting: $($Config.vCPU) vCPU(s)" -color "Info"
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter number of virtual CPUs (1-64):" -color "Info"
-    Write-OutputColor "(Press Enter to keep current value)" -color "Info"
-    Write-OutputColor "" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "Current setting: $($Config.vCPU) vCPU(s)" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "Enter number of virtual CPUs (1-64):" -color "Info"
+        Write-OutputColor "(Press Enter to keep current value)" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    $userResponse = Read-Host "vCPUs"
+        $userResponse = Read-Host "vCPUs"
 
-    $navResult = Test-NavigationCommand -UserInput $userResponse
-    if ($navResult.ShouldReturn) { return $false }
+        $navResult = Test-NavigationCommand -UserInput $userResponse
+        if ($navResult.ShouldReturn) { return $false }
 
-    if ([string]::IsNullOrWhiteSpace($userResponse)) {
-        Write-OutputColor "Keeping current value: $($Config.vCPU)" -color "Info"
-        return $true
-    }
-
-    if ($userResponse -match '^\d+$') {
-        $cpuCount = [int]$userResponse
-        if ($cpuCount -ge 1 -and $cpuCount -le 64) {
-            $Config.vCPU = $cpuCount
-            Write-OutputColor "CPU set to: $cpuCount" -color "Success"
+        if ([string]::IsNullOrWhiteSpace($userResponse)) {
+            Write-OutputColor "Keeping current value: $($Config.vCPU)" -color "Info"
             return $true
         }
-    }
 
-    Write-OutputColor "Invalid value. Must be between 1 and 64." -color "Error"
-    return $false
+        if ($userResponse -match '^\d+$') {
+            $cpuCount = [int]$userResponse
+            if ($cpuCount -ge 1 -and $cpuCount -le 64) {
+                $Config.vCPU = $cpuCount
+                Write-OutputColor "CPU set to: $cpuCount" -color "Success"
+                return $true
+            }
+        }
+
+        Write-OutputColor "  Invalid value. Must be between 1 and 64." -color "Error"
+        Start-Sleep -Seconds 1
+    }
 }
 
 # Function to configure memory
@@ -1197,31 +1202,31 @@ function Set-VMConfigMemory {
         }
     }
 
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter memory size in GB (1-1024):" -color "Info"
-    Write-OutputColor "(Press Enter to keep current value: $($Config.MemoryGB) GB)" -color "Info"
-    Write-OutputColor "" -color "Info"
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return $false }
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "Enter memory size in GB (1-1024):" -color "Info"
+        Write-OutputColor "(Press Enter to keep current value: $($Config.MemoryGB) GB)" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    $memInput = Read-Host "Memory (GB)"
+        $memInput = Read-Host "Memory (GB)"
 
-    $navResult = Test-NavigationCommand -UserInput $memInput
-    if ($navResult.ShouldReturn) { return $false }
+        $navResult = Test-NavigationCommand -UserInput $memInput
+        if ($navResult.ShouldReturn) { return $false }
 
-    if (-not [string]::IsNullOrWhiteSpace($memInput)) {
+        if ([string]::IsNullOrWhiteSpace($memInput)) {
+            break
+        }
+
         if ($memInput -match '^\d+$') {
             $memSize = [int]$memInput
             if ($memSize -ge 1 -and $memSize -le 1024) {
                 $Config.MemoryGB = $memSize
-            }
-            else {
-                Write-OutputColor "Invalid value. Must be between 1 and 1024 GB." -color "Error"
-                return $false
+                break
             }
         }
-        else {
-            Write-OutputColor "Invalid input." -color "Error"
-            return $false
-        }
+
+        Write-OutputColor "  Invalid value. Must be between 1 and 1024 GB." -color "Error"
     }
 
     Write-OutputColor "Memory set to: $($Config.MemoryGB) GB ($($Config.MemoryType))" -color "Success"
@@ -1236,6 +1241,7 @@ function Set-VMConfigDisks {
     )
 
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Disk Configuration" -color "Info"
 
@@ -1274,8 +1280,8 @@ function Set-VMConfigDisks {
                 $diskSize = Read-Host
                 $diskSizeInt = 0
                 if ($diskSize -notmatch '^\d+$' -or -not [int]::TryParse($diskSize, [ref]$diskSizeInt) -or $diskSizeInt -lt 1) {
-                    Write-OutputColor "Invalid size." -color "Error"
-                    Start-Sleep -Seconds 2
+                    Write-OutputColor "  Invalid size." -color "Error"
+                    Start-Sleep -Seconds 1
                     continue
                 }
 
@@ -1321,7 +1327,7 @@ function Set-VMConfigDisks {
                 # Delete disk
                 if ($Config.Disks.Count -le 1) {
                     Write-OutputColor "Cannot delete the last disk. VM must have at least one disk." -color "Warning"
-                    Start-Sleep -Seconds 2
+                    Start-Sleep -Seconds 1
                     continue
                 }
 
@@ -1376,6 +1382,8 @@ function Set-VMConfigNICs {
         Write-OutputColor "" -color "Info"
 
         $swCreateChoice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $swCreateChoice
+        if ($navResult.ShouldReturn) { return }
         switch ($swCreateChoice) {
             "1" {
                 New-SwitchEmbeddedTeam -SwitchName $script:SwitchName -ManagementName $script:ManagementName
@@ -1391,8 +1399,8 @@ function Set-VMConfigNICs {
 
         if ($swCreateChoice -eq "1" -or $swCreateChoice -eq "2") {
             # Re-check switches after creation
-            $switches = Get-AvailableVirtualSwitches -ComputerName $(if ($script:VMDeploymentMode -eq "Standalone") { $script:VMDeploymentTarget } else { $null }) `
-                                                      -Credential $script:VMDeploymentCredential
+            $switches = @(Get-AvailableVirtualSwitches -ComputerName $(if ($script:VMDeploymentMode -eq "Standalone") { $script:VMDeploymentTarget } else { $null }) `
+                                                      -Credential $script:VMDeploymentCredential)
             if ($switches.Count -eq 0) {
                 Write-OutputColor "  Still no virtual switches available. A reboot may be required." -color "Warning"
                 Write-PressEnter
@@ -1401,6 +1409,7 @@ function Set-VMConfigNICs {
     }
 
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Network Adapter Configuration" -color "Info"
 
@@ -1528,7 +1537,7 @@ function Set-VMConfigNICs {
                 # Delete NIC
                 if ($Config.NICs.Count -le 1) {
                     Write-OutputColor "Cannot delete the last NIC. VM must have at least one NIC." -color "Warning"
-                    Start-Sleep -Seconds 2
+                    Start-Sleep -Seconds 1
                     continue
                 }
 
@@ -2146,6 +2155,8 @@ function Publish-StandardVM {
         Write-OutputColor "" -color "Info"
 
         $vhdChoice = Read-Host "  Select method"
+        $navResult = Test-NavigationCommand -UserInput $vhdChoice
+        if ($navResult.ShouldReturn) { return }
 
         if ($vhdChoice -eq "1") {
             $osVersion = Show-OSVersionMenu -Title "SELECT OS VERSION FOR VHD"
@@ -2243,6 +2254,8 @@ function Publish-CustomVM {
     Write-OutputColor "" -color "Info"
 
     $vhdChoice = Read-Host "  Select method"
+    $navResult = Test-NavigationCommand -UserInput $vhdChoice
+    if ($navResult.ShouldReturn) { return }
     if ($vhdChoice -eq "1") {
         $osVersion = Show-OSVersionMenu -Title "SELECT OS VERSION FOR VHD"
         if ($osVersion) {
@@ -2306,6 +2319,10 @@ function Publish-CustomVM {
                     Write-OutputColor "VM deployment cancelled." -color "Warning"
                     Write-PressEnter
                     return
+                }
+                default {
+                    Write-OutputColor "  Invalid choice. Enter 1-7, C, or X." -color "Error"
+                    Start-Sleep -Seconds 1
                 }
             }
         }
@@ -2637,6 +2654,7 @@ function Edit-QueuedVM {
     $config = $script:VMDeploymentQueue[$QueueIndex]
 
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
 
         $titleText = "EDIT QUEUED VM: $($config.VMName)"
@@ -2707,6 +2725,7 @@ function Edit-QueuedVM {
 # Function to manage the deployment queue (view, edit, remove, deploy, clear)
 function Show-VMQueueManagement {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
         $queueCount = $script:VMDeploymentQueue.Count
 
@@ -2838,6 +2857,7 @@ function Show-VMQueueManagement {
 # Function to run VM Deployment menu
 function Start-VMDeployment {
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         # First, select deployment mode if not connected
         if (-not $script:VMDeploymentConnected) {
             $modeChoice = Show-VMDeploymentModeMenu

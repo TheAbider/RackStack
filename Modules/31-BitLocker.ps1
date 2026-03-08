@@ -39,19 +39,17 @@ function Show-BitLockerManagement {
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
         switch ($choice) {
             { $_ -eq "I" -or $_ -eq "i" } {
                 if (-not (Test-WindowsServer)) { return }
                 if (-not (Confirm-UserAction -Message "Install BitLocker feature?")) { return }
-                try {
-                    Write-OutputColor "  Installing BitLocker..." -color "Info"
-                    Install-WindowsFeature -Name BitLocker -IncludeManagementTools -ErrorAction Stop
-                    Write-OutputColor "  BitLocker installed. Reboot required before use." -color "Success"
+                $installResult = Install-WindowsFeatureWithTimeout -FeatureName "BitLocker" -DisplayName "BitLocker" -IncludeManagementTools
+                if ($installResult.Success) {
+                    Write-OutputColor "  Reboot required before use." -color "Warning"
                     $global:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Installed BitLocker"
-                }
-                catch {
-                    Write-OutputColor "  Failed: $_" -color "Error"
                 }
                 Write-PressEnter
             }
@@ -125,6 +123,8 @@ function Show-BitLockerManagement {
         switch ($choice) {
             "1" {
                 $volNum = Read-Host "  Enter volume number to encrypt"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volumes.Count) {
                     $vol = $volumes[[int]$volNum - 1]
                     if ($vol.ProtectionStatus -eq "On") {
@@ -134,7 +134,9 @@ function Show-BitLockerManagement {
                         Write-OutputColor "  [1] TPM only (recommended)" -color "Info"
                         Write-OutputColor "  [2] TPM + PIN" -color "Info"
                         Write-OutputColor "  [3] Password only (no TPM)" -color "Info"
-                        $method = Read-Host "  Select encryption method"
+                        $method = Read-Host "  Select"
+                        $navResult = Test-NavigationCommand -UserInput $method
+                        if ($navResult.ShouldReturn) { return }
 
                         try {
                             switch ($method) {
@@ -189,6 +191,8 @@ function Show-BitLockerManagement {
             }
             "2" {
                 $volNum = Read-Host "  Enter volume number to decrypt"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volumes.Count) {
                     $vol = $volumes[[int]$volNum - 1]
                     if (Confirm-UserAction -Message "Disable BitLocker on $($vol.MountPoint)?") {
@@ -205,6 +209,8 @@ function Show-BitLockerManagement {
             }
             "3" {
                 $volNum = Read-Host "  Enter volume number"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volumes.Count) {
                     $vol = $volumes[[int]$volNum - 1]
                     try {
@@ -226,9 +232,10 @@ function Show-BitLockerManagement {
                             Write-OutputColor "  Recovery key backed up to Active Directory." -color "Success"
                         } else {
                             # Client: save to file
-                            $savePath = Read-Host "  Enter save path (e.g., C:\Temp\BitLockerKey.txt)"
+                            $savePath = Read-Host "  Enter save path (e.g., $($script:TempPath)\BitLockerKey.txt)"
                             $navResult = Test-NavigationCommand -UserInput $savePath
                             if ($navResult.ShouldReturn) { continue }
+                            if ($savePath) { $savePath = $savePath.Trim('"') }
                             if ([string]::IsNullOrWhiteSpace($savePath)) {
                                 $savePath = "$env:USERPROFILE\Desktop\BitLockerKey_$($vol.MountPoint -replace '[:\\]','')_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
                                 Write-OutputColor "  Using default path: $savePath" -color "Info"
@@ -256,7 +263,7 @@ function Show-BitLockerManagement {
                                     $output += "Recovery Password: $($key.RecoveryPassword)"
                                     $output += ""
                                 }
-                                $output | Out-File -FilePath $savePath -Encoding UTF8 -ErrorAction Stop
+                                $output | Out-File -LiteralPath $savePath -Encoding UTF8 -ErrorAction Stop
                                 Write-OutputColor "  Recovery key saved to: $savePath" -color "Success"
                                 Write-OutputColor "  IMPORTANT: Store this file in a secure location!" -color "Warning"
                             } else {
@@ -271,6 +278,8 @@ function Show-BitLockerManagement {
             }
             "4" {
                 $volNum = Read-Host "  Enter volume number"
+                $navResult = Test-NavigationCommand -UserInput $volNum
+                if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volumes.Count) {
                     $vol = $volumes[[int]$volNum - 1]
                     $blVolume = Get-BitLockerVolume -MountPoint $vol.MountPoint -ErrorAction SilentlyContinue
@@ -310,7 +319,8 @@ function Show-BitLockerManagement {
                 }
                 Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             }
-            "b" { return }
+            { $_ -eq "b" -or $_ -eq "B" } { return }
+            default { Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter

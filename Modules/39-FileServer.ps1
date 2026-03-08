@@ -19,8 +19,9 @@ function Get-FileServerUrl {
         }
         default {
             # nginx / static — use BaseURL + path
+            $baseUrl = $script:FileServer.BaseURL.TrimEnd('/')
             $encodedPath = ($FilePath -split '/' | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
-            return "$($script:FileServer.BaseURL)/$encodedPath"
+            return "$baseUrl/$encodedPath"
         }
     }
 }
@@ -135,7 +136,7 @@ function Get-FileServerFiles {
             "static" {
                 # Static index.json — fetch index.json from the folder
                 $encodedFolder = [System.Uri]::EscapeDataString($FolderPath)
-                $url = "$($script:FileServer.BaseURL)/$encodedFolder/index.json"
+                $url = "$($script:FileServer.BaseURL.TrimEnd('/'))/$encodedFolder/index.json"
 
                 $requestParams = @{ Uri = $url; UseBasicParsing = $true; ErrorAction = "Stop" }
                 if ($headers.Count -gt 0) { $requestParams.Headers = $headers }
@@ -164,7 +165,7 @@ function Get-FileServerFiles {
             default {
                 # nginx — parse HTML autoindex response
                 $encodedFolder = [System.Uri]::EscapeDataString($FolderPath)
-                $url = "$($script:FileServer.BaseURL)/$encodedFolder/"
+                $url = "$($script:FileServer.BaseURL.TrimEnd('/'))/$encodedFolder/"
 
                 $requestParams = @{ Uri = $url; UseBasicParsing = $true; ErrorAction = "Stop" }
                 if ($headers.Count -gt 0) { $requestParams.Headers = $headers }

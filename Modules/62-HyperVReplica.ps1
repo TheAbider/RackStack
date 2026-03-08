@@ -181,6 +181,8 @@ function Enable-ReplicaServer {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Enter comma-separated list of primary server names/IPs:" -color "Info"
         $serverList = Read-Host "  "
+        $navResult = Test-NavigationCommand -UserInput $serverList
+        if ($navResult.ShouldReturn) { return }
         if ([string]::IsNullOrWhiteSpace($serverList)) {
             Write-OutputColor "  No servers specified. Cancelled." -color "Error"
             return
@@ -193,6 +195,9 @@ function Enable-ReplicaServer {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Default storage path for replica VMs (Enter for default: $defaultStorage):" -color "Info"
     $storagePath = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $storagePath
+    if ($navResult.ShouldReturn) { return }
+    if (-not [string]::IsNullOrWhiteSpace($storagePath)) { $storagePath = $storagePath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($storagePath)) { $storagePath = $defaultStorage }
 
     # Ensure storage directory exists
@@ -342,6 +347,8 @@ function Enable-VMReplicationWizard {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Enter the replica server name or IP address:" -color "Info"
     $replicaServer = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $replicaServer
+    if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($replicaServer)) {
         Write-OutputColor "  No server specified. Cancelled." -color "Error"
         return
@@ -358,6 +365,8 @@ function Enable-VMReplicationWizard {
     Write-OutputColor "" -color "Info"
 
     $authChoice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $authChoice
+    if ($navResult.ShouldReturn) { return }
     $authType = switch ($authChoice) {
         "1" { "Kerberos" }
         "2" { "Certificate" }
@@ -393,6 +402,8 @@ function Enable-VMReplicationWizard {
     Write-OutputColor "" -color "Info"
 
     $freqChoice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $freqChoice
+    if ($navResult.ShouldReturn) { return }
     $freqSec = switch ($freqChoice) {
         "1" { 30 }
         "3" { 900 }
@@ -416,6 +427,8 @@ function Enable-VMReplicationWizard {
     Write-OutputColor "" -color "Info"
 
     $initChoice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $initChoice
+    if ($navResult.ShouldReturn) { return }
     # Confirm
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -454,6 +467,9 @@ function Enable-VMReplicationWizard {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  Enter export path for external media:" -color "Info"
             $exportPath = Read-Host "  "
+            $navResult = Test-NavigationCommand -UserInput $exportPath
+            if ($navResult.ShouldReturn) { return }
+            if (-not [string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $exportPath.Trim('"') }
             if ([string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = "$env:SystemDrive\Hyper-V\ReplicaExport" }
             Start-VMInitialReplication -VMName $vmName -DestinationPath $exportPath -ErrorAction Stop
             Write-OutputColor "  Initial replication exported to: $exportPath" -color "Success"
@@ -910,6 +926,8 @@ function Set-ReverseReplication {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Enter the original primary server name (to become the new replica):" -color "Info"
     $originalServer = Read-Host "  "
+    $navResult = Test-NavigationCommand -UserInput $originalServer
+    if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($originalServer)) {
         Write-OutputColor "  No server specified. Cancelled." -color "Error"
         return

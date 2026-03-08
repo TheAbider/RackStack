@@ -257,6 +257,7 @@ function Show-AgentInstallerList {
     $currentPage = 0
 
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         $totalPages = [math]::Max(1, [math]::Ceiling($displayAgents.Count / $pageSize))
         if ($currentPage -ge $totalPages) { $currentPage = 0 }
         $startIdx = $currentPage * $pageSize
@@ -799,6 +800,7 @@ function Install-Agent {
     # --- Section: Step 4 - Full Agent Selection Menu ---
     # STEP 4: Full menu for manual selection
     while ($true) {
+        if ($global:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"
@@ -847,7 +849,7 @@ function Install-Agent {
                 }
             }
             'S' {
-                $agents = Get-AgentInstallerList
+                $agents = @(Get-AgentInstallerList)
                 if ($agents.Count -eq 0) {
                     Write-OutputColor "  No agents available." -color "Warning"
                     Write-PressEnter
@@ -861,7 +863,7 @@ function Install-Agent {
                 $navResult = Test-NavigationCommand -UserInput $searchTerm
                 if ($navResult.ShouldReturn) { continue }
 
-                $results = Search-AgentInstaller -SearchTerm $searchTerm -Agents $agents
+                $results = @(Search-AgentInstaller -SearchTerm $searchTerm -Agents $agents)
 
                 if ($results.Count -eq 0) {
                     Write-OutputColor "" -color "Info"

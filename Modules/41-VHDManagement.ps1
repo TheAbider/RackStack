@@ -15,7 +15,7 @@ function Show-OSVersionMenu {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │  $($Title.PadRight(71))│" -color "Info"
+    Write-OutputColor "  │  $($Title.PadRight(70))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │                                                                        │" -color "Info"
     Write-OutputColor "  │   [1]  Windows Server 2025                                             │" -color "Success"
@@ -346,6 +346,8 @@ function Copy-VHDForVM {
             Write-OutputColor "  [3] Cancel deployment" -color "Info"
             Write-OutputColor "" -color "Info"
             $fallbackChoice = Read-Host "  Select"
+            $navResult = Test-NavigationCommand -UserInput $fallbackChoice
+            if ($navResult.ShouldReturn) { return }
 
             if ($fallbackChoice -eq "2") {
                 Write-OutputColor "  Retrying conversion..." -color "Info"
@@ -546,8 +548,7 @@ function Show-SysprepGuide {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "  Press Enter for next page..." -color "Info"
-    Read-Host | Out-Null
+    Write-PressEnter -Message "  Press Enter for next page..."
 
     Clear-Host
 
@@ -600,8 +601,7 @@ function Show-SysprepGuide {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "  Press Enter for next page..." -color "Info"
-    Read-Host | Out-Null
+    Write-PressEnter -Message "  Press Enter for next page..."
 
     Clear-Host
 
@@ -698,8 +698,7 @@ function Show-LinuxVHDGuide {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "  Press Enter for next page..." -color "Info"
-    Read-Host | Out-Null
+    Write-PressEnter -Message "  Press Enter for next page..."
 
     Clear-Host
 

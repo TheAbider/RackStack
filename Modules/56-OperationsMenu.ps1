@@ -69,12 +69,49 @@ function Show-OperationsMenu {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"
+        Write-OutputColor "  [/] Search    [B] ◄ Back to Server Config" -color "Info"
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"
         $navResult = Test-NavigationCommand -UserInput $choice
         if ($navResult.ShouldReturn) { return }
+
+        # Search feature — filter operations by keyword
+        if ($choice -eq "/") {
+            Write-OutputColor "" -color "Info"
+            $searchTerm = Read-Host "  Search"
+            if ([string]::IsNullOrWhiteSpace($searchTerm)) { continue }
+            $opsItems = @(
+                @{Num="1";  Name="VM Checkpoint Management"}; @{Num="2";  Name="VM Export / Import"}
+                @{Num="3";  Name="Cluster Dashboard"};        @{Num="4";  Name="Cluster Operations (Drain/Resume)"}
+                @{Num="5";  Name="Remote PowerShell Session"}; @{Num="6";  Name="Remote Server Health Check"}
+                @{Num="7";  Name="Remote Service Manager"};   @{Num="8";  Name="Generate HTML Health Report"}
+                @{Num="9";  Name="Generate HTML Readiness Report"}; @{Num="10"; Name="Export Profile Comparison (HTML)"}
+                @{Num="11"; Name="Network Diagnostics"};      @{Num="12"; Name="Drift Detection"}
+                @{Num="13"; Name="Save Performance Snapshot"}; @{Num="14"; Name="Generate Trend Report"}
+                @{Num="15"; Name="Collect Metrics (Interval)"}; @{Num="16"; Name="Scheduled Task Viewer"}
+                @{Num="17"; Name="SMB Share Audit"};           @{Num="18"; Name="Installed Software Inventory"}
+                @{Num="19"; Name="Certificate Expiry Check"};  @{Num="20"; Name="VSS Writer Status"}
+                @{Num="21"; Name="Event Log Alerts (24h)"};    @{Num="22"; Name="Uptime & Reboot History"}
+                @{Num="23"; Name="Driver Health Check"};       @{Num="24"; Name="Disk Space Analyzer"}
+                @{Num="25"; Name="Windows Update Status"};     @{Num="26"; Name="Listening Ports & Services"}
+                @{Num="27"; Name="Scheduled Task Overview"};   @{Num="28"; Name="Firewall Rule Summary"}
+                @{Num="29"; Name="Reboot Pending Details"};    @{Num="30"; Name="Memory Pressure Diagnostics"}
+            )
+            $matched = @($opsItems | Where-Object { $_.Name -match [regex]::Escape($searchTerm) })
+            Write-OutputColor "" -color "Info"
+            if ($matched.Count -eq 0) {
+                Write-OutputColor "  No matches for '$searchTerm'" -color "Warning"
+            } else {
+                Write-OutputColor "  Results for '$searchTerm':" -color "Info"
+                foreach ($m in $matched) { Write-OutputColor "  [$($m.Num)] $($m.Name)" -color "Success" }
+            }
+            Write-OutputColor "" -color "Info"
+            $choice = Read-Host "  Select or Enter to go back"
+            if ([string]::IsNullOrWhiteSpace($choice)) { continue }
+            $navResult = Test-NavigationCommand -UserInput $choice
+            if ($navResult.ShouldReturn) { return }
+        }
 
         switch ($choice) {
             "1" {
@@ -131,6 +168,8 @@ function Show-OperationsMenu {
             "15" {
                 Write-OutputColor "  Interval (minutes, default 5):" -color "Info"
                 $interval = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $interval
+                if ($navResult.ShouldReturn) { continue }
                 if ([string]::IsNullOrWhiteSpace($interval)) { $interval = "5" }
                 $intervalInt = 0
                 if ($interval -notmatch '^\d+$' -or -not [int]::TryParse($interval, [ref]$intervalInt) -or $intervalInt -eq 0) {
@@ -140,6 +179,8 @@ function Show-OperationsMenu {
                 }
                 Write-OutputColor "  Duration (minutes, default 60):" -color "Info"
                 $duration = Read-Host "  "
+                $navResult = Test-NavigationCommand -UserInput $duration
+                if ($navResult.ShouldReturn) { continue }
                 if ([string]::IsNullOrWhiteSpace($duration)) { $duration = "60" }
                 $durationInt = 0
                 if ($duration -notmatch '^\d+$' -or -not [int]::TryParse($duration, [ref]$durationInt)) {
@@ -212,7 +253,7 @@ function Show-OperationsMenu {
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-30, [/] to search, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -402,6 +443,8 @@ function Invoke-RemoteServiceManager {
         }
 
         $action = Read-Host "  Action: [S]tart, [T]op, [R]estart"
+        $navResult = Test-NavigationCommand -UserInput $action
+        if ($navResult.ShouldReturn) { return }
         $actionName = switch ($action) {
             { $_ -eq 'S' -or $_ -eq 's' } { "start" }
             { $_ -eq 'T' -or $_ -eq 't' } { "stop" }
@@ -535,6 +578,8 @@ function Show-CompanyDefaultsPicker {
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return $null }
 
     if ("$choice".ToUpper() -eq "B") { return $null }
     if ("$choice".ToUpper() -eq "S") { return "__skip__" }
@@ -1201,7 +1246,7 @@ function Show-EditDefaults {
             }
             "5" {
                 Write-OutputColor "" -color "Info"
-                Write-OutputColor "Current DNS Presets:" -color "Info"
+                Write-OutputColor "  Current DNS Presets:" -color "Info"
                 $presetIndex = 1
                 foreach ($key in $script:DNSPresets.Keys) {
                     $marker = if ($key -in $builtinDNSNames) { " (built-in)" } else { " (custom)" }
@@ -1209,8 +1254,10 @@ function Show-EditDefaults {
                     $presetIndex++
                 }
                 Write-OutputColor "" -color "Info"
-                Write-OutputColor "[A] Add custom DNS preset  [D] Delete custom preset  [B] Back" -color "Info"
+                Write-OutputColor "  [A] Add custom DNS preset  [D] Delete custom preset  [B] Back" -color "Info"
                 $dnsChoice = Read-Host "  Select"
+                $navResult = Test-NavigationCommand -UserInput $dnsChoice
+                if ($navResult.ShouldReturn) { return }
 
                 switch ("$dnsChoice".ToUpper()) {
                     "A" {
@@ -1240,6 +1287,9 @@ function Show-EditDefaults {
                         else {
                             Write-OutputColor "Preset not found." -color "Error"
                         }
+                    }
+                    default {
+                        Write-OutputColor "  Invalid choice. Enter A, D, or B." -color "Error"
                     }
                 }
                 Start-Sleep -Seconds 1
@@ -1288,7 +1338,7 @@ function Show-EditDefaults {
                 if ($companyFiles.Count -eq 0) {
                     Write-OutputColor "  No company defaults files found." -color "Warning"
                     Write-OutputColor "  Place <name>.defaults.json files in the script directory." -color "Debug"
-                    Start-Sleep -Seconds 2
+                    Start-Sleep -Seconds 1
                 }
                 else {
                     $picked = Show-CompanyDefaultsPicker
@@ -1317,6 +1367,7 @@ function Show-EditDefaults {
             "11" {
                 Write-OutputColor "  Enter temp path (current: $($script:TempPath)):" -color "Info"
                 $val = Read-Host "  Path"
+                if (-not [string]::IsNullOrWhiteSpace($val)) { $val = $val.Trim('"') }
                 if (-not [string]::IsNullOrWhiteSpace($val)) {
                     if (-not (Test-Path $val -IsValid)) {
                         Write-OutputColor "  Invalid path format." -color "Error"
@@ -1341,6 +1392,8 @@ function Show-EditDefaults {
                     Write-OutputColor "  [$($ri + 1)] $($regionKeys[$ri])" -color "Info"
                 }
                 $val = Read-Host "  Select"
+                $navResult = Test-NavigationCommand -UserInput $val
+                if ($navResult.ShouldReturn) { return }
                 if ($val -eq "0" -or [string]::IsNullOrWhiteSpace($val)) {
                     $script:TimeZoneRegion = ""
                     Write-OutputColor "  Timezone region cleared (will show picker)." -color "Success"
@@ -1386,7 +1439,7 @@ function Show-EditDefaults {
             }
             "B" { return }
             default {
-                Write-OutputColor "Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-12, S, R, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -1441,20 +1494,28 @@ function Show-EditLicenses {
                 Write-OutputColor "  1. KMS (for hosts)" -color "Info"
                 Write-OutputColor "  2. AVMA (for VMs on Datacenter hosts)" -color "Info"
                 $typeChoice = Read-Host "  Select"
+                $navResult = Test-NavigationCommand -UserInput $typeChoice
+                if ($navResult.ShouldReturn) { return }
                 if ($typeChoice -ne "1" -and $typeChoice -ne "2") {
-                    Write-OutputColor "  Invalid selection. Please enter 1 or 2." -color "Error"
+                    Write-OutputColor "  Invalid choice. Enter 1 or 2." -color "Error"
                     Start-Sleep -Seconds 1
                     continue
                 }
 
                 Write-OutputColor "Enter Windows Server version (e.g., Windows Server 2022):" -color "Info"
                 $version = Read-Host
+                $navResult = Test-NavigationCommand -UserInput $version
+                if ($navResult.ShouldReturn) { continue }
 
                 Write-OutputColor "Enter edition (e.g., Datacenter, Standard):" -color "Info"
                 $edition = Read-Host
+                $navResult = Test-NavigationCommand -UserInput $edition
+                if ($navResult.ShouldReturn) { continue }
 
                 Write-OutputColor "Enter product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX):" -color "Info"
                 $key = Read-Host
+                $navResult = Test-NavigationCommand -UserInput $key
+                if ($navResult.ShouldReturn) { continue }
 
                 if (-not [string]::IsNullOrWhiteSpace($version) -and -not [string]::IsNullOrWhiteSpace($edition) -and -not [string]::IsNullOrWhiteSpace($key)) {
                     if ($typeChoice -eq "1") {
@@ -1480,8 +1541,10 @@ function Show-EditLicenses {
             "D" {
                 Write-OutputColor "Delete from: 1. KMS  2. AVMA" -color "Info"
                 $typeChoice = Read-Host "  Select"
+                $navResult = Test-NavigationCommand -UserInput $typeChoice
+                if ($navResult.ShouldReturn) { return }
                 if ($typeChoice -ne "1" -and $typeChoice -ne "2") {
-                    Write-OutputColor "  Invalid selection. Please enter 1 or 2." -color "Error"
+                    Write-OutputColor "  Invalid choice. Enter 1 or 2." -color "Error"
                     Start-Sleep -Seconds 1
                     continue
                 }
@@ -1503,6 +1566,8 @@ function Show-EditLicenses {
                     }
                     Write-OutputColor "Enter number to delete (or B to cancel):" -color "Info"
                     $delChoice = Read-Host
+                    $navResult = Test-NavigationCommand -UserInput $delChoice
+                    if ($navResult.ShouldReturn) { continue }
                     if ($delChoice -match '^\d+$') {
                         $delIdx = [int]$delChoice - 1
                         if ($delIdx -ge 0 -and $delIdx -lt $keyList.Count) {
@@ -1558,7 +1623,7 @@ function Show-EditLicenses {
             }
             "B" { return }
             default {
-                Write-OutputColor "Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter A, D, V, S, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

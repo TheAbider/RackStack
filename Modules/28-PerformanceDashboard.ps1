@@ -111,10 +111,48 @@ function Show-PerformanceDashboard {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        Write-OutputColor "  [R] Refresh  |  Press Enter or [B] to go back" -color "Info"
+        Write-OutputColor "  [R] Refresh  |  [C] Copy to Clipboard  |  Press Enter or [B] to go back" -color "Info"
         $choice = Read-Host "  "
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
         $lowerChoice = if ($choice) { $choice.ToLower().Trim() } else { "" }
         if ($lowerChoice -eq "r") { continue }
+        if ($lowerChoice -eq "c") {
+            $clipLines = @(
+                "=== System Performance Summary ==="
+                "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+                "Hostname:  $env:COMPUTERNAME"
+                ""
+                "CPU:    $cpuAvg%"
+                "Memory: $memPercent% ($usedMem GB / $totalMem GB)"
+                "Uptime: $uptimeStr"
+                ""
+                "Disks:"
+            )
+            foreach ($vol in $volumes) {
+                $dTotal = [math]::Round($vol.Size / 1GB, 1)
+                $dFree = [math]::Round($vol.SizeRemaining / 1GB, 1)
+                $dUsed = if ($dTotal -gt 0) { [math]::Round((($dTotal - $dFree) / $dTotal) * 100, 1) } else { 0 }
+                $clipLines += "  $($vol.DriveLetter): $dUsed% used ($dFree GB free / $dTotal GB)"
+            }
+            $clipLines += ""
+            $clipLines += "Network:"
+            foreach ($adapter in $adapters) {
+                $clipLines += "  $($adapter.Name) - $($adapter.LinkSpeed)"
+            }
+            $clipLines += ""
+            $clipLines += "Top Processes (by CPU):"
+            foreach ($proc in $topProcs) {
+                $pCpu = if ($null -ne $proc.CPU) { [math]::Round($proc.CPU, 1) } else { 0 }
+                $pMem = [math]::Round($proc.WorkingSet64 / 1MB, 0)
+                $clipLines += "  $($proc.ProcessName) (PID $($proc.Id)) - CPU: ${pCpu}s - Mem: $pMem MB"
+            }
+            ($clipLines -join "`r`n") | clip.exe
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  System info copied to clipboard." -color "Success"
+            Start-Sleep -Seconds 1
+            continue
+        }
         return
     }
 }

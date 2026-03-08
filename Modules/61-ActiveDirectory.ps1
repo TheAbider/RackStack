@@ -135,22 +135,12 @@ function Install-ADDSRoleIfNeeded {
         return $false
     }
 
-    try {
-        Write-OutputColor "`n  Installing AD-Domain-Services... This may take several minutes." -color "Info"
-        $installResult = Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools -ErrorAction Stop
-
-        if ($installResult.Success) {
-            Write-OutputColor "  AD-Domain-Services installed successfully!" -color "Success"
-            Add-SessionChange -Category "AD DS" -Description "Installed AD-Domain-Services role"
-            return $true
-        }
-        else {
-            Write-OutputColor "  AD-Domain-Services installation did not complete successfully." -color "Error"
-            return $false
-        }
+    $installResult = Install-WindowsFeatureWithTimeout -FeatureName "AD-Domain-Services" -DisplayName "AD Domain Services" -IncludeManagementTools
+    if ($installResult.Success) {
+        Add-SessionChange -Category "AD DS" -Description "Installed AD-Domain-Services role"
+        return $true
     }
-    catch {
-        Write-OutputColor "  Failed to install AD-Domain-Services: $_" -color "Error"
+    else {
         return $false
     }
 }
@@ -451,36 +441,43 @@ function Show-ReplicationMonitor {
 
 # Main AD DS Promotion menu
 function Show-ADDSPromotionMenu {
-    Clear-Host
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("               AD DS DOMAIN CONTROLLER PROMOTION").PadRight(72))║" -color "Info"
-    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
-    Write-OutputColor "" -color "Info"
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("               AD DS DOMAIN CONTROLLER PROMOTION").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  PROMOTION OPTIONS".PadRight(72))│" -color "Info"
-    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-MenuItem -Text "[1]  New Forest (First DC in new domain)"
-    Write-MenuItem -Text "[2]  Additional Domain Controller (Join existing domain)"
-    Write-MenuItem -Text "[3]  Read-Only Domain Controller (RODC)"
-    Write-MenuItem -Text "[4]  Check AD DS Status"
-    Write-MenuItem -Text "[5]  Replication Health Monitor"
-    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [B] ◄ Back" -color "Info"
-    Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  PROMOTION OPTIONS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem -Text "[1]  New Forest (First DC in new domain)"
+        Write-MenuItem -Text "[2]  Additional Domain Controller (Join existing domain)"
+        Write-MenuItem -Text "[3]  Read-Only Domain Controller (RODC)"
+        Write-MenuItem -Text "[4]  Check AD DS Status"
+        Write-MenuItem -Text "[5]  Replication Health Monitor"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    $choice = Read-Host "  Select"
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
 
-    switch ($choice) {
-        "1" { Install-NewForest }
-        "2" { Install-AdditionalDC }
-        "3" { Install-ReadOnlyDC }
-        "4" { Show-ADDSStatus }
-        "5" { Show-ReplicationMonitor }
+        switch ($choice) {
+            "1" { Install-NewForest }
+            "2" { Install-AdditionalDC }
+            "3" { Install-ReadOnlyDC }
+            "4" { Show-ADDSStatus }
+            "5" { Show-ReplicationMonitor }
+            default {
+                Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"
+                Start-Sleep -Seconds 1
+            }
+        }
     }
 }
 

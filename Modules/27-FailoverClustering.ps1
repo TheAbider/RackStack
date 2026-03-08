@@ -70,15 +70,14 @@ function Install-FailoverClusteringFeature {
 
 # Function to show Cluster Management menu
 function Show-ClusterManagementMenu {
-    Clear-Host
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                       CLUSTER MANAGEMENT").PadRight(72))║" -color "Info"
-    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
-    Write-OutputColor "" -color "Info"
-
-    # Check if clustering is installed
+    # Check if clustering is installed (pre-loop gate — reboot required after install)
     if (-not (Test-FailoverClusteringInstalled)) {
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                       CLUSTER MANAGEMENT").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  PREREQUISITE MISSING".PadRight(72))│" -color "Warning"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
@@ -90,6 +89,8 @@ function Show-ClusterManagementMenu {
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
         if ($choice -eq "I" -or $choice -eq "i") {
             Install-FailoverClusteringFeature
             Write-PressEnter
@@ -97,59 +98,73 @@ function Show-ClusterManagementMenu {
         return
     }
 
-    # Check if node is part of a cluster (with timeout)
-    $clusterResult = Invoke-WithTimeout -ScriptBlock { Get-Cluster } -TimeoutSeconds 15 -Activity "Querying cluster"
-    $cluster = if ($clusterResult.TimedOut) { $null } else { $clusterResult.Result }
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                       CLUSTER MANAGEMENT").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    if ($clusterResult.TimedOut) {
+        # Check if node is part of a cluster (with timeout)
+        $clusterResult = Invoke-WithTimeout -ScriptBlock { Get-Cluster } -TimeoutSeconds 15 -Activity "Querying cluster"
+        $cluster = if ($clusterResult.TimedOut) { $null } else { $clusterResult.Result }
+
+        if ($clusterResult.TimedOut) {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  Cluster query timed out (15s). Cluster may be unreachable.".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        } elseif ($cluster) {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  CURRENT CLUSTER".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Name: $($cluster.Name)".PadRight(72))│" -color "Success"
+            $nodeResult = Invoke-WithTimeout -ScriptBlock { Get-ClusterNode } -TimeoutSeconds 15 -Activity "Querying nodes"
+            $nodes = if ($nodeResult.TimedOut) { "(timed out)" } else { ($nodeResult.Result) -join ", " }
+            $lineStr = "  Nodes: $nodes"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        } else {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  This server is not part of a cluster.".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        }
+        Write-OutputColor "" -color "Info"
+
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  Cluster query timed out (15s). Cluster may be unreachable.".PadRight(72))│" -color "Warning"
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    } elseif ($cluster) {
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  CURRENT CLUSTER".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  CLUSTER OPTIONS".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │$("  Name: $($cluster.Name)".PadRight(72))│" -color "Success"
-        $nodeResult = Invoke-WithTimeout -ScriptBlock { Get-ClusterNode } -TimeoutSeconds 15 -Activity "Querying nodes"
-        $nodes = if ($nodeResult.TimedOut) { "(timed out)" } else { ($nodeResult.Result) -join ", " }
-        $lineStr = "  Nodes: $nodes"
-        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
-        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+        Write-MenuItem -Text "[1]  Create New Cluster"
+        Write-MenuItem -Text "[2]  Join Existing Cluster"
+        Write-MenuItem -Text "[3]  Validate Cluster Configuration"
+        Write-MenuItem -Text "[4]  Manage Cluster Shared Volumes (CSV)"
+        Write-MenuItem -Text "[5]  Configure Live Migration"
+        Write-MenuItem -Text "[6]  Configure Quorum/Witness"
+        Write-MenuItem -Text "[7]  Show Cluster Status"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    } else {
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  This server is not part of a cluster.".PadRight(72))│" -color "Warning"
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    }
-    Write-OutputColor "" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  CLUSTER OPTIONS".PadRight(72))│" -color "Info"
-    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-MenuItem -Text "[1]  Create New Cluster"
-    Write-MenuItem -Text "[2]  Join Existing Cluster"
-    Write-MenuItem -Text "[3]  Validate Cluster Configuration"
-    Write-MenuItem -Text "[4]  Manage Cluster Shared Volumes (CSV)"
-    Write-MenuItem -Text "[5]  Configure Live Migration"
-    Write-MenuItem -Text "[6]  Configure Quorum/Witness"
-    Write-MenuItem -Text "[7]  Show Cluster Status"
-    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [B] ◄ Back" -color "Info"
-    Write-OutputColor "" -color "Info"
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
 
-    $choice = Read-Host "  Select"
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
+        switch ($choice) {
+            "1" { New-ClusterWizard }
+            "2" { Add-NodeToCluster }
+            "3" { Test-ClusterValidation }
+            "4" { Edit-ClusterSharedVolume }
+            "5" { Set-LiveMigrationSettings }
+            "6" { Set-ClusterQuorum }
+            "7" { Show-ClusterStatus; continue }
+            { $_ -eq "b" -or $_ -eq "B" } { return }
+            default { Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"; Start-Sleep -Seconds 1 }
+        }
 
-    switch ($choice) {
-        "1" { New-ClusterWizard }
-        "2" { Add-NodeToCluster }
-        "3" { Test-ClusterValidation }
-        "4" { Edit-ClusterSharedVolume }
-        "5" { Set-LiveMigrationSettings }
-        "6" { Set-ClusterQuorum }
-        "7" { Show-ClusterStatus }
+        Write-PressEnter
     }
 }
 
@@ -238,7 +253,9 @@ function New-ClusterWizard {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  CLUSTER SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  Name: $clusterName".PadRight(72))│" -color "Info"
+    $nameLine = "  Name: $clusterName"
+    if ($nameLine.Length -gt 72) { $nameLine = $nameLine.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($nameLine.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  IP: $clusterIP".PadRight(72))│" -color "Info"
     $lineStr = "  Nodes: $($nodes -join ', ')"
     if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
@@ -348,6 +365,8 @@ function Test-ClusterValidation {
     Write-OutputColor "" -color "Info"
 
     $nodesInput = Read-Host "  Nodes"
+    $navResult = Test-NavigationCommand -UserInput $nodesInput
+    if ($navResult.ShouldReturn) { return }
 
     $nodes = if ($nodesInput) {
         @($nodesInput -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -446,6 +465,8 @@ function Edit-ClusterSharedVolume {
             Write-OutputColor "" -color "Info"
 
             $diskChoice = Read-Host "  Select disk number"
+            $navResult = Test-NavigationCommand -UserInput $diskChoice
+            if ($navResult.ShouldReturn) { return }
             if ($diskChoice -match '^\d+$') {
                 $selIdx = [int]$diskChoice - 1
                 if ($selIdx -ge 0 -and $selIdx -lt $clusterDisks.Count) {
@@ -476,6 +497,8 @@ function Edit-ClusterSharedVolume {
             Write-OutputColor "" -color "Info"
 
             $csvChoice = Read-Host "  Select CSV number to remove"
+            $navResult = Test-NavigationCommand -UserInput $csvChoice
+            if ($navResult.ShouldReturn) { return }
             if ($csvChoice -match '^\d+$') {
                 $selIdx = [int]$csvChoice - 1
                 if ($selIdx -ge 0 -and $selIdx -lt $csvs.Count) {
@@ -505,21 +528,24 @@ function Edit-ClusterSharedVolume {
                 Write-OutputColor "  No cluster disks found." -color "Warning"
             }
         }
+        default {
+            Write-OutputColor "  Invalid choice. Enter 1-3 or B." -color "Error"
+            Start-Sleep -Seconds 1
+        }
     }
 }
 
 # Function to configure Live Migration settings
 function Set-LiveMigrationSettings {
-    Clear-Host
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                   LIVE MIGRATION SETTINGS").PadRight(72))║" -color "Info"
-    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
-    Write-OutputColor "" -color "Info"
-
-    # Get current settings - requires Hyper-V
+    # Pre-loop gate: check Hyper-V availability
     $vmHost = Get-VMHost -ErrorAction SilentlyContinue
     if (-not $vmHost) {
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                   LIVE MIGRATION SETTINGS").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
         Write-OutputColor "  Hyper-V is required for Live Migration configuration." -color "Warning"
         Write-OutputColor "" -color "Info"
         if (-not (Test-HyperVInstalled)) {
@@ -535,132 +561,183 @@ function Set-LiveMigrationSettings {
         return
     }
 
-    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  CURRENT SETTINGS".PadRight(72))│" -color "Info"
-    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  Live Migration Enabled: $($vmHost.VirtualMachineMigrationEnabled)".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Simultaneous Migrations: $($vmHost.MaximumVirtualMachineMigrations)".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Authentication: $($vmHost.VirtualMachineMigrationAuthenticationType)".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Performance Option: $($vmHost.VirtualMachineMigrationPerformanceOption)".PadRight(72))│" -color "Info"
-    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-OutputColor "" -color "Info"
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+        # Re-query each iteration to show updated settings
+        $vmHost = Get-VMHost -ErrorAction SilentlyContinue
+        if (-not $vmHost) { return }
 
-    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  OPTIONS".PadRight(72))│" -color "Info"
-    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-MenuItem -Text "[1]  Enable Live Migration"
-    Write-MenuItem -Text "[2]  Set Simultaneous Migrations"
-    Write-MenuItem -Text "[3]  Set Authentication Type"
-    Write-MenuItem -Text "[4]  Set Performance Option"
-    Write-MenuItem -Text "[5]  Configure Allowed Networks"
-    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [B] ◄ Back" -color "Info"
-    Write-OutputColor "" -color "Info"
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                   LIVE MIGRATION SETTINGS").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    $choice = Read-Host "  Select"
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  CURRENT SETTINGS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Live Migration Enabled: $($vmHost.VirtualMachineMigrationEnabled)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Simultaneous Migrations: $($vmHost.MaximumVirtualMachineMigrations)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Authentication: $($vmHost.VirtualMachineMigrationAuthenticationType)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Performance Option: $($vmHost.VirtualMachineMigrationPerformanceOption)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    switch ($choice) {
-        "1" {
-            try {
-                Enable-VMMigration -ErrorAction Stop
-                Write-OutputColor "  Live Migration enabled." -color "Success"
-                Add-SessionChange -Category "Hyper-V" -Description "Enabled Live Migration"
-            }
-            catch {
-                Write-OutputColor "  Failed: $_" -color "Error"
-            }
-        }
-        "2" {
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  Current: $($vmHost.MaximumVirtualMachineMigrations)" -color "Info"
-            $newCount = Read-Host "  Enter number of simultaneous migrations (1-10)"
-            if ($newCount -match '^\d+$' -and [int]$newCount -ge 1 -and [int]$newCount -le 10) {
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  OPTIONS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem -Text "[1]  Enable Live Migration"
+        Write-MenuItem -Text "[2]  Set Simultaneous Migrations"
+        Write-MenuItem -Text "[3]  Set Authentication Type"
+        Write-MenuItem -Text "[4]  Set Performance Option"
+        Write-MenuItem -Text "[5]  Configure Allowed Networks"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        switch ($choice) {
+            "1" {
+                $wasMigrationEnabled = $vmHost.VirtualMachineMigrationEnabled
                 try {
-                    Set-VMHost -MaximumVirtualMachineMigrations ([int]$newCount) -ErrorAction Stop
-                    Write-OutputColor "  Set to $newCount simultaneous migrations." -color "Success"
-                    Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration to $newCount simultaneous"
-                }
-                catch {
-                    Write-OutputColor "  Failed: $_" -color "Error"
-                }
-            } else {
-                Write-OutputColor "  Invalid number." -color "Error"
-            }
-        }
-        "3" {
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [1] CredSSP (requires delegation setup)" -color "Info"
-            Write-OutputColor "  [2] Kerberos (recommended for domain environments)" -color "Info"
-            Write-OutputColor "" -color "Info"
-            $authChoice = Read-Host "  Select authentication type"
-            $authType = switch ($authChoice) {
-                "1" { "CredSSP" }
-                "2" { "Kerberos" }
-                default { $null }
-            }
-            if ($authType) {
-                try {
-                    Set-VMHost -VirtualMachineMigrationAuthenticationType $authType -ErrorAction Stop
-                    Write-OutputColor "  Authentication set to $authType." -color "Success"
-                    Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration auth to $authType"
+                    Enable-VMMigration -ErrorAction Stop
+                    Write-OutputColor "  Live Migration enabled." -color "Success"
+                    Add-SessionChange -Category "Hyper-V" -Description "Enabled Live Migration"
+                    if (-not $wasMigrationEnabled) {
+                        Add-UndoAction -Category "Hyper-V" -Description "Enabled Live Migration" -UndoScript {
+                            Disable-VMMigration -ErrorAction SilentlyContinue
+                        }
+                    }
                 }
                 catch {
                     Write-OutputColor "  Failed: $_" -color "Error"
                 }
             }
+            "2" {
+                Write-OutputColor "" -color "Info"
+                $prevCount = $vmHost.MaximumVirtualMachineMigrations
+                Write-OutputColor "  Current: $prevCount" -color "Info"
+                $newCount = Read-Host "  Enter number of simultaneous migrations (1-10)"
+                $navResult = Test-NavigationCommand -UserInput $newCount
+                if ($navResult.ShouldReturn) { return }
+                if ($newCount -match '^\d+$' -and [int]$newCount -ge 1 -and [int]$newCount -le 10) {
+                    try {
+                        Set-VMHost -MaximumVirtualMachineMigrations ([int]$newCount) -ErrorAction Stop
+                        Write-OutputColor "  Set to $newCount simultaneous migrations." -color "Success"
+                        Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration to $newCount simultaneous"
+                        Add-UndoAction -Category "Hyper-V" -Description "Set simultaneous migrations to $newCount" -UndoScript {
+                            param($OldCount)
+                            Set-VMHost -MaximumVirtualMachineMigrations $OldCount -ErrorAction SilentlyContinue
+                        }.GetNewClosure() -UndoParams @{ OldCount = $prevCount }
+                    }
+                    catch {
+                        Write-OutputColor "  Failed: $_" -color "Error"
+                    }
+                } else {
+                    Write-OutputColor "  Invalid number. Enter 1-10." -color "Error"
+                }
+            }
+            "3" {
+                Write-OutputColor "" -color "Info"
+                $prevAuth = $vmHost.VirtualMachineMigrationAuthenticationType
+                Write-OutputColor "  [1] CredSSP (requires delegation setup)" -color "Info"
+                Write-OutputColor "  [2] Kerberos (recommended for domain environments)" -color "Info"
+                Write-OutputColor "" -color "Info"
+                $authChoice = Read-Host "  Select authentication type"
+                $navResult = Test-NavigationCommand -UserInput $authChoice
+                if ($navResult.ShouldReturn) { return }
+                $authType = switch ($authChoice) {
+                    "1" { "CredSSP" }
+                    "2" { "Kerberos" }
+                    default { $null }
+                }
+                if ($authType) {
+                    try {
+                        Set-VMHost -VirtualMachineMigrationAuthenticationType $authType -ErrorAction Stop
+                        Write-OutputColor "  Authentication set to $authType." -color "Success"
+                        Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration auth to $authType"
+                        Add-UndoAction -Category "Hyper-V" -Description "Set Live Migration auth to $authType" -UndoScript {
+                            param($OldAuth)
+                            Set-VMHost -VirtualMachineMigrationAuthenticationType $OldAuth -ErrorAction SilentlyContinue
+                        }.GetNewClosure() -UndoParams @{ OldAuth = $prevAuth }
+                    }
+                    catch {
+                        Write-OutputColor "  Failed: $_" -color "Error"
+                    }
+                } else {
+                    Write-OutputColor "  Invalid choice. Enter 1 or 2." -color "Error"
+                }
+            }
+            "4" {
+                Write-OutputColor "" -color "Info"
+                $prevPerf = $vmHost.VirtualMachineMigrationPerformanceOption
+                Write-OutputColor "  [1] TCP/IP (compatible, slower)" -color "Info"
+                Write-OutputColor "  [2] Compression (balanced)" -color "Info"
+                Write-OutputColor "  [3] SMB (fastest, requires SMB Direct)" -color "Info"
+                Write-OutputColor "" -color "Info"
+                $perfChoice = Read-Host "  Select performance option"
+                $navResult = Test-NavigationCommand -UserInput $perfChoice
+                if ($navResult.ShouldReturn) { return }
+                $perfOption = switch ($perfChoice) {
+                    "1" { "TCPIP" }
+                    "2" { "Compression" }
+                    "3" { "SMB" }
+                    default { $null }
+                }
+                if ($perfOption) {
+                    try {
+                        Set-VMHost -VirtualMachineMigrationPerformanceOption $perfOption -ErrorAction Stop
+                        Write-OutputColor "  Performance option set to $perfOption." -color "Success"
+                        Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration performance to $perfOption"
+                        Add-UndoAction -Category "Hyper-V" -Description "Set Live Migration performance to $perfOption" -UndoScript {
+                            param($OldPerf)
+                            Set-VMHost -VirtualMachineMigrationPerformanceOption $OldPerf -ErrorAction SilentlyContinue
+                        }.GetNewClosure() -UndoParams @{ OldPerf = $prevPerf }
+                    }
+                    catch {
+                        Write-OutputColor "  Failed: $_" -color "Error"
+                    }
+                } else {
+                    Write-OutputColor "  Invalid choice. Enter 1-3." -color "Error"
+                }
+            }
+            "5" {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Current allowed networks for Live Migration:" -color "Info"
+                $networks = $vmHost.VirtualMachineMigrationNetworks
+                if ($networks) {
+                    foreach ($net in $networks) {
+                        Write-OutputColor "    $net" -color "Info"
+                    }
+                } else {
+                    Write-OutputColor "    Any network (not restricted)" -color "Warning"
+                }
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Enter subnet to add (e.g., 192.168.1.0/24) or leave blank:" -color "Info"
+                $newNet = Read-Host "  Subnet"
+                $navResult = Test-NavigationCommand -UserInput $newNet
+                if ($navResult.ShouldReturn) { return }
+                if ($newNet) {
+                    try {
+                        Add-VMMigrationNetwork -Subnet $newNet -ErrorAction Stop
+                        Write-OutputColor "  Added $newNet to allowed networks." -color "Success"
+                        Add-SessionChange -Category "Cluster" -Description "Added Live Migration network: $newNet"
+                    }
+                    catch {
+                        Write-OutputColor "  Failed: $_" -color "Error"
+                    }
+                }
+            }
+            { $_ -eq "b" -or $_ -eq "B" } { return }
+            default { Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
-        "4" {
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [1] TCP/IP (compatible, slower)" -color "Info"
-            Write-OutputColor "  [2] Compression (balanced)" -color "Info"
-            Write-OutputColor "  [3] SMB (fastest, requires SMB Direct)" -color "Info"
-            Write-OutputColor "" -color "Info"
-            $perfChoice = Read-Host "  Select performance option"
-            $perfOption = switch ($perfChoice) {
-                "1" { "TCPIP" }
-                "2" { "Compression" }
-                "3" { "SMB" }
-                default { $null }
-            }
-            if ($perfOption) {
-                try {
-                    Set-VMHost -VirtualMachineMigrationPerformanceOption $perfOption -ErrorAction Stop
-                    Write-OutputColor "  Performance option set to $perfOption." -color "Success"
-                    Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration performance to $perfOption"
-                }
-                catch {
-                    Write-OutputColor "  Failed: $_" -color "Error"
-                }
-            }
-        }
-        "5" {
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  Current allowed networks for Live Migration:" -color "Info"
-            $networks = $vmHost.VirtualMachineMigrationNetworks
-            if ($networks) {
-                foreach ($net in $networks) {
-                    Write-OutputColor "    $net" -color "Info"
-                }
-            } else {
-                Write-OutputColor "    Any network (not restricted)" -color "Warning"
-            }
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  Enter subnet to add (e.g., 192.168.1.0/24) or leave blank:" -color "Info"
-            $newNet = Read-Host "  Subnet"
-            if ($newNet) {
-                try {
-                    Add-VMMigrationNetwork -Subnet $newNet -ErrorAction Stop
-                    Write-OutputColor "  Added $newNet to allowed networks." -color "Success"
-                    Add-SessionChange -Category "Cluster" -Description "Added Live Migration network: $newNet"
-                }
-                catch {
-                    Write-OutputColor "  Failed: $_" -color "Error"
-                }
-            }
-        }
+
+        Write-PressEnter
     }
 }
 
@@ -745,6 +822,8 @@ function Set-ClusterQuorum {
             }
             Write-OutputColor "" -color "Info"
             $diskChoice = Read-Host "  Select disk number"
+            $navResult = Test-NavigationCommand -UserInput $diskChoice
+            if ($navResult.ShouldReturn) { return }
             if ($diskChoice -match '^\d+$') {
                 $selIdx = [int]$diskChoice - 1
                 if ($selIdx -ge 0 -and $selIdx -lt $disks.Count) {
@@ -763,7 +842,8 @@ function Set-ClusterQuorum {
             Write-OutputColor "" -color "Info"
             $sharePath = Read-Host "  Enter file share path (e.g., \\server\witness)"
             $navResult = Test-NavigationCommand -UserInput $sharePath
-            if ($navResult.ShouldReturn) { break }
+            if ($navResult.ShouldReturn) { return }
+            if ($sharePath) { $sharePath = $sharePath.Trim('"') }
             if ([string]::IsNullOrWhiteSpace($sharePath)) {
                 Write-OutputColor "  No path entered." -color "Error"
                 break
@@ -788,6 +868,8 @@ function Set-ClusterQuorum {
             Write-OutputColor "  Cloud Witness requires an Azure Storage Account." -color "Info"
             Write-OutputColor "" -color "Info"
             $accountName = Read-Host "  Azure Storage Account Name"
+            $navResult = Test-NavigationCommand -UserInput $accountName
+            if ($navResult.ShouldReturn) { return }
             $accessKeySecure = Read-Host "  Access Key" -AsSecureString
             $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($accessKeySecure)
             try {
@@ -808,6 +890,10 @@ function Set-ClusterQuorum {
                     $accessKey = $null
                 }
             }
+        }
+        default {
+            Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"
+            Start-Sleep -Seconds 1
         }
     }
 }

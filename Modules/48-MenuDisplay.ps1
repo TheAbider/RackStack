@@ -121,8 +121,10 @@ function Show-MainMenu {
         $statusParts += "REBOOT PENDING"
     }
     if ($script:SessionChanges.Count -gt 0) {
-        $statusParts += "$($script:SessionChanges.Count) change(s)"
+        $statusParts += "$($script:SessionChanges.Count) change(s) [V]iew"
     }
+    $sessionDuration = (Get-Date) - $script:ScriptStartTime
+    $statusParts += "Session: $($sessionDuration.Hours)h $($sessionDuration.Minutes)m"
     $statusParts += "Theme: $($script:ColorTheme)"
 
     Write-OutputColor "  $($statusParts -join '  |  ')" -color "Info"
@@ -254,6 +256,9 @@ function Show-SystemConfigMenu {
     $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
     $hostdisplay = if ($computerSystem) { $computerSystem.Name } else { $env:COMPUTERNAME }
     $domaindisplay = if ($computerSystem) { $computerSystem.Domain } else { "Unknown" }
+    $isDomainJoined = if ($null -ne $computerSystem) { $computerSystem.PartOfDomain } else { $false }
+    $domainColor = if ($isDomainJoined) { "Success" } else { "Warning" }
+    $hostColor = if ($hostdisplay -match '^WIN-|^DESKTOP-') { "Warning" } else { "Success" }
     $tzObj = Get-TimeZone -ErrorAction SilentlyContinue
     $timezonedisplay = if ($tzObj) { $tzObj.Id } else { "Unknown" }
     $powerPlan = Get-CachedValue -Key "PowerPlan" -FetchScript { (Get-CurrentPowerPlan).Name }
@@ -271,8 +276,8 @@ function Show-SystemConfigMenu {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-MenuItem "[1]  Set Hostname" -Status $hostdisplay -StatusColor "Info"
-    Write-MenuItem "[2]  Join a Domain" -Status $domaindisplay -StatusColor "Info"
+    Write-MenuItem "[1]  Set Hostname" -Status $hostdisplay -StatusColor $hostColor
+    Write-MenuItem "[2]  Join a Domain" -Status $domaindisplay -StatusColor $domainColor
     Write-MenuItem "[3]  Promote to Domain Controller ►"
     Write-MenuItem "[4]  Set Timezone" -Status $timezonedisplay -StatusColor "Info"
     Write-MenuItem "[5]  Install Windows Updates"
@@ -356,6 +361,14 @@ function Show-SecurityAccessMenu {
     $fwColor = if ($firewallStates.Domain -eq "Disabled" -and $firewallStates.Private -eq "Disabled" -and $firewallStates.Public -eq "Enabled") { "Success" } else { "Warning" }
     $fwDisplay = "D:$($firewallStates.Domain) Pr:$($firewallStates.Private) Pu:$($firewallStates.Public)"
 
+    $defenderStatus = Get-CachedValue -Key "DefenderRT" -FetchScript {
+        try {
+            $mp = Get-MpComputerStatus -ErrorAction Stop
+            if ($mp.RealTimeProtectionEnabled) { "RT: On" } else { "RT: Off" }
+        } catch { "N/A" }
+    } -CacheSeconds 60
+    $defenderColor = if ($defenderStatus -eq "RT: On") { "Success" } elseif ($defenderStatus -eq "N/A") { "Info" } else { "Error" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                          SECURITY & ACCESS").PadRight(72))║" -color "Info"
@@ -376,7 +389,7 @@ function Show-SecurityAccessMenu {
     Write-MenuItem "[3]  Configure Windows Firewall" -Status $fwDisplay -StatusColor $fwColor
     Write-MenuItem "[4]  Firewall Rule Templates"
     Write-MenuItem "[5]  Firewall Rule Search ►"
-    Write-MenuItem "[6]  Defender Exclusions"
+    Write-MenuItem "[6]  Defender Exclusions" -Status $defenderStatus -StatusColor $defenderColor
     Write-MenuItem "[7]  Defender Status Dashboard"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -400,6 +413,32 @@ function Show-SecurityAccessMenu {
 function Show-ToolsUtilitiesMenu {
     Clear-Host
 
+    # Gather status info for display
+    $ntpStatus = Get-CachedValue -Key "NTPSource" -FetchScript {
+        try {
+            $w32tmQuery = w32tm /query /status 2>&1
+            $sourceLine = $w32tmQuery | Select-String "Source:"
+            if ($null -ne $sourceLine) {
+                $splitParts = $sourceLine.ToString().Split(":", 2)
+                if ($splitParts.Count -ge 2) {
+                    $src = $splitParts[1].Trim()
+                    if ($src.Length -gt 25) { $src = $src.Substring(0, 22) + "..." }
+                    return $src
+                }
+            }
+            "Unknown"
+        } catch { "Unknown" }
+    } -CacheSeconds 60
+    $ntpColor = if ($ntpStatus -match "Unknown|Free-Running|Local CMOS") { "Warning" } else { "Success" }
+
+    $backupStatus = Get-CachedValue -Key "WSBInstalled" -FetchScript {
+        if (Test-WindowsServer) {
+            $feat = Get-WindowsFeature -Name Windows-Server-Backup -ErrorAction SilentlyContinue
+            if ($feat -and $feat.InstallState -eq "Installed") { "Installed" } else { "Not Installed" }
+        } else { "N/A" }
+    }
+    $backupColor = if ($backupStatus -eq "Installed") { "Success" } elseif ($backupStatus -eq "N/A") { "Info" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                          TOOLS & UTILITIES").PadRight(72))║" -color "Info"
@@ -409,7 +448,7 @@ function Show-ToolsUtilitiesMenu {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  SYSTEM TOOLS".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-MenuItem "[1]  NTP Configuration"
+    Write-MenuItem "[1]  NTP Configuration" -Status $ntpStatus -StatusColor $ntpColor
     Write-MenuItem "[2]  Disk Cleanup"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -432,7 +471,7 @@ function Show-ToolsUtilitiesMenu {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[9]  Pagefile Configuration"
     Write-MenuItem "[10] SNMP Configuration"
-    Write-MenuItem "[11] Windows Server Backup"
+    Write-MenuItem "[11] Windows Server Backup" -Status $backupStatus -StatusColor $backupColor
     Write-MenuItem "[12] Certificate Management ►"
     Write-MenuItem "[13] Scheduled Task Manager ►"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -453,6 +492,14 @@ function Show-StorageClusteringMenu {
     }
     $clusterColor = if ($clusterStatus -eq "Installed") { "Success" } else { "Warning" }
 
+    $dedupStatus = Get-CachedValue -Key "DedupInstalled" -FetchScript {
+        if (Test-WindowsServer) {
+            $feat = Get-WindowsFeature -Name FS-Data-Deduplication -ErrorAction SilentlyContinue
+            if ($feat -and $feat.InstallState -eq "Installed") { "Installed" } else { "Not Installed" }
+        } else { "N/A" }
+    }
+    $dedupColor = if ($dedupStatus -eq "Installed") { "Success" } elseif ($dedupStatus -eq "N/A") { "Info" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                        STORAGE & CLUSTERING").PadRight(72))║" -color "Info"
@@ -464,7 +511,7 @@ function Show-StorageClusteringMenu {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[1]  Storage Manager ►"
     Write-MenuItem "[2]  BitLocker Management"
-    Write-MenuItem "[3]  Data Deduplication"
+    Write-MenuItem "[3]  Data Deduplication" -Status $dedupStatus -StatusColor $dedupColor
     Write-MenuItem "[4]  Storage Replica"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -615,8 +662,8 @@ function Show-AdapterInfoBox {
         }
     }
 
-    $statusColor = if ($adapterStatus -eq "Up") { "Success" } else { "Warning" }
-    $dhcpColor   = if ($dhcpEnabled   -eq "Static") { "Success" } else { "Info" }
+    $statusColor = if ($adapterStatus -eq "Up") { "Green" } else { "Yellow" }
+    $dhcpColor   = if ($dhcpEnabled   -eq "Static") { "Green" } else { "Cyan" }
 
     $displayName = if ($AdapterName) { $AdapterName } else { "(none selected)" }
 

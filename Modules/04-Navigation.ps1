@@ -204,10 +204,18 @@ function Undo-LastChange {
     if ($script:UndoStack.Count -eq 0) {
         Write-OutputColor "No changes available to undo." -color "Warning"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Note: Only certain operations support undo:" -color "Info"
-        Write-OutputColor "  - DNS configuration changes" -color "Info"
-        Write-OutputColor "  - IP address changes" -color "Info"
+        Write-OutputColor "Note: Supported undo operations include:" -color "Info"
+        Write-OutputColor "  - IP address, DNS, and VLAN changes" -color "Info"
         Write-OutputColor "  - Adapter renames" -color "Info"
+        Write-OutputColor "  - Hostname, timezone, and power plan changes" -color "Info"
+        Write-OutputColor "  - Firewall profile toggles" -color "Info"
+        Write-OutputColor "  - RDP and WinRM enable" -color "Info"
+        Write-OutputColor "  - Defender exclusion add/remove" -color "Info"
+        Write-OutputColor "  - Service start/stop and startup type" -color "Info"
+        Write-OutputColor "  - Disk online/offline, Hyper-V paths" -color "Info"
+        Write-OutputColor "  - Live Migration settings" -color "Info"
+        Write-OutputColor "  - Scheduled task enable/disable" -color "Info"
+        Write-OutputColor "  - Color theme changes" -color "Info"
         return
     }
 

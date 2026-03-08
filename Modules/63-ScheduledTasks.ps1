@@ -43,7 +43,7 @@ function Show-ScheduledTaskManager {
             "8" { Import-ScheduledTaskXML; Write-PressEnter }
             { $_ -eq "B" -or $_ -eq "b" } { return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -108,7 +108,7 @@ function Show-AllScheduledTasks {
         if ($includeMs -ne "Y" -and $includeMs -ne "y") {
             $allTasks = @($allTasks | Where-Object { $_.TaskPath -notmatch '^\\Microsoft\\' })
         }
-        $allTasks = $allTasks | Sort-Object TaskPath, TaskName
+        $allTasks = @($allTasks | Sort-Object TaskPath, TaskName)
     }
     catch {
         Write-OutputColor "  Error retrieving tasks: $_" -color "Error"
@@ -394,6 +394,15 @@ function Set-ScheduledTaskState {
         }
         Write-OutputColor "  Task ${action}d successfully." -color "Success"
         Add-SessionChange -Category "System" -Description "${action}d scheduled task '$($selected.TaskName)'"
+        $reverseAction = if ($action -eq "Enable") { "Disable" } else { "Enable" }
+        Add-UndoAction -Category "System" -Description "${action}d scheduled task '$($selected.TaskName)'" -UndoScript {
+            param($TaskPath, $TaskName, $Reverse)
+            if ($Reverse -eq "Disable") {
+                Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue | Disable-ScheduledTask -ErrorAction SilentlyContinue
+            } else {
+                Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue | Enable-ScheduledTask -ErrorAction SilentlyContinue
+            }
+        }.GetNewClosure() -UndoParams @{ TaskPath = $selected.TaskPath; TaskName = $selected.TaskName; Reverse = $reverseAction }
     }
     catch {
         Write-OutputColor "  Error: $_" -color "Error"
@@ -512,6 +521,7 @@ function Export-ScheduledTaskXML {
     $exportPath = Read-Host "  "
     $navResult = Test-NavigationCommand -UserInput $exportPath
     if ($navResult.ShouldReturn) { return }
+    if (-not [string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $exportPath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $defaultFile }
 
     # Ensure parent directory exists

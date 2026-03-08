@@ -313,7 +313,7 @@ function Select-Disk {
         }
     }
 
-    Write-OutputColor "Invalid selection." -color "Error"
+    Write-OutputColor "  Invalid selection." -color "Error"
     return $null
 }
 
@@ -330,14 +330,14 @@ function Select-Partition {
 
     if (-not $AllowSystemPartitions) {
         # Filter out system-critical partitions
-        $partitions = $partitions | Where-Object {
+        $partitions = @($partitions | Where-Object {
             $_.Type -ne "Reserved" -and
             $_.Type -ne "System" -and
             $_.Type -ne "Recovery" -and
             $_.GptType -ne "{e3c9e316-0b5c-4db8-817d-f92df00215ae}" -and  # Microsoft Reserved
             $_.GptType -ne "{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}" -and  # EFI System
             $_.GptType -ne "{de94bba4-06d1-4d40-a16a-bfd50179d6ac}"       # Windows Recovery
-        }
+        })
     }
 
     if (-not $partitions -or $partitions.Count -eq 0) {
@@ -372,7 +372,7 @@ function Select-Partition {
         }
     }
 
-    Write-OutputColor "Invalid selection." -color "Error"
+    Write-OutputColor "  Invalid selection." -color "Error"
     return $null
 }
 
@@ -459,13 +459,15 @@ function Initialize-NewDisk {
     Write-OutputColor "  [2] MBR (Legacy, required for some older systems)" -color "Success"
     Write-OutputColor "" -color "Info"
 
-    $styleChoice = Read-Host "Enter choice (1 or 2)"
+    $styleChoice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $styleChoice
+    if ($navResult.ShouldReturn) { return }
 
     $partitionStyle = switch ($styleChoice) {
         "1" { "GPT" }
         "2" { "MBR" }
         default {
-            Write-OutputColor "Invalid choice. Defaulting to GPT." -color "Warning"
+            Write-OutputColor "  Invalid choice. Defaulting to GPT." -color "Warning"
             "GPT"
         }
     }
@@ -517,7 +519,9 @@ function Set-DiskOnlineStatus {
         Write-OutputColor "  [1] Take disk OFFLINE" -color "Warning"
         Write-OutputColor "  [2] Cancel" -color "Success"
 
-        $choice = Read-Host "Enter choice"
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
 
         if ($choice -eq "1") {
             Write-OutputColor "" -color "Info"
@@ -533,6 +537,10 @@ function Set-DiskOnlineStatus {
                 Set-Disk -Number $disk.Number -IsOffline $true -ErrorAction Stop
                 Write-OutputColor "Disk $($disk.Number) is now OFFLINE." -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Set Disk $($disk.Number) offline"
+                Add-UndoAction -Category "Storage" -Description "Set Disk $($disk.Number) offline" -UndoScript {
+                    param($DiskNum)
+                    Set-Disk -Number $DiskNum -IsOffline $false -ErrorAction SilentlyContinue
+                }.GetNewClosure() -UndoParams @{ DiskNum = $disk.Number }
             }
             catch {
                 Write-OutputColor "Failed to take disk offline: $_" -color "Error"
@@ -544,7 +552,9 @@ function Set-DiskOnlineStatus {
         Write-OutputColor "  [1] Bring disk ONLINE" -color "Success"
         Write-OutputColor "  [2] Cancel" -color "Info"
 
-        $choice = Read-Host "Enter choice"
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
 
         if ($choice -eq "1") {
             try {
@@ -555,6 +565,10 @@ function Set-DiskOnlineStatus {
 
                 Write-OutputColor "Disk $($disk.Number) is now ONLINE." -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Set Disk $($disk.Number) online"
+                Add-UndoAction -Category "Storage" -Description "Set Disk $($disk.Number) online" -UndoScript {
+                    param($DiskNum)
+                    Set-Disk -Number $DiskNum -IsOffline $true -ErrorAction SilentlyContinue
+                }.GetNewClosure() -UndoParams @{ DiskNum = $disk.Number }
             }
             catch {
                 Write-OutputColor "Failed to bring disk online: $_" -color "Error"
@@ -723,7 +737,7 @@ function New-DiskPartition {
         }
     }
     else {
-        Write-OutputColor "Invalid size input. Examples: '100', '2TB', '500MB', 'MAX'" -color "Error"
+        Write-OutputColor "  Invalid size input. Examples: '100', '2TB', '500MB', 'MAX'" -color "Error"
         return
     }
 
@@ -882,14 +896,16 @@ function Format-DiskVolume {
     Write-OutputColor "  [3] exFAT (For USB drives/cross-platform)" -color "Success"
     Write-OutputColor "" -color "Info"
 
-    $fsChoice = Read-Host "Enter choice (1-3)"
+    $fsChoice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $fsChoice
+    if ($navResult.ShouldReturn) { return }
 
     $fileSystem = switch ($fsChoice) {
         "1" { "NTFS" }
         "2" { "ReFS" }
         "3" { "exFAT" }
         default {
-            Write-OutputColor "Invalid choice. Defaulting to NTFS." -color "Warning"
+            Write-OutputColor "  Invalid choice. Defaulting to NTFS." -color "Warning"
             "NTFS"
         }
     }
@@ -907,7 +923,9 @@ function Format-DiskVolume {
         Write-OutputColor "  [6] 64 KB (Best for large files, databases, VHDs)" -color "Success"
         Write-OutputColor "" -color "Info"
 
-        $ausChoice = Read-Host "Enter choice (1-6, default=1)"
+        $ausChoice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $ausChoice
+        if ($navResult.ShouldReturn) { return }
 
         $allocationUnitSize = switch ($ausChoice) {
             "2" { 4096 }
@@ -930,6 +948,8 @@ function Format-DiskVolume {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "Enter volume label (or press Enter for no label):" -color "Info"
     $volumeLabel = Read-Host "Label"
+    $navResult = Test-NavigationCommand -UserInput $volumeLabel
+    if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($volumeLabel)) {
         $volumeLabel = ""
     }
@@ -1102,7 +1122,7 @@ function Expand-DiskVolume {
         }
     }
     else {
-        Write-OutputColor "Invalid size input. Examples: '50', '1TB', '500MB', 'MAX'" -color "Error"
+        Write-OutputColor "  Invalid size input. Examples: '50', '1TB', '500MB', 'MAX'" -color "Error"
         return
     }
 
@@ -1191,7 +1211,7 @@ function Compress-DiskVolume {
     }
 
     if ($shrinkInput -notmatch '^(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?$') {
-        Write-OutputColor "Invalid input. Examples: '50', '1TB', '500MB'" -color "Error"
+        Write-OutputColor "  Invalid input. Examples: '50', '1TB', '500MB'" -color "Error"
         return
     }
 
@@ -1675,7 +1695,7 @@ function Set-VolumeLabel {
     }
 
     if ($letterInput -notmatch '^[A-Za-z]$') {
-        Write-OutputColor "Invalid drive letter." -color "Error"
+        Write-OutputColor "  Invalid drive letter." -color "Error"
         return
     }
 
@@ -1794,7 +1814,7 @@ function Start-StorageManager {
                     Show-DiskPartitions -DiskNumber ([int]$diskNum)
                 }
                 else {
-                    Write-OutputColor "Invalid disk number." -color "Error"
+                    Write-OutputColor "  Invalid disk number." -color "Error"
                 }
                 Write-PressEnter
             }
@@ -1845,8 +1865,8 @@ function Start-StorageManager {
                 return
             }
             default {
-                Write-OutputColor "Invalid choice. Please enter 1-13 or B to go back." -color "Error"
-                Start-Sleep -Seconds 2
+                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }

@@ -1,13 +1,6 @@
 ﻿#region ===== WINDOWS DEFENDER EXCLUSIONS =====
 # Function to configure Windows Defender exclusions for Hyper-V
 function Set-DefenderExclusions {
-    Clear-Host
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                    WINDOWS DEFENDER EXCLUSIONS").PadRight(72))║" -color "Info"
-    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
-    Write-OutputColor "" -color "Info"
-
     # Check if Windows Defender cmdlets are available (Server 2016+ only)
     if (-not (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue)) {
         Write-OutputColor "  Windows Defender PowerShell module is not available." -color "Error"
@@ -22,104 +15,133 @@ function Set-DefenderExclusions {
         return
     }
 
-    # Show current exclusions
-    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  CURRENT EXCLUSIONS".PadRight(72))│" -color "Info"
-    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                    WINDOWS DEFENDER EXCLUSIONS").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
 
-    $prefs = Get-MpPreference
-    $pathExclusions = if ($null -ne $prefs.ExclusionPath) { @($prefs.ExclusionPath) } else { @() }
-    $processExclusions = if ($null -ne $prefs.ExclusionProcess) { @($prefs.ExclusionProcess) } else { @() }
-    $null = $prefs.ExclusionExtension  # Suppress unused warning
+        # Show current exclusions
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  CURRENT EXCLUSIONS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-    if ($pathExclusions) {
-        Write-OutputColor "  │$("  Path Exclusions:".PadRight(72))│" -color "Info"
-        foreach ($path in $pathExclusions | Select-Object -First 5) {
-            $displayPath = if ($path.Length -gt 66) { $path.Substring(0,63) + "..." } else { $path }
-            Write-OutputColor "  │$("    $displayPath".PadRight(72))│" -color "Success"
+        $prefs = Get-MpPreference
+        $pathExclusions = if ($null -ne $prefs.ExclusionPath) { @($prefs.ExclusionPath) } else { @() }
+        $processExclusions = if ($null -ne $prefs.ExclusionProcess) { @($prefs.ExclusionProcess) } else { @() }
+        $null = $prefs.ExclusionExtension  # Suppress unused warning
+
+        if ($pathExclusions) {
+            Write-OutputColor "  │$("  Path Exclusions:".PadRight(72))│" -color "Info"
+            foreach ($path in $pathExclusions | Select-Object -First 5) {
+                $displayPath = if ($path.Length -gt 66) { $path.Substring(0,63) + "..." } else { $path }
+                Write-OutputColor "  │$("    $displayPath".PadRight(72))│" -color "Success"
+            }
+            if ($pathExclusions.Count -gt 5) {
+                Write-OutputColor "  │$("    ... and $($pathExclusions.Count - 5) more".PadRight(72))│" -color "Info"
+            }
+        } else {
+            Write-OutputColor "  │$("  No path exclusions configured".PadRight(72))│" -color "Warning"
         }
-        if ($pathExclusions.Count -gt 5) {
-            Write-OutputColor "  │$("    ... and $($pathExclusions.Count - 5) more".PadRight(72))│" -color "Info"
-        }
-    } else {
-        Write-OutputColor "  │$("  No path exclusions configured".PadRight(72))│" -color "Warning"
-    }
 
-    if ($processExclusions) {
-        Write-OutputColor "  │$("  Process Exclusions:".PadRight(72))│" -color "Info"
-        foreach ($proc in $processExclusions | Select-Object -First 3) {
-            $lineStr = "    $proc"
-            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
-            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
-        }
-        if ($processExclusions.Count -gt 3) {
-            Write-OutputColor "  │$("    ... and $($processExclusions.Count - 3) more".PadRight(72))│" -color "Info"
-        }
-    }
-    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-OutputColor "" -color "Info"
-
-    # Menu options
-    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  OPTIONS".PadRight(72))│" -color "Info"
-    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-MenuItem -Text "[1]  Add Hyper-V Exclusions (Recommended)"
-    Write-MenuItem -Text "[2]  Add Custom Path Exclusion"
-    Write-MenuItem -Text "[3]  Add Custom Process Exclusion"
-    Write-MenuItem -Text "[4]  View All Current Exclusions"
-    Write-MenuItem -Text "[5]  Remove an Exclusion"
-    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [B] ◄ Back" -color "Info"
-    Write-OutputColor "" -color "Info"
-
-    $choice = Read-Host "  Select"
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
-
-    switch ($choice) {
-        "1" {
-            Add-HyperVDefenderExclusions
-        }
-        "2" {
-            Write-OutputColor "" -color "Info"
-            $customPath = Read-Host "  Enter path to exclude"
-            $navResult = Test-NavigationCommand -UserInput $customPath
-            if ($navResult.ShouldReturn) { return }
-            if ($customPath -and (Test-Path -LiteralPath $customPath -IsValid)) {
-                try {
-                    Add-MpPreference -ExclusionPath $customPath -ErrorAction Stop
-                    Write-OutputColor "  Added path exclusion: $customPath" -color "Success"
-                    Add-SessionChange -Category "Security" -Description "Added Defender exclusion: $customPath"
-                }
-                catch {
-                    Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
-                }
-            } else {
-                Write-OutputColor "  Invalid path." -color "Error"
+        if ($processExclusions) {
+            Write-OutputColor "  │$("  Process Exclusions:".PadRight(72))│" -color "Info"
+            foreach ($proc in $processExclusions | Select-Object -First 3) {
+                $lineStr = "    $proc"
+                if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
+            }
+            if ($processExclusions.Count -gt 3) {
+                Write-OutputColor "  │$("    ... and $($processExclusions.Count - 3) more".PadRight(72))│" -color "Info"
             }
         }
-        "3" {
-            Write-OutputColor "" -color "Info"
-            $customProc = Read-Host "  Enter process name to exclude (e.g., myapp.exe)"
-            $navResult = Test-NavigationCommand -UserInput $customProc
-            if ($navResult.ShouldReturn) { return }
-            if ($customProc) {
-                try {
-                    Add-MpPreference -ExclusionProcess $customProc -ErrorAction Stop
-                    Write-OutputColor "  Added process exclusion: $customProc" -color "Success"
-                    Add-SessionChange -Category "Security" -Description "Added Defender process exclusion: $customProc"
-                }
-                catch {
-                    Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
-                }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        # Menu options
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  OPTIONS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem -Text "[1]  Add Hyper-V Exclusions (Recommended)"
+        Write-MenuItem -Text "[2]  Add Custom Path Exclusion"
+        Write-MenuItem -Text "[3]  Add Custom Process Exclusion"
+        Write-MenuItem -Text "[4]  View All Current Exclusions"
+        Write-MenuItem -Text "[5]  Remove an Exclusion"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        switch ("$choice".ToUpper()) {
+            "1" {
+                Add-HyperVDefenderExclusions
+                Write-PressEnter
             }
-        }
-        "4" {
-            Show-AllDefenderExclusions
-        }
-        "5" {
-            Remove-DefenderExclusion
+            "2" {
+                Write-OutputColor "" -color "Info"
+                $customPath = Read-Host "  Enter path to exclude"
+                $navResult = Test-NavigationCommand -UserInput $customPath
+                if ($navResult.ShouldReturn) { return }
+                if ($customPath) { $customPath = $customPath.Trim('"') }
+                if ($customPath -and (Test-Path -LiteralPath $customPath -IsValid)) {
+                    try {
+                        Add-MpPreference -ExclusionPath $customPath -ErrorAction Stop
+                        Write-OutputColor "  Added path exclusion: $customPath" -color "Success"
+                        Add-SessionChange -Category "Security" -Description "Added Defender exclusion: $customPath"
+                        Add-UndoAction -Category "Security" -Description "Added Defender exclusion: $customPath" -UndoScript {
+                            param($Path)
+                            Remove-MpPreference -ExclusionPath $Path -ErrorAction SilentlyContinue
+                        }.GetNewClosure() -UndoParams @{ Path = $customPath }
+                    }
+                    catch {
+                        Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
+                    }
+                } else {
+                    Write-OutputColor "  Invalid path." -color "Error"
+                }
+                Write-PressEnter
+            }
+            "3" {
+                Write-OutputColor "" -color "Info"
+                $customProc = Read-Host "  Enter process name to exclude (e.g., myapp.exe)"
+                $navResult = Test-NavigationCommand -UserInput $customProc
+                if ($navResult.ShouldReturn) { return }
+                if ($customProc) {
+                    try {
+                        Add-MpPreference -ExclusionProcess $customProc -ErrorAction Stop
+                        Write-OutputColor "  Added process exclusion: $customProc" -color "Success"
+                        Add-SessionChange -Category "Security" -Description "Added Defender process exclusion: $customProc"
+                        Add-UndoAction -Category "Security" -Description "Added Defender process exclusion: $customProc" -UndoScript {
+                            param($Proc)
+                            Remove-MpPreference -ExclusionProcess $Proc -ErrorAction SilentlyContinue
+                        }.GetNewClosure() -UndoParams @{ Proc = $customProc }
+                    }
+                    catch {
+                        Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
+                    }
+                }
+                Write-PressEnter
+            }
+            "4" {
+                Show-AllDefenderExclusions
+                Write-PressEnter
+            }
+            "5" {
+                Remove-DefenderExclusion
+                Write-PressEnter
+            }
+            "B" { return }
+            default {
+                Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"
+                Start-Sleep -Seconds 1
+            }
         }
     }
 }
@@ -158,6 +180,9 @@ function Add-HyperVDefenderExclusions {
 
     $added = 0
     $errors = 0
+    $addedPaths = @()
+    $addedProcesses = @()
+    $addedExtensions = @()
 
     # Path exclusions (configurable via defaults.json DefenderExclusionPaths)
     $pathsToExclude = @($script:DefenderExclusionPaths)
@@ -181,6 +206,7 @@ function Add-HyperVDefenderExclusions {
         try {
             Add-MpPreference -ExclusionPath $path -ErrorAction Stop
             Write-OutputColor "  Added path: $path" -color "Success"
+            $addedPaths += $path
             $added++
         }
         catch {
@@ -205,6 +231,7 @@ function Add-HyperVDefenderExclusions {
         try {
             Add-MpPreference -ExclusionProcess $proc -ErrorAction Stop
             Write-OutputColor "  Added process: $proc" -color "Success"
+            $addedProcesses += $proc
             $added++
         }
         catch {
@@ -224,6 +251,7 @@ function Add-HyperVDefenderExclusions {
         try {
             Add-MpPreference -ExclusionExtension $ext -ErrorAction Stop
             Write-OutputColor "  Added extension: $ext" -color "Success"
+            $addedExtensions += $ext
             $added++
         }
         catch {
@@ -243,6 +271,14 @@ function Add-HyperVDefenderExclusions {
         Write-OutputColor "  Completed with $errors errors. $added items added." -color "Warning"
     }
     Add-SessionChange -Category "Security" -Description "Configured Windows Defender Hyper-V exclusions"
+    if ($added -gt 0) {
+        Add-UndoAction -Category "Security" -Description "Added Hyper-V Defender exclusions ($added items)" -UndoScript {
+            param($Paths, $Processes, $Extensions)
+            foreach ($p in $Paths) { Remove-MpPreference -ExclusionPath $p -ErrorAction SilentlyContinue }
+            foreach ($p in $Processes) { Remove-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue }
+            foreach ($e in $Extensions) { Remove-MpPreference -ExclusionExtension $e -ErrorAction SilentlyContinue }
+        }.GetNewClosure() -UndoParams @{ Paths = $addedPaths; Processes = $addedProcesses; Extensions = $addedExtensions }
+    }
 }
 
 # Function to show all Defender exclusions
@@ -308,8 +344,6 @@ function Show-AllDefenderExclusions {
         Write-OutputColor "  │$("  (none)".PadRight(72))│" -color "Info"
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-
-    Write-PressEnter
 }
 
 # Function to remove a Defender exclusion
@@ -372,6 +406,14 @@ function Remove-DefenderExclusion {
                 }
                 Write-OutputColor "  Removed $($selected.Type) exclusion: $($selected.Value)" -color "Success"
                 Add-SessionChange -Category "Security" -Description "Removed Defender exclusion: $($selected.Value)"
+                Add-UndoAction -Category "Security" -Description "Removed Defender $($selected.Type) exclusion: $($selected.Value)" -UndoScript {
+                    param($ExclType, $ExclValue)
+                    switch ($ExclType) {
+                        "Path" { Add-MpPreference -ExclusionPath $ExclValue -ErrorAction SilentlyContinue }
+                        "Process" { Add-MpPreference -ExclusionProcess $ExclValue -ErrorAction SilentlyContinue }
+                        "Extension" { Add-MpPreference -ExclusionExtension $ExclValue -ErrorAction SilentlyContinue }
+                    }
+                }.GetNewClosure() -UndoParams @{ ExclType = $selected.Type; ExclValue = $selected.Value }
             }
             catch {
                 Write-OutputColor "  Failed to remove exclusion: $_" -color "Error"

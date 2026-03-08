@@ -204,7 +204,7 @@ function New-BatchConfigTemplate {
         $savePath = $defaultPath
     }
     else {
-        $savePath = $customPath
+        $savePath = $customPath.Trim('"')
     }
 
     # Validate save directory exists
@@ -218,7 +218,7 @@ function New-BatchConfigTemplate {
     }
 
     try {
-        $configTemplate | Out-File -FilePath $savePath -Encoding UTF8 -Force
+        $configTemplate | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Batch config template created: $savePath" -color "Success"
         Write-OutputColor "" -color "Info"
@@ -541,7 +541,7 @@ function Export-BatchConfigFromState {
             $savePath = $defaultPath
         }
         else {
-            $savePath = $customPath
+            $savePath = $customPath.Trim('"')
         }
 
         # Validate save directory exists
@@ -554,7 +554,7 @@ function Export-BatchConfigFromState {
             if (-not (Confirm-UserAction -Message "File already exists. Overwrite?")) { return }
         }
 
-        $config | ConvertTo-Json -Depth 5 | Out-File -FilePath $savePath -Encoding UTF8 -Force
+        $config | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Batch config generated from current state: $savePath" -color "Success"

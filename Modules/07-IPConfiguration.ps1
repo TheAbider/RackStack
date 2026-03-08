@@ -51,12 +51,12 @@ function Get-IPAddressAndSubnet {
         $cidr = [int]$regexMatches[2]
 
         if (-not (Test-ValidIPAddress -IPAddress $ipAddress)) {
-            Write-OutputColor "Invalid IP address format. Must be X.X.X.X (e.g., 192.168.1.100)" -color "Error"
+            Write-OutputColor "  Invalid IP address format. Must be X.X.X.X (e.g., 192.168.1.100)" -color "Error"
             return $null
         }
 
         if ($cidr -lt 0 -or $cidr -gt 32) {
-            Write-OutputColor "Invalid CIDR prefix. Must be between 0-32 (common: 24=/24, 16=/16, 8=/8)" -color "Error"
+            Write-OutputColor "  Invalid CIDR prefix. Must be between 0-32 (common: 24=/24, 16=/16, 8=/8)" -color "Error"
             return $null
         }
 
@@ -67,11 +67,11 @@ function Get-IPAddressAndSubnet {
         $ipAddress = $ipInput
 
         if (-not (Test-ValidIPAddress -IPAddress $ipAddress)) {
-            Write-OutputColor "Invalid IP address format. Must be X.X.X.X (e.g., 192.168.1.100)" -color "Error"
+            Write-OutputColor "  Invalid IP address format. Must be X.X.X.X (e.g., 192.168.1.100)" -color "Error"
             return $null
         }
 
-        Write-OutputColor "Enter subnet mask (e.g., 255.255.255.0) or CIDR prefix (e.g., 24):" -color "Info"
+        Write-OutputColor "  Enter subnet mask (e.g., 255.255.255.0) or CIDR prefix (e.g., 24):" -color "Info"
         $subnetInput = Read-Host
 
         $navResult = Test-NavigationCommand -UserInput $subnetInput
@@ -86,7 +86,7 @@ function Get-IPAddressAndSubnet {
         if ($subnetInput -match '^\d{1,2}$') {
             $cidr = [int]$subnetInput
             if ($cidr -lt 0 -or $cidr -gt 32) {
-                Write-OutputColor "Invalid CIDR prefix. Must be between 0-32 (common: 24, 16, 8)" -color "Error"
+                Write-OutputColor "  Invalid CIDR prefix. Must be between 0-32 (common: 24, 16, 8)" -color "Error"
                 return $null
             }
             return @($ipAddress, $cidr)
@@ -95,7 +95,7 @@ function Get-IPAddressAndSubnet {
             # It's a subnet mask
             $cidr = Convert-SubnetMaskToPrefix -SubnetMask $subnetInput
             if ($null -eq $cidr) {
-                Write-OutputColor "Invalid subnet mask. Must be X.X.X.X (e.g., 255.255.255.0 = /24)" -color "Error"
+                Write-OutputColor "  Invalid subnet mask. Must be X.X.X.X (e.g., 255.255.255.0 = /24)" -color "Error"
                 return $null
             }
             return @($ipAddress, $cidr)
@@ -105,7 +105,7 @@ function Get-IPAddressAndSubnet {
 
 # Function to get gateway address
 function Get-GatewayAddress {
-    Write-OutputColor "Enter default gateway (e.g., 192.168.1.1):" -color "Info"
+    Write-OutputColor "  Enter default gateway (e.g., 192.168.1.1):" -color "Info"
     $gateway = Read-Host
 
     $navResult = Test-NavigationCommand -UserInput $gateway
@@ -117,7 +117,7 @@ function Get-GatewayAddress {
     }
 
     if (-not (Test-ValidIPAddress -IPAddress $gateway)) {
-        Write-OutputColor "Invalid gateway format. Must be X.X.X.X (e.g., 192.168.1.1)" -color "Error"
+        Write-OutputColor "  Invalid gateway format. Must be X.X.X.X (e.g., 192.168.1.1)" -color "Error"
         return $null
     }
 
@@ -244,6 +244,18 @@ function Set-VMIPAddress {
 
         Write-OutputColor "IP configuration applied successfully!" -color "Success"
         Add-SessionChange -Category "Network" -Description "Set IP $ipAddress/$cidr on $selectedAdapterName"
+        if ($null -ne $previousIP) {
+            $oldGW = if ($null -ne $previousRoute) { $previousRoute.NextHop } else { $null }
+            Add-UndoAction -Category "Network" -Description "Set IP $ipAddress/$cidr on $selectedAdapterName" -UndoScript {
+                param($Adapter, $OldIP, $OldPrefix, $OldGW)
+                Remove-NetIPAddress -InterfaceAlias $Adapter -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-NetRoute -InterfaceAlias $Adapter -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                $params = @{ InterfaceAlias = $Adapter; IPAddress = $OldIP; PrefixLength = $OldPrefix; ErrorAction = 'SilentlyContinue' }
+                if ($OldGW) { $params.DefaultGateway = $OldGW }
+                New-NetIPAddress @params
+            }.GetNewClosure() -UndoParams @{ Adapter = $selectedAdapterName; OldIP = $previousIP.IPAddress; OldPrefix = $previousIP.PrefixLength; OldGW = $oldGW }
+        }
+        Clear-MenuCache
 
         # Wait for address to leave Tentative state (DAD takes 1-3 seconds)
         $dadWait = 0
@@ -291,6 +303,7 @@ function Set-VMDNSAddress {
             Set-DnsClientServerAddress -InterfaceAlias $AdapterName -ServerAddresses $Servers -ErrorAction Stop
             Write-OutputColor "DNS servers set: $($Servers -join ', ')" -color "Success"
             Add-SessionChange -Category "Network" -Description "Set DNS on $AdapterName to $PresetName"
+            Clear-MenuCache
 
             # Add to undo stack
             Add-UndoAction -Category "Network" -Description "DNS change on $AdapterName" -UndoScript {
@@ -355,7 +368,7 @@ function Set-VMDNSAddress {
             }
 
             if ([string]::IsNullOrWhiteSpace($dns1) -or -not (Test-ValidIPAddress -IPAddress $dns1)) {
-                Write-OutputColor "Invalid DNS server address. Must be in format: X.X.X.X (e.g., 8.8.8.8)" -color "Error"
+                Write-OutputColor "  Invalid DNS server address. Must be in format: X.X.X.X (e.g., 8.8.8.8)" -color "Error"
                 return
             }
 
@@ -364,6 +377,8 @@ function Set-VMDNSAddress {
             if (Confirm-UserAction -Message "Add a secondary DNS server?") {
                 Write-OutputColor "Enter secondary DNS server:" -color "Info"
                 $dns2 = Read-Host
+                $navResult = Test-NavigationCommand -UserInput $dns2
+                if ($navResult.ShouldReturn) { return }
 
                 if (-not [string]::IsNullOrWhiteSpace($dns2)) {
                     if (Test-ValidIPAddress -IPAddress $dns2) {
@@ -375,7 +390,7 @@ function Set-VMDNSAddress {
                         }
                     }
                     else {
-                        Write-OutputColor "Invalid secondary DNS. Continuing with primary only." -color "Warning"
+                        Write-OutputColor "  Invalid secondary DNS. Continuing with primary only." -color "Warning"
                     }
                 }
             }
@@ -385,9 +400,17 @@ function Set-VMDNSAddress {
         elseif ($choiceNum -eq $dhcpNum) {
             # DHCP
             try {
+                $prevDHCPDns = @((Get-DnsClientServerAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses)
                 Set-DnsClientServerAddress -InterfaceAlias $selectedAdapterName -ResetServerAddresses -ErrorAction Stop
                 Write-OutputColor "DNS set to use DHCP." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set DNS on $selectedAdapterName to DHCP"
+                if ($prevDHCPDns.Count -gt 0) {
+                    Add-UndoAction -Category "Network" -Description "Set DNS on $selectedAdapterName to DHCP" -UndoScript {
+                        param($Adapter, $OldDNS)
+                        Set-DnsClientServerAddress -InterfaceAlias $Adapter -ServerAddresses $OldDNS -ErrorAction SilentlyContinue
+                    }.GetNewClosure() -UndoParams @{ Adapter = $selectedAdapterName; OldDNS = $prevDHCPDns }
+                }
+                Clear-MenuCache
                 $success = $true
             }
             catch {
@@ -459,6 +482,7 @@ function Disable-AllIPv6 {
 
     Write-OutputColor "`nIPv6 disabled on $successCount of $totalCount adapters." -color "Success"
     Add-SessionChange -Category "Network" -Description "Disabled IPv6 on $successCount adapters"
+    Clear-MenuCache
 }
 
 # Function to rename a network adapter
@@ -498,7 +522,7 @@ function Rename-NetworkAdapter {
     }
 
     if (-not ($selection -match '^\d+$') -or -not $adapterMap.ContainsKey([int]$selection)) {
-        Write-OutputColor "Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection." -color "Error"
         return
     }
 
@@ -531,7 +555,7 @@ function Rename-NetworkAdapter {
 
     # Validate name (no special characters that would cause issues)
     if ($newName -match '[\\\/\:\*\?\"\<\>\|]') {
-        Write-OutputColor "Invalid characters in name. Avoid: \ / : * ? `" < > |" -color "Error"
+        Write-OutputColor "  Invalid characters in name. Avoid: \ / : * ? `" < > |" -color "Error"
         return
     }
 
@@ -554,6 +578,7 @@ function Rename-NetworkAdapter {
         Rename-NetAdapter -Name $oldName -NewName $newName -ErrorAction Stop
         Write-OutputColor "Adapter renamed successfully: '$oldName' -> '$newName'" -color "Success"
         Add-SessionChange -Category "Network" -Description "Renamed adapter '$oldName' to '$newName'"
+        Clear-MenuCache
 
         # Add to undo stack
         Add-UndoAction -Category "Network" -Description "Rename adapter '$oldName' to '$newName'" -UndoScript {

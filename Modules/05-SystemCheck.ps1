@@ -2,12 +2,17 @@
 # Check if running on Windows Server (vs client/workstation)
 function Test-WindowsServer {
     try {
-        $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        if ($null -eq $osInfo) { return $false }
-        return ($osInfo.ProductType -ne 1)  # 1 = Workstation, 2 = Domain Controller, 3 = Server
+        # Registry first (faster, immune to WMI hangs)
+        $productType = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\ProductOptions' -ErrorAction Stop).ProductType
+        return ($productType -ne "WinNT")  # WinNT = Workstation, ServerNT/LanmanNT = Server/DC
     }
     catch {
-        return $false
+        try {
+            $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            if ($null -eq $osInfo) { return $false }
+            return ($osInfo.ProductType -ne 1)
+        }
+        catch { return $false }
     }
 }
 
@@ -26,8 +31,7 @@ function Test-WindowsActivated {
 function Test-HyperVInstalled {
     try {
         # Check if this is Windows Server or Windows Client
-        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
-        $isServer = $osInfo.ProductType -ne 1  # 1 = Workstation, 2 = Domain Controller, 3 = Server
+        $isServer = Test-WindowsServer
 
         if ($isServer) {
             # Windows Server - check using Get-WindowsFeature
@@ -157,21 +161,35 @@ function Get-WinRMState {
 # Function to get firewall state
 function Get-FirewallState {
     try {
-        $domainProfile = Get-NetFirewallProfile -Profile Domain -ErrorAction SilentlyContinue
-        $privateProfile = Get-NetFirewallProfile -Profile Private -ErrorAction SilentlyContinue
-        $publicProfile = Get-NetFirewallProfile -Profile Public -ErrorAction SilentlyContinue
-
+        # Registry first (faster, immune to WMI/CIM hangs)
+        $fwBase = 'HKLM:\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy'
+        $domainEnabled  = (Get-ItemProperty "$fwBase\DomainProfile"  -Name EnableFirewall -ErrorAction Stop).EnableFirewall
+        $privateEnabled = (Get-ItemProperty "$fwBase\StandardProfile" -Name EnableFirewall -ErrorAction Stop).EnableFirewall
+        $publicEnabled  = (Get-ItemProperty "$fwBase\PublicProfile"  -Name EnableFirewall -ErrorAction Stop).EnableFirewall
         return @{
-            Domain = if ($null -ne $domainProfile -and $domainProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
-            Private = if ($null -ne $privateProfile -and $privateProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
-            Public = if ($null -ne $publicProfile -and $publicProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
+            Domain  = if ($domainEnabled -eq 1) { "Enabled" } else { "Disabled" }
+            Private = if ($privateEnabled -eq 1) { "Enabled" } else { "Disabled" }
+            Public  = if ($publicEnabled -eq 1) { "Enabled" } else { "Disabled" }
         }
     }
     catch {
-        return @{
-            Domain = "Unknown"
-            Private = "Unknown"
-            Public = "Unknown"
+        # Fallback to cmdlet if registry path doesn't exist
+        try {
+            $domainProfile  = Get-NetFirewallProfile -Profile Domain -ErrorAction SilentlyContinue
+            $privateProfile = Get-NetFirewallProfile -Profile Private -ErrorAction SilentlyContinue
+            $publicProfile  = Get-NetFirewallProfile -Profile Public -ErrorAction SilentlyContinue
+            return @{
+                Domain  = if ($null -ne $domainProfile -and $domainProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
+                Private = if ($null -ne $privateProfile -and $privateProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
+                Public  = if ($null -ne $publicProfile -and $publicProfile.Enabled -eq $true) { "Enabled" } else { "Disabled" }
+            }
+        }
+        catch {
+            return @{
+                Domain  = "Unknown"
+                Private = "Unknown"
+                Public  = "Unknown"
+            }
         }
     }
 }
@@ -181,7 +199,7 @@ function Test-AllConnectivity {
     Clear-Host
     Write-CenteredOutput "Network Connectivity Test" -color "Info"
 
-    Write-OutputColor "Testing network connectivity..." -color "Info"
+    Write-OutputColor "  Testing network connectivity..." -color "Info"
     Write-OutputColor "" -color "Info"
 
     $results = @()
@@ -236,18 +254,18 @@ function Test-AllConnectivity {
     $failCount = @($results | Where-Object { $_.Status -eq "FAIL" }).Count
 
     if ($failCount -eq 0) {
-        Write-OutputColor "All connectivity tests passed!" -color "Success"
+        Write-OutputColor "  All connectivity tests passed!" -color "Success"
     }
     elseif ($okCount -gt 0) {
-        Write-OutputColor "Partial connectivity: $okCount passed, $failCount failed" -color "Warning"
+        Write-OutputColor "  Partial connectivity: $okCount passed, $failCount failed" -color "Warning"
     }
     else {
-        Write-OutputColor "No connectivity! Check network configuration." -color "Error"
+        Write-OutputColor "  No connectivity! Check network configuration." -color "Error"
     }
 
     # DNS resolution test
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Testing DNS resolution..." -color "Info"
+    Write-OutputColor "  Testing DNS resolution..." -color "Info"
     try {
         $dnsTest = Resolve-DnsName -Name "google.com" -Type A -ErrorAction Stop
         Write-OutputColor "[OK ] DNS resolution working (google.com -> $(($dnsTest | Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress }) -join ', '))" -color "Success"
@@ -281,7 +299,7 @@ function Set-ServerPowerPlan {
     Write-CenteredOutput "Power Plan Configuration" -color "Info"
 
     $currentPlan = Get-CurrentPowerPlan
-    Write-OutputColor "Current Power Plan: $($currentPlan.Name)" -color "Info"
+    Write-OutputColor "  Current Power Plan: $($currentPlan.Name)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $powerPlans = @{
@@ -290,11 +308,11 @@ function Set-ServerPowerPlan {
         "3" = @{ GUID = $script:PowerPlanGUID["Power Saver"]; Name = "Power Saver" }
     }
 
-    Write-OutputColor "Available Power Plans:" -color "Info"
-    Write-OutputColor "1. High Performance (Recommended for servers)" -color "Success"
-    Write-OutputColor "2. Balanced" -color "Info"
-    Write-OutputColor "3. Power Saver" -color "Info"
-    Write-OutputColor "4. Cancel" -color "Info"
+    Write-OutputColor "  Available Power Plans:" -color "Info"
+    Write-OutputColor "  1. High Performance (Recommended for servers)" -color "Success"
+    Write-OutputColor "  2. Balanced" -color "Info"
+    Write-OutputColor "  3. Power Saver" -color "Info"
+    Write-OutputColor "  4. Cancel" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"
@@ -311,7 +329,7 @@ function Set-ServerPowerPlan {
     }
 
     if (-not $powerPlans.ContainsKey($choice)) {
-        Write-OutputColor "Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection." -color "Error"
         return
     }
 
@@ -331,6 +349,10 @@ function Set-ServerPowerPlan {
         if ($newPlan.GUID -eq $selectedPlan.GUID) {
             Write-OutputColor "Power plan set to: $($selectedPlan.Name)" -color "Success"
             Add-SessionChange -Category "System" -Description "Set power plan to $($selectedPlan.Name)"
+            Add-UndoAction -Category "System" -Description "Set power plan to $($selectedPlan.Name)" -UndoScript {
+                param($OldGUID)
+                powercfg /setactive $OldGUID
+            }.GetNewClosure() -UndoParams @{ OldGUID = $currentPlan.GUID }
             Clear-MenuCache  # Invalidate cache after change
         }
         else {

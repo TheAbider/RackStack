@@ -22,6 +22,8 @@ function Export-HTMLHealthReport {
     if (-not $useDefault) {
         Write-OutputColor "  Enter output path:" -color "Info"
         $customPath = Read-Host "  "
+        $navResult = Test-NavigationCommand -UserInput $customPath
+        if ($navResult.ShouldReturn) { return }
         if (-not [string]::IsNullOrWhiteSpace($customPath)) {
             $OutputPath = $customPath.Trim('"')
         }
@@ -102,6 +104,26 @@ function Export-HTMLHealthReport {
         }
     }
 
+    # Certificates
+    $certHtml = ""
+    try {
+        $now = Get-Date
+        $allCerts = @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue)
+        if ($allCerts.Count -gt 0) {
+            foreach ($cert in ($allCerts | Sort-Object NotAfter)) {
+                $subject = if ($cert.Subject) { $cert.Subject } else { "(no subject)" }
+                $daysLeft = [math]::Floor(($cert.NotAfter - $now).TotalDays)
+                $certStatus = if ($daysLeft -lt 0) { "bad" } elseif ($daysLeft -lt 30) { "warn" } else { "good" }
+                $statusTag = if ($daysLeft -lt 0) { "EXPIRED" } elseif ($daysLeft -lt 30) { "EXPIRING" } else { "OK" }
+                $certHtml += "<tr><td>$(ConvertTo-HtmlSafe $subject)</td><td>$($cert.NotAfter.ToString('yyyy-MM-dd'))</td><td>${daysLeft}d</td><td class='status-$certStatus'>$statusTag</td></tr>"
+            }
+        } else {
+            $certHtml = "<tr><td colspan='4'>No certificates in LocalMachine\My store</td></tr>"
+        }
+    } catch {
+        $certHtml = "<tr><td colspan='4'>Certificate check unavailable</td></tr>"
+    }
+
     # Disk I/O Latency (v1.7.0)
     $diskIOHtml = "<table><tr><th>Disk</th><th>Metric</th><th>Latency</th><th>Status</th></tr>"
     try {
@@ -178,6 +200,71 @@ function Export-HTMLHealthReport {
     } catch { $topProcsHtml += "<tr><td colspan='3'>Process information unavailable</td></tr>" }
     $topProcsHtml += "</table>"
 
+    # Time Sync Status
+    $timeSyncHtml = "<table><tr><th>Property</th><th>Value</th><th>Status</th></tr>"
+    try {
+        $w32tmOut = w32tm /query /status 2>&1
+        $timeSyncSource = "Unknown"
+        $timeSyncOffset = $null
+        $timeSyncStat = "good"
+        foreach ($tsLine in $w32tmOut) {
+            $tsText = $tsLine.ToString()
+            if ($tsText -match 'Source:\s*(.+)') {
+                $regexMatches = $matches
+                $timeSyncSource = $regexMatches[1].Trim()
+            }
+            if ($tsText -match 'Phase Offset:\s*([\-\d\.]+)s') {
+                $regexMatches = $matches
+                $timeSyncOffset = [double]$regexMatches[1]
+            }
+        }
+        if ($timeSyncSource -match 'Free-Running|Local CMOS') { $timeSyncStat = "warn" }
+        $offsetStr = if ($null -ne $timeSyncOffset) { "$([math]::Round($timeSyncOffset, 3))s" } else { "N/A" }
+        $offsetStat = "good"
+        if ($null -ne $timeSyncOffset) {
+            $absOffset = [math]::Abs($timeSyncOffset)
+            if ($absOffset -gt 30) { $offsetStat = "bad" } elseif ($absOffset -gt 5) { $offsetStat = "warn" }
+        }
+        $timeSyncHtml += "<tr><td>Source</td><td>$(ConvertTo-HtmlSafe $timeSyncSource)</td><td class='status-$timeSyncStat'>$(if ($timeSyncStat -eq 'good') { 'OK' } else { 'CHECK' })</td></tr>"
+        $timeSyncHtml += "<tr><td>Phase Offset</td><td>$offsetStr</td><td class='status-$offsetStat'>$(if ($offsetStat -eq 'good') { 'OK' } elseif ($offsetStat -eq 'warn') { 'DRIFT' } else { 'HIGH DRIFT' })</td></tr>"
+    } catch {
+        $timeSyncHtml += "<tr><td colspan='3'>Time sync status unavailable</td></tr>"
+    }
+    $timeSyncHtml += "</table>"
+
+    # Firewall Status
+    $firewallHtml = "<table><tr><th>Profile</th><th>Enabled</th><th>Status</th></tr>"
+    try {
+        $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+        foreach ($fwProf in $fwProfiles) {
+            $fwOn = $fwProf.Enabled -eq $true
+            $fwStat = if ($fwOn) { "good" } else { "bad" }
+            $fwText = if ($fwOn) { "Enabled" } else { "DISABLED" }
+            $firewallHtml += "<tr><td>$($fwProf.Name)</td><td class='status-$fwStat'>$fwText</td><td class='status-$fwStat'>$(if ($fwOn) { 'OK' } else { 'WARNING' })</td></tr>"
+        }
+    } catch {
+        $firewallHtml += "<tr><td colspan='3'>Firewall status unavailable</td></tr>"
+    }
+    $firewallHtml += "</table>"
+
+    # Recent Critical Events (24h)
+    $critEventsHtml = "<table><tr><th>Time</th><th>Source</th><th>ID</th><th>Message</th></tr>"
+    try {
+        $critEvents = @(Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction SilentlyContinue)
+        if ($critEvents.Count -gt 0) {
+            foreach ($evt in ($critEvents | Select-Object -First 5)) {
+                $evtMsg = if ($evt.Message) { $evt.Message.Split("`n")[0] } else { "N/A" }
+                if ($evtMsg.Length -gt 80) { $evtMsg = $evtMsg.Substring(0, 77) + "..." }
+                $critEventsHtml += "<tr><td>$($evt.TimeCreated.ToString('MM/dd HH:mm'))</td><td>$(ConvertTo-HtmlSafe $evt.ProviderName)</td><td>$($evt.Id)</td><td>$(ConvertTo-HtmlSafe $evtMsg)</td></tr>"
+            }
+        } else {
+            $critEventsHtml += "<tr><td colspan='4' class='status-good'>No critical/error events in last 24 hours</td></tr>"
+        }
+    } catch {
+        $critEventsHtml += "<tr><td colspan='4'>Event log query unavailable</td></tr>"
+    }
+    $critEventsHtml += "</table>"
+
     # Issues summary
     $issues = @()
     if ($cpuLoad -gt 80) { $issues += "High CPU usage ($([math]::Round($cpuLoad, 1))%)" }
@@ -187,6 +274,14 @@ function Export-HTMLHealthReport {
         if ($usedPercent -gt 90) { $issues += "Low disk space on $($disk.DeviceID) ($usedPercent% used)" }
     }
     if (Test-RebootPending) { $issues += "Reboot pending" }
+    if ($null -ne $timeSyncOffset -and [math]::Abs($timeSyncOffset) -gt 30) { $issues += "Time sync offset > 30s" }
+    if ($timeSyncSource -match 'Free-Running|Local CMOS') { $issues += "No external time source configured" }
+    try {
+        foreach ($fwProf in $fwProfiles) {
+            if ($fwProf.Enabled -ne $true) { $issues += "Firewall profile '$($fwProf.Name)' disabled"; break }
+        }
+    } catch { }
+    if ($critEvents.Count -ge 5) { $issues += "$($critEvents.Count) critical/error events in last 24h" }
 
     $overallStatus = if ($issues.Count -eq 0) { "good" } elseif ($issues.Count -le 2) { "warn" } else { "bad" }
     $overallText = if ($issues.Count -eq 0) { "HEALTHY" } else { "ATTENTION NEEDED" }
@@ -277,6 +372,12 @@ function Export-HTMLHealthReport {
             $servicesHtml
         </table>
 
+        <h2>Certificates</h2>
+        <table>
+            <tr><th>Subject</th><th>Expires</th><th>Days Left</th><th>Status</th></tr>
+            $certHtml
+        </table>
+
         <h2>Disk I/O Latency</h2>
         $diskIOHtml
 
@@ -291,6 +392,15 @@ function Export-HTMLHealthReport {
         <h2>Top 5 CPU Processes</h2>
         $topProcsHtml
 
+        <h2>Time Sync</h2>
+        $timeSyncHtml
+
+        <h2>Firewall Status</h2>
+        $firewallHtml
+
+        <h2>Recent Critical Events (24h)</h2>
+        $critEventsHtml
+
         <div class="footer">
             Report generated by $($script:ToolFullName) v$($script:ScriptVersion)
         </div>
@@ -300,7 +410,7 @@ function Export-HTMLHealthReport {
 "@
 
     try {
-        $html | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Report saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated HTML health report"
@@ -474,7 +584,7 @@ function Export-ProfileComparisonHTML {
 "@
 
     try {
-        $html | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Comparison saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated HTML profile comparison"
@@ -509,6 +619,8 @@ function Export-HTMLReadinessReport {
     if (-not $useDefault) {
         Write-OutputColor "  Enter output path:" -color "Info"
         $customPath = Read-Host "  "
+        $navResult = Test-NavigationCommand -UserInput $customPath
+        if ($navResult.ShouldReturn) { return }
         if (-not [string]::IsNullOrWhiteSpace($customPath)) {
             $OutputPath = $customPath.Trim('"')
         }
@@ -630,6 +742,72 @@ function Export-HTMLReadinessReport {
     if ($lic) { $ready++; $rows += Add-ReadinessRow -Cat "System" -Name "Windows License" -Value "Activated" -Status "ok" }
     else { $rows += Add-ReadinessRow -Cat "System" -Name "Windows License" -Value "Not Activated" -Status "warn" }
 
+    # C: Drive Space
+    $total++
+    try {
+        $cVol = Get-Volume -DriveLetter C -ErrorAction Stop
+        if ($null -ne $cVol -and $cVol.Size -gt 0) {
+            $freeGB = [math]::Round($cVol.SizeRemaining / 1GB, 1)
+            $totalGB = [math]::Round($cVol.Size / 1GB, 1)
+            $usedPct = [math]::Round((($cVol.Size - $cVol.SizeRemaining) / $cVol.Size) * 100)
+            if ($freeGB -lt 5) {
+                $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "${freeGB}GB free of ${totalGB}GB ($usedPct% used)" -Status "fail"
+            } elseif ($freeGB -lt 20) {
+                $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "${freeGB}GB free of ${totalGB}GB ($usedPct% used)" -Status "warn"
+            } else {
+                $ready++; $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "${freeGB}GB free of ${totalGB}GB" -Status "ok"
+            }
+        } else {
+            $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "Unable to read" -Status "warn"
+        }
+    } catch {
+        $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "Check failed" -Status "warn"
+    }
+
+    # DNS Resolution
+    $total++
+    try {
+        $dnsResult = Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
+        if ($dnsResult) {
+            $ready++; $rows += Add-ReadinessRow -Cat "Network" -Name "DNS Resolution" -Value "Working" -Status "ok"
+        } else {
+            $rows += Add-ReadinessRow -Cat "Network" -Name "DNS Resolution" -Value "No response" -Status "warn"
+        }
+    } catch {
+        $rows += Add-ReadinessRow -Cat "Network" -Name "DNS Resolution" -Value "Failed" -Status "fail"
+    }
+
+    # Time Sync
+    $total++
+    try {
+        $w32tmOut = w32tm /query /status 2>&1
+        $tsSource = "Unknown"
+        foreach ($tsLine in $w32tmOut) {
+            $tsText = $tsLine.ToString()
+            if ($tsText -match 'Source:\s*(.+)') { $regexMatches = $matches; $tsSource = $regexMatches[1].Trim() }
+        }
+        if ($tsSource -match 'Free-Running|Local CMOS') {
+            $rows += Add-ReadinessRow -Cat "System" -Name "Time Sync" -Value "No external source ($tsSource)" -Status "warn"
+        } else {
+            $ready++; $rows += Add-ReadinessRow -Cat "System" -Name "Time Sync" -Value "Source: $tsSource" -Status "ok"
+        }
+    } catch {
+        $rows += Add-ReadinessRow -Cat "System" -Name "Time Sync" -Value "Unable to check" -Status "warn"
+    }
+
+    # Windows Defender
+    $total++
+    try {
+        $mpStat = Get-MpComputerStatus -ErrorAction Stop
+        if ($mpStat.RealTimeProtectionEnabled) {
+            $ready++; $rows += Add-ReadinessRow -Cat "Security" -Name "Defender Real-Time" -Value "Enabled" -Status "ok"
+        } else {
+            $rows += Add-ReadinessRow -Cat "Security" -Name "Defender Real-Time" -Value "DISABLED" -Status "fail"
+        }
+    } catch {
+        $rows += Add-ReadinessRow -Cat "Security" -Name "Defender Real-Time" -Value "Unavailable" -Status "warn"
+    }
+
     $pct = if ($total -gt 0) { [math]::Round(($ready / $total) * 100) } else { 0 }
     $overallStatus = if ($pct -ge 80) { "good" } elseif ($pct -ge 50) { "warn" } else { "bad" }
     $overallText = if ($pct -ge 80) { "READY" } elseif ($pct -ge 50) { "PARTIALLY READY" } else { "NOT READY" }
@@ -701,7 +879,7 @@ function Export-HTMLReadinessReport {
 "@
 
     try {
-        $html | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Report saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated HTML readiness report ($pct% ready)"
@@ -767,7 +945,7 @@ function Save-PerformanceSnapshot {
             Network = $netInfo
         }
 
-        $snapshot | ConvertTo-Json -Depth 5 | Out-File -FilePath $snapshotPath -Encoding UTF8 -Force
+        $snapshot | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $snapshotPath -Encoding UTF8 -Force
         Add-SessionChange -Category "Metrics" -Description "Saved performance snapshot"
         return $snapshotPath
     }
@@ -916,7 +1094,7 @@ function Export-HTMLTrendReport {
 "@
 
     try {
-        $html | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
         Write-OutputColor "  Trend report saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated performance trend report ($($snapshots.Count) snapshots)"
 
