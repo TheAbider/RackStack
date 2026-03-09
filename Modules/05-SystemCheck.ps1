@@ -360,7 +360,7 @@ function Set-ServerPowerPlan {
         }
     }
     catch {
-        Write-OutputColor "Error setting power plan: $_" -color "Error"
+        Write-OutputColor "  Error setting power plan: $_" -color "Error"
     }
 }
 
@@ -453,8 +453,22 @@ function Test-FeaturePrerequisites {
 
     switch ($Feature) {
         "Hyper-V" {
+            # Batch CIM queries with timeout (immune to WMI hangs)
+            $hvCim = Invoke-WithTimeout -ScriptBlock {
+                @{
+                    CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+                    CS   = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+                    Disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction SilentlyContinue
+                }
+            } -TimeoutSeconds 10 -Activity "Checking Hyper-V prerequisites"
+
+            if ($hvCim.TimedOut) {
+                $cpu = $null; $cs = $null; $sysDisk = $null
+            } else {
+                $cpu = $hvCim.Result.CPU; $cs = $hvCim.Result.CS; $sysDisk = $hvCim.Result.Disk
+            }
+
             # CPU cores
-            $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
             $cores = if ($cpu) { $cpu.NumberOfCores } else { 0 }
             $checks += @{
                 Name    = "CPU Cores"
@@ -471,7 +485,6 @@ function Test-FeaturePrerequisites {
             }
 
             # RAM
-            $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
             $ramGB = if ($cs) { [math]::Round($cs.TotalPhysicalMemory / 1GB, 1) } else { 0 }
             $checks += @{
                 Name    = "Physical RAM"
@@ -480,7 +493,6 @@ function Test-FeaturePrerequisites {
             }
 
             # Disk space
-            $sysDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction SilentlyContinue
             $freeGB = if ($sysDisk) { [math]::Round($sysDisk.FreeSpace / 1GB, 1) } else { 0 }
             $checks += @{
                 Name    = "Disk Space (C:)"
@@ -516,8 +528,11 @@ function Test-FeaturePrerequisites {
                 Message = if ($isServer) { "Server OS detected" } else { "Failover Clustering requires Windows Server" }
             }
 
-            # Domain membership
-            $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            # Domain membership (with timeout protection)
+            $fcCim = Invoke-WithTimeout -ScriptBlock {
+                Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            } -TimeoutSeconds 10 -Activity "Checking cluster prerequisites"
+            $cs = if ($fcCim.TimedOut) { $null } else { $fcCim.Result }
             $inDomain = if ($cs) { $cs.PartOfDomain } else { $false }
             $checks += @{
                 Name    = "Domain Joined"

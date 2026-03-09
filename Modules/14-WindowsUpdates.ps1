@@ -154,6 +154,7 @@ function Install-WindowsUpdates {
         Write-OutputColor "A reboot may be required to complete the installation." -color "Warning"
         $global:RebootNeeded = $true
         Add-SessionChange -Category "System" -Description "Installed $updateCount Windows update(s)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "Failed to install updates: $_" -color "Error"

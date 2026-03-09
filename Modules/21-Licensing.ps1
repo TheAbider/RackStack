@@ -159,6 +159,7 @@ function Enable-ServerActivation {
         if ($atoText -match "(?i)success") {
             Write-OutputColor "  Server activated successfully!" -color "Success"
             Add-SessionChange -Category "System" -Description "Activated Windows license with product key"
+            Clear-MenuCache
         }
         else {
             if ($atoText -match "0xC004F074") {

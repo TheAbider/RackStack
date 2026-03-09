@@ -187,6 +187,7 @@ function Show-StorageReplicaManagement {
 
                         Write-OutputColor "  Storage Replica partnership created!" -color "Success"
                         Add-SessionChange -Category "Storage" -Description "Created SR partnership: $srcServer -> $destServer"
+                        Clear-MenuCache
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"

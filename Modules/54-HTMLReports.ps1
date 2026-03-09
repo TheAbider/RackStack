@@ -39,10 +39,23 @@ function Export-HTMLHealthReport {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Gathering system information..." -color "Info"
 
-    # Gather data
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
-    $cpuAll = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+    # Gather data (CIM with timeout — immune to WMI hangs)
+    $cimResult = Invoke-WithTimeout -ScriptBlock {
+        @{
+            OS  = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+            CS  = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            CPU = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+        }
+    } -TimeoutSeconds 15 -Activity "Querying system info"
+
+    if ($cimResult.TimedOut) {
+        Write-OutputColor "  WMI/CIM query timed out. Report will have limited data." -color "Warning"
+        $os = $null; $cs = $null; $cpuAll = $null
+    } else {
+        $os = $cimResult.Result.OS
+        $cs = $cimResult.Result.CS
+        $cpuAll = $cimResult.Result.CPU
+    }
     $cpu = $cpuAll | Select-Object -First 1
     $uptime = if ($os -and $os.LastBootUpTime) { (Get-Date) - $os.LastBootUpTime } else { $null }
     $uptimeStr = if ($uptime) { "{0} days, {1} hours, {2} minutes" -f $uptime.Days, $uptime.Hours, $uptime.Minutes } else { "Unknown" }
@@ -60,7 +73,10 @@ function Export-HTMLHealthReport {
     $memStatus = if ($memPercent -gt 90) { "bad" } elseif ($memPercent -gt 75) { "warn" } else { "good" }
 
     # Disks
-    $disks = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+    $diskResult = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Querying disk info"
+    $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
     $diskHtml = ""
     foreach ($disk in $disks) {
         $totalGB = [math]::Round($disk.Size / 1GB, 1)
@@ -656,9 +672,10 @@ function Export-HTMLReadinessReport {
     else { $rows += Add-ReadinessRow -Cat "Identity" -Name "Hostname" -Value "$hostname (default)" -Status "fail" }
 
     # Domain
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    $cs = if ($csResult.TimedOut) { $null } else { $csResult.Result }
     $total++
-    if ($cs.PartOfDomain) { $ready++; $rows += Add-ReadinessRow -Cat "Identity" -Name "Domain" -Value $cs.Domain -Status "ok" }
+    if ($cs -and $cs.PartOfDomain) { $ready++; $rows += Add-ReadinessRow -Cat "Identity" -Name "Domain" -Value $cs.Domain -Status "ok" }
     else { $rows += Add-ReadinessRow -Cat "Identity" -Name "Domain" -Value "WORKGROUP" -Status "warn" }
 
     # Site Number
@@ -910,15 +927,28 @@ function Save-PerformanceSnapshot {
     $snapshotPath = Join-Path $metricsDir "${hostname}_${timestamp}.json"
 
     try {
-        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        $cpuAll = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+        $cimSnap = Invoke-WithTimeout -ScriptBlock {
+            @{
+                OS   = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+                CPU  = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+                Disk = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+            }
+        } -TimeoutSeconds 15 -Activity "Collecting metrics"
+
+        if ($cimSnap.TimedOut) {
+            Write-OutputColor "  CIM query timed out — snapshot skipped." -color "Warning"
+            return
+        }
+
+        $os = $cimSnap.Result.OS
+        $cpuAll = $cimSnap.Result.CPU
         $cpuLoad = ($cpuAll | Measure-Object -Property LoadPercentage -Average).Average
         $totalMemMB = [math]::Round($os.TotalVisibleMemorySize / 1024, 0)
         $freeMemMB = [math]::Round($os.FreePhysicalMemory / 1024, 0)
 
         # Disk info
         $diskInfo = @()
-        $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+        $disks = $cimSnap.Result.Disk
         foreach ($disk in $disks) {
             $totalGB = [math]::Round($disk.Size / 1GB, 2)
             $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)

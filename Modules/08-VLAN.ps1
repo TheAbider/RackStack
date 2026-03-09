@@ -146,6 +146,7 @@ function Set-AdapterVLAN {
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Access -VlanId $vlanId -ErrorAction Stop
                 Write-OutputColor "VLAN $vlanId configured successfully on $selectedAdapterName" -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set VLAN $vlanId on $selectedAdapterName"
+                Clear-MenuCache
                 Add-UndoAction -Category "Network" -Description "Set VLAN $vlanId on $selectedAdapterName" -UndoScript {
                     param($AdapterName, $OldVlanId)
                     if ($OldVlanId -gt 0) {
@@ -166,6 +167,7 @@ function Set-AdapterVLAN {
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Untagged -ErrorAction Stop
                 Write-OutputColor "VLAN removed. Adapter is now untagged." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Removed VLAN from $selectedAdapterName"
+                Clear-MenuCache
                 if ($prevVlanId -gt 0) {
                     Add-UndoAction -Category "Network" -Description "Removed VLAN from $selectedAdapterName" -UndoScript {
                         param($AdapterName, $OldVlanId)

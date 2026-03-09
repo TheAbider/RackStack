@@ -102,6 +102,7 @@ function Show-ServiceManager {
                         Start-Service -Name $svc.Name -ErrorAction Stop
                         Write-OutputColor "  Started $($svc.DisplayName)" -color "Success"
                         Add-SessionChange -Category "System" -Description "Started service: $($svc.Name)"
+                        Clear-MenuCache
                         if ($prevStatus -eq 'Stopped') {
                             Add-UndoAction -Category "System" -Description "Started service: $($svc.Name)" -UndoScript {
                                 param($SvcName)
@@ -136,6 +137,7 @@ function Show-ServiceManager {
                         Stop-Service -Name $svc.Name -Force -ErrorAction Stop
                         Write-OutputColor "  Stopped $($svc.DisplayName)" -color "Success"
                         Add-SessionChange -Category "System" -Description "Stopped service: $($svc.Name)"
+                        Clear-MenuCache
                         Add-UndoAction -Category "System" -Description "Stopped service: $($svc.Name)" -UndoScript {
                             param($SvcName)
                             Start-Service -Name $SvcName -ErrorAction SilentlyContinue
@@ -168,6 +170,7 @@ function Show-ServiceManager {
                         Restart-Service -Name $svc.Name -Force -ErrorAction Stop
                         Write-OutputColor "  Restarted $($svc.DisplayName)" -color "Success"
                         Add-SessionChange -Category "System" -Description "Restarted service: $($svc.Name)"
+                        Clear-MenuCache
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
@@ -204,6 +207,7 @@ function Show-ServiceManager {
                             Set-Service -Name $svc.Name -StartupType $newType -ErrorAction Stop
                             Write-OutputColor "  Set $($svc.DisplayName) startup type to $newType" -color "Success"
                             Add-SessionChange -Category "System" -Description "Changed service startup: $($svc.Name) -> $newType"
+                            Clear-MenuCache
                             Add-UndoAction -Category "System" -Description "Changed $($svc.Name) startup to $newType" -UndoScript {
                                 param($SvcName, $OldType)
                                 Set-Service -Name $SvcName -StartupType $OldType -ErrorAction SilentlyContinue

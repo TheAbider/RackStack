@@ -253,10 +253,14 @@ function Show-ConfigureServerMenu {
 function Show-SystemConfigMenu {
     Clear-Host
 
-    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
-    $hostdisplay = if ($computerSystem) { $computerSystem.Name } else { $env:COMPUTERNAME }
-    $domaindisplay = if ($computerSystem) { $computerSystem.Domain } else { "Unknown" }
-    $isDomainJoined = if ($null -ne $computerSystem) { $computerSystem.PartOfDomain } else { $false }
+    $csResult = Get-CachedValue -Key "SysConfigCS" -FetchScript {
+        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        if ($cs) { @{ Name = $cs.Name; Domain = $cs.Domain; PartOfDomain = $cs.PartOfDomain } }
+        else { @{ Name = $env:COMPUTERNAME; Domain = "Unknown"; PartOfDomain = $false } }
+    } -CacheSeconds 30
+    $hostdisplay = $csResult.Name
+    $domaindisplay = $csResult.Domain
+    $isDomainJoined = $csResult.PartOfDomain
     $domainColor = if ($isDomainJoined) { "Success" } else { "Warning" }
     $hostColor = if ($hostdisplay -match '^WIN-|^DESKTOP-') { "Warning" } else { "Success" }
     $tzObj = Get-TimeZone -ErrorAction SilentlyContinue

@@ -443,10 +443,21 @@ function Set-PagefileConfiguration {
         Write-OutputColor "" -color "Info"
 
         # --- Section: Retrieve Current Pagefile Status ---
-        # Read current pagefile settings
-        $pagefileSettings = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
-        $pagefileUsage = @(Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue)
-        $compSys = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        # Read current pagefile settings (batch CIM with timeout)
+        $pfCim = Invoke-WithTimeout -ScriptBlock {
+            @{
+                Settings = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
+                Usage    = @(Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue)
+                CompSys  = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+            }
+        } -TimeoutSeconds 10 -Activity "Querying pagefile info"
+        if ($pfCim.TimedOut) {
+            $pagefileSettings = $null; $pagefileUsage = @(); $compSys = $null
+        } else {
+            $pagefileSettings = $pfCim.Result.Settings
+            $pagefileUsage = $pfCim.Result.Usage
+            $compSys = $pfCim.Result.CompSys
+        }
         $autoManaged = if ($null -ne $compSys) { $compSys.AutomaticManagedPagefile } else { $false }
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -521,7 +532,15 @@ function Set-PagefileConfiguration {
 
                 try {
                     # Enable automatic managed pagefile
-                    $compSysObj = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+                    $pfSysCim = Invoke-WithTimeout -ScriptBlock {
+                        Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+                    } -TimeoutSeconds 10 -Activity "Querying pagefile settings"
+                    if ($pfSysCim.TimedOut) {
+                        Write-OutputColor "  CIM query timed out." -color "Error"
+                        Write-PressEnter
+                        continue
+                    }
+                    $compSysObj = $pfSysCim.Result
                     Set-CimInstance -InputObject $compSysObj -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop
                     Write-OutputColor "  Pagefile set to System Managed (Automatic)." -color "Success"
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
@@ -587,7 +606,10 @@ function Set-PagefileConfiguration {
                         $currentDrive = $regexMatches[1]
                     }
                 }
-                $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$currentDrive'" -ErrorAction SilentlyContinue
+                $diskCim = Invoke-WithTimeout -ScriptBlock {
+                    Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$currentDrive'" -ErrorAction SilentlyContinue
+                } -TimeoutSeconds 10 -Activity "Checking disk space"
+                $disk = if ($diskCim.TimedOut) { $null } else { $diskCim.Result }
                 if ($null -ne $disk) {
                     $freeSpaceMB = [math]::Floor($disk.FreeSpace / 1MB)
                     if ($maxMB -gt $freeSpaceMB) {

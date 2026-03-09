@@ -31,7 +31,10 @@ function Set-NTPConfiguration {
         Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  Current Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')".PadRight(72))│" -color "Info"
 
-        $isDomainJoined = try { (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).PartOfDomain } catch { $false }
+        $ntpCim = Invoke-WithTimeout -ScriptBlock {
+            (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain
+        } -TimeoutSeconds 10 -Activity "Checking domain status"
+        $isDomainJoined = if ($ntpCim.TimedOut) { $false } else { $ntpCim.Result }
         if ($isDomainJoined) {
             Write-OutputColor "  │$("  Domain Joined: Yes (typically syncs with DC)".PadRight(72))│" -color "Info"
         } else {
@@ -144,6 +147,7 @@ function Set-NTPServer {
 
         Write-OutputColor "  NTP server configured successfully." -color "Success"
         Add-SessionChange -Category "System" -Description "Configured NTP server: $Server"
+        Clear-MenuCache
         if ($prevSource -and -not $IsDomainType) {
             Add-UndoAction -Category "System" -Description "Configured NTP server: $Server" -UndoScript {
                 param($OldServer)

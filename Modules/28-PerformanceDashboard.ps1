@@ -10,8 +10,26 @@ function Show-PerformanceDashboard {
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
+        # Batch CIM queries with timeout (immune to WMI hangs)
+        $cimResult = Invoke-WithTimeout -ScriptBlock {
+            @{
+                CPU = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+                OS  = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            }
+        } -TimeoutSeconds 10 -Activity "Refreshing metrics"
+
+        if ($cimResult.TimedOut) {
+            Write-OutputColor "  WMI/CIM query timed out. Press [R] to retry." -color "Warning"
+            $choice = Read-Host "  "
+            if ($choice -and $choice.ToLower().Trim() -eq "r") { continue }
+            return
+        }
+
+        $cpuAll = $cimResult.Result.CPU
+        $os = $cimResult.Result.OS
+
         # CPU
-        $cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
+        $cpu = $cpuAll | Measure-Object -Property LoadPercentage -Average
         $cpuAvg = if ($null -ne $cpu.Average) { [math]::Round($cpu.Average, 1) } else { 0 }
         $cpuColor = if ($cpuAvg -lt 70) { "Success" } elseif ($cpuAvg -lt 90) { "Warning" } else { "Error" }
         $cpuBar = Get-ProgressBar -Percent $cpuAvg -Width 40
@@ -24,7 +42,6 @@ function Show-PerformanceDashboard {
         Write-OutputColor "" -color "Info"
 
         # Memory
-        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
         if ($os) {
             $totalMem = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
             $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 1)

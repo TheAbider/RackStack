@@ -95,6 +95,7 @@ function Set-DefenderExclusions {
                         Add-MpPreference -ExclusionPath $customPath -ErrorAction Stop
                         Write-OutputColor "  Added path exclusion: $customPath" -color "Success"
                         Add-SessionChange -Category "Security" -Description "Added Defender exclusion: $customPath"
+                        Clear-MenuCache
                         Add-UndoAction -Category "Security" -Description "Added Defender exclusion: $customPath" -UndoScript {
                             param($Path)
                             Remove-MpPreference -ExclusionPath $Path -ErrorAction SilentlyContinue
@@ -118,6 +119,7 @@ function Set-DefenderExclusions {
                         Add-MpPreference -ExclusionProcess $customProc -ErrorAction Stop
                         Write-OutputColor "  Added process exclusion: $customProc" -color "Success"
                         Add-SessionChange -Category "Security" -Description "Added Defender process exclusion: $customProc"
+                        Clear-MenuCache
                         Add-UndoAction -Category "Security" -Description "Added Defender process exclusion: $customProc" -UndoScript {
                             param($Proc)
                             Remove-MpPreference -ExclusionProcess $Proc -ErrorAction SilentlyContinue
@@ -271,6 +273,7 @@ function Add-HyperVDefenderExclusions {
         Write-OutputColor "  Completed with $errors errors. $added items added." -color "Warning"
     }
     Add-SessionChange -Category "Security" -Description "Configured Windows Defender Hyper-V exclusions"
+    Clear-MenuCache
     if ($added -gt 0) {
         Add-UndoAction -Category "Security" -Description "Added Hyper-V Defender exclusions ($added items)" -UndoScript {
             param($Paths, $Processes, $Extensions)
@@ -406,6 +409,7 @@ function Remove-DefenderExclusion {
                 }
                 Write-OutputColor "  Removed $($selected.Type) exclusion: $($selected.Value)" -color "Success"
                 Add-SessionChange -Category "Security" -Description "Removed Defender exclusion: $($selected.Value)"
+                Clear-MenuCache
                 Add-UndoAction -Category "Security" -Description "Removed Defender $($selected.Type) exclusion: $($selected.Value)" -UndoScript {
                     param($ExclType, $ExclValue)
                     switch ($ExclType) {

@@ -44,7 +44,7 @@ function Compare-ConfigurationProfiles {
         $profile2 = Get-Content -LiteralPath $path2 -Raw | ConvertFrom-Json
     }
     catch {
-        Write-OutputColor "Error parsing JSON files: $_" -color "Error"
+        Write-OutputColor "  Error parsing JSON files: $_" -color "Error"
         return
     }
 
@@ -566,7 +566,7 @@ function Invoke-RemoteProfileApply {
         Write-OutputColor "and use 'Load Configuration Profile' with the path above." -color "Info"
     }
     catch {
-        Write-OutputColor "Error during remote operation: $_" -color "Error"
+        Write-OutputColor "  Error during remote operation: $_" -color "Error"
     }
     finally {
         Remove-PSSession $session -ErrorAction SilentlyContinue
@@ -1271,6 +1271,7 @@ function Show-CertificateExpiryCheck {
     }
 
     Add-SessionChange -Category "Security" -Description "Certificate expiry check: $($expired.Count) expired, $($expiringSoon.Count) expiring soon, $($valid.Count) valid"
+    Write-PressEnter
 }
 
 # VSS Writer Health Dashboard
@@ -1365,6 +1366,7 @@ function Show-VSSWriterStatus {
     }
 
     Add-SessionChange -Category "System" -Description "VSS writer check: $($stable.Count) stable, $($failed.Count) failed of $($writers.Count) total"
+    Write-PressEnter
 }
 
 # Event Log Alert Summary (last 24 hours)
@@ -1464,6 +1466,7 @@ function Show-EventLogAlerts {
     }
 
     Add-SessionChange -Category "System" -Description "Event log alerts: $critCount critical, $errCount errors, $warnCount warnings from $($grouped.Count) sources in last 24h"
+    Write-PressEnter
 }
 
 # Uptime & Reboot History
@@ -1478,7 +1481,11 @@ function Show-UptimeRebootHistory {
     # Current uptime
     $uptimeStr = "Unknown"
     try {
-        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $uptCim = Invoke-WithTimeout -ScriptBlock {
+            Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        } -TimeoutSeconds 10 -Activity "Querying uptime"
+        if ($uptCim.TimedOut) { throw "CIM query timed out" }
+        $os = $uptCim.Result
         $lastBoot = $os.LastBootUpTime
         $uptime = (Get-Date) - $lastBoot
         $uptimeStr = ""
@@ -1558,6 +1565,7 @@ function Show-UptimeRebootHistory {
     }
 
     Add-SessionChange -Category "System" -Description "Uptime check: $uptimeStr, $($reboots.Count) reboots in history ($unexpectedCount unexpected)"
+    Write-PressEnter
 }
 
 # Driver Health Check
@@ -1571,34 +1579,29 @@ function Show-DriverHealthCheck {
 
     Write-OutputColor "  Scanning device drivers..." -color "Info"
 
-    # Get problem devices (status != OK)
+    # Get device/driver info in one batched CIM call
+    $drvCim = Invoke-WithTimeout -ScriptBlock {
+        @{
+            Devices = @(Get-CimInstance Win32_PnPEntity -ErrorAction Stop)
+            SignedDrivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue)
+        }
+    } -TimeoutSeconds 30 -Activity "Scanning device drivers"
+
     $allDevices = @()
     $problemDevices = @()
-    try {
-        $allDevices = @(Get-CimInstance Win32_PnPEntity -ErrorAction Stop)
-        $problemDevices = @($allDevices | Where-Object { $_.ConfigManagerErrorCode -ne 0 })
-    } catch {
-        Write-OutputColor "  Could not query device manager: $_" -color "Error"
+    $thirdPartyDrivers = @()
+    $unsignedDrivers = @()
+
+    if ($drvCim.TimedOut) {
+        Write-OutputColor "  Device driver query timed out." -color "Error"
         return
     }
 
-    # Get third-party drivers (non-Microsoft)
-    $thirdPartyDrivers = @()
-    try {
-        $thirdPartyDrivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop |
-            Where-Object { $null -ne $_.DriverProviderName -and $_.DriverProviderName -ne "Microsoft" -and $_.DriverProviderName -ne "" })
-    } catch {
-        Write-OutputColor "  Could not query signed drivers: $_" -color "Warning"
-    }
-
-    # Get unsigned drivers
-    $unsignedDrivers = @()
-    try {
-        $unsignedDrivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop |
-            Where-Object { $_.IsSigned -eq $false })
-    } catch {
-        Write-OutputColor "  Could not check driver signatures: $_" -color "Warning"
-    }
+    $allDevices = @($drvCim.Result.Devices)
+    $problemDevices = @($allDevices | Where-Object { $_.ConfigManagerErrorCode -ne 0 })
+    $signedDrivers = @($drvCim.Result.SignedDrivers)
+    $thirdPartyDrivers = @($signedDrivers | Where-Object { $null -ne $_.DriverProviderName -and $_.DriverProviderName -ne "Microsoft" -and $_.DriverProviderName -ne "" })
+    $unsignedDrivers = @($signedDrivers | Where-Object { $_.IsSigned -eq $false })
 
     # Summary
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -1671,12 +1674,14 @@ function Show-DiskSpaceAnalyzer {
     Write-OutputColor "" -color "Info"
 
     # Show all volumes
-    try {
-        $volumes = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop)
-    } catch {
-        Write-OutputColor "  Could not query disk volumes: $_" -color "Error"
+    $volCim = Invoke-WithTimeout -ScriptBlock {
+        @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop)
+    } -TimeoutSeconds 15 -Activity "Querying disk volumes"
+    if ($volCim.TimedOut) {
+        Write-OutputColor "  Disk volume query timed out." -color "Error"
         return
     }
+    $volumes = @($volCim.Result)
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  VOLUME OVERVIEW".PadRight(72))│" -color "Info"
@@ -1748,6 +1753,7 @@ function Show-DiskSpaceAnalyzer {
     }
 
     Add-SessionChange -Category "System" -Description "Disk space analysis: $($volumes.Count) volumes scanned, ${totalScanGB}GB in known consumers on $sysDrive"
+    Write-PressEnter
 }
 
 # Windows Update Status Dashboard
@@ -1819,6 +1825,7 @@ function Show-WindowsUpdateStatus {
     $updateCount = if ($hotfixes) { $hotfixes.Count } else { 0 }
     $daysSinceStr = if ($null -eq $daysSince) { "unknown" } else { "$daysSince" }
     Add-SessionChange -Category "System" -Description "Windows Update status check: $updateCount recent updates, last installed $daysSinceStr days ago"
+    Write-PressEnter
 }
 
 # Open Ports & Listening Services
@@ -1912,6 +1919,7 @@ function Show-ListeningPorts {
     }
 
     Add-SessionChange -Category "Network" -Description "Listening ports scan: $($portInfo.Count) endpoints on $($uniquePorts.Count) unique ports"
+    Write-PressEnter
 }
 
 # Scheduled Task Overview
@@ -1997,6 +2005,7 @@ function Show-ScheduledTaskOverview {
 
     $failedCount = @($failed).Count
     Add-SessionChange -Category "System" -Description "Scheduled tasks: $(@($allTasks).Count) total, $failedCount failed, $(@($running).Count) running"
+    Write-PressEnter
 }
 
 # Firewall Rule Summary
@@ -2073,6 +2082,7 @@ function Show-FirewallRuleSummary {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
     Add-SessionChange -Category "Security" -Description "Firewall summary: $(@($allRules).Count) rules ($(@($enabledRules).Count) enabled), profiles: $(($profiles | ForEach-Object { "$($_.Name)=$($_.Enabled)" }) -join ', ')"
+    Write-PressEnter
 }
 
 # Function to show pending reboot root cause details
@@ -2178,6 +2188,7 @@ function Show-RebootPendingDetails {
     }
 
     Add-SessionChange -Category "System" -Description "Reboot pending details: $($reasons.Count) reason(s) found"
+    Write-PressEnter
 }
 
 # Function to show memory pressure diagnostics
@@ -2189,8 +2200,20 @@ function Show-MemoryDiagnostics {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Physical memory
-    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+    # Physical memory (with timeout protection)
+    $memCim = Invoke-WithTimeout -ScriptBlock {
+        @{
+            OS     = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            PF     = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue
+            PerfOS = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory -ErrorAction SilentlyContinue
+        }
+    } -TimeoutSeconds 10 -Activity "Querying memory info"
+    if ($memCim.TimedOut) {
+        Write-OutputColor "  CIM query timed out. System may be under heavy load." -color "Warning"
+        return
+    }
+
+    $os = $memCim.Result.OS
     if (-not $os) {
         Write-OutputColor "  Failed to query system memory information." -color "Error"
         return
@@ -2213,7 +2236,7 @@ function Show-MemoryDiagnostics {
     Write-OutputColor "" -color "Info"
 
     # Page file
-    $pageFiles = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue
+    $pageFiles = $memCim.Result.PF
     if ($pageFiles) {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  PAGE FILE").PadRight(72)│" -color "Info"
@@ -2230,7 +2253,7 @@ function Show-MemoryDiagnostics {
     }
 
     # Committed memory
-    $perfOS = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory -ErrorAction SilentlyContinue
+    $perfOS = $memCim.Result.PerfOS
     if ($perfOS) {
         $commitLimitGB = [math]::Round($perfOS.CommitLimit / 1GB, 1)
         $committedGB = [math]::Round($perfOS.CommittedBytes / 1GB, 1)
@@ -2287,5 +2310,6 @@ function Show-MemoryDiagnostics {
     }
 
     Add-SessionChange -Category "System" -Description "Memory diagnostics: ${usedGB}GB/$($totalGB)GB ($usedPct% used)"
+    Write-PressEnter
 }
 #endregion

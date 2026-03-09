@@ -61,9 +61,14 @@ function Set-OfflineVHDConfiguration {
             if ($freeLetter) {
                 $mainPartition = $disk | Get-Partition -ErrorAction Stop | Where-Object { $_.Size -gt 10GB } | Select-Object -First 1
                 if ($mainPartition) {
-                    Set-Partition -DiskNumber $mainPartition.DiskNumber -PartitionNumber $mainPartition.PartitionNumber -NewDriveLetter $freeLetter -ErrorAction SilentlyContinue
-                    Start-Sleep -Seconds 2
-                    $windowsDrive = "${freeLetter}:"
+                    try {
+                        Set-Partition -DiskNumber $mainPartition.DiskNumber -PartitionNumber $mainPartition.PartitionNumber -NewDriveLetter $freeLetter -ErrorAction Stop
+                        Start-Sleep -Seconds 2
+                        $windowsDrive = "${freeLetter}:"
+                    }
+                    catch {
+                        Write-OutputColor "  Failed to assign drive letter: $_" -color "Warning"
+                    }
                 }
             }
 

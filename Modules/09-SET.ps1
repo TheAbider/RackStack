@@ -507,6 +507,7 @@ function Add-CustomVNIC {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Virtual NIC '$vnicName' created successfully!" -color "Success"
+    Write-PressEnter
 }
 
 # Function to add multiple vNICs in one session

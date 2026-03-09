@@ -81,7 +81,11 @@ function Start-DiskCleanup {
             }
             "5" {
                 Write-OutputColor "  Launching Windows Disk Cleanup..." -color "Info"
-                Start-Process cleanmgr -ArgumentList "/d $($env:SystemDrive.TrimEnd(':'))" -Wait
+                $cleanProc = Start-Process cleanmgr -ArgumentList "/d $($env:SystemDrive.TrimEnd(':'))" -PassThru
+                $null = $cleanProc | Wait-Process -Timeout 600 -ErrorAction SilentlyContinue
+                if (-not $cleanProc.HasExited) {
+                    Write-OutputColor "  Disk Cleanup is still running. Continuing..." -color "Warning"
+                }
             }
             "b" { return }
             "B" { return }
@@ -125,6 +129,7 @@ function Invoke-QuickClean {
     Write-Host "`r" -NoNewline
     Write-OutputColor "  Quick Clean complete. Freed $([math]::Round($cleaned/1MB, 1)) MB ($fileCount files)" -color "Success"
     Add-SessionChange -Category "System" -Description "Disk cleanup freed $([math]::Round($cleaned/1MB, 1)) MB ($fileCount files)"
+    Write-PressEnter
 }
 
 function Invoke-StandardClean {
@@ -141,11 +146,15 @@ function Invoke-DeepClean {
 
     Invoke-StandardClean
 
-    # Component store cleanup
-    Write-OutputColor "  Cleaning component store (DISM)..." -color "Info"
-    $null = Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-OutputColor "  Component store cleanup failed (exit code $LASTEXITCODE)." -color "Warning"
+    # Component store cleanup (with progress spinner)
+    $dismResult = Invoke-WithTimeout -ScriptBlock {
+        $output = Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>&1
+        @{ ExitCode = $LASTEXITCODE; Output = $output }
+    } -TimeoutSeconds 1800 -Activity "Cleaning component store (DISM)"
+    if ($dismResult.TimedOut) {
+        Write-OutputColor "  DISM timed out after 30 minutes." -color "Warning"
+    } elseif ($dismResult.Result.ExitCode -ne 0) {
+        Write-OutputColor "  Component store cleanup failed (exit code $($dismResult.Result.ExitCode))." -color "Warning"
     } else {
         Write-OutputColor "  Component store cleanup complete." -color "Success"
     }
@@ -157,6 +166,7 @@ function Invoke-DeepClean {
     }
 
     Add-SessionChange -Category "System" -Description "Deep disk cleanup completed"
+    Clear-MenuCache
 }
 
 function Clear-WindowsUpdateCache {
@@ -175,16 +185,15 @@ function Clear-WindowsUpdateCache {
             Get-ChildItem -LiteralPath $wuPath -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -Recurse -ErrorAction SilentlyContinue }
         }
 
-        # Restart services
-        Start-Service bits -ErrorAction SilentlyContinue
-        Start-Service wuauserv -ErrorAction SilentlyContinue
-
         Write-OutputColor "  Windows Update cache cleared." -color "Success"
         Add-SessionChange -Category "System" -Description "Cleared Windows Update cache"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error clearing cache: $_" -color "Error"
-        # Make sure services are restarted
+    }
+    finally {
+        # Always restart services regardless of success/failure
         Start-Service bits -ErrorAction SilentlyContinue
         Start-Service wuauserv -ErrorAction SilentlyContinue
     }

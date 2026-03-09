@@ -442,7 +442,7 @@ function Get-FileServerFile {
             $fileSize = (Get-Item -LiteralPath $destFile -ErrorAction SilentlyContinue).Length
             if ($fileSize -lt 1000) {
                 $content = Get-Content -LiteralPath $destFile -Raw -ErrorAction SilentlyContinue
-                if ($content -match "html|error|not found|denied|exception") {
+                if ($null -ne $content -and $content -match "html|error|not found|denied|exception") {
                     Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
                     if ($attempt -ge $maxAttempts) {
                         return @{ Success = $false; Error = "Downloaded file appears to be an error response."; FilePath = $null }

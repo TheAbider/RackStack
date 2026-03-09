@@ -274,7 +274,10 @@ function Export-BatchConfigFromState {
         $configType = if ($isHyperVHost) { "HOST" } else { "VM" }
 
         # ----- System info -----
-        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $batchCim = Invoke-WithTimeout -ScriptBlock {
+            Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        } -TimeoutSeconds 10 -Activity "Querying system info"
+        $computerSystem = if ($batchCim.TimedOut) { $null } else { $batchCim.Result }
         $currentHostname = $env:COMPUTERNAME
         $currentTimezone = (Get-TimeZone -ErrorAction SilentlyContinue).Id
 

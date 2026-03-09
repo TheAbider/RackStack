@@ -244,6 +244,7 @@ function Set-VMIPAddress {
 
         Write-OutputColor "IP configuration applied successfully!" -color "Success"
         Add-SessionChange -Category "Network" -Description "Set IP $ipAddress/$cidr on $selectedAdapterName"
+        Clear-MenuCache
         if ($null -ne $previousIP) {
             $oldGW = if ($null -ne $previousRoute) { $previousRoute.NextHop } else { $null }
             Add-UndoAction -Category "Network" -Description "Set IP $ipAddress/$cidr on $selectedAdapterName" -UndoScript {

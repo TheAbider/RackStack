@@ -7,10 +7,25 @@ function Show-SystemHealthCheck {
     Write-OutputColor "Gathering system information..." -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # System Info
+    # System Info (CIM with timeout — immune to WMI hangs)
     Write-OutputColor "=== SYSTEM INFORMATION ===" -color "Success"
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $cimResult = Invoke-WithTimeout -ScriptBlock {
+        @{
+            OS  = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+            CS  = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            CPU = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+        }
+    } -TimeoutSeconds 15 -Activity "Querying system info"
+
+    if ($cimResult.TimedOut) {
+        Write-OutputColor "  WMI/CIM query timed out — system may be under heavy load." -color "Warning"
+        $os = $null; $cs = $null; $cpuAll = $null
+    } else {
+        $os = $cimResult.Result.OS
+        $cs = $cimResult.Result.CS
+        $cpuAll = $cimResult.Result.CPU
+    }
+
     Write-OutputColor "  Computer Name: $(if ($cs) { $cs.Name } else { $env:COMPUTERNAME })" -color "Info"
     Write-OutputColor "  OS: $(if ($os) { $os.Caption } else { 'Unknown' })" -color "Info"
     Write-OutputColor "  Version: $(if ($os) { $os.Version } else { 'Unknown' })" -color "Info"
@@ -25,7 +40,6 @@ function Show-SystemHealthCheck {
 
     # CPU
     Write-OutputColor "=== CPU ===" -color "Success"
-    $cpuAll = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
     $cpu = $cpuAll | Select-Object -First 1
     $cpuName = if ($cpu) { $cpu.Name } else { "Unknown" }
     $cpuCores = if ($cpu) { $cpu.NumberOfCores } else { "?" }
@@ -58,7 +72,13 @@ function Show-SystemHealthCheck {
 
     # Disk Space
     Write-OutputColor "=== DISK SPACE ===" -color "Success"
-    $disks = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+    $diskResult = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Querying disk info"
+    $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
+    if ($diskResult.TimedOut) {
+        Write-OutputColor "  Disk query timed out." -color "Warning"
+    }
     foreach ($disk in $disks) {
         $totalGB = [math]::Round($disk.Size / 1GB, 2)
         $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
@@ -353,16 +373,15 @@ function Show-SystemHealthCheck {
     }
     Write-OutputColor "" -color "Info"
 
-    # Firewall Status
+    # Firewall Status (uses registry-first approach via Get-FirewallState)
     Write-OutputColor "=== FIREWALL STATUS ===" -color "Success"
     try {
-        $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
-        foreach ($fwProfile in $fwProfiles) {
-            $fwEnabled = $fwProfile.Enabled -eq $true
-            $fwColor = if ($fwEnabled) { "Success" } else { "Warning" }
-            $fwStatus = if ($fwEnabled) { "Enabled" } else { "Disabled" }
-            Write-OutputColor "  $($fwProfile.Name): $fwStatus" -color $fwColor
-            if (-not $fwEnabled) { $issues += "Firewall $($fwProfile.Name) profile disabled" }
+        $fwState = Get-FirewallState
+        foreach ($profileName in @('Domain', 'Private', 'Public')) {
+            $fwStatus = $fwState[$profileName]
+            $fwColor = if ($fwStatus -eq "Enabled") { "Success" } elseif ($fwStatus -eq "Unknown") { "Debug" } else { "Warning" }
+            Write-OutputColor "  ${profileName}: $fwStatus" -color $fwColor
+            if ($fwStatus -eq "Disabled") { $issues += "Firewall $profileName profile disabled" }
         }
     }
     catch {
@@ -414,7 +433,8 @@ function Show-ServerReadiness {
     }
 
     $total++
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    $cs = if ($csResult.TimedOut) { $null } else { $csResult.Result }
     if ($null -ne $cs -and $cs.PartOfDomain) {
         $ready++
         $items += @{ Category = "IDENTITY"; Name = "Domain"; Value = $cs.Domain; Color = "Success"; Symbol = "[OK]" }
@@ -554,7 +574,8 @@ function Show-ServerReadiness {
     # Uptime check - warn if server hasn't rebooted in 30+ days
     $total++
     try {
-        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+        $osResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking uptime"
+        $osInfo = if ($osResult.TimedOut) { $null } else { $osResult.Result }
         if ($null -ne $osInfo -and $null -ne $osInfo.LastBootUpTime) {
             $uptime = (Get-Date) - $osInfo.LastBootUpTime
             $uptimeDays = [math]::Floor($uptime.TotalDays)
@@ -820,9 +841,10 @@ function Show-QuickSetupWizard {
     Write-OutputColor "  ────────────────────────────────────────────" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $csResult2 = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    $cs = if ($csResult2.TimedOut) { $null } else { $csResult2.Result }
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    if ($cs.PartOfDomain) {
+    if ($cs -and $cs.PartOfDomain) {
         $domLine = "  Current:  Joined to $($cs.Domain)"
         if ($domLine.Length -gt 72) { $domLine = $domLine.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($domLine.PadRight(72))│" -color "Success"
@@ -1173,5 +1195,6 @@ function Show-RoleTemplates {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Role template $templateName setup complete!" -color "Success"
     Add-SessionChange -Category "System" -Description "Completed role template: $templateName"
+    Write-PressEnter
 }
 #endregion

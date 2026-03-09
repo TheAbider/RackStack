@@ -28,6 +28,7 @@ function Show-DeduplicationManagement {
                 $installResult = Install-WindowsFeatureWithTimeout -FeatureName "FS-Data-Deduplication" -DisplayName "Data Deduplication" -IncludeManagementTools
                 if ($installResult.Success) {
                     Add-SessionChange -Category "System" -Description "Installed Data Deduplication"
+                    Clear-MenuCache
                 }
                 Write-PressEnter
             }
@@ -122,6 +123,7 @@ function Show-DeduplicationManagement {
                         Enable-DedupVolume -Volume "$($vol.DriveLetter):" -UsageType $usage -ErrorAction Stop
                         Write-OutputColor "  Deduplication enabled on $($vol.DriveLetter): with $usage profile." -color "Success"
                         Add-SessionChange -Category "Storage" -Description "Enabled deduplication on $($vol.DriveLetter):"
+                        Clear-MenuCache
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
@@ -139,6 +141,7 @@ function Show-DeduplicationManagement {
                             Disable-DedupVolume -Volume "$($vol.DriveLetter):" -ErrorAction Stop
                             Write-OutputColor "  Deduplication disabled on $($vol.DriveLetter):" -color "Success"
                             Add-SessionChange -Category "Storage" -Description "Disabled deduplication on $($vol.DriveLetter):"
+                            Clear-MenuCache
                         }
                         catch {
                             Write-OutputColor "  Failed: $_" -color "Error"

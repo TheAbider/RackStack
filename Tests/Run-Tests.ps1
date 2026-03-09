@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.21.0
+    Automated Test Runner for RackStack v1.21.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -367,6 +367,7 @@ $requiredFunctions = @(
     "Clear-MenuCache",
     "Show-ProgressMessage",
     "Complete-ProgressMessage",
+    "Invoke-WithTimeout",
     # System Check (05)
     "Test-WindowsServer",
     "Test-HyperVInstalled",
@@ -3005,8 +3006,8 @@ try {
 # 48-MenuDisplay Show-SystemConfigMenu should NOT have two Win32_ComputerSystem calls
 try {
     $mdContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
-    # Check specifically in Show-SystemConfigMenu function area
-    $hasConsolidated = $mdContent -match '\$computerSystem\s*=\s*Get-CimInstance'
+    # Check specifically in Show-SystemConfigMenu function area — now uses Get-CachedValue
+    $hasConsolidated = $mdContent -match 'Get-CachedValue -Key "SysConfigCS"'
     Write-TestResult "48-MenuDisplay: consolidated Win32_ComputerSystem into single call" $hasConsolidated
 } catch {
     Write-TestResult "48-MenuDisplay CIM dedup" $false $_.Exception.Message
@@ -6863,6 +6864,8 @@ try {
     Write-TestResult "12-DomainJoin: handles reboot" ($djContent -match 'Restart-Computer|RebootNeeded|reboot')
     Write-TestResult "12-DomainJoin: tracks session change" ($djContent -match 'Add-SessionChange|SessionChange')
     Write-TestResult "12-DomainJoin: has error handling" ($djContent -match 'try\s*\{|catch\s*\{')
+    Write-TestResult "12-DomainJoin: validates domain name format" ($djContent -match 'targetDomain -notmatch')
+    Write-TestResult "12-DomainJoin: rejects domain without dot" ($djContent -match "notmatch '\\\.'")
 
 } catch {
     Write-TestResult "Domain Join Module Tests" $false $_.Exception.Message
@@ -7425,6 +7428,9 @@ try {
     Write-TestResult "37-Health: sorts processes by CPU" ($healthContent -match 'Sort-Object CPU -Descending')
     Write-TestResult "37-Health: disk latency thresholds" ($healthContent -match 'latencyMs.*-gt\s+20|20.*Error')
     Write-TestResult "37-Health: NIC error threshold" ($healthContent -match 'totalErrors.*-gt\s*0')
+    Write-TestResult "37-Health: CIM calls use Invoke-WithTimeout" ($healthContent -match 'Invoke-WithTimeout -ScriptBlock')
+    Write-TestResult "37-Health: handles CIM timeout gracefully" ($healthContent -match 'cimResult\.TimedOut')
+    Write-TestResult "37-Health: firewall uses Get-FirewallState" ($healthContent -match 'Get-FirewallState')
 
 } catch {
     Write-TestResult "Expanded Health Dashboard Tests" $false $_.Exception.Message
@@ -8253,6 +8259,271 @@ Write-TestResult "56-OpsMenu: temp path trims quotes" ($omContent -match 'val\.T
 
 # 57-Agent: search results wrapped for PS 5.1 safety
 Write-TestResult "57-Agent: search results wrapped @()" ($agContent -match '@\(Search-AgentInstaller')
+
+# v1.21.1: Resilience and validation improvements
+# 27-Cluster: live migration subnet validates CIDR format
+Write-TestResult "27-Cluster: migration subnet validates CIDR format" ($fcContent3 -match 'notmatch.*\\d\{1,3\}.*\\d\{1,2\}')
+
+# 10-iSCSI: temp IP cleanup uses finally block
+$iscsiContent2 = Get-Content -LiteralPath "$modulesPath\10-iSCSI.ps1" -Raw
+Write-TestResult "10-iSCSI: temp IP cleanup in finally block" ($iscsiContent2 -match 'finally\s*\{[\s\S]{0,200}Remove-NetIPAddress.*AdapterName')
+Write-TestResult "10-iSCSI: tracks tempIPAssigned flag" ($iscsiContent2 -match 'tempIPAssigned\s*=\s*\$true')
+
+# 58-NetworkDiagnostics: hostname/IP format validation
+$ndContent2 = Get-Content -LiteralPath "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
+$ndHostValidationCount = ([regex]::Matches($ndContent2, 'notmatch.*a-zA-Z0-9.*a-zA-Z0-9')).Count
+Write-TestResult "58-NetDiag: all 5 input functions validate hostname format" ($ndHostValidationCount -ge 5)
+$ndQuoteTrimCount = ([regex]::Matches($ndContent2, 'target\.Trim\(''"''\)')).Count
+Write-TestResult "58-NetDiag: all 5 input functions trim quotes" ($ndQuoteTrimCount -ge 5)
+
+# 12-DomainJoin: domain name format validation
+Write-TestResult "12-DomainJoin: validates domain has dot separator" ($djContent -match "notmatch '\\\.'")
+
+# 43-OfflineVHD: Set-Partition uses ErrorAction Stop
+$ovhdContent = Get-Content -LiteralPath "$modulesPath\43-OfflineVHD.ps1" -Raw
+Write-TestResult "43-OfflineVHD: Set-Partition uses ErrorAction Stop" ($ovhdContent -match 'Set-Partition.*-ErrorAction Stop')
+
+# v1.21.1 continued: CIM timeout hardening + robustness
+
+# 48-MenuDisplay: Show-SystemConfigMenu uses cached CIM, not bare Get-CimInstance
+$mdContent3 = Get-Content -LiteralPath "$modulesPath\48-MenuDisplay.ps1" -Raw
+Write-TestResult "48-MenuDisplay: SystemConfigMenu uses cached CS data" ($mdContent3 -match 'Get-CachedValue -Key "SysConfigCS"')
+# All Get-CimInstance Win32_ComputerSystem calls should be inside Get-CachedValue FetchScript blocks
+$mdBareCSCount = ([regex]::Matches($mdContent3, 'Get-CimInstance -ClassName Win32_ComputerSystem')).Count
+$mdCachedCSCount = ([regex]::Matches($mdContent3, 'Get-CachedValue[\s\S]{0,200}Get-CimInstance -ClassName Win32_ComputerSystem')).Count
+Write-TestResult "48-MenuDisplay: all CS CIM calls are cached" ($mdBareCSCount -le $mdCachedCSCount)
+
+# 05-SystemCheck: Hyper-V pre-flight batches CIM with timeout
+$scContent2 = Get-Content -LiteralPath "$modulesPath\05-SystemCheck.ps1" -Raw
+Write-TestResult "05-SystemCheck: HyperV preflight uses Invoke-WithTimeout" ($scContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}Checking Hyper-V prerequisites')
+Write-TestResult "05-SystemCheck: Cluster preflight uses Invoke-WithTimeout" ($scContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}Checking cluster prerequisites')
+
+# 45-ConfigExport: config export system info uses Invoke-WithTimeout
+$ceContent3 = Get-Content -LiteralPath "$modulesPath\45-ConfigExport.ps1" -Raw
+Write-TestResult "45-ConfigExport: export uses Invoke-WithTimeout for system info" ($ceContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}Querying system info')
+Write-TestResult "45-ConfigExport: export handles CIM timeout gracefully" ($ceContent3 -match 'sysInfo\.TimedOut')
+
+# 55-QoLFeatures: pagefile CIM calls batched with timeout
+$qolContent3 = Get-Content -LiteralPath "$modulesPath\55-QoLFeatures.ps1" -Raw
+Write-TestResult "55-QoL: pagefile uses Invoke-WithTimeout" ($qolContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}Querying pagefile info')
+Write-TestResult "55-QoL: pagefile handles CIM timeout" ($qolContent3 -match 'pfCim\.TimedOut')
+
+# 20-DiskCleanup: cleanmgr has timeout instead of indefinite -Wait
+$dcContent2 = Get-Content -LiteralPath "$modulesPath\20-DiskCleanup.ps1" -Raw
+Write-TestResult "20-DiskCleanup: cleanmgr uses Wait-Process timeout" ($dcContent2 -match 'Wait-Process -Timeout')
+Write-TestResult "20-DiskCleanup: cleanmgr checks HasExited" ($dcContent2 -match 'cleanProc\.HasExited')
+
+# 56-OperationsMenu: Enter-PSSession has ErrorAction Stop
+$opsContent2 = Get-Content -LiteralPath "$modulesPath\56-OperationsMenu.ps1" -Raw
+Write-TestResult "56-OpsMenu: Enter-PSSession uses ErrorAction Stop" ($opsContent2 -match 'Enter-PSSession.*-ErrorAction Stop')
+
+# 35-Utilities: memory diagnostics batches CIM with timeout
+$utilContent3 = Get-Content -LiteralPath "$modulesPath\35-Utilities.ps1" -Raw
+Write-TestResult "35-Utilities: memory diag uses Invoke-WithTimeout" ($utilContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}Querying memory info')
+Write-TestResult "35-Utilities: memory diag handles timeout" ($utilContent3 -match 'memCim\.TimedOut')
+
+# 32-Deduplication: Clear-MenuCache after install
+$ddContent2 = Get-Content -LiteralPath "$modulesPath\32-Deduplication.ps1" -Raw
+Write-TestResult "32-Dedup: Clear-MenuCache after feature install" ($ddContent2 -match 'Installed Data Deduplication[\s\S]{0,100}Clear-MenuCache')
+
+# 20-DiskCleanup: DISM uses Invoke-WithTimeout for progress
+$dcContent3 = Get-Content -LiteralPath "$modulesPath\20-DiskCleanup.ps1" -Raw
+Write-TestResult "20-DiskCleanup: DISM uses Invoke-WithTimeout" ($dcContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}ResetBase')
+Write-TestResult "20-DiskCleanup: DISM handles timeout" ($dcContent3 -match 'dismResult\.TimedOut')
+
+# v1.21.1: Additional behavioral tests for under-tested modules
+
+# 53-VMExportImport behavioral tests
+$vmeiContent = Get-Content -LiteralPath "$modulesPath\53-VMExportImport.ps1" -Raw
+Write-TestResult "53-VMExport: Export-VMWizard function exists" ($vmeiContent -match 'function Export-VMWizard')
+Write-TestResult "53-VMExport: Import-VMWizard function exists" ($vmeiContent -match 'function Import-VMWizard')
+Write-TestResult "53-VMExport: Show-VMExportImportMenu while loop" ($vmeiContent -match 'function Show-VMExportImportMenu[\s\S]*?while \(\$true\)[\s\S]*?ReturnToMainMenu')
+Write-TestResult "53-VMExport: export wraps Get-VM with @()" ($vmeiContent -match '@\(Get-VM')
+Write-TestResult "53-VMExport: export validates VM selection" ($vmeiContent -match 'ContainsKey\(\$vmChoice\)')
+Write-TestResult "53-VMExport: export validates destination with Test-Path" ($vmeiContent -match 'Test-Path.*exportPath')
+Write-TestResult "53-VMExport: import validates source path" ($vmeiContent -match 'Test-Path.*LiteralPath.*destPath' -or $vmeiContent -match 'Test-Path.*importPath')
+Write-TestResult "53-VMExport: export has session tracking" ($vmeiContent -match 'Add-SessionChange.*Export')
+Write-TestResult "53-VMExport: import has session tracking" ($vmeiContent -match 'Add-SessionChange.*Import')
+
+# 58-NetworkDiagnostics behavioral tests
+$ndContent3 = Get-Content -LiteralPath "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
+Write-TestResult "58-NetDiag: Show-NetworkDiagnostics while loop" ($ndContent3 -match 'function Show-NetworkDiagnostics[\s\S]*?while \(\$true\)[\s\S]*?ReturnToMainMenu')
+Write-TestResult "58-NetDiag: Invoke-PingHost has try/catch" ($ndContent3 -match 'function Invoke-PingHost[\s\S]*?try[\s\S]*?catch')
+Write-TestResult "58-NetDiag: Invoke-PortTest has try/catch" ($ndContent3 -match 'function Invoke-PortTest[\s\S]*?try[\s\S]*?catch')
+Write-TestResult "58-NetDiag: Invoke-DnsLookup has try/catch" ($ndContent3 -match 'function Invoke-DnsLookup[\s\S]*?try[\s\S]*?catch')
+Write-TestResult "58-NetDiag: Invoke-SubnetSweep validates subnet" ($ndContent3 -match 'function Invoke-SubnetSweep[\s\S]*?notmatch')
+Write-TestResult "58-NetDiag: Invoke-QuickPortScan validates target" ($ndContent3 -match 'function Invoke-QuickPortScan[\s\S]*?notmatch')
+Write-TestResult "58-NetDiag: Show-ActiveConnections function exists" ($ndContent3 -match 'function Show-ActiveConnections')
+Write-TestResult "58-NetDiag: Show-ArpTable function exists" ($ndContent3 -match 'function Show-ArpTable')
+Write-TestResult "58-NetDiag: menu has 8 options" ($ndContent3 -match 'Enter 1-8 or B')
+
+# 48-MenuDisplay: Invoke-WithTimeout function existence (critical helper)
+Write-TestResult "04-Navigation: Invoke-WithTimeout defined" ((Get-Command -Name Invoke-WithTimeout -ErrorAction SilentlyContinue) -ne $null)
+
+# 11-Hostname behavioral tests
+$hnContent2 = Get-Content -LiteralPath "$modulesPath\11-Hostname.ps1" -Raw
+Write-TestResult "11-Hostname: validates via Test-ValidHostname" ($hnContent2 -match 'Test-ValidHostname')
+Write-TestResult "11-Hostname: checks AD name collision" ($hnContent2 -match 'Test-ComputerNameInAD')
+Write-TestResult "11-Hostname: checks DNS collision" ($hnContent2 -match 'Resolve-DnsName.*newHostname')
+Write-TestResult "11-Hostname: sets RebootNeeded flag" ($hnContent2 -match 'RebootNeeded = \$true')
+Write-TestResult "11-Hostname: has undo action" ($hnContent2 -match 'Add-UndoAction[\s\S]{0,200}OldName')
+
+# 13-Timezone behavioral tests
+$tzContent2 = Get-Content -LiteralPath "$modulesPath\13-Timezone.ps1" -Raw
+$tzRegionCount = ([regex]::Matches($tzContent2, '"(North America|South America|Europe|Africa|Asia|Oceania/Pacific|UTC/Manual)"')).Count
+Write-TestResult "13-Timezone: 7 timezone regions defined" ($tzRegionCount -ge 7)
+Write-TestResult "13-Timezone: Set-SelectedTimezone uses module-qualified Set-TimeZone" ($tzContent2 -match 'Microsoft\.PowerShell\.Management\\Set-TimeZone')
+Write-TestResult "13-Timezone: checks if already set (no-op)" ($tzContent2 -match 'already set to')
+Write-TestResult "13-Timezone: time sync after timezone change" ($tzContent2 -match 'w32tm /resync')
+Write-TestResult "13-Timezone: W32Time service pre-check" ($tzContent2 -match 'Get-Service.*W32Time')
+Write-TestResult "13-Timezone: handles sync failures gracefully" ($tzContent2 -match 'no time data|peer not reachable')
+
+# 56-OpsMenu: temp path warns if dir doesn't exist
+Write-TestResult "56-OpsMenu: temp path warns if nonexistent" ($opsContent2 -match 'Directory does not exist yet')
+
+# No unindented "Error " messages in any module (console indent consistency)
+$unindentedErrorCount = 0
+foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
+    $lines = Get-Content -LiteralPath $modFile.FullName
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match 'Write-OutputColor "[Ee][Rr][Rr][Oo][Rr][ :]' -and $lines[$i] -notmatch 'Write-OutputColor "  [Ee][Rr][Rr][Oo][Rr][ :]') {
+            $unindentedErrorCount++
+        }
+    }
+}
+Write-TestResult "No unindented 'Error' messages in modules" ($unindentedErrorCount -eq 0)
+
+# 23-LocalAdmin: Write-PressEnter after account creation
+$laContent2 = Get-Content (Join-Path $modulesPath "23-LocalAdmin.ps1") -Raw
+Write-TestResult "23-LocalAdmin: Write-PressEnter after account creation" ($laContent2 -match 'Write-PressEnter[\s\S]{0,20}\}[\s\S]{0,10}#endregion')
+
+# 45-ConfigExport: CIM calls wrapped with Invoke-WithTimeout
+$ceContent2 = Get-Content (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw
+Write-TestResult "45-ConfigExport: Save-Config uses Invoke-WithTimeout for CIM" ($ceContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Querying computer system')
+Write-TestResult "45-ConfigExport: Apply-Config domain check uses Invoke-WithTimeout" ($ceContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking domain status')
+Write-TestResult "45-ConfigExport: Compare-Drift domain uses Invoke-WithTimeout" ($ceContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking domain membership')
+Write-TestResult "45-ConfigExport: Apply-Config null-safe domain join check" ($ceContent2 -match '\$null -ne \$domCs -and -not \$domCs\.PartOfDomain')
+
+# 50-EntryPoint: CIM calls wrapped with Invoke-WithTimeout
+$epContent2 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+Write-TestResult "50-EntryPoint: domain join uses Invoke-WithTimeout" ($epContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking domain status')
+Write-TestResult "50-EntryPoint: DC promotion uses Invoke-WithTimeout" ($epContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking domain role')
+Write-TestResult "50-EntryPoint: auto-reboot sleep is 5 seconds" ($epContent2 -match 'Rebooting in 5 seconds' -and $epContent2 -match 'Start-Sleep -Seconds 5')
+
+# Write-PressEnter after action completion (prevents output flashing away)
+$setContent2 = Get-Content (Join-Path $modulesPath "09-SET.ps1") -Raw
+Write-TestResult "09-SET: Add-CustomVNIC has Write-PressEnter" ($setContent2 -match 'created successfully![\s\S]{0,30}Write-PressEnter')
+$iscsiContent2 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
+Write-TestResult "10-iSCSI: auto-config has Write-PressEnter" ($iscsiContent2 -match 'Auto-Configuration Complete![\s\S]{0,30}Write-PressEnter')
+$dcContent2 = Get-Content (Join-Path $modulesPath "20-DiskCleanup.ps1") -Raw
+Write-TestResult "20-DiskCleanup: QuickClean has Write-PressEnter" ($dcContent2 -match 'Quick Clean complete[\s\S]{0,300}Write-PressEnter')
+$hcContent2 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
+Write-TestResult "37-HealthCheck: role template has Write-PressEnter" ($hcContent2 -match 'template.*setup complete![\s\S]{0,200}Write-PressEnter')
+
+# CIM timeout wrapping (Invoke-WithTimeout)
+$djContent2 = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1") -Raw
+Write-TestResult "12-DomainJoin: domain check uses Invoke-WithTimeout" ($djContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking domain status')
+Write-TestResult "12-DomainJoin: post-join verify uses Invoke-WithTimeout" ($djContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Verifying domain join')
+$hvContent2 = Get-Content (Join-Path $modulesPath "25-HyperV.ps1") -Raw
+Write-TestResult "25-HyperV: OS detect uses Invoke-WithTimeout" ($hvContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Detecting OS type')
+$bcContent2 = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+Write-TestResult "36-BatchConfig: system info uses Invoke-WithTimeout" ($bcContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Querying system info')
+$hsContent2 = Get-Content (Join-Path $modulesPath "40-HostStorage.ps1") -Raw
+Write-TestResult "40-HostStorage: optical drive check uses Invoke-WithTimeout" ($hsContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking optical drives')
+Write-TestResult "40-HostStorage: D: volume query uses Invoke-WithTimeout" ($hsContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Querying D: volume')
+$vmContent2 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+Write-TestResult "44-VMDeployment: RAM check uses Invoke-WithTimeout" ($vmContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking system memory')
+Write-TestResult "44-VMDeployment: CPU check uses Invoke-WithTimeout" ($vmContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking CPU info')
+
+# Clear-MenuCache after state-changing operations
+$hnContent2 = Get-Content (Join-Path $modulesPath "11-Hostname.ps1") -Raw
+Write-TestResult "11-Hostname: Clear-MenuCache after rename" ($hnContent2 -match 'Changed hostname[\s\S]{0,200}Clear-MenuCache')
+Write-TestResult "12-DomainJoin: Clear-MenuCache after join" ($djContent2 -match "Joined domain[\s\S]{0,200}Clear-MenuCache")
+$tzContent3 = Get-Content (Join-Path $modulesPath "13-Timezone.ps1") -Raw
+Write-TestResult "13-Timezone: Clear-MenuCache after set" ($tzContent3 -match 'Set timezone to[\s\S]{0,100}Clear-MenuCache')
+$vlanContent2 = Get-Content (Join-Path $modulesPath "08-VLAN.ps1") -Raw
+Write-TestResult "08-VLAN: Clear-MenuCache after VLAN set" ($vlanContent2 -match 'Set VLAN[\s\S]{0,200}Clear-MenuCache')
+Write-TestResult "08-VLAN: Clear-MenuCache after VLAN remove" ($vlanContent2 -match 'Removed VLAN[\s\S]{0,200}Clear-MenuCache')
+$ntpContent2 = Get-Content (Join-Path $modulesPath "19-NTPConfiguration.ps1") -Raw
+Write-TestResult "19-NTP: Clear-MenuCache after config" ($ntpContent2 -match 'NTP server configured[\s\S]{0,200}Clear-MenuCache')
+$licContent2 = Get-Content (Join-Path $modulesPath "21-Licensing.ps1") -Raw
+Write-TestResult "21-Licensing: Clear-MenuCache after activation" ($licContent2 -match 'activated successfully[\s\S]{0,200}Clear-MenuCache')
+$blContent2 = Get-Content (Join-Path $modulesPath "31-BitLocker.ps1") -Raw
+Write-TestResult "31-BitLocker: Clear-MenuCache after install" ($blContent2 -match 'Installed BitLocker[\s\S]{0,100}Clear-MenuCache')
+$ipContent2 = Get-Content (Join-Path $modulesPath "07-IPConfiguration.ps1") -Raw
+Write-TestResult "07-IPConfig: Clear-MenuCache after IP set" ($ipContent2 -match 'IP configuration applied[\s\S]{0,200}Clear-MenuCache')
+
+# Clear-MenuCache: firewall templates
+$fwContent2 = Get-Content (Join-Path $modulesPath "18-FirewallTemplates.ps1") -Raw
+$fwCacheCount = ([regex]::Matches($fwContent2, 'Clear-MenuCache')).Count
+Write-TestResult "18-FirewallTemplates: Clear-MenuCache in all 6 template functions" ($fwCacheCount -ge 6)
+
+# Clear-MenuCache: service manager
+$smContent2 = Get-Content (Join-Path $modulesPath "30-ServiceManager.ps1") -Raw
+$smCacheCount = ([regex]::Matches($smContent2, 'Clear-MenuCache')).Count
+Write-TestResult "30-ServiceManager: Clear-MenuCache after all 4 service operations" ($smCacheCount -ge 4)
+
+# Clear-MenuCache: iSCSI config
+$iscsiCacheCount = ([regex]::Matches($iscsiContent2, 'Clear-MenuCache')).Count
+Write-TestResult "10-iSCSI: Clear-MenuCache after config and MPIO" ($iscsiCacheCount -ge 3)
+
+# Clear-MenuCache: Windows Updates
+$wuContent2 = Get-Content (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw
+Write-TestResult "14-WindowsUpdates: Clear-MenuCache after install" ($wuContent2 -match 'Installed[\s\S]{0,100}Clear-MenuCache')
+
+# Clear-MenuCache: dedup enable/disable
+$dedupContent2 = Get-Content (Join-Path $modulesPath "32-Deduplication.ps1") -Raw
+$dedupCacheCount = ([regex]::Matches($dedupContent2, 'Clear-MenuCache')).Count
+Write-TestResult "32-Deduplication: Clear-MenuCache after enable/disable/install" ($dedupCacheCount -ge 3)
+
+# Clear-MenuCache: StorageReplica partnership
+$srContent2 = Get-Content (Join-Path $modulesPath "33-StorageReplica.ps1") -Raw
+Write-TestResult "33-StorageReplica: Clear-MenuCache after partnership" ($srContent2 -match 'SR partnership[\s\S]{0,100}Clear-MenuCache')
+
+# 39-FileServer: null-safe Get-Content check
+$fsContent2 = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
+Write-TestResult "39-FileServer: null-safe Get-Content before match" ($fsContent2 -match '\$null -ne \$content -and \$content -match')
+
+# 12-DomainJoin: indentation consistency and Invoke-WithTimeout
+$djContent3 = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1") -Raw
+Write-TestResult "12-DomainJoin: Add-Computer uses Invoke-WithTimeout" ($djContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Joining domain')
+# Check that key messages are indented (no bare starts)
+$djLines = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1")
+$djUnindented = 0
+foreach ($djl in $djLines) {
+    if ($djl -match 'Write-OutputColor "[A-Z]' -and $djl -notmatch 'Write-OutputColor "\s\s' -and $djl -notmatch 'Write-OutputColor ""' -and $djl -notmatch 'Write-OutputColor "`n' -and $djl -notmatch '-color "Debug"') {
+        $djUnindented++
+    }
+}
+Write-TestResult "12-DomainJoin: all messages have 2-space indent" ($djUnindented -eq 0)
+
+# 35-Utilities: all dashboard functions have Write-PressEnter
+$utilPECount = ([regex]::Matches($utilContent3, 'Write-PressEnter')).Count
+Write-TestResult "35-Utilities: 13+ dashboard functions have Write-PressEnter" ($utilPECount -ge 13)
+
+# CIM timeout: NTP, DisableAdmin, QoL pagefile
+$ntpCimContent = Get-Content (Join-Path $modulesPath "19-NTPConfiguration.ps1") -Raw
+Write-TestResult "19-NTP: domain check uses Invoke-WithTimeout" ($ntpCimContent -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking domain status')
+$daContent2 = Get-Content (Join-Path $modulesPath "24-DisableAdmin.ps1") -Raw
+Write-TestResult "24-DisableAdmin: domain check uses Invoke-WithTimeout" ($daContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking domain status')
+$qolContent3 = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
+Write-TestResult "55-QoL: pagefile system CIM uses Invoke-WithTimeout" ($qolContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Querying pagefile settings')
+Write-TestResult "55-QoL: pagefile disk space CIM uses Invoke-WithTimeout" ($qolContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking disk space')
+
+# CIM timeout: 35-Utilities utility functions
+$utilContent3 = Get-Content (Join-Path $modulesPath "35-Utilities.ps1") -Raw
+Write-TestResult "35-Utilities: uptime analyzer uses Invoke-WithTimeout" ($utilContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Querying uptime')
+Write-TestResult "35-Utilities: device drivers batched Invoke-WithTimeout" ($utilContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Scanning device drivers')
+Write-TestResult "35-Utilities: disk space analyzer uses Invoke-WithTimeout" ($utilContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Querying disk volumes')
+
+# Clear-MenuCache: Defender exclusions
+$defContent2 = Get-Content (Join-Path $modulesPath "17-DefenderExclusions.ps1") -Raw
+$defCacheCount = ([regex]::Matches($defContent2, 'Clear-MenuCache')).Count
+Write-TestResult "17-DefenderExclusions: Clear-MenuCache after all exclusion ops (4+)" ($defCacheCount -ge 4)
+
+# Clear-MenuCache: DiskCleanup deep/WU
+$dcCacheCount = ([regex]::Matches($dcContent2, 'Clear-MenuCache')).Count
+Write-TestResult "20-DiskCleanup: Clear-MenuCache after deep clean and WU cache" ($dcCacheCount -ge 2)
 
 $elapsed = (Get-Date) - $script:StartTime
 

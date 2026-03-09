@@ -309,6 +309,7 @@ function Set-SelectedTimezone {
         $newTz = Get-TimeZone
         Write-OutputColor "  Timezone set to: $($newTz.DisplayName)" -color "Success"
         Add-SessionChange -Category "System" -Description "Set timezone to $($newTz.DisplayName)"
+        Clear-MenuCache
         Add-UndoAction -Category "System" -Description "Set timezone to $($newTz.DisplayName)" -UndoScript {
             param($OldTzId)
             Microsoft.PowerShell.Management\Set-TimeZone -Id $OldTzId -ErrorAction SilentlyContinue

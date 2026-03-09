@@ -149,7 +149,7 @@ function Get-SecurePassword {
             return $Password1
         }
         catch {
-            Write-OutputColor "Error processing password: $_" -color "Error"
+            Write-OutputColor "  Error processing password: $_" -color "Error"
             continue
         }
         finally {

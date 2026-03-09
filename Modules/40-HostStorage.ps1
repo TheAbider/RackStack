@@ -28,7 +28,10 @@ function Test-OpticalDrive {
     $letter = $DriveLetter.TrimEnd(':')
 
     # Check WMI for CD-ROM drives
-    $cdDrives = Get-CimInstance -ClassName Win32_CDROMDrive -ErrorAction SilentlyContinue
+    $cdCim = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_CDROMDrive -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Checking optical drives"
+    $cdDrives = if ($cdCim.TimedOut) { @() } else { $cdCim.Result }
     foreach ($cd in $cdDrives) {
         if ($cd.Drive -and $cd.Drive.TrimEnd(':') -eq $letter) {
             return @{ IsOptical = $true; Type = "CD/DVD"; Name = $cd.Caption }
@@ -63,9 +66,14 @@ function Get-NextAvailableDriveLetter {
 
     $usedLetters = @()
     $usedLetters += (Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { $_.DriveLetter })
-    $usedLetters += (Get-CimInstance -ClassName Win32_CDROMDrive -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Drive) { $_.Drive.TrimEnd(':') }
-    })
+    $cdCim2 = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_CDROMDrive -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Checking CD-ROM drives"
+    if (-not $cdCim2.TimedOut -and $cdCim2.Result) {
+        $usedLetters += ($cdCim2.Result | ForEach-Object {
+            if ($_.Drive) { $_.Drive.TrimEnd(':') }
+        })
+    }
     $usedLetters += $Exclude
 
     # Try Z, Y, X... down to E (skip A, B, C, D)
@@ -101,7 +109,10 @@ function Move-OpticalDriveFromD {
 
     try {
         # Try using diskpart-style approach via WMI/CIM
-        $volume = Get-CimInstance -ClassName Win32_Volume -Filter "DriveLetter='D:'" -ErrorAction SilentlyContinue
+        $volCim = Invoke-WithTimeout -ScriptBlock {
+            Get-CimInstance -ClassName Win32_Volume -Filter "DriveLetter='D:'" -ErrorAction SilentlyContinue
+        } -TimeoutSeconds 10 -Activity "Querying D: volume"
+        $volume = if ($volCim.TimedOut) { $null } else { $volCim.Result }
 
         if ($volume) {
             # Change the drive letter

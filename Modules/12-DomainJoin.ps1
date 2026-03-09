@@ -43,15 +43,18 @@ function Join-Domain {
     }
 
     # Check current domain status
-    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $csCim = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Checking domain status"
+    $computerSystem = if ($csCim.TimedOut) { $null } else { $csCim.Result }
     if ($null -ne $computerSystem -and $computerSystem.PartOfDomain) {
-        Write-OutputColor "Server is already joined to domain: $($computerSystem.Domain)" -color "Warning"
+        Write-OutputColor "  Server is already joined to domain: $($computerSystem.Domain)" -color "Warning"
         if (-not (Confirm-UserAction -Message "Do you want to join a different domain?")) {
             return
         }
     }
     else {
-        Write-OutputColor "Server is currently in WORKGROUP" -color "Info"
+        Write-OutputColor "  Server is currently in WORKGROUP" -color "Info"
     }
 
     Write-OutputColor "" -color "Info"
@@ -64,7 +67,7 @@ function Join-Domain {
         if ($navResult.ShouldReturn) { return }
 
         if ([string]::IsNullOrWhiteSpace($targetDomain)) {
-            Write-OutputColor "No domain entered. Cancelled." -color "Warning"
+            Write-OutputColor "  No domain entered. Cancelled." -color "Warning"
             return
         }
     }
@@ -79,22 +82,28 @@ function Join-Domain {
         if ($navResult.ShouldReturn) { return }
 
         if ([string]::IsNullOrWhiteSpace($targetDomain)) {
-            Write-OutputColor "No domain entered. Cancelled." -color "Warning"
+            Write-OutputColor "  No domain entered. Cancelled." -color "Warning"
             return
         }
     }
 
+    # Validate domain name format
+    if ($targetDomain -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-]*[a-zA-Z0-9]$' -or $targetDomain -notmatch '\.') {
+        Write-OutputColor "  Invalid domain name format. Expected format: corp.local" -color "Error"
+        return
+    }
+
     # Test network connectivity
-    Write-OutputColor "Testing network connectivity..." -color "Info"
+    Write-OutputColor "  Testing network connectivity..." -color "Info"
     if (-not (Test-NetworkConnectivity)) {
-        Write-OutputColor "Warning: No network connectivity detected." -color "Warning"
+        Write-OutputColor "  Warning: No network connectivity detected." -color "Warning"
         if (-not (Confirm-UserAction -Message "Continue anyway?")) {
             return
         }
     }
 
     # Test DNS resolution of target domain
-    Write-OutputColor "Resolving domain '$targetDomain'..." -color "Info"
+    Write-OutputColor "  Resolving domain '$targetDomain'..." -color "Info"
     try {
         $dcRecords = Resolve-DnsName -Name $targetDomain -Type A -ErrorAction Stop
         if ($dcRecords) {
@@ -113,11 +122,11 @@ function Join-Domain {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Joining domain: $targetDomain" -color "Warning"
-    Write-OutputColor "You will need domain admin credentials." -color "Info"
+    Write-OutputColor "  Joining domain: $targetDomain" -color "Warning"
+    Write-OutputColor "  You will need domain admin credentials." -color "Info"
 
     if (-not (Confirm-UserAction -Message "Proceed with domain join?")) {
-        Write-OutputColor "Domain join cancelled." -color "Info"
+        Write-OutputColor "  Domain join cancelled." -color "Info"
         return
     }
 
@@ -127,26 +136,35 @@ function Join-Domain {
     while ($attempt -lt $maxAttempts) {
         $attempt++
 
-        Write-OutputColor "`nAttempt $attempt of $maxAttempts" -color "Info"
+        Write-OutputColor "`n  Attempt $attempt of $maxAttempts" -color "Info"
 
         $credential = Get-Credential -Message "Enter domain admin credentials for $targetDomain"
 
         if ($null -eq $credential) {
-            Write-OutputColor "Credential entry cancelled." -color "Warning"
+            Write-OutputColor "  Credential entry cancelled." -color "Warning"
             return
         }
 
         try {
-            Add-Computer -DomainName $targetDomain -Credential $credential -ErrorAction Stop
-            Write-OutputColor "Successfully joined domain '$targetDomain'!" -color "Success"
-            Write-OutputColor "A reboot is required to complete the domain join." -color "Warning"
+            $joinResult = Invoke-WithTimeout -ScriptBlock {
+                Add-Computer -DomainName $targetDomain -Credential $credential -ErrorAction Stop
+            } -TimeoutSeconds 120 -Activity "Joining domain '$targetDomain'"
+            if ($joinResult.TimedOut) {
+                Write-OutputColor "  Domain join timed out after 2 minutes." -color "Error"
+                Write-OutputColor "  The operation may still be in progress. Check Event Viewer." -color "Warning"
+                continue
+            }
+            if ($joinResult.Error) { throw $joinResult.Error }
+            Write-OutputColor "  Successfully joined domain '$targetDomain'!" -color "Success"
+            Write-OutputColor "  A reboot is required to complete the domain join." -color "Warning"
             $global:RebootNeeded = $true
             Add-SessionChange -Category "System" -Description "Joined domain '$targetDomain'"
+            Clear-MenuCache
             return
         }
         catch {
             $errMsg = $_.Exception.Message
-            Write-OutputColor "Failed to join domain: $errMsg" -color "Error"
+            Write-OutputColor "  Failed to join domain: $errMsg" -color "Error"
 
             # Provide specific guidance based on error
             if ($errMsg -match "network path was not found|RPC server is unavailable") {
@@ -158,7 +176,10 @@ function Join-Domain {
             }
 
             # Check if partial join occurred (domain state changed despite error)
-            $postCheck = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            $postCim = Invoke-WithTimeout -ScriptBlock {
+                Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            } -TimeoutSeconds 10 -Activity "Verifying domain join"
+            $postCheck = if ($postCim.TimedOut) { $null } else { $postCim.Result }
             if ($null -ne $postCheck -and $postCheck.PartOfDomain) {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Note: Server appears to be domain-joined (to $($postCheck.Domain))." -color "Warning"
@@ -174,6 +195,6 @@ function Join-Domain {
         }
     }
 
-    Write-OutputColor "Maximum attempts reached. Domain join failed." -color "Critical"
+    Write-OutputColor "  Maximum attempts reached. Domain join failed." -color "Critical"
 }
 #endregion

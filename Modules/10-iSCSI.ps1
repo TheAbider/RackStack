@@ -33,32 +33,37 @@ function Test-iSCSIAdapterSide {
     $result.BTotal = $bSideTargets.Count
 
     # Temporarily assign IP on the adapter
+    $tempIPAssigned = $false
     try {
         Remove-NetIPAddress -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
         Remove-NetRoute -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
         New-NetIPAddress -InterfaceAlias $AdapterName -IPAddress $TempIP -PrefixLength 24 -ErrorAction Stop | Out-Null
+        $tempIPAssigned = $true
         Start-Sleep -Seconds 2  # Allow ARP/routing to settle
+
+        # Ping A-side targets
+        foreach ($target in $aSideTargets) {
+            $reachable = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
+            if ($reachable) { $result.AReachable++ }
+        }
+
+        # Ping B-side targets
+        foreach ($target in $bSideTargets) {
+            $reachable = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
+            if ($reachable) { $result.BReachable++ }
+        }
     }
     catch {
         Write-OutputColor "    Failed to assign temp IP $TempIP to $AdapterName`: $_" -color "Warning"
         return $result
     }
-
-    # Ping A-side targets
-    foreach ($target in $aSideTargets) {
-        $reachable = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
-        if ($reachable) { $result.AReachable++ }
+    finally {
+        # Always clean up temporary IP to avoid leaving adapter misconfigured
+        if ($tempIPAssigned) {
+            Remove-NetIPAddress -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-NetRoute -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
+        }
     }
-
-    # Ping B-side targets
-    foreach ($target in $bSideTargets) {
-        $reachable = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
-        if ($reachable) { $result.BReachable++ }
-    }
-
-    # Remove temporary IP
-    Remove-NetIPAddress -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
-    Remove-NetRoute -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
 
     # Determine side
     $hasA = $result.AReachable -gt 0
@@ -504,11 +509,13 @@ function Set-iSCSIAutoConfiguration {
 
     if ($aSideOK -and $bSideOK) {
         Add-SessionChange -Category "Network" -Description "Configured iSCSI: A-side $ip1, B-side $ip2"
+        Clear-MenuCache
     } elseif ($aSideOK -or $bSideOK) {
         $partial = if ($aSideOK) { "A-side $ip1 OK, B-side failed" } else { "A-side failed, B-side $ip2 OK" }
         Write-OutputColor "  Warning: Partial configuration - $partial" -color "Warning"
         Write-OutputColor "  Dual-path iSCSI requires both sides. Fix the failed adapter." -color "Warning"
         Add-SessionChange -Category "Network" -Description "iSCSI PARTIAL: $partial"
+        Clear-MenuCache
     } else {
         Write-OutputColor "  Both iSCSI adapters failed to configure." -color "Error"
         Add-SessionChange -Category "Network" -Description "iSCSI configuration failed (both sides)"
@@ -533,6 +540,7 @@ function Set-iSCSIAutoConfiguration {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  iSCSI Auto-Configuration Complete!" -color "Success"
+    Write-PressEnter
 }
 
 # Function to configure a single iSCSI adapter
@@ -1024,6 +1032,7 @@ function Initialize-MPIOForISCSI {
         }
 
         Add-SessionChange -Category "System" -Description "Configured MPIO for iSCSI"
+        Clear-MenuCache
         return $true
     }
     catch {

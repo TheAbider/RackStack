@@ -817,7 +817,10 @@ function Start-BatchMode {
 
     # Step 13: Join domain (prompts for credentials - do near end)
     $stepNum++
-    $csInfo = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $csCim = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Checking domain status"
+    $csInfo = if ($csCim.TimedOut) { $null } else { $csCim.Result }
     $isDomainJoined = if ($null -ne $csInfo) { $csInfo.PartOfDomain } else { $false }
     if ($Config.DomainName -and -not $isDomainJoined) {
         Write-OutputColor "  [$stepNum/$totalSteps] Joining domain '$($Config.DomainName)'..." -color "Info"
@@ -886,7 +889,10 @@ function Start-BatchMode {
     # Step 15: Promote to Domain Controller
     $stepNum++
     if ($Config.PromoteToDC) {
-        $domainRole = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).DomainRole
+        $dcCim = Invoke-WithTimeout -ScriptBlock {
+            Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        } -TimeoutSeconds 10 -Activity "Checking domain role"
+        $domainRole = if ($dcCim.TimedOut) { $null } else { $dcCim.Result.DomainRole }
         if ($domainRole -ge 4) {
             Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion: already a domain controller" -color "Debug"
             $skipped++
@@ -1447,8 +1453,8 @@ function Start-BatchMode {
 
     # Auto-reboot if needed and configured
     if ($global:RebootNeeded -and $Config.AutoReboot) {
-        Write-OutputColor "Rebooting in 10 seconds... (Ctrl+C to cancel)" -color "Warning"
-        Start-Sleep -Seconds 10
+        Write-OutputColor "Rebooting in 5 seconds... (Ctrl+C to cancel)" -color "Warning"
+        Start-Sleep -Seconds 5
         Restart-Computer -Force
     }
     elseif ($global:RebootNeeded) {

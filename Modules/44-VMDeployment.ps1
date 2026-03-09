@@ -530,7 +530,7 @@ function Connect-StandaloneHost {
             }
             else {
                 Write-OutputColor "Connection failed with current credentials." -color "Warning"
-                Write-OutputColor "Error: $($result.Message)" -color "Info"
+                Write-OutputColor "  Error: $($result.Message)" -color "Info"
                 Write-OutputColor "" -color "Info"
 
                 if (Confirm-UserAction -Message "Try with different credentials?") {
@@ -1985,7 +1985,7 @@ function New-DeployedVM {
     }
     catch {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "ERROR creating VM: $_" -color "Error"
+        Write-OutputColor "  ERROR creating VM: $_" -color "Error"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "The VM may have been partially created. Check Hyper-V Manager." -color "Warning"
         Write-OutputColor "" -color "Info"
@@ -2067,7 +2067,7 @@ function Show-ExistingVMs {
         Write-OutputColor "Total VMs: $($vms.Count)" -color "Info"
     }
     catch {
-        Write-OutputColor "Error retrieving VMs: $_" -color "Error"
+        Write-OutputColor "  Error retrieving VMs: $_" -color "Error"
     }
 }
 
@@ -3017,9 +3017,12 @@ function Test-VMDeploymentPreFlight {
     }
 
     # 2. RAM check
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
-    $totalRAMGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
-    $freeRAMGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    $osCim = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Checking system memory"
+    $os = if ($osCim.TimedOut) { $null } else { $osCim.Result }
+    $totalRAMGB = if ($os) { [math]::Round($os.TotalVisibleMemorySize / 1MB, 1) } else { 0 }
+    $freeRAMGB = if ($os) { [math]::Round($os.FreePhysicalMemory / 1MB, 1) } else { 0 }
     $requiredRAMGB = 0
     foreach ($vm in $VMConfigs) {
         if ($vm.MemoryGB) { $requiredRAMGB += $vm.MemoryGB }
@@ -3039,7 +3042,10 @@ function Test-VMDeploymentPreFlight {
     }
 
     # 3. vCPU ratio check
-    $logicalProcs = (Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+    $cpuCim = Invoke-WithTimeout -ScriptBlock {
+        (Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+    } -TimeoutSeconds 10 -Activity "Checking CPU info"
+    $logicalProcs = if ($cpuCim.TimedOut) { 0 } else { $cpuCim.Result }
     $newvCPUs = 0
     foreach ($vm in $VMConfigs) { if ($vm.vCPU) { $newvCPUs += $vm.vCPU } }
     $existingvCPUs = 0

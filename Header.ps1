@@ -30,10 +30,20 @@
     7h3 4b1d3r
 
 .VERSION
-    1.21.0
+    1.21.1
 
 .LAST UPDATED
-    03/06/2026
+    03/09/2026
+
+.CHANGELOG v1.21.1
+    ROBUSTNESS, UX, CACHE CONSISTENCY:
+    - CIM timeout hardening — 25+ bare Get-CimInstance calls wrapped with Invoke-WithTimeout to prevent UI hangs
+    - Cache invalidation — 30+ state-changing operations now call Clear-MenuCache so menu status stays current
+    - Dashboard pause — 11 utility dashboard/viewer functions now pause for user to read output before returning
+    - Write-PressEnter — 5 action functions now pause after completion so results don't flash away
+    - Domain join — spinner during Add-Computer, 2-minute timeout, consistent message indentation
+    - Auto-reboot delay — reduced from 10 to 5 seconds for faster workflow
+    - Bug fixes — null-safe Get-Content check in FileServer, error message indentation fixes
 
 .CHANGELOG v1.21.0
     RESILIENCE, UX, BUG FIXES:

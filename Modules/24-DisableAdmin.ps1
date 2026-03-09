@@ -26,7 +26,10 @@ function Disable-BuiltInAdminAccount {
             if ($null -ne $localUser -and $localUser.Enabled -and $userName -ne 'Administrator') { $localUser }
         })
 
-        $isDomainJoined = try { (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain } catch { $false }
+        $daCim = Invoke-WithTimeout -ScriptBlock {
+            (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain
+        } -TimeoutSeconds 10 -Activity "Checking domain status"
+        $isDomainJoined = if ($daCim.TimedOut) { $false } else { $daCim.Result }
         $hasDomainAdmins = @($adminMembers | Where-Object { $_.ObjectClass -eq 'Group' -or $_.PrincipalSource -eq 'ActiveDirectory' }).Count -gt 0
 
         if ($enabledLocalAdmins.Count -eq 0 -and -not ($isDomainJoined -and $hasDomainAdmins)) {

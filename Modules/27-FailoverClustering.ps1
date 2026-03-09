@@ -723,6 +723,11 @@ function Set-LiveMigrationSettings {
                 $navResult = Test-NavigationCommand -UserInput $newNet
                 if ($navResult.ShouldReturn) { return }
                 if ($newNet) {
+                    if ($newNet -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$') {
+                        Write-OutputColor "  Invalid subnet format. Use CIDR notation (e.g., 192.168.1.0/24)." -color "Error"
+                        Write-PressEnter
+                        continue
+                    }
                     try {
                         Add-VMMigrationNetwork -Subnet $newNet -ErrorAction Stop
                         Write-OutputColor "  Added $newNet to allowed networks." -color "Success"

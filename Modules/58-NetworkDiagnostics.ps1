@@ -65,6 +65,12 @@ function Invoke-PingHost {
     $navResult = Test-NavigationCommand -UserInput $target
     if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"')
+
+    if ($target -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$') {
+        Write-OutputColor "  Invalid hostname or IP format." -color "Error"
+        return
+    }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Pinging $target (20 packets)..." -color "Info"
@@ -154,6 +160,11 @@ function Invoke-PortTest {
     $navResult = Test-NavigationCommand -UserInput $target
     if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"')
+    if ($target -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$') {
+        Write-OutputColor "  Invalid hostname or IP format." -color "Error"
+        return
+    }
 
     $portInput = Read-Host "  Enter port number (e.g., 80, 443, 3389)"
     $navResult = Test-NavigationCommand -UserInput $portInput
@@ -203,6 +214,11 @@ function Invoke-TraceRoute {
     $navResult = Test-NavigationCommand -UserInput $target
     if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"')
+    if ($target -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$') {
+        Write-OutputColor "  Invalid hostname or IP format." -color "Error"
+        return
+    }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Tracing route to $target ..." -color "Info"
@@ -355,6 +371,11 @@ function Invoke-DnsLookup {
     $navResult = Test-NavigationCommand -UserInput $target
     if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"')
+    if ($target -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$') {
+        Write-OutputColor "  Invalid hostname or IP format." -color "Error"
+        return
+    }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Resolving $target ..." -color "Info"
@@ -443,6 +464,11 @@ function Invoke-QuickPortScan {
     $navResult = Test-NavigationCommand -UserInput $target
     if ($navResult.ShouldReturn) { return }
     if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"')
+    if ($target -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$') {
+        Write-OutputColor "  Invalid hostname or IP format." -color "Error"
+        return
+    }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

@@ -76,7 +76,7 @@ function Enable-RDP {
         Clear-MenuCache  # Invalidate cache after change
     }
     catch {
-        Write-OutputColor "Error configuring Remote Desktop: $_" -color "Error"
+        Write-OutputColor "  Error configuring Remote Desktop: $_" -color "Error"
     }
 }
 
@@ -313,7 +313,7 @@ function Enable-PowerShellRemoting {
         Clear-MenuCache  # Invalidate cache after change
     }
     catch {
-        Write-OutputColor "Error configuring PowerShell Remoting: $_" -color "Error"
+        Write-OutputColor "  Error configuring PowerShell Remoting: $_" -color "Error"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "Troubleshooting tips:" -color "Warning"
         Write-OutputColor "  - Run this script as Administrator" -color "Info"

@@ -71,5 +71,6 @@ function Add-LocalAdminAccount {
     catch {
         Write-OutputColor "Failed to create account: $_" -color "Error"
     }
+    Write-PressEnter
 }
 #endregion

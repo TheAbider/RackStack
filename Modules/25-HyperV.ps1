@@ -11,9 +11,12 @@ function Install-HyperVRole {
     }
 
     # Detect if this is Windows Server or Windows Client
-    $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+    $osCim = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Detecting OS type"
+    $osInfo = if ($osCim.TimedOut) { $null } else { $osCim.Result }
     if (-not $osInfo) {
-        Write-OutputColor "Could not detect OS type via CIM." -color "Error"
+        Write-OutputColor "  Could not detect OS type via CIM." -color "Error"
         return
     }
     $isServer = $osInfo.ProductType -ne 1  # 1 = Workstation, 2 = Domain Controller, 3 = Server
@@ -101,7 +104,7 @@ function Install-HyperVRole {
 
             if ($jobError -or $jobFailed) {
                 Complete-ProgressMessage -Activity "Hyper-V installation" -Status "Failed" -Failed
-                Write-OutputColor "Error: $jobError" -color "Error"
+                Write-OutputColor "  Error: $jobError" -color "Error"
                 Add-SessionChange -Category "System" -Description "Hyper-V installation failed (Windows Client)"
 
                 # Check for common issues

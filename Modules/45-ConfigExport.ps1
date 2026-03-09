@@ -45,20 +45,31 @@ function Export-ServerConfiguration {
         $config += "=" * 80
         $config += ""
 
-        # System Info
+        # System Info (batch CIM with timeout)
         $config += "### SYSTEM INFORMATION ###"
-        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
-        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
-        $proc = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
-        $config += "Hostname:       $($computerSystem.Name)"
-        $config += "Domain:         $($computerSystem.Domain)"
-        $config += "Part of Domain: $($computerSystem.PartOfDomain)"
-        $config += "OS:             $($os.Caption)"
-        $config += "OS Build:       $($os.BuildNumber)"
-        $config += "Timezone:       $((Get-TimeZone).DisplayName)"
-        $config += "CPU:            $($proc.Name)"
-        $config += "CPU Cores:      $($proc.NumberOfCores) cores / $($proc.NumberOfLogicalProcessors) logical"
-        $config += "Total RAM:      $([math]::Round($computerSystem.TotalPhysicalMemory / 1GB, 1)) GB"
+        $sysInfo = Invoke-WithTimeout -ScriptBlock {
+            @{
+                CS   = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+                OS   = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+                CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+            }
+        } -TimeoutSeconds 15 -Activity "Querying system info"
+        if ($sysInfo.TimedOut) {
+            $config += "(CIM query timed out — system info unavailable)"
+        } else {
+            $computerSystem = $sysInfo.Result.CS
+            $os = $sysInfo.Result.OS
+            $proc = $sysInfo.Result.CPU
+            $config += "Hostname:       $(if ($computerSystem) { $computerSystem.Name } else { $env:COMPUTERNAME })"
+            $config += "Domain:         $(if ($computerSystem) { $computerSystem.Domain } else { 'Unknown' })"
+            $config += "Part of Domain: $(if ($computerSystem) { $computerSystem.PartOfDomain } else { 'Unknown' })"
+            $config += "OS:             $(if ($os) { $os.Caption } else { 'Unknown' })"
+            $config += "OS Build:       $(if ($os) { $os.BuildNumber } else { 'Unknown' })"
+            $config += "Timezone:       $((Get-TimeZone).DisplayName)"
+            $config += "CPU:            $(if ($proc) { $proc.Name } else { 'Unknown' })"
+            $config += "CPU Cores:      $(if ($proc) { "$($proc.NumberOfCores) cores / $($proc.NumberOfLogicalProcessors) logical" } else { 'Unknown' })"
+            $config += "Total RAM:      $(if ($computerSystem) { "$([math]::Round($computerSystem.TotalPhysicalMemory / 1GB, 1)) GB" } else { 'Unknown' })"
+        }
         $config += ""
 
         # Licensing
@@ -338,7 +349,10 @@ function Save-ConfigurationProfile {
     # Gather current configuration
     Write-OutputColor "Gathering current configuration..." -color "Info"
 
-    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $csCim = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Querying computer system"
+    $computerSystem = if ($csCim.TimedOut) { $null } else { $csCim.Result }
     $timezone = Get-TimeZone
     $powerPlan = Get-CurrentPowerPlan
 
@@ -840,7 +854,11 @@ function Import-ConfigurationProfile {
         }
 
         # Domain join (always last among quick tasks - prompts for creds)
-        if ($configProfile.Domain.JoinDomain -and -not (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).PartOfDomain) {
+        $domCim = Invoke-WithTimeout -ScriptBlock {
+            Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        } -TimeoutSeconds 10 -Activity "Checking domain status"
+        $domCs = if ($domCim.TimedOut) { $null } else { $domCim.Result }
+        if ($configProfile.Domain.JoinDomain -and $null -ne $domCs -and -not $domCs.PartOfDomain) {
             Write-OutputColor "  [13/13] Joining domain '$($configProfile.Domain.DomainName)'..." -color "Info"
             Write-OutputColor "        Enter domain credentials:" -color "Info"
             try {
@@ -955,7 +973,10 @@ function Compare-ConfigurationDrift {
     }
 
     # Domain membership
-    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $driftCim = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Checking domain membership"
+    $cs = if ($driftCim.TimedOut) { $null } else { $driftCim.Result }
     if ($savedProfile.Domain -and $savedProfile.Domain.DomainName) {
         $currentDomain = if ($cs.PartOfDomain) { $cs.Domain } else { "(workgroup)" }
         $results["Domain"] = @{

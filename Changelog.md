@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## v1.21.1
+
+- **Robustness:** CIM timeout hardening — 25+ bare `Get-CimInstance` calls wrapped with `Invoke-WithTimeout` to prevent UI hangs when WMI is slow or unresponsive (12-DomainJoin, 19-NTP, 24-DisableAdmin, 25-HyperV, 35-Utilities, 36-BatchConfig, 40-HostStorage, 44-VMDeployment, 45-ConfigExport, 50-EntryPoint, 55-QoLFeatures).
+- **Robustness:** Cache invalidation — 30+ state-changing operations now call `Clear-MenuCache` so menu status stays current after changes (07-IPConfig, 08-VLAN, 10-iSCSI, 11-Hostname, 12-DomainJoin, 13-Timezone, 14-WindowsUpdates, 17-DefenderExclusions, 18-FirewallTemplates, 19-NTP, 20-DiskCleanup, 21-Licensing, 30-ServiceManager, 31-BitLocker, 32-Deduplication, 33-StorageReplica).
+- **UX:** Dashboard pause — 11 utility dashboard/viewer functions now pause with "Press Enter" so output doesn't flash away before the user can read it (35-Utilities: CertExpiry, VSS, EventLog, Uptime, DriverHealth, DiskSpace, WinUpdate, ListeningPorts, ScheduledTasks, FirewallSummary, RebootPending, MemoryDiagnostics).
+- **UX:** Action completion pause — 5 action functions now call `Write-PressEnter` after success/error so results are visible (09-SET, 10-iSCSI, 20-DiskCleanup, 23-LocalAdmin, 37-HealthCheck).
+- **UX:** Domain join now shows a spinner during the `Add-Computer` call with a 2-minute timeout, plus consistent 2-space message indentation (12-DomainJoin).
+- **UX:** Auto-reboot delay reduced from 10 to 5 seconds for faster workflow (50-EntryPoint).
+- **UX:** Device driver scan batches 3 CIM queries into a single call with timeout for faster results (35-Utilities).
+- **Bug Fix:** Null-safe `Get-Content` check before pattern matching in file download validation (39-FileServer).
+- **Bug Fix:** Error message indentation fixes for console box alignment (25-HyperV, 44-VMDeployment).
+- 64 modules, 2196 tests
+
 ## v1.21.0
 
 - **New Feature:** Performance Dashboard Copy to Clipboard — press `[C]` to copy a full system snapshot (CPU, memory, disk, network, top processes) to clipboard for sharing or documentation (28-PerformanceDashboard).

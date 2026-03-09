@@ -295,9 +295,9 @@ function Invoke-RemotePSSession {
         if ($navResult.ShouldReturn) { return }
         if ($useCredential -eq 'Y' -or $useCredential -eq 'y') {
             $cred = Get-Credential -Message "Credentials for $target"
-            Enter-PSSession -ComputerName $target -Credential $cred
+            Enter-PSSession -ComputerName $target -Credential $cred -ErrorAction Stop
         } else {
-            Enter-PSSession -ComputerName $target
+            Enter-PSSession -ComputerName $target -ErrorAction Stop
         }
     }
     catch {
@@ -1378,6 +1378,9 @@ function Show-EditDefaults {
                             Write-OutputColor "  Temp path set to $val" -color "Success"
                         }
                     } else {
+                        if (-not (Test-Path -LiteralPath $val)) {
+                            Write-OutputColor "  Note: Directory does not exist yet. It will be created when needed." -color "Warning"
+                        }
                         $script:TempPath = $val
                         Write-OutputColor "  Temp path set to $val" -color "Success"
                     }

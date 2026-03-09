@@ -50,6 +50,7 @@ function Show-BitLockerManagement {
                     Write-OutputColor "  Reboot required before use." -color "Warning"
                     $global:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Installed BitLocker"
+                    Clear-MenuCache
                 }
                 Write-PressEnter
             }
