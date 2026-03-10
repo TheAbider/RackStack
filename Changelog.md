@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.21.3
+
+- **Bug Fix:** Agent installer failsafe — if company defaults weren't loaded during startup, automatically retry loading when agent installer is accessed. Shows diagnostic info if still misconfigured.
+- 64 modules, 2291 tests
+
 ## v1.21.2
 
 - **Bug Fix:** Company defaults loading — first-run wizard no longer saves built-in defaults that overwrite company values on reload; company defaults files (*.defaults.json) are now properly detected and prompted even when defaults.json already exists (56-OperationsMenu).

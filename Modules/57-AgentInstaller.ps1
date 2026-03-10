@@ -577,6 +577,32 @@ function Install-Agent {
 
     # --- Section: Pre-check - Feature Configuration ---
     if (-not (Test-AgentInstallerConfigured)) {
+        # Safety net: if company defaults exist but weren't loaded, retry now
+        if (-not $script:CompanyDefaultsPath) {
+            $retryFiles = @(Get-CompanyDefaultsFiles)
+            if ($retryFiles.Count -gt 0) {
+                # Company defaults file exists but wasn't loaded — force reload
+                if ($retryFiles.Count -eq 1) {
+                    $script:CompanyDefaultsName = $retryFiles[0].Name
+                    $script:CompanyDefaultsPath = $retryFiles[0].Path
+                } else {
+                    $picked = Show-CompanyDefaultsPicker
+                    if ($null -ne $picked -and $picked -ne "__skip__") {
+                        $script:CompanyDefaultsName = $picked.Name
+                        $script:CompanyDefaultsPath = $picked.Path
+                    }
+                }
+                if ($script:CompanyDefaultsPath) {
+                    Import-Defaults
+                    if (Test-AgentInstallerConfigured) {
+                        # Retry succeeded — continue to agent installer
+                        Install-Agent @PSBoundParameters
+                        return
+                    }
+                }
+            }
+        }
+
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -591,6 +617,12 @@ function Install-Agent {
             Write-OutputColor "  Agent installer has not been customized. Set AgentInstaller.ToolName" -color "Warning"
             Write-OutputColor "  in defaults.json or company defaults to enable this feature." -color "Warning"
         }
+        Write-OutputColor "" -color "Info"
+        # Diagnostic info to help troubleshoot
+        Write-OutputColor "  Debug: ModuleRoot = $script:ModuleRoot" -color "Debug"
+        Write-OutputColor "  Debug: CompanyDefaults = $script:CompanyDefaultsPath" -color "Debug"
+        Write-OutputColor "  Debug: ToolName = $script:AgentInstaller.ToolName" -color "Debug"
+        Write-OutputColor "  Debug: BaseURL = $script:FileServer.BaseURL" -color "Debug"
         Write-OutputColor "" -color "Info"
         Write-PressEnter
         return
