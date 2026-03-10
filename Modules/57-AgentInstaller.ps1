@@ -30,11 +30,22 @@ function Test-AgentInstalled {
         return @{ Installed = $true; Status = $agentService.Status; ServiceName = $agentService.Name }
     }
 
-    # Check configured installation paths
+    # Check configured installation paths (verify actual agent files exist, not just empty dirs)
     foreach ($path in $script:AgentInstaller.InstallPaths) {
         $expandedPath = [Environment]::ExpandEnvironmentVariables($path)
         if (Test-Path -LiteralPath $expandedPath) {
-            return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
+            # Directory: check for executables/DLLs inside (empty or near-empty dirs = uninstalled)
+            if ((Get-Item -LiteralPath $expandedPath) -is [System.IO.DirectoryInfo]) {
+                $agentFiles = Get-ChildItem -LiteralPath $expandedPath -Recurse -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Extension -in '.exe', '.dll', '.sys' } |
+                    Select-Object -First 1
+                if ($agentFiles) {
+                    return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
+                }
+            } else {
+                # Direct file path
+                return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
+            }
         }
     }
 

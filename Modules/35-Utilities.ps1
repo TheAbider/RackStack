@@ -332,13 +332,24 @@ function Install-ScriptUpdate {
         $batchPath = Join-Path $env:TEMP "RackStack_update_$([System.IO.Path]::GetRandomFileName()).cmd"
         $batchContent = @"
 @echo off
-echo Updating RackStack...
-timeout /t 2 /nobreak >nul
-move /y "$tempPath" "$targetPath"
+echo Updating $($script:ToolName)...
+timeout /t 5 /nobreak >nul
+move /y "$tempPath" "$targetPath" >nul 2>&1
 if errorlevel 1 (
-    echo Update failed - file may be in use. Retrying...
-    timeout /t 3 /nobreak >nul
-    move /y "$tempPath" "$targetPath"
+    echo Retry 1 - waiting for file lock to release...
+    timeout /t 5 /nobreak >nul
+    move /y "$tempPath" "$targetPath" >nul 2>&1
+)
+if errorlevel 1 (
+    echo Retry 2 - final attempt...
+    timeout /t 10 /nobreak >nul
+    move /y "$tempPath" "$targetPath" >nul 2>&1
+)
+if errorlevel 1 (
+    echo Update failed - could not replace file.
+    del "$tempPath" >nul 2>&1
+    timeout /t 5 /nobreak >nul
+    goto :eof
 )
 echo Update complete. Restarting...
 start "" "$targetPath"
@@ -375,8 +386,11 @@ del "%~f0"
             Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-            Write-OutputColor "  │$("  Updated to v$remoteVersion! Please restart the tool.".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Updated to v$remoteVersion! Restarting...".PadRight(72))│" -color "Success"
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            Start-Sleep -Seconds 2
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$targetPath`"" -Verb RunAs
+            [Environment]::Exit(0)
         }
         catch {
             # If the running script is locked, save alongside it

@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.21.12
+
+- **Bug Fix:** Agent detection false positive after uninstall — `InstallPaths` check now verifies actual agent executables exist in the directory, not just the directory itself (57-AgentInstaller).
+- **Bug Fix:** Agent installer showed "MSP" instead of configured agent name after loading company defaults — personal defaults.json no longer overwrites company agent config; agent installer resets to factory before each config reload (56-OperationsMenu).
+- **Bug Fix:** Self-update not applying — EXE updater now waits longer for file lock release with 3 retry attempts; PS1 updater auto-restarts instead of requiring manual restart (35-Utilities).
+- **UX:** Company defaults prompt cleaned up — no longer shows confusing `.defaults.json` extension in prompts (56-OperationsMenu).
+- 64 modules, 2291 tests
+
 ## v1.21.11
 
 - **Bug Fix:** Manual "Check for Updates" used stale cached results from startup — now always fetches fresh from GitHub API so newly published releases are detected immediately (35-Utilities).

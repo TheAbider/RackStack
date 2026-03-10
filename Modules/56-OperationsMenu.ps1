@@ -626,6 +626,21 @@ function Import-CompanyDefaults {
 # Import environment defaults from defaults.json (merges with built-in generics)
 function Import-Defaults {
 
+    # Reset agent installer to factory defaults before re-merge (prevents stale config from previous company)
+    $script:AgentInstaller = @{
+        ToolName         = "MSP"
+        FolderName       = "Agents"
+        FilePattern      = ".*\.exe$"
+        ServiceName      = "*Agent*"
+        InstallArgs      = "/s /norestart"
+        InstallPaths     = @()
+        SuccessExitCodes = @(0, 1641, 3010)
+        TimeoutSeconds   = 300
+    }
+    $script:AdditionalAgents = @()
+    $script:AgentInstallerCache = $null
+    $script:AgentInstallerCacheTime = $null
+
     # Check for company defaults files
     $companyFiles = @(Get-CompanyDefaultsFiles)
 
@@ -684,7 +699,7 @@ function Import-Defaults {
             if (-not $companyDefaultsResolved) {
                 if ($companyFiles.Count -eq 1) {
                     $compFile = $companyFiles[0]
-                    if (Confirm-UserAction -Message "Company defaults found: '$($compFile.Name).defaults.json'. Load it?" -DefaultYes) {
+                    if (Confirm-UserAction -Message "Load company defaults '$($compFile.Name)'?" -DefaultYes) {
                         $script:CompanyDefaultsName = $compFile.Name
                         $script:CompanyDefaultsPath = $compFile.Path
                     }
@@ -703,7 +718,7 @@ function Import-Defaults {
             # No defaults.json: offer company defaults
             if ($companyFiles.Count -eq 1) {
                 $compFile = $companyFiles[0]
-                if (Confirm-UserAction -Message "Load company defaults from '$($compFile.Name).defaults.json'?" -DefaultYes) {
+                if (Confirm-UserAction -Message "Load company defaults '$($compFile.Name)'?" -DefaultYes) {
                     $script:CompanyDefaultsName = $compFile.Name
                     $script:CompanyDefaultsPath = $compFile.Path
                 }
@@ -728,6 +743,9 @@ function Import-Defaults {
             $fileDefaults = Get-Content -LiteralPath $script:DefaultsPath -Raw | ConvertFrom-Json
             foreach ($prop in $fileDefaults.PSObject.Properties) {
                 if ($prop.Name -like "_*") { continue }  # Skip metadata fields
+                # When company defaults are active, don't let personal defaults override agent config
+                # (old defaults.json files may have stale AgentInstaller with ToolName="MSP")
+                if ($script:CompanyDefaultsPath -and $prop.Name -in @('AgentInstaller', 'AdditionalAgents')) { continue }
                 if ($null -ne $prop.Value -and $prop.Value -ne "") {
                     # Deep-merge nested objects (FileServer, AgentInstaller, etc.)
                     # so empty sub-properties in personal defaults don't overwrite
