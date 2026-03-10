@@ -131,7 +131,7 @@ function Enable-ServerActivation {
             Start-Sleep -Seconds 2
         }
 
-        Write-OutputColor "Installing product key..." -color "Info"
+        Write-OutputColor "  Installing product key..." -color "Info"
         $ipkResult = cscript.exe //NoLogo "$env:SystemRoot\System32\slmgr.vbs" /ipk "$productKey" 2>&1
         $ipkText = $ipkResult -join ' '
 
@@ -143,8 +143,10 @@ function Enable-ServerActivation {
                 Write-OutputColor "  Verify the key matches your OS edition (Standard/Datacenter/etc.)." -color "Warning"
             } elseif ($ipkText -match "0xC004F069") {
                 Write-OutputColor "  The Software Licensing Service reports that the product SKU is not found." -color "Error"
+                Write-OutputColor "  Verify the key type matches your Windows Server edition." -color "Warning"
             } elseif ($ipkText -match "0x80070005") {
                 Write-OutputColor "  Access denied. Ensure you are running as Administrator." -color "Error"
+                Write-OutputColor "  Tip: Right-click the script and select 'Run as Administrator'." -color "Warning"
             } else {
                 Write-OutputColor "  Detail: $ipkText" -color "Debug"
             }
@@ -184,23 +186,23 @@ function Register-ServerLicense {
 
     # Check current status
     $windowsInfo = Get-WindowsVersionInfo
-    Write-OutputColor "Windows Version: $($windowsInfo.WindowsVersion)" -color "Info"
-    Write-OutputColor "Windows Edition: $($windowsInfo.WindowsEdition)" -color "Info"
-    Write-OutputColor "Build Number: $($windowsInfo.BuildNumber)" -color "Info"
+    Write-OutputColor "  Windows Version: $($windowsInfo.WindowsVersion)" -color "Info"
+    Write-OutputColor "  Windows Edition: $($windowsInfo.WindowsEdition)" -color "Info"
+    Write-OutputColor "  Build Number: $($windowsInfo.BuildNumber)" -color "Info"
 
     # Check if this is Windows Client
     if (-not $windowsInfo.IsServer) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "This is a Windows Client operating system." -color "Warning"
-        Write-OutputColor "Server licensing options (AVMA) are not available for client OS." -color "Warning"
+        Write-OutputColor "  This is a Windows Client operating system." -color "Warning"
+        Write-OutputColor "  Server licensing options (AVMA) are not available for client OS." -color "Warning"
 
         if (Test-ServerActivated) {
-            Write-OutputColor "Windows is already licensed and activated." -color "Success"
+            Write-OutputColor "  Windows is already licensed and activated." -color "Success"
         }
         else {
-            Write-OutputColor "Windows is NOT activated." -color "Warning"
+            Write-OutputColor "  Windows is NOT activated." -color "Warning"
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "To activate Windows Client:" -color "Info"
+            Write-OutputColor "  To activate Windows Client:" -color "Info"
             Write-OutputColor "  1. Go to Settings > System > Activation" -color "Info"
             Write-OutputColor "  2. Or use: slmgr.vbs /ipk <product-key>" -color "Info"
         }
@@ -209,14 +211,14 @@ function Register-ServerLicense {
 
     if (Test-ServerActivated) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Server is already licensed and activated with Microsoft." -color "Success"
+        Write-OutputColor "  Server is already licensed and activated with Microsoft." -color "Success"
         if (-not (Confirm-UserAction -Message "Re-license anyway?")) {
             return
         }
     }
     else {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Server is NOT licensed or in evaluation mode." -color "Warning"
+        Write-OutputColor "  Server is NOT licensed or in evaluation mode." -color "Warning"
     }
 
     # --- Section: Built-in License Key Definitions (KMS + AVMA) ---
@@ -335,7 +337,7 @@ function Register-ServerLicense {
     function Enter-ManualKey {
         $attempts = 0
         while ($attempts -lt $script:MaxRetryAttempts) {
-            Write-OutputColor "Enter product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX):" -color "Info"
+            Write-OutputColor "  Enter product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX):" -color "Info"
             $productKey = Read-Host
 
             # Check for navigation commands
@@ -351,17 +353,17 @@ function Register-ServerLicense {
                 Write-OutputColor "  Invalid product key format. Enter a valid 25-character key." -color "Error"
                 $attempts++
                 if ($attempts -lt $script:MaxRetryAttempts) {
-                    Write-OutputColor "Attempts remaining: $($script:MaxRetryAttempts - $attempts)" -color "Warning"
+                    Write-OutputColor "  Attempts remaining: $($script:MaxRetryAttempts - $attempts)" -color "Warning"
                 }
             }
         }
-        Write-OutputColor "Maximum attempts reached." -color "Error"
+        Write-OutputColor "  Maximum attempts reached." -color "Error"
         return $null
     }
 
     # --- Section: Main Menu - Host vs VM Selection ---
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Are you licensing a Host or a Virtual Machine?" -color "Info"
+    Write-OutputColor "  Are you licensing a Host or a Virtual Machine?" -color "Info"
     Write-OutputColor "1. Host (physical server or Hyper-V host)" -color "Info"
     Write-OutputColor "2. Virtual Machine" -color "Info"
     Write-OutputColor "3. Enter product key manually" -color "Info"
@@ -380,7 +382,7 @@ function Register-ServerLicense {
         "1" {
             # HOST licensing path
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "Host Licensing Options:" -color "Info"
+            Write-OutputColor "  Host Licensing Options:" -color "Info"
             Write-OutputColor "  [1] Use default KMS client key (requires KMS server)" -color "Info"
             Write-OutputColor "  [2] Enter volume license key manually" -color "Info"
             Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -399,12 +401,12 @@ function Register-ServerLicense {
                         $versionKeys = $keys[$windowsInfo.WindowsVersion]
                         if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
                             $productKey = $versionKeys[$windowsInfo.WindowsEdition]
-                            Write-OutputColor "Using KMS client key for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)..." -color "Info"
+                            Write-OutputColor "  Using KMS client key for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)..." -color "Info"
                             Enable-ServerActivation -productKey $productKey
                         }
                         else {
-                            Write-OutputColor "No default key available for $($windowsInfo.WindowsEdition)" -color "Error"
-                            Write-OutputColor "Available editions: $($versionKeys.Keys -join ', ')" -color "Info"
+                            Write-OutputColor "  No default key available for $($windowsInfo.WindowsEdition)" -color "Error"
+                            Write-OutputColor "  Available editions: $($versionKeys.Keys -join ', ')" -color "Info"
                             $productKey = Enter-ManualKey
                             if ($null -ne $productKey) {
                                 Enable-ServerActivation -productKey $productKey
@@ -412,7 +414,7 @@ function Register-ServerLicense {
                         }
                     }
                     else {
-                        Write-OutputColor "No default keys available for $($windowsInfo.WindowsVersion)" -color "Error"
+                        Write-OutputColor "  No default keys available for $($windowsInfo.WindowsVersion)" -color "Error"
                         $productKey = Enter-ManualKey
                         if ($null -ne $productKey) {
                             Enable-ServerActivation -productKey $productKey
@@ -427,7 +429,7 @@ function Register-ServerLicense {
                     }
                 }
                 default {
-                    Write-OutputColor "Returning to main menu." -color "Info"
+                    Write-OutputColor "  Returning to main menu." -color "Info"
                     return
                 }
             }
@@ -435,7 +437,7 @@ function Register-ServerLicense {
         "2" {
             # VIRTUAL MACHINE licensing path
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "Is your Hyper-V host running Windows Server Datacenter edition?" -color "Info"
+            Write-OutputColor "  Is your Hyper-V host running Windows Server Datacenter edition?" -color "Info"
             Write-OutputColor "(Datacenter hosts can automatically activate VMs using AVMA)" -color "Debug"
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  [1] Yes - Host is Datacenter (use AVMA)" -color "Info"
@@ -457,8 +459,8 @@ function Register-ServerLicense {
                         if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
                             $productKey = $versionKeys[$windowsInfo.WindowsEdition]
                             Write-OutputColor "" -color "Info"
-                            Write-OutputColor "AVMA key found for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)" -color "Success"
-                            Write-OutputColor "This VM will automatically activate against the Datacenter host." -color "Info"
+                            Write-OutputColor "  AVMA key found for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)" -color "Success"
+                            Write-OutputColor "  This VM will automatically activate against the Datacenter host." -color "Info"
                             Write-OutputColor "" -color "Info"
 
                             if (Confirm-UserAction -Message "Apply AVMA key?") {
@@ -466,8 +468,8 @@ function Register-ServerLicense {
                             }
                         }
                         else {
-                            Write-OutputColor "No AVMA key available for $($windowsInfo.WindowsEdition)" -color "Error"
-                            Write-OutputColor "Available editions for AVMA: $($versionKeys.Keys -join ', ')" -color "Info"
+                            Write-OutputColor "  No AVMA key available for $($windowsInfo.WindowsEdition)" -color "Error"
+                            Write-OutputColor "  Available editions for AVMA: $($versionKeys.Keys -join ', ')" -color "Info"
                             Write-OutputColor "" -color "Info"
 
                             $manualChoice = Read-Host "Enter key manually? (yes/no)"
@@ -484,8 +486,8 @@ function Register-ServerLicense {
                         }
                     }
                     else {
-                        Write-OutputColor "No AVMA keys available for $($windowsInfo.WindowsVersion)" -color "Error"
-                        Write-OutputColor "AVMA is supported on Server 2012 R2 and later." -color "Info"
+                        Write-OutputColor "  No AVMA keys available for $($windowsInfo.WindowsVersion)" -color "Error"
+                        Write-OutputColor "  AVMA is supported on Server 2012 R2 and later." -color "Info"
                         Write-OutputColor "" -color "Info"
 
                         $manualChoice = Read-Host "Enter key manually? (yes/no)"
@@ -504,7 +506,7 @@ function Register-ServerLicense {
                 "2" {
                     # Host is NOT Datacenter - use regular keys
                     Write-OutputColor "" -color "Info"
-                    Write-OutputColor "VM Licensing Options (non-Datacenter host):" -color "Info"
+                    Write-OutputColor "  VM Licensing Options (non-Datacenter host):" -color "Info"
                     Write-OutputColor "  [1] Use default KMS client key (requires KMS server)" -color "Info"
                     Write-OutputColor "  [2] Enter product key manually" -color "Info"
                     Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -522,11 +524,11 @@ function Register-ServerLicense {
                                 $versionKeys = $keys[$windowsInfo.WindowsVersion]
                                 if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
                                     $productKey = $versionKeys[$windowsInfo.WindowsEdition]
-                                    Write-OutputColor "Using KMS client key for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)..." -color "Info"
+                                    Write-OutputColor "  Using KMS client key for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)..." -color "Info"
                                     Enable-ServerActivation -productKey $productKey
                                 }
                                 else {
-                                    Write-OutputColor "No default key for $($windowsInfo.WindowsEdition)" -color "Error"
+                                    Write-OutputColor "  No default key for $($windowsInfo.WindowsEdition)" -color "Error"
                                     $productKey = Enter-ManualKey
                                     if ($null -ne $productKey) {
                                         Enable-ServerActivation -productKey $productKey
@@ -534,7 +536,7 @@ function Register-ServerLicense {
                                 }
                             }
                             else {
-                                Write-OutputColor "No default keys for $($windowsInfo.WindowsVersion)" -color "Error"
+                                Write-OutputColor "  No default keys for $($windowsInfo.WindowsVersion)" -color "Error"
                                 $productKey = Enter-ManualKey
                                 if ($null -ne $productKey) {
                                     Enable-ServerActivation -productKey $productKey
@@ -548,13 +550,13 @@ function Register-ServerLicense {
                             }
                         }
                         default {
-                            Write-OutputColor "Returning to main menu." -color "Info"
+                            Write-OutputColor "  Returning to main menu." -color "Info"
                             return
                         }
                     }
                 }
                 default {
-                    Write-OutputColor "Returning to main menu." -color "Info"
+                    Write-OutputColor "  Returning to main menu." -color "Info"
                     return
                 }
             }
@@ -567,9 +569,10 @@ function Register-ServerLicense {
             }
         }
         default {
-            Write-OutputColor "Licensing cancelled." -color "Info"
+            Write-OutputColor "  Licensing cancelled." -color "Info"
         }
     }
+    Write-PressEnter
 }
 
 #endregion

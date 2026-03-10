@@ -81,10 +81,15 @@ function Start-DiskCleanup {
             }
             "5" {
                 Write-OutputColor "  Launching Windows Disk Cleanup..." -color "Info"
-                $cleanProc = Start-Process cleanmgr -ArgumentList "/d $($env:SystemDrive.TrimEnd(':'))" -PassThru
-                $null = $cleanProc | Wait-Process -Timeout 600 -ErrorAction SilentlyContinue
-                if (-not $cleanProc.HasExited) {
-                    Write-OutputColor "  Disk Cleanup is still running. Continuing..." -color "Warning"
+                try {
+                    $cleanProc = Start-Process cleanmgr -ArgumentList "/d $($env:SystemDrive.TrimEnd(':'))" -PassThru -ErrorAction Stop
+                    $null = $cleanProc | Wait-Process -Timeout 600 -ErrorAction SilentlyContinue
+                    if (-not $cleanProc.HasExited) {
+                        Write-OutputColor "  Disk Cleanup is still running. Continuing..." -color "Warning"
+                    }
+                }
+                catch {
+                    Write-OutputColor "  Failed to launch Disk Cleanup: $_" -color "Error"
                 }
             }
             "b" { return }

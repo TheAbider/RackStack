@@ -54,7 +54,7 @@ function Enable-HyperVFirewallRules {
             Enable-NetFirewallRule -DisplayGroup $group -ErrorAction Stop
         }
         catch {
-            Write-OutputColor "  Warning: Could not enable '$group' rules (may not exist on this system)" -color "Warning"
+            Write-OutputColor "  Warning: Could not enable '$group' rules: $_" -color "Warning"
             $fwErrors++
         }
     }
@@ -79,7 +79,7 @@ function Enable-ClusterFirewallRules {
         Enable-NetFirewallRule -DisplayGroup "Failover Clusters" -ErrorAction Stop
     }
     catch {
-        Write-OutputColor "  Warning: Could not enable 'Failover Clusters' rules (may not exist)" -color "Warning"
+        Write-OutputColor "  Warning: Could not enable 'Failover Clusters' rules: $_" -color "Warning"
     }
     # Cluster communication ports
     $clusterRules = @(
@@ -114,7 +114,7 @@ function Enable-ReplicaFirewallRules {
     Write-OutputColor "  Enabling Hyper-V Replica firewall rules..." -color "Info"
     foreach ($group in @("Hyper-V Replica HTTP", "Hyper-V Replica HTTPS")) {
         try { Enable-NetFirewallRule -DisplayGroup $group -ErrorAction Stop }
-        catch { Write-OutputColor "  Warning: Could not enable '$group' rules" -color "Warning" }
+        catch { Write-OutputColor "  Warning: Could not enable '$group' rules: $_" -color "Warning" }
     }
     # Replica ports
     foreach ($ruleInfo in @(@{Name="Hyper-V Replica HTTP 80"; Port=80}, @{Name="Hyper-V Replica HTTPS 443"; Port=443})) {
@@ -144,7 +144,7 @@ function Enable-LiveMigrationFirewallRules {
     Write-OutputColor "  Enabling Live Migration firewall rules..." -color "Info"
     foreach ($group in @("Hyper-V", "File and Printer Sharing")) {
         try { Enable-NetFirewallRule -DisplayGroup $group -ErrorAction Stop }
-        catch { Write-OutputColor "  Warning: Could not enable '$group' rules" -color "Warning" }
+        catch { Write-OutputColor "  Warning: Could not enable '$group' rules: $_" -color "Warning" }
     }
     # Live Migration port
     $lmRule = Get-NetFirewallRule -DisplayName "Hyper-V Live Migration" -ErrorAction SilentlyContinue
@@ -169,7 +169,7 @@ function Enable-iSCSIFirewallRules {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Enabling iSCSI firewall rules..." -color "Info"
     try { Enable-NetFirewallRule -DisplayGroup "iSCSI Service" -ErrorAction Stop }
-    catch { Write-OutputColor "  Warning: Could not enable 'iSCSI Service' rules" -color "Warning" }
+    catch { Write-OutputColor "  Warning: Could not enable 'iSCSI Service' rules: $_" -color "Warning" }
     $iscsiRule = Get-NetFirewallRule -DisplayName "iSCSI Target" -ErrorAction SilentlyContinue
     if (-not $iscsiRule) {
         try {
@@ -191,7 +191,7 @@ function Enable-SMBFirewallRules {
     Write-OutputColor "  Enabling SMB/File Sharing firewall rules..." -color "Info"
     foreach ($group in @("File and Printer Sharing", "Netlogon Service")) {
         try { Enable-NetFirewallRule -DisplayGroup $group -ErrorAction Stop }
-        catch { Write-OutputColor "  Warning: Could not enable '$group' rules" -color "Warning" }
+        catch { Write-OutputColor "  Warning: Could not enable '$group' rules: $_" -color "Warning" }
     }
     Write-OutputColor "  SMB/File Sharing firewall rules enabled." -color "Success"
     Add-SessionChange -Category "Security" -Description "Enabled SMB firewall rules"

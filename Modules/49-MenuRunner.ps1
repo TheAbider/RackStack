@@ -371,7 +371,7 @@ function Start-Show-HostNetworkMenu {
         if (Test-RebootPending) {
             Clear-Host
             Write-CenteredOutput "Configure Host Network" -color "Info"
-            Write-OutputColor "A reboot is pending. Please reboot the server and rerun the script." -color "Error"
+            Write-OutputColor "  A reboot is pending. Please reboot the server and rerun the script." -color "Error"
             Write-PressEnter
             return
         }
@@ -380,14 +380,14 @@ function Start-Show-HostNetworkMenu {
         if (-not (Test-HyperVInstalled)) {
             Clear-Host
             Write-CenteredOutput "Configure Host Network" -color "Info"
-            Write-OutputColor "Hyper-V is not installed." -color "Warning"
+            Write-OutputColor "  Hyper-V is not installed." -color "Warning"
 
             if (Confirm-UserAction -Message "Install Hyper-V now?") {
                 $installResult = Install-WindowsFeatureWithTimeout -FeatureName "Hyper-V" -DisplayName "Hyper-V" -IncludeManagementTools
                 if ($installResult.Success) {
                     $global:RebootNeeded = $true
                     Add-SessionChange -Category "Roles" -Description "Installed Hyper-V (reboot required)"
-                    Write-OutputColor "A reboot is required." -color "Warning"
+                    Write-OutputColor "  A reboot is required." -color "Warning"
                 }
                 Write-PressEnter
                 return

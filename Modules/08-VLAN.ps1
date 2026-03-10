@@ -9,13 +9,13 @@ function Set-AdapterVLAN {
 
     Clear-Host
     Write-CenteredOutput "VLAN Configuration" -color "Info"
-    Write-OutputColor "Adapter: $selectedAdapterName" -color "Info"
+    Write-OutputColor "  Adapter: $selectedAdapterName" -color "Info"
 
     # Check if this is a vEthernet adapter (Hyper-V)
     if ($selectedAdapterName -notlike "vEthernet*") {
         Write-OutputColor "`nNote: VLAN tagging on physical adapters varies by manufacturer." -color "Warning"
-        Write-OutputColor "Please configure VLAN via adapter properties or manufacturer tools." -color "Info"
-        Write-OutputColor "This function only works with Hyper-V virtual adapters (vEthernet)." -color "Info"
+        Write-OutputColor "  Please configure VLAN via adapter properties or manufacturer tools." -color "Info"
+        Write-OutputColor "  This function only works with Hyper-V virtual adapters (vEthernet)." -color "Info"
         return
     }
 
@@ -54,7 +54,7 @@ function Set-AdapterVLAN {
 
     if (-not $vmAdapter) {
         Write-OutputColor "`nCould not find Hyper-V adapter matching '$vmAdapterName'" -color "Error"
-        Write-OutputColor "Available Hyper-V management adapters:" -color "Info"
+        Write-OutputColor "  Available Hyper-V management adapters:" -color "Info"
         $allVMAdapters = Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue
         foreach ($a in $allVMAdapters) {
             Write-OutputColor "  - $($a.Name) (Switch: $($a.SwitchName))" -color "Info"
@@ -71,25 +71,25 @@ function Set-AdapterVLAN {
 
         if ($currentVlan) {
             if ($currentVlan.AccessVlanId -gt 0) {
-                Write-OutputColor "Current VLAN ID: $($currentVlan.AccessVlanId) (Access Mode)" -color "Info"
+                Write-OutputColor "  Current VLAN ID: $($currentVlan.AccessVlanId) (Access Mode)" -color "Info"
             }
             elseif ($currentVlan.OperationMode -eq "Trunk") {
-                Write-OutputColor "Current Mode: Trunk (Native VLAN: $($currentVlan.NativeVlanId))" -color "Info"
+                Write-OutputColor "  Current Mode: Trunk (Native VLAN: $($currentVlan.NativeVlanId))" -color "Info"
             }
             else {
-                Write-OutputColor "Current VLAN: Untagged" -color "Info"
+                Write-OutputColor "  Current VLAN: Untagged" -color "Info"
             }
         }
         else {
-            Write-OutputColor "Current VLAN: Untagged" -color "Info"
+            Write-OutputColor "  Current VLAN: Untagged" -color "Info"
         }
     }
     catch {
-        Write-OutputColor "Current VLAN: Unable to determine" -color "Warning"
+        Write-OutputColor "  Current VLAN: Unable to determine" -color "Warning"
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "VLAN Options:" -color "Info"
+    Write-OutputColor "  VLAN Options:" -color "Info"
     Write-OutputColor "1. Set Access VLAN (tag all traffic with VLAN ID)" -color "Info"
     Write-OutputColor "2. Remove VLAN (untagged traffic)" -color "Info"
     Write-OutputColor "3. Cancel" -color "Info"
@@ -144,7 +144,7 @@ function Set-AdapterVLAN {
             try {
                 $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Access -VlanId $vlanId -ErrorAction Stop
-                Write-OutputColor "VLAN $vlanId configured successfully on $selectedAdapterName" -color "Success"
+                Write-OutputColor "  VLAN $vlanId configured successfully on $selectedAdapterName" -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set VLAN $vlanId on $selectedAdapterName"
                 Clear-MenuCache
                 Add-UndoAction -Category "Network" -Description "Set VLAN $vlanId on $selectedAdapterName" -UndoScript {
@@ -157,15 +157,15 @@ function Set-AdapterVLAN {
                 }.GetNewClosure() -UndoParams @{ AdapterName = $vmAdapterName; OldVlanId = $prevVlanId }
             }
             catch {
-                Write-OutputColor "Failed to set VLAN: $_" -color "Error"
-                Write-OutputColor "Tip: Ensure Hyper-V is properly installed and the adapter is a management OS adapter." -color "Warning"
+                Write-OutputColor "  Failed to set VLAN: $_" -color "Error"
+                Write-OutputColor "  Tip: Ensure Hyper-V is properly installed and the adapter is a management OS adapter." -color "Warning"
             }
         }
         "2" {
             try {
                 $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Untagged -ErrorAction Stop
-                Write-OutputColor "VLAN removed. Adapter is now untagged." -color "Success"
+                Write-OutputColor "  VLAN removed. Adapter is now untagged." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Removed VLAN from $selectedAdapterName"
                 Clear-MenuCache
                 if ($prevVlanId -gt 0) {
@@ -176,11 +176,11 @@ function Set-AdapterVLAN {
                 }
             }
             catch {
-                Write-OutputColor "Failed to remove VLAN: $_" -color "Error"
+                Write-OutputColor "  Failed to remove VLAN: $_" -color "Error"
             }
         }
         default {
-            Write-OutputColor "VLAN configuration cancelled." -color "Info"
+            Write-OutputColor "  VLAN configuration cancelled." -color "Info"
         }
     }
 }

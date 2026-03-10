@@ -58,13 +58,13 @@ function Show-AllDisks {
     Clear-Host
     Write-CenteredOutput "Disk Overview" -color "Info"
 
-    Write-OutputColor "Scanning disks..." -color "Info"
+    Write-OutputColor "  Scanning disks..." -color "Info"
     Write-OutputColor "" -color "Info"
 
     $disks = @(Get-Disk -ErrorAction SilentlyContinue | Sort-Object Number)
 
     if ($disks.Count -eq 0) {
-        Write-OutputColor "No disks found." -color "Warning"
+        Write-OutputColor "  No disks found." -color "Warning"
         return
     }
 
@@ -105,7 +105,7 @@ function Show-AllDisks {
 
     Write-OutputColor ("=" * 100) -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Total Disks: $($disks.Count)" -color "Info"
+    Write-OutputColor "  Total Disks: $($disks.Count)" -color "Info"
 }
 
 # Function to display partitions for a specific disk
@@ -120,23 +120,23 @@ function Show-DiskPartitions {
 
     $disk = Get-Disk -Number $DiskNumber -ErrorAction SilentlyContinue
     if (-not $disk) {
-        Write-OutputColor "Disk $DiskNumber not found." -color "Error"
+        Write-OutputColor "  Disk $DiskNumber not found." -color "Error"
         return
     }
 
-    Write-OutputColor "Disk: $($disk.FriendlyName)" -color "Info"
-    Write-OutputColor "Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
-    Write-OutputColor "Partition Style: $($disk.PartitionStyle)" -color "Info"
+    Write-OutputColor "  Disk: $($disk.FriendlyName)" -color "Info"
+    Write-OutputColor "  Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
+    Write-OutputColor "  Partition Style: $($disk.PartitionStyle)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $partitions = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction SilentlyContinue)
 
     if (-not $partitions -or $partitions.Count -eq 0) {
-        Write-OutputColor "No partitions found on this disk." -color "Warning"
+        Write-OutputColor "  No partitions found on this disk." -color "Warning"
 
         if ($disk.PartitionStyle -eq "RAW") {
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "This disk needs to be initialized before partitions can be created." -color "Warning"
+            Write-OutputColor "  This disk needs to be initialized before partitions can be created." -color "Warning"
         }
         return
     }
@@ -177,7 +177,7 @@ function Show-AllVolumes {
     $volumes = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -or $_.FileSystemLabel } | Sort-Object DriveLetter)
 
     if ($volumes.Count -eq 0) {
-        Write-OutputColor "No volumes found." -color "Warning"
+        Write-OutputColor "  No volumes found." -color "Warning"
         return
     }
 
@@ -261,7 +261,7 @@ function Select-Disk {
     }
 
     if ($disks.Count -eq 0) {
-        Write-OutputColor "No eligible disks found." -color "Warning"
+        Write-OutputColor "  No eligible disks found." -color "Warning"
         return $null
     }
 
@@ -302,10 +302,10 @@ function Select-Disk {
             if ($selectedDisk.Number -eq $osDiskNumber -and -not $AllowOSDisk) {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "!!! WARNING: This is your OPERATING SYSTEM disk !!!" -color "Error"
-                Write-OutputColor "Modifying this disk may make your system unbootable!" -color "Error"
+                Write-OutputColor "  Modifying this disk may make your system unbootable!" -color "Error"
                 Write-OutputColor "" -color "Info"
                 if (-not (Confirm-UserAction -Message "Are you SURE you want to select the OS disk?")) {
-                    Write-OutputColor "Selection cancelled." -color "Info"
+                    Write-OutputColor "  Selection cancelled." -color "Info"
                     return $null
                 }
             }
@@ -341,7 +341,7 @@ function Select-Partition {
     }
 
     if (-not $partitions -or $partitions.Count -eq 0) {
-        Write-OutputColor "No eligible partitions found on disk $DiskNumber." -color "Warning"
+        Write-OutputColor "  No eligible partitions found on disk $DiskNumber." -color "Warning"
         Write-OutputColor "(System, Reserved, and Recovery partitions are protected)" -color "Info"
         return $null
     }
@@ -381,8 +381,8 @@ function Initialize-NewDisk {
     Clear-Host
     Write-CenteredOutput "Initialize Disk" -color "Info"
 
-    Write-OutputColor "This will initialize an uninitialized (RAW) disk." -color "Info"
-    Write-OutputColor "Initializing prepares the disk for partitioning." -color "Info"
+    Write-OutputColor "  This will initialize an uninitialized (RAW) disk." -color "Info"
+    Write-OutputColor "  Initializing prepares the disk for partitioning." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Check for offline disks first - they must be brought online before initialization
@@ -418,8 +418,8 @@ function Initialize-NewDisk {
     $rawDisks = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.PartitionStyle -eq "RAW" })
 
     if ($rawDisks.Count -eq 0) {
-        Write-OutputColor "No uninitialized disks found." -color "Warning"
-        Write-OutputColor "All disks are already initialized." -color "Info"
+        Write-OutputColor "  No uninitialized disks found." -color "Warning"
+        Write-OutputColor "  All disks are already initialized." -color "Info"
         return
     }
 
@@ -449,12 +449,12 @@ function Initialize-NewDisk {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
-    Write-OutputColor "Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
+    Write-OutputColor "  Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
+    Write-OutputColor "  Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Ask for partition style
-    Write-OutputColor "Select partition style:" -color "Info"
+    Write-OutputColor "  Select partition style:" -color "Info"
     Write-OutputColor "  [1] GPT (Recommended for disks > 2TB and UEFI systems)" -color "Success"
     Write-OutputColor "  [2] MBR (Legacy, required for some older systems)" -color "Success"
     Write-OutputColor "" -color "Info"
@@ -473,25 +473,25 @@ function Initialize-NewDisk {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "WARNING: This will prepare the disk for use." -color "Warning"
-    Write-OutputColor "Partition Style: $partitionStyle" -color "Info"
+    Write-OutputColor "  WARNING: This will prepare the disk for use." -color "Warning"
+    Write-OutputColor "  Partition Style: $partitionStyle" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Initialize Disk $($disk.Number) as $partitionStyle?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Initializing disk..." -color "Info"
+        Write-OutputColor "  Initializing disk..." -color "Info"
 
         Initialize-Disk -Number $disk.Number -PartitionStyle $partitionStyle -Confirm:$false -ErrorAction Stop
 
-        Write-OutputColor "Disk $($disk.Number) initialized successfully as $partitionStyle!" -color "Success"
+        Write-OutputColor "  Disk $($disk.Number) initialized successfully as $partitionStyle!" -color "Success"
         Add-SessionChange -Category "Storage" -Description "Initialized Disk $($disk.Number) as $partitionStyle"
     }
     catch {
-        Write-OutputColor "Failed to initialize disk: $_" -color "Error"
+        Write-OutputColor "  Failed to initialize disk: $_" -color "Error"
     }
 }
 
@@ -500,7 +500,7 @@ function Set-DiskOnlineStatus {
     Clear-Host
     Write-CenteredOutput "Set Disk Online/Offline" -color "Info"
 
-    Write-OutputColor "This allows you to bring disks online or take them offline." -color "Info"
+    Write-OutputColor "  This allows you to bring disks online or take them offline." -color "Info"
     Write-OutputColor "" -color "Info"
 
     $disk = Select-Disk -Prompt "Select a disk:" -AllowOffline
@@ -510,12 +510,12 @@ function Set-DiskOnlineStatus {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
-    Write-OutputColor "Current Status: $($disk.OperationalStatus)" -color "Info"
+    Write-OutputColor "  Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
+    Write-OutputColor "  Current Status: $($disk.OperationalStatus)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     if ($disk.OperationalStatus -eq "Online") {
-        Write-OutputColor "Options:" -color "Info"
+        Write-OutputColor "  Options:" -color "Info"
         Write-OutputColor "  [1] Take disk OFFLINE" -color "Warning"
         Write-OutputColor "  [2] Cancel" -color "Success"
 
@@ -525,17 +525,17 @@ function Set-DiskOnlineStatus {
 
         if ($choice -eq "1") {
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "WARNING: Taking a disk offline will make it inaccessible!" -color "Warning"
-            Write-OutputColor "Any volumes on this disk will become unavailable." -color "Warning"
+            Write-OutputColor "  WARNING: Taking a disk offline will make it inaccessible!" -color "Warning"
+            Write-OutputColor "  Any volumes on this disk will become unavailable." -color "Warning"
 
             if (-not (Confirm-UserAction -Message "Take Disk $($disk.Number) offline?")) {
-                Write-OutputColor "Operation cancelled." -color "Info"
+                Write-OutputColor "  Operation cancelled." -color "Info"
                 return
             }
 
             try {
                 Set-Disk -Number $disk.Number -IsOffline $true -ErrorAction Stop
-                Write-OutputColor "Disk $($disk.Number) is now OFFLINE." -color "Success"
+                Write-OutputColor "  Disk $($disk.Number) is now OFFLINE." -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Set Disk $($disk.Number) offline"
                 Add-UndoAction -Category "Storage" -Description "Set Disk $($disk.Number) offline" -UndoScript {
                     param($DiskNum)
@@ -543,12 +543,12 @@ function Set-DiskOnlineStatus {
                 }.GetNewClosure() -UndoParams @{ DiskNum = $disk.Number }
             }
             catch {
-                Write-OutputColor "Failed to take disk offline: $_" -color "Error"
+                Write-OutputColor "  Failed to take disk offline: $_" -color "Error"
             }
         }
     }
     else {
-        Write-OutputColor "Options:" -color "Info"
+        Write-OutputColor "  Options:" -color "Info"
         Write-OutputColor "  [1] Bring disk ONLINE" -color "Success"
         Write-OutputColor "  [2] Cancel" -color "Info"
 
@@ -563,7 +563,7 @@ function Set-DiskOnlineStatus {
                 # Also clear read-only if set
                 Set-Disk -Number $disk.Number -IsReadOnly $false -ErrorAction Stop
 
-                Write-OutputColor "Disk $($disk.Number) is now ONLINE." -color "Success"
+                Write-OutputColor "  Disk $($disk.Number) is now ONLINE." -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Set Disk $($disk.Number) online"
                 Add-UndoAction -Category "Storage" -Description "Set Disk $($disk.Number) online" -UndoScript {
                     param($DiskNum)
@@ -571,7 +571,7 @@ function Set-DiskOnlineStatus {
                 }.GetNewClosure() -UndoParams @{ DiskNum = $disk.Number }
             }
             catch {
-                Write-OutputColor "Failed to bring disk online: $_" -color "Error"
+                Write-OutputColor "  Failed to bring disk online: $_" -color "Error"
             }
         }
     }
@@ -584,8 +584,8 @@ function Clear-DiskData {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "!!! WARNING !!!" -color "Error"
-    Write-OutputColor "This will DESTROY ALL DATA on the selected disk!" -color "Error"
-    Write-OutputColor "All partitions and data will be permanently deleted!" -color "Error"
+    Write-OutputColor "  This will DESTROY ALL DATA on the selected disk!" -color "Error"
+    Write-OutputColor "  All partitions and data will be permanently deleted!" -color "Error"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "(OS disk is excluded from selection for safety)" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -601,20 +601,20 @@ function Clear-DiskData {
     $osPartition = Get-Partition -DriveLetter $systemDrive -ErrorAction SilentlyContinue
     if ($osPartition -and $osPartition.DiskNumber -eq $disk.Number) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "BLOCKED: Cannot clear the operating system disk!" -color "Error"
-        Write-OutputColor "This would make your system unbootable." -color "Error"
+        Write-OutputColor "  BLOCKED: Cannot clear the operating system disk!" -color "Error"
+        Write-OutputColor "  This would make your system unbootable." -color "Error"
         return
     }
 
     # Show what will be deleted
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
-    Write-OutputColor "Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
+    Write-OutputColor "  Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
+    Write-OutputColor "  Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $partitions = Get-Partition -DiskNumber $disk.Number -ErrorAction SilentlyContinue
     if ($partitions) {
-        Write-OutputColor "The following partitions will be DELETED:" -color "Warning"
+        Write-OutputColor "  The following partitions will be DELETED:" -color "Warning"
         foreach ($part in $partitions) {
             $driveLetter = if ($part.DriveLetter) { "$($part.DriveLetter):" } else { "No Letter" }
             $typeInfo = if ($part.Type) { " [$($part.Type)]" } else { "" }
@@ -623,36 +623,36 @@ function Clear-DiskData {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "This action CANNOT be undone!" -color "Error"
+    Write-OutputColor "  This action CANNOT be undone!" -color "Error"
     Write-OutputColor "" -color "Info"
 
     # Require explicit confirmation
-    Write-OutputColor "Type 'YES' (all caps) to confirm deletion:" -color "Warning"
+    Write-OutputColor "  Type 'YES' (all caps) to confirm deletion:" -color "Warning"
     $confirmation = (Read-Host).Trim()
 
     if ($confirmation -ne "YES") {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     # Double confirmation for safety
     if (-not (Confirm-UserAction -Message "FINAL WARNING: Clear Disk $($disk.Number)?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Clearing disk..." -color "Info"
+        Write-OutputColor "  Clearing disk..." -color "Info"
 
         Clear-Disk -Number $disk.Number -RemoveData -RemoveOEM -Confirm:$false -ErrorAction Stop
 
-        Write-OutputColor "Disk $($disk.Number) cleared successfully!" -color "Success"
-        Write-OutputColor "The disk is now uninitialized and ready to be set up fresh." -color "Info"
+        Write-OutputColor "  Disk $($disk.Number) cleared successfully!" -color "Success"
+        Write-OutputColor "  The disk is now uninitialized and ready to be set up fresh." -color "Info"
         Add-SessionChange -Category "Storage" -Description "Cleared all data from Disk $($disk.Number)"
     }
     catch {
-        Write-OutputColor "Failed to clear disk: $_" -color "Error"
+        Write-OutputColor "  Failed to clear disk: $_" -color "Error"
     }
 }
 
@@ -661,7 +661,7 @@ function New-DiskPartition {
     Clear-Host
     Write-CenteredOutput "Create New Partition" -color "Info"
 
-    Write-OutputColor "This will create a new partition on a disk." -color "Info"
+    Write-OutputColor "  This will create a new partition on a disk." -color "Info"
     Write-OutputColor "" -color "Info"
 
     $disk = Select-Disk -Prompt "Select a disk:" -OnlyInitialized
@@ -678,19 +678,19 @@ function New-DiskPartition {
     $unallocated = $disk.Size - $usedSpace
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
-    Write-OutputColor "Total Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
-    Write-OutputColor "Unallocated Space: $(Format-ByteSize -Bytes $unallocated)" -color "Info"
+    Write-OutputColor "  Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
+    Write-OutputColor "  Total Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
+    Write-OutputColor "  Unallocated Space: $(Format-ByteSize -Bytes $unallocated)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     if ($unallocated -lt 1MB) {
-        Write-OutputColor "No unallocated space available on this disk." -color "Warning"
-        Write-OutputColor "You may need to shrink or delete an existing partition first." -color "Info"
+        Write-OutputColor "  No unallocated space available on this disk." -color "Warning"
+        Write-OutputColor "  You may need to shrink or delete an existing partition first." -color "Info"
         return
     }
 
     # Ask for partition size
-    Write-OutputColor "Enter partition size:" -color "Info"
+    Write-OutputColor "  Enter partition size:" -color "Info"
     Write-OutputColor "  - Examples: '100', '100GB', '2TB', '500MB', 'MAX'" -color "Info"
     Write-OutputColor "  - Plain number defaults to GB (e.g., '100' = 100 GB)" -color "Info"
     Write-OutputColor "  - Enter 'MAX' to use all available space" -color "Info"
@@ -726,13 +726,13 @@ function New-DiskPartition {
                 $useMax = $true
                 $partitionSize = $unallocated
             } else {
-                Write-OutputColor "Requested size ($(Format-ByteSize -Bytes $partitionSize)) exceeds available space." -color "Warning"
-                Write-OutputColor "Maximum available: $(Format-ByteSize -Bytes $unallocated)" -color "Info"
+                Write-OutputColor "  Requested size ($(Format-ByteSize -Bytes $partitionSize)) exceeds available space." -color "Warning"
+                Write-OutputColor "  Maximum available: $(Format-ByteSize -Bytes $unallocated)" -color "Info"
                 return
             }
         }
         if ($partitionSize -lt 1MB) {
-            Write-OutputColor "Partition size must be at least 1 MB." -color "Warning"
+            Write-OutputColor "  Partition size must be at least 1 MB." -color "Warning"
             return
         }
     }
@@ -742,7 +742,7 @@ function New-DiskPartition {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Partition size: $(Format-ByteSize -Bytes $partitionSize)" -color "Info"
+    Write-OutputColor "  Partition size: $(Format-ByteSize -Bytes $partitionSize)" -color "Info"
 
     # Ask for drive letter using smart picker
     Write-OutputColor "" -color "Info"
@@ -750,13 +750,13 @@ function New-DiskPartition {
     $assignDriveLetter = $null -ne $driveLetter
 
     if (-not (Confirm-UserAction -Message "Create partition on Disk $($disk.Number)?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Creating partition..." -color "Info"
+        Write-OutputColor "  Creating partition..." -color "Info"
 
         if ($useMax) {
             $newPartition = New-Partition -DiskNumber $disk.Number -UseMaximumSize -ErrorAction Stop
@@ -767,7 +767,7 @@ function New-DiskPartition {
 
         $driveAssigned = $false
         if ($assignDriveLetter -and $driveLetter) {
-            Write-OutputColor "Assigning drive letter $driveLetter..." -color "Info"
+            Write-OutputColor "  Assigning drive letter $driveLetter..." -color "Info"
             try {
                 Set-Partition -DiskNumber $disk.Number -PartitionNumber $newPartition.PartitionNumber -NewDriveLetter $driveLetter -ErrorAction Stop
                 $driveAssigned = $true
@@ -777,18 +777,18 @@ function New-DiskPartition {
         }
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Partition created successfully!" -color "Success"
-        Write-OutputColor "Partition Number: $($newPartition.PartitionNumber)" -color "Info"
+        Write-OutputColor "  Partition created successfully!" -color "Success"
+        Write-OutputColor "  Partition Number: $($newPartition.PartitionNumber)" -color "Info"
         if ($driveAssigned) {
-            Write-OutputColor "Drive Letter: $driveLetter" -color "Info"
+            Write-OutputColor "  Drive Letter: $driveLetter" -color "Info"
         }
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Note: The partition is not yet formatted. Use 'Format Volume' to format it." -color "Warning"
+        Write-OutputColor "  Note: The partition is not yet formatted. Use 'Format Volume' to format it." -color "Warning"
 
         Add-SessionChange -Category "Storage" -Description "Created partition on Disk $($disk.Number)"
     }
     catch {
-        Write-OutputColor "Failed to create partition: $_" -color "Error"
+        Write-OutputColor "  Failed to create partition: $_" -color "Error"
     }
 }
 
@@ -798,7 +798,7 @@ function Remove-DiskPartition {
     Write-CenteredOutput "Delete Partition" -color "Info"
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "WARNING: This will delete a partition and ALL DATA on it!" -color "Warning"
+    Write-OutputColor "  WARNING: This will delete a partition and ALL DATA on it!" -color "Warning"
     Write-OutputColor "" -color "Info"
 
     $disk = Select-Disk -Prompt "Select a disk:" -OnlyInitialized
@@ -819,40 +819,40 @@ function Remove-DiskPartition {
     if ($partition.Type -eq "System" -or $partition.Type -eq "Reserved" -or $partition.IsBoot) {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "!!! DANGER !!!" -color "Error"
-        Write-OutputColor "This appears to be a system/boot partition!" -color "Error"
-        Write-OutputColor "Deleting it may make your system unbootable!" -color "Error"
+        Write-OutputColor "  This appears to be a system/boot partition!" -color "Error"
+        Write-OutputColor "  Deleting it may make your system unbootable!" -color "Error"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Are you ABSOLUTELY SURE?" -color "Error"
+        Write-OutputColor "  Are you ABSOLUTELY SURE?" -color "Error"
     }
 
     $driveLetter = if ($partition.DriveLetter) { "$($partition.DriveLetter):" } else { "No Letter" }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Partition $($partition.PartitionNumber) on Disk $($disk.Number)" -color "Info"
-    Write-OutputColor "Drive Letter: $driveLetter" -color "Info"
-    Write-OutputColor "Size: $(Format-ByteSize -Bytes $partition.Size)" -color "Info"
-    Write-OutputColor "Type: $($partition.Type)" -color "Info"
+    Write-OutputColor "  Selected: Partition $($partition.PartitionNumber) on Disk $($disk.Number)" -color "Info"
+    Write-OutputColor "  Drive Letter: $driveLetter" -color "Info"
+    Write-OutputColor "  Size: $(Format-ByteSize -Bytes $partition.Size)" -color "Info"
+    Write-OutputColor "  Type: $($partition.Type)" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "Type 'DELETE' (all caps) to confirm:" -color "Warning"
+    Write-OutputColor "  Type 'DELETE' (all caps) to confirm:" -color "Warning"
     $confirmation = (Read-Host).Trim()
 
     if ($confirmation -ne "DELETE") {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Deleting partition..." -color "Info"
+        Write-OutputColor "  Deleting partition..." -color "Info"
 
         Remove-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber -Confirm:$false -ErrorAction Stop
 
-        Write-OutputColor "Partition deleted successfully!" -color "Success"
+        Write-OutputColor "  Partition deleted successfully!" -color "Success"
         Add-SessionChange -Category "Storage" -Description "Deleted Partition $($partition.PartitionNumber) from Disk $($disk.Number)"
     }
     catch {
-        Write-OutputColor "Failed to delete partition: $_" -color "Error"
+        Write-OutputColor "  Failed to delete partition: $_" -color "Error"
     }
 }
 
@@ -862,7 +862,7 @@ function Format-DiskVolume {
     Write-CenteredOutput "Format Volume" -color "Info"
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "WARNING: Formatting will ERASE ALL DATA on the volume!" -color "Warning"
+    Write-OutputColor "  WARNING: Formatting will ERASE ALL DATA on the volume!" -color "Warning"
     Write-OutputColor "" -color "Info"
 
     $disk = Select-Disk -Prompt "Select a disk:" -OnlyInitialized
@@ -882,15 +882,15 @@ function Format-DiskVolume {
     $driveLetter = if ($partition.DriveLetter) { "$($partition.DriveLetter):" } else { $null }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Partition $($partition.PartitionNumber) on Disk $($disk.Number)" -color "Info"
+    Write-OutputColor "  Selected: Partition $($partition.PartitionNumber) on Disk $($disk.Number)" -color "Info"
     if ($driveLetter) {
-        Write-OutputColor "Drive Letter: $driveLetter" -color "Info"
+        Write-OutputColor "  Drive Letter: $driveLetter" -color "Info"
     }
-    Write-OutputColor "Size: $(Format-ByteSize -Bytes $partition.Size)" -color "Info"
+    Write-OutputColor "  Size: $(Format-ByteSize -Bytes $partition.Size)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Select file system
-    Write-OutputColor "Select file system:" -color "Info"
+    Write-OutputColor "  Select file system:" -color "Info"
     Write-OutputColor "  [1] NTFS (Recommended for Windows)" -color "Success"
     Write-OutputColor "  [2] ReFS (Resilient File System - for data volumes)" -color "Success"
     Write-OutputColor "  [3] exFAT (For USB drives/cross-platform)" -color "Success"
@@ -914,7 +914,7 @@ function Format-DiskVolume {
     $allocationUnitSize = $null
     if ($fileSystem -eq "NTFS" -or $fileSystem -eq "ReFS") {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Select allocation unit size:" -color "Info"
+        Write-OutputColor "  Select allocation unit size:" -color "Info"
         Write-OutputColor "  [1] Default (Recommended - auto-selected based on volume size)" -color "Success"
         Write-OutputColor "  [2] 4 KB  (Best for small files)" -color "Success"
         Write-OutputColor "  [3] 8 KB" -color "Success"
@@ -946,7 +946,7 @@ function Format-DiskVolume {
 
     # Ask for volume label
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter volume label (or press Enter for no label):" -color "Info"
+    Write-OutputColor "  Enter volume label (or press Enter for no label):" -color "Info"
     $volumeLabel = Read-Host "Label"
     $navResult = Test-NavigationCommand -UserInput $volumeLabel
     if ($navResult.ShouldReturn) { return }
@@ -965,7 +965,7 @@ function Format-DiskVolume {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Format Summary:" -color "Info"
+    Write-OutputColor "  Format Summary:" -color "Info"
     Write-OutputColor "  File System: $fileSystem" -color "Info"
     if ($allocationUnitSize) {
         Write-OutputColor "  Allocation Unit: $(Format-ByteSize -Bytes $allocationUnitSize)" -color "Info"
@@ -977,17 +977,17 @@ function Format-DiskVolume {
     Write-OutputColor "  Quick Format: $(if ($quickFormat) { 'Yes' } else { 'No (Full format - takes longer)' })" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "Type 'FORMAT' (all caps) to confirm:" -color "Warning"
+    Write-OutputColor "  Type 'FORMAT' (all caps) to confirm:" -color "Warning"
     $confirmation = (Read-Host).Trim()
 
     if ($confirmation -ne "FORMAT") {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Formatting volume..." -color "Info"
+        Write-OutputColor "  Formatting volume..." -color "Info"
 
         # Assign drive letter first if needed
         if ($newDriveLetter) {
@@ -1031,16 +1031,16 @@ function Format-DiskVolume {
         $null = Format-Volume @formatParams
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Volume formatted successfully!" -color "Success"
-        Write-OutputColor "File System: $fileSystem" -color "Info"
+        Write-OutputColor "  Volume formatted successfully!" -color "Success"
+        Write-OutputColor "  File System: $fileSystem" -color "Info"
         if ($driveLetter) {
-            Write-OutputColor "Drive Letter: $driveLetter" -color "Info"
+            Write-OutputColor "  Drive Letter: $driveLetter" -color "Info"
         }
 
         Add-SessionChange -Category "Storage" -Description "Formatted Partition $($partition.PartitionNumber) on Disk $($disk.Number) as $fileSystem"
     }
     catch {
-        Write-OutputColor "Failed to format volume: $_" -color "Error"
+        Write-OutputColor "  Failed to format volume: $_" -color "Error"
     }
 }
 
@@ -1049,7 +1049,7 @@ function Expand-DiskVolume {
     Clear-Host
     Write-CenteredOutput "Extend Volume" -color "Info"
 
-    Write-OutputColor "This extends a volume to use unallocated space on the disk." -color "Info"
+    Write-OutputColor "  This extends a volume to use unallocated space on the disk." -color "Info"
     Write-OutputColor "" -color "Info"
 
     $disk = Select-Disk -Prompt "Select a disk:" -OnlyInitialized
@@ -1071,21 +1071,21 @@ function Expand-DiskVolume {
 
     if (-not $maxSize -or $maxSize.SizeMax -le $partition.Size) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "No additional space available to extend this partition." -color "Warning"
-        Write-OutputColor "The unallocated space must be immediately after this partition." -color "Info"
+        Write-OutputColor "  No additional space available to extend this partition." -color "Warning"
+        Write-OutputColor "  The unallocated space must be immediately after this partition." -color "Info"
         return
     }
 
     $availableExtend = $maxSize.SizeMax - $partition.Size
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Partition $($partition.PartitionNumber)" -color "Info"
-    Write-OutputColor "Current Size: $(Format-ByteSize -Bytes $partition.Size)" -color "Info"
-    Write-OutputColor "Maximum Size: $(Format-ByteSize -Bytes $maxSize.SizeMax)" -color "Info"
-    Write-OutputColor "Available to Add: $(Format-ByteSize -Bytes $availableExtend)" -color "Success"
+    Write-OutputColor "  Selected: Partition $($partition.PartitionNumber)" -color "Info"
+    Write-OutputColor "  Current Size: $(Format-ByteSize -Bytes $partition.Size)" -color "Info"
+    Write-OutputColor "  Maximum Size: $(Format-ByteSize -Bytes $maxSize.SizeMax)" -color "Info"
+    Write-OutputColor "  Available to Add: $(Format-ByteSize -Bytes $availableExtend)" -color "Success"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "Enter size to add:" -color "Info"
+    Write-OutputColor "  Enter size to add:" -color "Info"
     Write-OutputColor "  - Examples: '50', '50GB', '1TB', '500MB', 'MAX'" -color "Info"
     Write-OutputColor "  - Plain number defaults to GB" -color "Info"
     Write-OutputColor "  - Enter 'MAX' to use all available space" -color "Info"
@@ -1116,8 +1116,8 @@ function Expand-DiskVolume {
         $newSize = $partition.Size + $addSize
 
         if ($newSize -gt $maxSize.SizeMax) {
-            Write-OutputColor "Requested size ($(Format-ByteSize -Bytes $addSize)) exceeds available space." -color "Warning"
-            Write-OutputColor "Maximum you can add: $(Format-ByteSize -Bytes $availableExtend)" -color "Info"
+            Write-OutputColor "  Requested size ($(Format-ByteSize -Bytes $addSize)) exceeds available space." -color "Warning"
+            Write-OutputColor "  Maximum you can add: $(Format-ByteSize -Bytes $availableExtend)" -color "Info"
             return
         }
     }
@@ -1127,26 +1127,26 @@ function Expand-DiskVolume {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "New partition size will be: $(Format-ByteSize -Bytes $newSize)" -color "Info"
+    Write-OutputColor "  New partition size will be: $(Format-ByteSize -Bytes $newSize)" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Extend partition?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Extending partition..." -color "Info"
+        Write-OutputColor "  Extending partition..." -color "Info"
 
         Resize-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber -Size $newSize -ErrorAction Stop
 
-        Write-OutputColor "Partition extended successfully!" -color "Success"
-        Write-OutputColor "New Size: $(Format-ByteSize -Bytes $newSize)" -color "Info"
+        Write-OutputColor "  Partition extended successfully!" -color "Success"
+        Write-OutputColor "  New Size: $(Format-ByteSize -Bytes $newSize)" -color "Info"
 
         Add-SessionChange -Category "Storage" -Description "Extended Partition $($partition.PartitionNumber) on Disk $($disk.Number) to $(Format-ByteSize -Bytes $newSize)"
     }
     catch {
-        Write-OutputColor "Failed to extend partition: $_" -color "Error"
+        Write-OutputColor "  Failed to extend partition: $_" -color "Error"
     }
 }
 
@@ -1155,7 +1155,7 @@ function Compress-DiskVolume {
     Clear-Host
     Write-CenteredOutput "Shrink Volume" -color "Info"
 
-    Write-OutputColor "This shrinks a volume to create unallocated space." -color "Info"
+    Write-OutputColor "  This shrinks a volume to create unallocated space." -color "Info"
     Write-OutputColor "" -color "Info"
 
     $disk = Select-Disk -Prompt "Select a disk:" -OnlyInitialized
@@ -1176,7 +1176,7 @@ function Compress-DiskVolume {
     $sizeInfo = $partition | Get-PartitionSupportedSize -ErrorAction SilentlyContinue
 
     if (-not $sizeInfo) {
-        Write-OutputColor "Unable to determine shrink limits for this partition." -color "Error"
+        Write-OutputColor "  Unable to determine shrink limits for this partition." -color "Error"
         return
     }
 
@@ -1186,19 +1186,19 @@ function Compress-DiskVolume {
 
     if ($maxShrink -lt 1MB) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "This partition cannot be shrunk." -color "Warning"
-        Write-OutputColor "There is not enough free space on the volume." -color "Info"
+        Write-OutputColor "  This partition cannot be shrunk." -color "Warning"
+        Write-OutputColor "  There is not enough free space on the volume." -color "Info"
         return
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: Partition $($partition.PartitionNumber)" -color "Info"
-    Write-OutputColor "Current Size: $(Format-ByteSize -Bytes $currentSize)" -color "Info"
-    Write-OutputColor "Minimum Size: $(Format-ByteSize -Bytes $minSize)" -color "Info"
-    Write-OutputColor "Maximum Shrink: $(Format-ByteSize -Bytes $maxShrink)" -color "Success"
+    Write-OutputColor "  Selected: Partition $($partition.PartitionNumber)" -color "Info"
+    Write-OutputColor "  Current Size: $(Format-ByteSize -Bytes $currentSize)" -color "Info"
+    Write-OutputColor "  Minimum Size: $(Format-ByteSize -Bytes $minSize)" -color "Info"
+    Write-OutputColor "  Maximum Shrink: $(Format-ByteSize -Bytes $maxShrink)" -color "Success"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "Enter amount to shrink by:" -color "Info"
+    Write-OutputColor "  Enter amount to shrink by:" -color "Info"
     Write-OutputColor "  Examples: '50', '50GB', '1TB', '500MB'" -color "Info"
     Write-OutputColor "  Plain number defaults to GB" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -1226,36 +1226,36 @@ function Compress-DiskVolume {
     }
 
     if ($shrinkAmount -gt $maxShrink) {
-        Write-OutputColor "Cannot shrink by that amount." -color "Warning"
-        Write-OutputColor "Maximum shrink: $(Format-ByteSize -Bytes $maxShrink)" -color "Info"
+        Write-OutputColor "  Cannot shrink by that amount." -color "Warning"
+        Write-OutputColor "  Maximum shrink: $(Format-ByteSize -Bytes $maxShrink)" -color "Info"
         return
     }
 
     $newSize = $currentSize - $shrinkAmount
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "New partition size will be: $(Format-ByteSize -Bytes $newSize)" -color "Info"
-    Write-OutputColor "This will free up: $(Format-ByteSize -Bytes $shrinkAmount) of space" -color "Info"
+    Write-OutputColor "  New partition size will be: $(Format-ByteSize -Bytes $newSize)" -color "Info"
+    Write-OutputColor "  This will free up: $(Format-ByteSize -Bytes $shrinkAmount) of space" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Shrink partition?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Shrinking partition..." -color "Info"
+        Write-OutputColor "  Shrinking partition..." -color "Info"
 
         Resize-Partition -DiskNumber $disk.Number -PartitionNumber $partition.PartitionNumber -Size $newSize -ErrorAction Stop
 
-        Write-OutputColor "Partition shrunk successfully!" -color "Success"
-        Write-OutputColor "New Size: $(Format-ByteSize -Bytes $newSize)" -color "Info"
-        Write-OutputColor "Freed Space: $(Format-ByteSize -Bytes $shrinkAmount)" -color "Info"
+        Write-OutputColor "  Partition shrunk successfully!" -color "Success"
+        Write-OutputColor "  New Size: $(Format-ByteSize -Bytes $newSize)" -color "Info"
+        Write-OutputColor "  Freed Space: $(Format-ByteSize -Bytes $shrinkAmount)" -color "Info"
 
         Add-SessionChange -Category "Storage" -Description "Shrunk Partition $($partition.PartitionNumber) on Disk $($disk.Number) by $(Format-ByteSize -Bytes $shrinkAmount)"
     }
     catch {
-        Write-OutputColor "Failed to shrink partition: $_" -color "Error"
+        Write-OutputColor "  Failed to shrink partition: $_" -color "Error"
     }
 }
 
@@ -1473,7 +1473,7 @@ function Set-VolumeDriveLetter {
     Clear-Host
     Write-CenteredOutput "Change Drive Letter" -color "Info"
 
-    Write-OutputColor "This changes or assigns a drive letter to any volume (including CD/DVD)." -color "Info"
+    Write-OutputColor "  This changes or assigns a drive letter to any volume (including CD/DVD)." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Show all volumes with drive letters (including CD/DVD)
@@ -1667,18 +1667,18 @@ function Set-VolumeLabel {
     Clear-Host
     Write-CenteredOutput "Change Volume Label" -color "Info"
 
-    Write-OutputColor "This changes the label (name) of a volume." -color "Info"
+    Write-OutputColor "  This changes the label (name) of a volume." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Show volumes with drive letters
     $volumes = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | Sort-Object DriveLetter)
 
     if ($volumes.Count -eq 0) {
-        Write-OutputColor "No volumes with drive letters found." -color "Warning"
+        Write-OutputColor "  No volumes with drive letters found." -color "Warning"
         return
     }
 
-    Write-OutputColor "Available volumes:" -color "Info"
+    Write-OutputColor "  Available volumes:" -color "Info"
     Write-OutputColor "" -color "Info"
 
     foreach ($vol in $volumes) {
@@ -1703,18 +1703,18 @@ function Set-VolumeLabel {
     $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
 
     if (-not $volume) {
-        Write-OutputColor "Volume not found." -color "Error"
+        Write-OutputColor "  Volume not found." -color "Error"
         return
     }
 
     $currentLabel = if ($volume.FileSystemLabel) { $volume.FileSystemLabel } else { "(No Label)" }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: $driveLetter`:" -color "Info"
-    Write-OutputColor "Current Label: $currentLabel" -color "Info"
+    Write-OutputColor "  Selected: $driveLetter`:" -color "Info"
+    Write-OutputColor "  Current Label: $currentLabel" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "Enter new label (or press Enter to clear label):" -color "Info"
+    Write-OutputColor "  Enter new label (or press Enter to clear label):" -color "Info"
     $newLabel = (Read-Host "New label").Trim()
 
     $navResult = Test-NavigationCommand -UserInput $newLabel
@@ -1724,16 +1724,16 @@ function Set-VolumeLabel {
         Set-Volume -DriveLetter $driveLetter -NewFileSystemLabel $newLabel -ErrorAction Stop
 
         if ($newLabel) {
-            Write-OutputColor "Volume label changed to '$newLabel' successfully!" -color "Success"
+            Write-OutputColor "  Volume label changed to '$newLabel' successfully!" -color "Success"
         }
         else {
-            Write-OutputColor "Volume label cleared successfully!" -color "Success"
+            Write-OutputColor "  Volume label cleared successfully!" -color "Success"
         }
 
         Add-SessionChange -Category "Storage" -Description "Changed label of $driveLetter`: to '$newLabel'"
     }
     catch {
-        Write-OutputColor "Failed to change volume label: $_" -color "Error"
+        Write-OutputColor "  Failed to change volume label: $_" -color "Error"
     }
 }
 

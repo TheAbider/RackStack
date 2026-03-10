@@ -21,7 +21,9 @@ function Show-MainMenu {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(' '.PadRight(72))║" -color "Info"
-    Write-OutputColor "  ║$(("     $($script:ToolFullName.ToUpper()) v" + $script:ScriptVersion).PadRight(72))║" -color "Info"
+    $mainTitle = "     $($script:ToolFullName.ToUpper()) v" + $script:ScriptVersion
+    if ($mainTitle.Length -gt 72) { $mainTitle = $mainTitle.Substring(0, 69) + "..." }
+    Write-OutputColor "  ║$($mainTitle.PadRight(72))║" -color "Info"
     Write-OutputColor "  ║$(' '.PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -32,7 +34,7 @@ function Show-MainMenu {
         $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
         if ($os) {
             $caption = $os.Caption -replace 'Microsoft ', ''
-            $uptime = (Get-Date) - $os.LastBootUpTime
+            $uptime = [DateTime]::UtcNow - $os.LastBootUpTime.ToUniversalTime()
             @{
                 Caption = $caption
                 Uptime  = "$($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m"
@@ -188,11 +190,13 @@ function Show-ConfigureServerMenu {
     Write-MenuItem "[1]  Network Configuration ►"
     Write-OutputColor "  │$("        IP, SET Teaming, Storage/SAN, VLAN".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-    Write-MenuItem "[2]  System Configuration â–º" -Status $sysSummary -StatusColor $sysColor
+    Write-MenuItem "[2]  System Configuration ►" -Status $sysSummary -StatusColor $sysColor
     Write-OutputColor "  │$("        Hostname, Domain, DCPromo, Timezone, Updates, License".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[3]  Roles & Features ►" -Status $rolesSummary -StatusColor $rolesColor
-    Write-OutputColor "  │$(("        Hyper-V, MPIO, Failover Clustering, $($script:AgentInstaller.ToolName)").PadRight(72))│" -color "Info"
+    $rolesDesc = "        Hyper-V, MPIO, Failover Clustering, $($script:AgentInstaller.ToolName)"
+    if ($rolesDesc.Length -gt 72) { $rolesDesc = $rolesDesc.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($rolesDesc.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[4]  Security & Access ►" -Status $secSummary -StatusColor $secColor
     Write-OutputColor "  │$("        RDP, WinRM, Firewall, Admin Accounts, Defender".PadRight(72))│" -color "Info"
@@ -222,7 +226,9 @@ function Show-ConfigureServerMenu {
     Write-OutputColor "  │$("  QUICK ACTIONS".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[Q]  Quick Setup Wizard"
-    Write-OutputColor "  │$(("        Guided: Hostname, Domain, $($script:AgentInstaller.ToolName), RDP, Power, License").PadRight(72))│" -color "Info"
+    $quickDesc = "        Guided: Hostname, Domain, $($script:AgentInstaller.ToolName), RDP, Power, License"
+    if ($quickDesc.Length -gt 72) { $quickDesc = $quickDesc.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($quickDesc.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[8]  System Health Check"
     Write-MenuItem "[9]  Test Network Connectivity"

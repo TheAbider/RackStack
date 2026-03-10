@@ -92,8 +92,15 @@ function Remove-OldTranscripts {
 # Function to ensure the script is running with elevated privileges
 function Assert-Elevation {
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-OutputColor "This script requires administrative privileges. Restarting with elevation..." -color "Error"
-        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+        Write-OutputColor "  This script requires administrative privileges. Restarting with elevation..." -color "Error"
+        try {
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -ErrorAction Stop
+        }
+        catch {
+            Write-OutputColor "  Failed to elevate: $_" -color "Error"
+            Write-OutputColor "  Please right-click and 'Run as Administrator'." -color "Warning"
+            Read-Host "  Press Enter to exit"
+        }
         [Environment]::Exit(0)
     }
     else {
@@ -109,7 +116,7 @@ function Assert-Elevation {
         # Clean up old transcripts (older than 30 days)
         Remove-OldTranscripts -DaysToKeep 30
 
-        Write-OutputColor "Script is running with elevated privileges." -color "Success"
+        Write-OutputColor "  Script is running with elevated privileges." -color "Success"
 
         # Check for session to restore (v2.8.0)
         $null = Restore-SessionState
@@ -1453,7 +1460,7 @@ function Start-BatchMode {
 
     # Auto-reboot if needed and configured
     if ($global:RebootNeeded -and $Config.AutoReboot) {
-        Write-OutputColor "Rebooting in 5 seconds... (Ctrl+C to cancel)" -color "Warning"
+        Write-OutputColor "  Rebooting in 5 seconds... (Ctrl+C to cancel)" -color "Warning"
         Start-Sleep -Seconds 5
         Restart-Computer -Force
     }
@@ -1471,7 +1478,7 @@ if ($script:ScriptPath) {
         # Verify elevation before batch mode
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         if (-not $isAdmin) {
-            Write-Host "ERROR: Batch mode requires administrator privileges." -ForegroundColor Red
+            Write-OutputColor "  ERROR: Batch mode requires administrator privileges." -color "Error"
             [Environment]::Exit(1)
         }
         try {
@@ -1482,7 +1489,8 @@ if ($script:ScriptPath) {
             [Environment]::Exit(0)
         }
         catch {
-            Write-OutputColor "Failed to load batch config: $_" -color "Error"
+            Write-OutputColor "  Failed to load batch config: $_" -color "Error"
+            [Environment]::Exit(1)
         }
     }
 }

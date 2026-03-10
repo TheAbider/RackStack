@@ -40,7 +40,7 @@ function Get-IPAddressAndSubnet {
     if ($navResult.ShouldReturn) { return $null }
 
     if ([string]::IsNullOrWhiteSpace($ipInput)) {
-        Write-OutputColor "No IP address entered." -color "Error"
+        Write-OutputColor "  No IP address entered." -color "Error"
         return $null
     }
 
@@ -78,7 +78,7 @@ function Get-IPAddressAndSubnet {
         if ($navResult.ShouldReturn) { return $null }
 
         if ([string]::IsNullOrWhiteSpace($subnetInput)) {
-            Write-OutputColor "No subnet entered." -color "Error"
+            Write-OutputColor "  No subnet entered." -color "Error"
             return $null
         }
 
@@ -112,7 +112,7 @@ function Get-GatewayAddress {
     if ($navResult.ShouldReturn) { return $null }
 
     if ([string]::IsNullOrWhiteSpace($gateway)) {
-        Write-OutputColor "No gateway entered." -color "Error"
+        Write-OutputColor "  No gateway entered." -color "Error"
         return $null
     }
 
@@ -135,7 +135,7 @@ function Set-VMIPAddress {
     # Get current IP configuration
     $currentIP = Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($currentIP) {
-        Write-OutputColor "Current IP: $($currentIP.IPAddress)/$($currentIP.PrefixLength)" -color "Info"
+        Write-OutputColor "  Current IP: $($currentIP.IPAddress)/$($currentIP.PrefixLength)" -color "Info"
     }
 
     # Get IP and subnet
@@ -177,7 +177,7 @@ function Set-VMIPAddress {
         $gwSubnet = for ($idx = 0; $idx -lt 4; $idx++) { $gwBytes[$idx] -band $maskBytes[$idx] }
         $subnetMatch = ($ipSubnet[0] -eq $gwSubnet[0]) -and ($ipSubnet[1] -eq $gwSubnet[1]) -and ($ipSubnet[2] -eq $gwSubnet[2]) -and ($ipSubnet[3] -eq $gwSubnet[3])
         if (-not $subnetMatch) {
-            Write-OutputColor "Warning: Gateway $gateway is not in the same subnet as $ipAddress/$cidr" -color "Critical"
+            Write-OutputColor "  Warning: Gateway $gateway is not in the same subnet as $ipAddress/$cidr" -color "Critical"
             Write-OutputColor "  IP network:      $($ipSubnet -join '.')" -color "Warning"
             Write-OutputColor "  Gateway network:  $($gwSubnet -join '.')" -color "Warning"
             if (-not (Confirm-UserAction -Message "Continue with this gateway anyway?")) {
@@ -196,7 +196,7 @@ function Set-VMIPAddress {
     Write-OutputColor "`nWarning: This may disconnect your session!" -color "Critical"
 
     if (-not (Confirm-UserAction -Message "Apply this configuration?")) {
-        Write-OutputColor "Configuration cancelled." -color "Warning"
+        Write-OutputColor "  Configuration cancelled." -color "Warning"
         return
     }
 
@@ -216,9 +216,9 @@ function Set-VMIPAddress {
         }
         catch {
             # Rollback: restore previous IP if new one fails
-            Write-OutputColor "Failed to apply new IP: $_" -color "Error"
+            Write-OutputColor "  Failed to apply new IP: $_" -color "Error"
             if ($null -ne $previousIP) {
-                Write-OutputColor "Restoring previous IP configuration..." -color "Warning"
+                Write-OutputColor "  Restoring previous IP configuration..." -color "Warning"
                 try {
                     $rollbackParams = @{
                         InterfaceAlias = $selectedAdapterName
@@ -230,10 +230,10 @@ function Set-VMIPAddress {
                         $rollbackParams.DefaultGateway = $previousRoute.NextHop
                     }
                     New-NetIPAddress @rollbackParams
-                    Write-OutputColor "Previous IP restored: $($previousIP.IPAddress)/$($previousIP.PrefixLength)" -color "Success"
+                    Write-OutputColor "  Previous IP restored: $($previousIP.IPAddress)/$($previousIP.PrefixLength)" -color "Success"
                 }
                 catch {
-                    Write-OutputColor "WARNING: Could not restore previous IP. Adapter may need manual configuration." -color "Critical"
+                    Write-OutputColor "  WARNING: Could not restore previous IP. Adapter may need manual configuration." -color "Critical"
                 }
             }
             return
@@ -242,7 +242,7 @@ function Set-VMIPAddress {
         # Disable IPv6
         Disable-NetAdapterBinding -Name $selectedAdapterName -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
 
-        Write-OutputColor "IP configuration applied successfully!" -color "Success"
+        Write-OutputColor "  IP configuration applied successfully!" -color "Success"
         Add-SessionChange -Category "Network" -Description "Set IP $ipAddress/$cidr on $selectedAdapterName"
         Clear-MenuCache
         if ($null -ne $previousIP) {
@@ -274,14 +274,14 @@ function Set-VMIPAddress {
         Write-OutputColor "`nTesting connectivity to gateway..." -color "Info"
         $pingResult = Test-Connection -ComputerName $gateway -Count 2 -Quiet -ErrorAction SilentlyContinue
         if ($pingResult) {
-            Write-OutputColor "Gateway is reachable." -color "Success"
+            Write-OutputColor "  Gateway is reachable." -color "Success"
         }
         else {
-            Write-OutputColor "Gateway not reachable (this may be normal if VLAN not yet configured)." -color "Warning"
+            Write-OutputColor "  Gateway not reachable (this may be normal if VLAN not yet configured)." -color "Warning"
         }
     }
     catch {
-        Write-OutputColor "Failed to apply IP configuration: $_" -color "Error"
+        Write-OutputColor "  Failed to apply IP configuration: $_" -color "Error"
     }
 }
 
@@ -302,7 +302,7 @@ function Set-VMDNSAddress {
         )
         try {
             Set-DnsClientServerAddress -InterfaceAlias $AdapterName -ServerAddresses $Servers -ErrorAction Stop
-            Write-OutputColor "DNS servers set: $($Servers -join ', ')" -color "Success"
+            Write-OutputColor "  DNS servers set: $($Servers -join ', ')" -color "Success"
             Add-SessionChange -Category "Network" -Description "Set DNS on $AdapterName to $PresetName"
             Clear-MenuCache
 
@@ -315,7 +315,7 @@ function Set-VMDNSAddress {
             return $true
         }
         catch {
-            Write-OutputColor "Failed to set DNS: $_" -color "Error"
+            Write-OutputColor "  Failed to set DNS: $_" -color "Error"
             return $false
         }
     }
@@ -323,7 +323,7 @@ function Set-VMDNSAddress {
     # Get current DNS
     $currentDNS = Get-DnsClientServerAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue
     if ($currentDNS -and $currentDNS.ServerAddresses) {
-        Write-OutputColor "Current DNS: $($currentDNS.ServerAddresses -join ', ')" -color "Info"
+        Write-OutputColor "  Current DNS: $($currentDNS.ServerAddresses -join ', ')" -color "Info"
     }
 
     # Build dynamic preset list from $script:DNSPresets
@@ -359,7 +359,7 @@ function Set-VMDNSAddress {
         }
         elseif ($choiceNum -eq $customNum) {
             # Custom DNS entry
-            Write-OutputColor "Enter primary DNS server:" -color "Info"
+            Write-OutputColor "  Enter primary DNS server:" -color "Info"
             $dns1 = Read-Host
 
             # Check for navigation
@@ -376,7 +376,7 @@ function Set-VMDNSAddress {
             $dnsServers = @($dns1)
 
             if (Confirm-UserAction -Message "Add a secondary DNS server?") {
-                Write-OutputColor "Enter secondary DNS server:" -color "Info"
+                Write-OutputColor "  Enter secondary DNS server:" -color "Info"
                 $dns2 = Read-Host
                 $navResult = Test-NavigationCommand -UserInput $dns2
                 if ($navResult.ShouldReturn) { return }
@@ -384,7 +384,7 @@ function Set-VMDNSAddress {
                 if (-not [string]::IsNullOrWhiteSpace($dns2)) {
                     if (Test-ValidIPAddress -IPAddress $dns2) {
                         if ($dns2 -eq $dns1) {
-                            Write-OutputColor "Secondary DNS is the same as primary. Skipping duplicate." -color "Warning"
+                            Write-OutputColor "  Secondary DNS is the same as primary. Skipping duplicate." -color "Warning"
                         }
                         else {
                             $dnsServers += $dns2
@@ -403,7 +403,7 @@ function Set-VMDNSAddress {
             try {
                 $prevDHCPDns = @((Get-DnsClientServerAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses)
                 Set-DnsClientServerAddress -InterfaceAlias $selectedAdapterName -ResetServerAddresses -ErrorAction Stop
-                Write-OutputColor "DNS set to use DHCP." -color "Success"
+                Write-OutputColor "  DNS set to use DHCP." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set DNS on $selectedAdapterName to DHCP"
                 if ($prevDHCPDns.Count -gt 0) {
                     Add-UndoAction -Category "Network" -Description "Set DNS on $selectedAdapterName to DHCP" -UndoScript {
@@ -415,16 +415,16 @@ function Set-VMDNSAddress {
                 $success = $true
             }
             catch {
-                Write-OutputColor "Failed to reset DNS: $_" -color "Error"
+                Write-OutputColor "  Failed to reset DNS: $_" -color "Error"
             }
         }
         else {
-            Write-OutputColor "DNS configuration cancelled." -color "Info"
+            Write-OutputColor "  DNS configuration cancelled." -color "Info"
             return
         }
     }
     else {
-        Write-OutputColor "DNS configuration cancelled." -color "Info"
+        Write-OutputColor "  DNS configuration cancelled." -color "Info"
         return
     }
 
@@ -446,7 +446,7 @@ function Disable-AllIPv6 {
     }
 
     Write-OutputColor "`nThis will disable IPv6 on all network adapters." -color "Warning"
-    Write-OutputColor "Adapters to be modified:" -color "Info"
+    Write-OutputColor "  Adapters to be modified:" -color "Info"
 
     foreach ($adapter in $adapters) {
         $ipv6Binding = Get-NetAdapterBinding -Name $adapter.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
@@ -463,7 +463,7 @@ function Disable-AllIPv6 {
     Write-OutputColor "" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Disable IPv6 on all adapters?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
@@ -474,10 +474,10 @@ function Disable-AllIPv6 {
         try {
             Disable-NetAdapterBinding -Name $adapter.Name -ComponentID ms_tcpip6 -ErrorAction Stop
             $successCount++
-            Write-OutputColor "Disabled IPv6 on $($adapter.Name)" -color "Success"
+            Write-OutputColor "  Disabled IPv6 on $($adapter.Name)" -color "Success"
         }
         catch {
-            Write-OutputColor "Failed to disable IPv6 on $($adapter.Name): $_" -color "Error"
+            Write-OutputColor "  Failed to disable IPv6 on $($adapter.Name): $_" -color "Error"
         }
     }
 
@@ -495,11 +495,11 @@ function Rename-NetworkAdapter {
     $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Sort-Object Name
 
     if ($null -eq $adapters -or @($adapters).Count -eq 0) {
-        Write-OutputColor "No network adapters found." -color "Error"
+        Write-OutputColor "  No network adapters found." -color "Error"
         return
     }
 
-    Write-OutputColor "Available adapters:" -color "Info"
+    Write-OutputColor "  Available adapters:" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $index = 1
@@ -513,7 +513,7 @@ function Rename-NetworkAdapter {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter the number of the adapter to rename (or 'back' to cancel):" -color "Info"
+    Write-OutputColor "  Enter the number of the adapter to rename (or 'back' to cancel):" -color "Info"
     $selection = Read-Host
 
     # Check for navigation
@@ -531,9 +531,9 @@ function Rename-NetworkAdapter {
     $oldName = $selectedAdapter.Name
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Selected: $oldName" -color "Info"
+    Write-OutputColor "  Selected: $oldName" -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter new name for the adapter:" -color "Info"
+    Write-OutputColor "  Enter new name for the adapter:" -color "Info"
     $newName = Read-Host
 
     # Check for navigation
@@ -544,13 +544,13 @@ function Rename-NetworkAdapter {
 
     $newName = $newName.Trim()
     if ([string]::IsNullOrWhiteSpace($newName)) {
-        Write-OutputColor "No name entered. Operation cancelled." -color "Warning"
+        Write-OutputColor "  No name entered. Operation cancelled." -color "Warning"
         return
     }
 
     # Validate name length
     if ($newName.Length -gt 64) {
-        Write-OutputColor "Adapter name is too long (max 64 characters, entered $($newName.Length))." -color "Error"
+        Write-OutputColor "  Adapter name is too long (max 64 characters, entered $($newName.Length))." -color "Error"
         return
     }
 
@@ -563,21 +563,21 @@ function Rename-NetworkAdapter {
     # Check if name already exists
     $existingAdapter = Get-NetAdapter -Name $newName -ErrorAction SilentlyContinue
     if ($existingAdapter) {
-        Write-OutputColor "An adapter with the name '$newName' already exists." -color "Error"
+        Write-OutputColor "  An adapter with the name '$newName' already exists." -color "Error"
         return
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Rename '$oldName' to '$newName'?" -color "Warning"
+    Write-OutputColor "  Rename '$oldName' to '$newName'?" -color "Warning"
 
     if (-not (Confirm-UserAction -Message "Proceed with rename?")) {
-        Write-OutputColor "Operation cancelled." -color "Info"
+        Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
 
     try {
         Rename-NetAdapter -Name $oldName -NewName $newName -ErrorAction Stop
-        Write-OutputColor "Adapter renamed successfully: '$oldName' -> '$newName'" -color "Success"
+        Write-OutputColor "  Adapter renamed successfully: '$oldName' -> '$newName'" -color "Success"
         Add-SessionChange -Category "Network" -Description "Renamed adapter '$oldName' to '$newName'"
         Clear-MenuCache
 
@@ -588,7 +588,7 @@ function Rename-NetworkAdapter {
         }.GetNewClosure() -UndoParams @{ OldN = $oldName; NewN = $newName }
     }
     catch {
-        Write-OutputColor "Failed to rename adapter: $_" -color "Error"
+        Write-OutputColor "  Failed to rename adapter: $_" -color "Error"
     }
 }
 #endregion

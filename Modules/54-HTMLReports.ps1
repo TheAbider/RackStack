@@ -78,6 +78,9 @@ function Export-HTMLHealthReport {
     } -TimeoutSeconds 10 -Activity "Querying disk info"
     $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
     $diskHtml = ""
+    if (-not $disks) {
+        $diskHtml = "<tr><td colspan='5'>Disk information unavailable</td></tr>"
+    }
     foreach ($disk in $disks) {
         $totalGB = [math]::Round($disk.Size / 1GB, 1)
         $freeGB = [math]::Round($disk.FreeSpace / 1GB, 1)
@@ -85,7 +88,7 @@ function Export-HTMLHealthReport {
         $diskStatus = if ($usedPercent -gt 90) { "bad" } elseif ($usedPercent -gt 75) { "warn" } else { "good" }
         $diskHtml += @"
         <tr>
-            <td>$($disk.DeviceID)</td>
+            <td>$(ConvertTo-HtmlSafe $disk.DeviceID)</td>
             <td>$totalGB GB</td>
             <td>$freeGB GB</td>
             <td class="status-$diskStatus">$usedPercent%</td>
@@ -98,6 +101,9 @@ function Export-HTMLHealthReport {
     $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" }
     $allIPv4Html = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
     $networkHtml = ""
+    if (-not $adapters) {
+        $networkHtml = "<tr><td colspan='4'>No active network adapters found</td></tr>"
+    }
     foreach ($adapter in $adapters) {
         $ip = $allIPv4Html | Where-Object { $_.InterfaceAlias -eq $adapter.Name }
         $ipStr = if ($ip) { $ip.IPAddress } else { "No IP" }
@@ -116,7 +122,7 @@ function Export-HTMLHealthReport {
         $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
         if ($service) {
             $svcStatus = if ($service.Status -eq "Running") { "good" } else { "warn" }
-            $servicesHtml += "<tr><td>$($svc.Display)</td><td class='status-$svcStatus'>$($service.Status)</td></tr>"
+            $servicesHtml += "<tr><td>$(ConvertTo-HtmlSafe $svc.Display)</td><td class='status-$svcStatus'>$(ConvertTo-HtmlSafe $service.Status)</td></tr>"
         }
     }
 
@@ -242,7 +248,7 @@ function Export-HTMLHealthReport {
             if ($absOffset -gt 30) { $offsetStat = "bad" } elseif ($absOffset -gt 5) { $offsetStat = "warn" }
         }
         $timeSyncHtml += "<tr><td>Source</td><td>$(ConvertTo-HtmlSafe $timeSyncSource)</td><td class='status-$timeSyncStat'>$(if ($timeSyncStat -eq 'good') { 'OK' } else { 'CHECK' })</td></tr>"
-        $timeSyncHtml += "<tr><td>Phase Offset</td><td>$offsetStr</td><td class='status-$offsetStat'>$(if ($offsetStat -eq 'good') { 'OK' } elseif ($offsetStat -eq 'warn') { 'DRIFT' } else { 'HIGH DRIFT' })</td></tr>"
+        $timeSyncHtml += "<tr><td>Phase Offset</td><td>$(ConvertTo-HtmlSafe $offsetStr)</td><td class='status-$offsetStat'>$(if ($offsetStat -eq 'good') { 'OK' } elseif ($offsetStat -eq 'warn') { 'DRIFT' } else { 'HIGH DRIFT' })</td></tr>"
     } catch {
         $timeSyncHtml += "<tr><td colspan='3'>Time sync status unavailable</td></tr>"
     }
@@ -256,7 +262,7 @@ function Export-HTMLHealthReport {
             $fwOn = $fwProf.Enabled -eq $true
             $fwStat = if ($fwOn) { "good" } else { "bad" }
             $fwText = if ($fwOn) { "Enabled" } else { "DISABLED" }
-            $firewallHtml += "<tr><td>$($fwProf.Name)</td><td class='status-$fwStat'>$fwText</td><td class='status-$fwStat'>$(if ($fwOn) { 'OK' } else { 'WARNING' })</td></tr>"
+            $firewallHtml += "<tr><td>$(ConvertTo-HtmlSafe $fwProf.Name)</td><td class='status-$fwStat'>$fwText</td><td class='status-$fwStat'>$(if ($fwOn) { 'OK' } else { 'WARNING' })</td></tr>"
         }
     } catch {
         $firewallHtml += "<tr><td colspan='3'>Firewall status unavailable</td></tr>"
@@ -301,7 +307,7 @@ function Export-HTMLHealthReport {
 
     $overallStatus = if ($issues.Count -eq 0) { "good" } elseif ($issues.Count -le 2) { "warn" } else { "bad" }
     $overallText = if ($issues.Count -eq 0) { "HEALTHY" } else { "ATTENTION NEEDED" }
-    $issuesHtml = if ($issues.Count -eq 0) { "<li class='status-good'>No issues detected</li>" } else { ($issues | ForEach-Object { "<li class='status-warn'>$_</li>" }) -join "`n" }
+    $issuesHtml = if ($issues.Count -eq 0) { "<li class='status-good'>No issues detected</li>" } else { ($issues | ForEach-Object { "<li class='status-warn'>$(ConvertTo-HtmlSafe $_)</li>" }) -join "`n" }
 
     # Build HTML
     $html = @"
@@ -352,7 +358,7 @@ function Export-HTMLHealthReport {
         <div class="info-grid">
             <div class="info-box"><div class="info-label">Computer Name</div><div class="info-value">$(ConvertTo-HtmlSafe $cs.Name)</div></div>
             <div class="info-box"><div class="info-label">Operating System</div><div class="info-value">$(ConvertTo-HtmlSafe $os.Caption)</div></div>
-            <div class="info-box"><div class="info-label">OS Version</div><div class="info-value">$($os.Version)</div></div>
+            <div class="info-box"><div class="info-label">OS Version</div><div class="info-value">$(ConvertTo-HtmlSafe $os.Version)</div></div>
             <div class="info-box"><div class="info-label">Uptime</div><div class="info-value">$uptimeStr</div></div>
         </div>
 
@@ -581,8 +587,8 @@ function Export-ProfileComparisonHTML {
         <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
 
         <div class="summary">
-            <strong>Profile 1:</strong> <span class="file-name">$(Split-Path $Profile1Path -Leaf)</span><br>
-            <strong>Profile 2:</strong> <span class="file-name">$(Split-Path $Profile2Path -Leaf)</span><br><br>
+            <strong>Profile 1:</strong> <span class="file-name">$(ConvertTo-HtmlSafe (Split-Path $Profile1Path -Leaf))</span><br>
+            <strong>Profile 2:</strong> <span class="file-name">$(ConvertTo-HtmlSafe (Split-Path $Profile2Path -Leaf))</span><br><br>
             <strong>Result:</strong> $summaryText
         </div>
 
@@ -1005,16 +1011,17 @@ function Export-HTMLTrendReport {
 
     Write-OutputColor "  Loading $($files.Count) snapshot(s)..." -color "Info"
 
-    $snapshots = @()
+    $snapshotList = [System.Collections.Generic.List[object]]::new()
     $failedFiles = 0
     foreach ($file in $files) {
         try {
             $data = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
-            $snapshots += $data
+            $snapshotList.Add($data)
         } catch {
             $failedFiles++
         }
     }
+    $snapshots = @($snapshotList)
     if ($failedFiles -gt 0) {
         Write-OutputColor "  Warning: $failedFiles snapshot file(s) could not be parsed and were skipped." -color "Warning"
     }
@@ -1067,7 +1074,7 @@ function Export-HTMLTrendReport {
                 }
             }
             $diskColor = if ($disk.UsedPercent -gt 90) { "status-bad" } elseif ($disk.UsedPercent -gt 75) { "status-warn" } else { "status-good" }
-            $diskSection += "<tr><td>$($disk.Drive)</td><td>$($disk.TotalGB) GB</td><td>$($disk.FreeGB) GB free</td><td class='$diskColor'>$($disk.UsedPercent)%$daysUntilFull</td></tr>"
+            $diskSection += "<tr><td>$(ConvertTo-HtmlSafe $disk.Drive)</td><td>$($disk.TotalGB) GB</td><td>$($disk.FreeGB) GB free</td><td class='$diskColor'>$($disk.UsedPercent)%$(ConvertTo-HtmlSafe $daysUntilFull)</td></tr>"
         }
         $diskSection += "</table>"
     }
@@ -1076,7 +1083,7 @@ function Export-HTMLTrendReport {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Performance Trend Report - $($latestSnap.Hostname)</title>
+    <title>Performance Trend Report - $(ConvertTo-HtmlSafe $latestSnap.Hostname)</title>
     <meta charset="UTF-8">
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 20px; background: #f5f5f5; }

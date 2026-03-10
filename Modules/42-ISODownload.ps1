@@ -44,6 +44,14 @@ function Get-ServerISO {
 
     $isoPath = Get-ISOStoragePath
 
+    # Check network connectivity before attempting download
+    if (-not (Test-NetworkConnectivity)) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  No network connectivity. Cannot download ISO." -color "Error"
+        Write-OutputColor "  Tip: Verify network configuration and DNS settings." -color "Warning"
+        return $null
+    }
+
     # Validate the ISO storage path is configured
     if (-not $isoPath) {
         Write-OutputColor "" -color "Info"

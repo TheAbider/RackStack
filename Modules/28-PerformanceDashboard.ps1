@@ -71,7 +71,7 @@ function Show-PerformanceDashboard {
         if (-not $volumes) {
             Write-OutputColor "  │$("  No fixed volumes detected".PadRight(72))│" -color "Warning"
         }
-        foreach ($vol in $volumes) {
+        foreach ($vol in @($volumes | Where-Object { $_.Size -gt 0 })) {
             $totalGB = [math]::Round($vol.Size / 1GB, 1)
             $freeGB = [math]::Round($vol.SizeRemaining / 1GB, 1)
             $usedPercent = if ($totalGB -gt 0) { [math]::Round((($totalGB - $freeGB) / $totalGB) * 100, 1) } else { 0 }

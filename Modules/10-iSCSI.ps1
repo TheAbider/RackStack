@@ -250,7 +250,7 @@ function Test-SANTargetConnectivity {
         [string]$Subnet = $script:iSCSISubnet
     )
 
-    Write-OutputColor "Scanning for SAN targets on $Subnet.x network..." -color "Info"
+    Write-OutputColor "  Scanning for SAN targets on $Subnet.x network..." -color "Info"
 
     # SAN IP assignments from configurable target mappings
     $sanIPs = @()
@@ -551,22 +551,22 @@ function Set-iSCSIAdapter {
     )
 
     Write-OutputColor "`n--- Configuring iSCSI Adapter: $($nic.Name) ---" -color "Info"
-    Write-OutputColor "Status: $($nic.Status)" -color $(if ($nic.Status -eq "Up") { "Success" } else { "Warning" })
+    Write-OutputColor "  Status: $($nic.Status)" -color $(if ($nic.Status -eq "Up") { "Success" } else { "Warning" })
 
     # Get current configuration
     $currentIP = Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($currentIP) {
-        Write-OutputColor "Current IP: $($currentIP.IPAddress)/$($currentIP.PrefixLength)" -color "Info"
+        Write-OutputColor "  Current IP: $($currentIP.IPAddress)/$($currentIP.PrefixLength)" -color "Info"
     }
     else {
-        Write-OutputColor "Current IP: None configured" -color "Info"
+        Write-OutputColor "  Current IP: None configured" -color "Info"
     }
 
     # Get IP and subnet for iSCSI
     $ipResult = Get-IPAddressAndSubnet -Prompt "Enter iSCSI IP address (e.g., 10.0.0.100/24)"
 
     if ($null -eq $ipResult) {
-        Write-OutputColor "Skipping $($nic.Name)..." -color "Warning"
+        Write-OutputColor "  Skipping $($nic.Name)..." -color "Warning"
         return
     }
 
@@ -585,7 +585,7 @@ function Set-iSCSIAdapter {
     if ($navResult.ShouldReturn) { return }
 
     if ($confirmation -notmatch '^(y|yes)$') {
-        Write-OutputColor "Skipping $($nic.Name)..." -color "Warning"
+        Write-OutputColor "  Skipping $($nic.Name)..." -color "Warning"
         return
     }
 
@@ -600,10 +600,10 @@ function Set-iSCSIAdapter {
         # Disable IPv6
         Disable-NetAdapterBinding -Name $nic.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
 
-        Write-OutputColor "iSCSI configuration applied to $($nic.Name)" -color "Success"
+        Write-OutputColor "  iSCSI configuration applied to $($nic.Name)" -color "Success"
     }
     catch {
-        Write-OutputColor "Failed to configure $($nic.Name): $_" -color "Error"
+        Write-OutputColor "  Failed to configure $($nic.Name): $_" -color "Error"
     }
 }
 
@@ -625,13 +625,13 @@ function Set-iSCSIConfiguration {
             Write-CenteredOutput "iSCSI NIC Configuration (Manual)" -color "Info"
 
             Write-OutputColor "`nThis will configure network adapters for iSCSI storage traffic." -color "Info"
-            Write-OutputColor "iSCSI NICs should NOT have a default gateway configured." -color "Warning"
+            Write-OutputColor "  iSCSI NICs should NOT have a default gateway configured." -color "Warning"
             Write-OutputColor "" -color "Info"
 
             $selectedAdapters = Select-iSCSI-Adapters
 
             if ($null -eq $selectedAdapters) {
-                Write-OutputColor "No adapters selected for iSCSI configuration." -color "Warning"
+                Write-OutputColor "  No adapters selected for iSCSI configuration." -color "Warning"
                 return
             }
 
@@ -642,7 +642,7 @@ function Set-iSCSIConfiguration {
             }
 
             Write-OutputColor "`niSCSI Configuration Complete" -color "Success"
-            Write-OutputColor "Processed: $totalCount adapter(s)" -color "Info"
+            Write-OutputColor "  Processed: $totalCount adapter(s)" -color "Info"
         }
         '^[Bb]$' {
             return
@@ -894,12 +894,13 @@ function Connect-iSCSITargets {
     )
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Connecting to iSCSI targets..." -color "Info"
+    Write-OutputColor "  Connecting to iSCSI targets..." -color "Info"
 
     # Pre-check: ensure iSCSI Initiator service is running
     $iscsiService = Get-Service -Name MSiSCSI -ErrorAction SilentlyContinue
     if ($null -eq $iscsiService) {
         Write-OutputColor "  iSCSI Initiator service (MSiSCSI) not found on this system." -color "Error"
+        Write-OutputColor "  Tip: iSCSI Initiator is built-in on Windows Server. Check OS edition or run SFC." -color "Warning"
         return
     }
     if ($iscsiService.Status -ne 'Running') {
@@ -1024,7 +1025,9 @@ function Initialize-MPIOForISCSI {
         $supportedHW = Get-MSDSMSupportedHW -ErrorAction SilentlyContinue
         if ($supportedHW) {
             foreach ($hw in $supportedHW) {
-                Write-OutputColor "    $($hw.VendorId.Trim()) - $($hw.ProductId.Trim())" -color "Success"
+                $vendor = if ($hw.VendorId) { $hw.VendorId.Trim() } else { "Unknown" }
+                $product = if ($hw.ProductId) { $hw.ProductId.Trim() } else { "Unknown" }
+                Write-OutputColor "    $vendor - $product" -color "Success"
             }
         }
         else {
@@ -1059,7 +1062,9 @@ function Show-iSCSIStatus {
             $line = "  $($session.TargetNodeAddress)"
             if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($line.PadRight(72))│" -color "Success"
-            Write-OutputColor "  │$("    Portal: $($session.TargetPortalAddress):$($session.TargetPortalPortNumber)".PadRight(72))│" -color "Info"
+            $portalStr = "    Portal: $($session.TargetPortalAddress):$($session.TargetPortalPortNumber)"
+            if ($portalStr.Length -gt 72) { $portalStr = $portalStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($portalStr.PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("    Persistent: $($session.IsPersistent) | Connected: $($session.IsConnected)".PadRight(72))│" -color "Info"
         }
     }

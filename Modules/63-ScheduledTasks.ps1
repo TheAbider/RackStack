@@ -144,7 +144,7 @@ function Show-AllScheduledTasks {
 
         $name = $task.TaskName
         if ($name.Length -gt 34) { $name = $name.Substring(0, 31) + "..." }
-        $state = $task.State.ToString()
+        $state = if ($null -ne $task.State) { $task.State.ToString() } else { "Unknown" }
 
         $stateColor = switch ($state) {
             "Ready"    { "Success" }
@@ -317,7 +317,7 @@ function Search-ScheduledTasks {
     foreach ($task in $matches_) {
         $name = $task.TaskName
         if ($name.Length -gt 34) { $name = $name.Substring(0, 31) + "..." }
-        $state = $task.State.ToString()
+        $state = if ($null -ne $task.State) { $task.State.ToString() } else { "Unknown" }
         $path = $task.TaskPath
         if ($path.Length -gt 24) { $path = $path.Substring(0, 21) + "..." }
         $line = "  $($name.PadRight(34))$($state.PadRight(12))$path"
@@ -355,7 +355,7 @@ function Set-ScheduledTaskState {
     foreach ($task in $tasks) {
         $name = $task.TaskName
         if ($name.Length -gt 36) { $name = $name.Substring(0, 33) + "..." }
-        $state = $task.State.ToString()
+        $state = if ($null -ne $task.State) { $task.State.ToString() } else { "Unknown" }
         $stateColor = if ($state -eq "Ready") { "Success" } elseif ($state -eq "Running") { "Warning" } else { "Error" }
         $line = "  [$idx]".PadRight(6) + "$($name.PadRight(40))$state"
         Write-OutputColor "  │$($line.PadRight(72))│" -color $stateColor

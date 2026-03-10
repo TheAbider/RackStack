@@ -4,7 +4,7 @@ function Show-SystemHealthCheck {
     Clear-Host
     Write-CenteredOutput "System Health Check" -color "Info"
 
-    Write-OutputColor "Gathering system information..." -color "Info"
+    Write-OutputColor "  Gathering system information..." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # System Info (CIM with timeout — immune to WMI hangs)
@@ -162,7 +162,8 @@ function Show-SystemHealthCheck {
                 $certColor = if ($daysLeft -lt 0) { "Error" } elseif ($daysLeft -lt 30) { "Warning" } else { "Success" }
                 $statusTag = if ($daysLeft -lt 0) { "EXPIRED" } elseif ($daysLeft -lt 30) { "EXPIRING" } else { "OK" }
                 Write-OutputColor "  [$statusTag] $subject" -color $certColor
-                Write-OutputColor "           Expires: $expiryStr  Thumbprint: $($cert.Thumbprint.Substring(0,8))..." -color $certColor
+                $thumbShort = if ($cert.Thumbprint -and $cert.Thumbprint.Length -ge 8) { $cert.Thumbprint.Substring(0,8) + "..." } else { "N/A" }
+                Write-OutputColor "           Expires: $expiryStr  Thumbprint: $thumbShort" -color $certColor
             }
         }
     } catch {
@@ -592,7 +593,7 @@ function Show-ServerReadiness {
             $items += @{ Category = "SYSTEM"; Name = "Uptime"; Value = "Unknown"; Color = "Info"; Symbol = "[--]" }
         }
     } catch {
-        $items += @{ Category = "SYSTEM"; Name = "Uptime"; Value = "Check failed"; Color = "Warning"; Symbol = "[--]" }
+        $items += @{ Category = "SYSTEM"; Name = "Uptime"; Value = "Check failed: $_"; Color = "Warning"; Symbol = "[--]" }
     }
 
     # --- HARDWARE ---
@@ -615,7 +616,7 @@ function Show-ServerReadiness {
             }
         }
     } catch {
-        $items += @{ Category = "HARDWARE"; Name = "Disk Health"; Value = "Check failed"; Color = "Warning"; Symbol = "[--]" }
+        $items += @{ Category = "HARDWARE"; Name = "Disk Health"; Value = "Check failed: $_"; Color = "Warning"; Symbol = "[--]" }
     }
 
     # Disk temperature check (Server 2016+ with Get-StorageReliabilityCounter)
@@ -637,7 +638,7 @@ function Show-ServerReadiness {
                 $items += @{ Category = "HARDWARE"; Name = "Disk Temperature"; Value = "All within normal range"; Color = "Success"; Symbol = "[OK]" }
             }
         } catch {
-            $items += @{ Category = "HARDWARE"; Name = "Disk Temperature"; Value = "Check failed"; Color = "Warning"; Symbol = "[--]" }
+            $items += @{ Category = "HARDWARE"; Name = "Disk Temperature"; Value = "Check failed: $_"; Color = "Warning"; Symbol = "[--]" }
         }
     }
 
@@ -684,7 +685,7 @@ function Show-ServerReadiness {
             $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "Unable to read"; Color = "Warning"; Symbol = "[--]" }
         }
     } catch {
-        $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "Check failed"; Color = "Warning"; Symbol = "[--]" }
+        $items += @{ Category = "STORAGE"; Name = "C: Drive Space"; Value = "Check failed: $_"; Color = "Warning"; Symbol = "[--]" }
     }
 
     # --- DNS RESOLUTION ---

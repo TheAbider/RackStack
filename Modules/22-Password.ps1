@@ -91,7 +91,7 @@ function Get-SecurePassword {
 
     $minLength = $script:MinPasswordLength
 
-    Write-OutputColor "Password Requirements:" -color "Info"
+    Write-OutputColor "  Password Requirements:" -color "Info"
     Write-OutputColor "  - Minimum $minLength characters" -color "Info"
     Write-OutputColor "  - At least 1 uppercase letter" -color "Info"
     Write-OutputColor "  - At least 1 lowercase letter" -color "Info"
@@ -118,10 +118,10 @@ function Get-SecurePassword {
             # Check if passwords match
             if ($Pwd1Plain -ne $Pwd2Plain) {
                 if ($remaining -gt 0) {
-                    Write-OutputColor "Passwords do not match. ($remaining attempt(s) remaining)" -color "Error"
+                    Write-OutputColor "  Passwords do not match. ($remaining attempt(s) remaining)" -color "Error"
                 }
                 else {
-                    Write-OutputColor "Passwords do not match." -color "Error"
+                    Write-OutputColor "  Passwords do not match." -color "Error"
                 }
                 continue
             }
@@ -129,10 +129,10 @@ function Get-SecurePassword {
             # Check for empty password
             if ([string]::IsNullOrEmpty($Pwd1Plain)) {
                 if ($remaining -gt 0) {
-                    Write-OutputColor "Password cannot be empty. ($remaining attempt(s) remaining)" -color "Error"
+                    Write-OutputColor "  Password cannot be empty. ($remaining attempt(s) remaining)" -color "Error"
                 }
                 else {
-                    Write-OutputColor "Password cannot be empty." -color "Error"
+                    Write-OutputColor "  Password cannot be empty." -color "Error"
                 }
                 continue
             }
@@ -145,7 +145,7 @@ function Get-SecurePassword {
                 continue
             }
 
-            Write-OutputColor "Password meets all requirements." -color "Success"
+            Write-OutputColor "  Password meets all requirements." -color "Success"
             return $Password1
         }
         catch {
@@ -159,7 +159,7 @@ function Get-SecurePassword {
         }
     }
 
-    Write-OutputColor "Maximum attempts reached." -color "Critical"
+    Write-OutputColor "  Maximum attempts reached." -color "Critical"
     return $null
 }
 # Function to audit local user accounts for password and login status
@@ -255,5 +255,6 @@ function Show-LocalAccountAudit {
     }
 
     Add-SessionChange -Category "Security" -Description "Ran local account audit ($($users.Count) accounts, $issues issues)"
+    Write-PressEnter
 }
 #endregion

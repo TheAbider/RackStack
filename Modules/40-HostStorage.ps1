@@ -250,8 +250,13 @@ function Initialize-HostStorage {
         Write-OutputColor "" -color "Info"
 
         if (Confirm-UserAction -Message "Open Disk Management now?") {
-            Start-Process "diskmgmt.msc" -ErrorAction SilentlyContinue
-            Write-OutputColor "  Disk Management opened. Set up a data drive and run this again." -color "Info"
+            try {
+                Start-Process "diskmgmt.msc" -ErrorAction Stop
+                Write-OutputColor "  Disk Management opened. Set up a data drive and run this again." -color "Info"
+            }
+            catch {
+                Write-OutputColor "  Failed to open Disk Management: $_" -color "Error"
+            }
         }
         return $false
     }
@@ -293,8 +298,13 @@ function Initialize-HostStorage {
     if ($driveChoice -match '^\d+$') {
         $choiceNum = [int]$driveChoice
         if ($choiceNum -eq $diskMgmtIndex) {
-            Start-Process "diskmgmt.msc" -ErrorAction SilentlyContinue
-            Write-OutputColor "  Disk Management opened." -color "Info"
+            try {
+                Start-Process "diskmgmt.msc" -ErrorAction Stop
+                Write-OutputColor "  Disk Management opened." -color "Info"
+            }
+            catch {
+                Write-OutputColor "  Failed to open Disk Management: $_" -color "Error"
+            }
             return $false
         }
         if ($choiceNum -lt 1 -or $choiceNum -gt $validDrives.Count) {

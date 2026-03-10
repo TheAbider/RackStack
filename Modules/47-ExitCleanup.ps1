@@ -10,7 +10,7 @@ function Exit-Script {
     Show-SessionSummary
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Press Enter to continue to exit..." -color "Info"
+    Write-OutputColor "  Press Enter to continue to exit..." -color "Info"
     Read-Host
 
     Clear-Host
@@ -21,14 +21,14 @@ function Exit-Script {
     $rebootNeeded = $global:RebootNeeded -or $windowsRebootPending
 
     if ($global:DisabledAdminReboot -eq $true) {
-        Write-OutputColor "As always, should you or any member of your IT Force be caught or killed, the Abider will disavow any knowledge of your actions" -color "Error"
+        Write-OutputColor "  As always, should you or any member of your IT Force be caught or killed, the Abider will disavow any knowledge of your actions" -color "Error"
 
         for ($i = 5; $i -gt 0; $i--) {
-            Write-OutputColor "This script will now self destruct in $i seconds" -color "Error"
+            Write-OutputColor "  This script will now self destruct in $i seconds" -color "Error"
             Start-Sleep -Seconds 1
         }
 
-        Write-OutputColor "Good luck." -color "Error"
+        Write-OutputColor "  Good luck." -color "Error"
         Clear-Host
 
         # Build list of paths to delete
@@ -113,32 +113,32 @@ function Exit-Script {
             Register-ScheduledTask -TaskName "$($script:ToolName)Cleanup" -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
         }
         catch {
-            Write-OutputColor "Could not schedule cleanup: $_" -color "Warning"
+            Write-OutputColor "  Could not schedule cleanup: $_" -color "Warning"
         }
 
         Restart-Computer -Force
     }
     elseif ($rebootNeeded) {
         if ($windowsRebootPending -and -not $global:RebootNeeded) {
-            Write-OutputColor "Windows has a pending reboot (from previous changes)." -color "Warning"
+            Write-OutputColor "  Windows has a pending reboot (from previous changes)." -color "Warning"
         }
         else {
-            Write-OutputColor "Changes made during this session require a reboot." -color "Warning"
+            Write-OutputColor "  Changes made during this session require a reboot." -color "Warning"
         }
 
         if (Confirm-UserAction -Message "Reboot now to apply changes?") {
-            Write-OutputColor "Rebooting the server..." -color "Warning"
+            Write-OutputColor "  Rebooting the server..." -color "Warning"
             Start-Sleep -Seconds 3
             Restart-Computer -Force
         }
         else {
-            Write-OutputColor "Remember to reboot later to apply all changes!" -color "Warning"
+            Write-OutputColor "  Remember to reboot later to apply all changes!" -color "Warning"
             Start-Sleep -Seconds 3
             [Environment]::Exit(0)
         }
     }
     else {
-        Write-OutputColor "No reboot needed. Exiting script..." -color "Success"
+        Write-OutputColor "  No reboot needed. Exiting script..." -color "Success"
         Start-Sleep -Seconds 2
         [Environment]::Exit(0)
     }

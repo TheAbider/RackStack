@@ -71,6 +71,11 @@ function Add-SessionChange {
         Description = $Description
     })
 
+    # Cap session changes to prevent unbounded growth in long sessions
+    if ($script:SessionChanges.Count -gt 500) {
+        $script:SessionChanges.RemoveAt(0)
+    }
+
     # Also log to file if logging is enabled
     if ($logFilePath) {
         Write-LogMessage -message "[$Category] $Description" -logFilePath $logFilePath
@@ -202,9 +207,9 @@ function Undo-LastChange {
     Write-CenteredOutput "Undo Last Change" -color "Info"
 
     if ($script:UndoStack.Count -eq 0) {
-        Write-OutputColor "No changes available to undo." -color "Warning"
+        Write-OutputColor "  No changes available to undo." -color "Warning"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Note: Supported undo operations include:" -color "Info"
+        Write-OutputColor "  Note: Supported undo operations include:" -color "Info"
         Write-OutputColor "  - IP address, DNS, and VLAN changes" -color "Info"
         Write-OutputColor "  - Adapter renames" -color "Info"
         Write-OutputColor "  - Hostname, timezone, and power plan changes" -color "Info"
@@ -222,19 +227,19 @@ function Undo-LastChange {
     # Get the last action
     $lastAction = $script:UndoStack[-1]
 
-    Write-OutputColor "Last undoable change:" -color "Info"
+    Write-OutputColor "  Last undoable change:" -color "Info"
     Write-OutputColor "  Time: $($lastAction.Timestamp)" -color "Info"
     Write-OutputColor "  Category: $($lastAction.Category)" -color "Info"
     Write-OutputColor "  Action: $($lastAction.Description)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Undo this change?")) {
-        Write-OutputColor "Undo cancelled." -color "Info"
+        Write-OutputColor "  Undo cancelled." -color "Info"
         return
     }
 
     try {
-        Write-OutputColor "Undoing change..." -color "Info"
+        Write-OutputColor "  Undoing change..." -color "Info"
 
         # Execute the undo script with parameters
         if ($lastAction.UndoParams.Count -gt 0) {
@@ -245,7 +250,7 @@ function Undo-LastChange {
             & $lastAction.UndoScript
         }
 
-        Write-OutputColor "Change undone successfully!" -color "Success"
+        Write-OutputColor "  Change undone successfully!" -color "Success"
 
         # Remove from undo stack
         $script:UndoStack.RemoveAt($script:UndoStack.Count - 1)
@@ -254,7 +259,7 @@ function Undo-LastChange {
         Add-SessionChange -Category "Undo" -Description "Undid: $($lastAction.Description)"
     }
     catch {
-        Write-OutputColor "Failed to undo change: $_" -color "Error"
+        Write-OutputColor "  Failed to undo change: $_" -color "Error"
     }
 }
 
@@ -571,7 +576,7 @@ function Invoke-WithTimeout {
     }
 
     if ($job.State -eq "Failed") {
-        $errorMsg = $job.ChildJobs[0].JobStateInfo.Reason.Message
+        $errorMsg = if ($job.ChildJobs.Count -gt 0) { $job.ChildJobs[0].JobStateInfo.Reason.Message } else { "Job failed" }
         Remove-Job $job -Force
         return @{ TimedOut = $false; Result = $null; Failed = $true; Error = $errorMsg }
     }

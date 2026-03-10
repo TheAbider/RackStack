@@ -324,7 +324,7 @@ function Set-ServerPowerPlan {
     }
 
     if ($choice -eq "4" -or [string]::IsNullOrWhiteSpace($choice)) {
-        Write-OutputColor "Power plan not changed." -color "Info"
+        Write-OutputColor "  Power plan not changed." -color "Info"
         return
     }
 
@@ -336,7 +336,7 @@ function Set-ServerPowerPlan {
     $selectedPlan = $powerPlans[$choice]
 
     if ($selectedPlan.GUID -eq $currentPlan.GUID) {
-        Write-OutputColor "Power plan is already set to $($selectedPlan.Name)." -color "Info"
+        Write-OutputColor "  Power plan is already set to $($selectedPlan.Name)." -color "Info"
         return
     }
 
@@ -347,7 +347,7 @@ function Set-ServerPowerPlan {
         # Verify it was set
         $newPlan = Get-CurrentPowerPlan
         if ($newPlan.GUID -eq $selectedPlan.GUID) {
-            Write-OutputColor "Power plan set to: $($selectedPlan.Name)" -color "Success"
+            Write-OutputColor "  Power plan set to: $($selectedPlan.Name)" -color "Success"
             Add-SessionChange -Category "System" -Description "Set power plan to $($selectedPlan.Name)"
             Add-UndoAction -Category "System" -Description "Set power plan to $($selectedPlan.Name)" -UndoScript {
                 param($OldGUID)
@@ -356,7 +356,7 @@ function Set-ServerPowerPlan {
             Clear-MenuCache  # Invalidate cache after change
         }
         else {
-            Write-OutputColor "Failed to set power plan. May need to run as administrator." -color "Error"
+            Write-OutputColor "  Failed to set power plan. May need to run as administrator." -color "Error"
         }
     }
     catch {

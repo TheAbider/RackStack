@@ -639,7 +639,9 @@ function Test-FileIntegrity {
         } else {
             $result.HashMatch = $false
             $result.Valid = $false
-            $result.Error = "SHA256 mismatch (local: $($result.Hash.Substring(0,16))..., remote: $($result.RemoteHash.Substring(0,16))...)"
+            $localHashShort = if ($result.Hash.Length -ge 16) { $result.Hash.Substring(0,16) } else { $result.Hash }
+            $remoteHashShort = if ($result.RemoteHash.Length -ge 16) { $result.RemoteHash.Substring(0,16) } else { $result.RemoteHash }
+            $result.Error = "SHA256 mismatch (local: $localHashShort..., remote: $remoteHashShort...)"
         }
     }
 

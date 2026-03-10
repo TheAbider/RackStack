@@ -20,6 +20,21 @@ function Test-ValidHostname {
     return $true
 }
 
+# Get specific rejection reason for an invalid hostname (for detailed error messages)
+function Get-HostnameValidationError {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$Hostname
+    )
+
+    if ($Hostname.Length -gt 15) { return "Too long: $($Hostname.Length) characters (max 15)" }
+    if ($Hostname.Length -lt 1) { return "Hostname cannot be empty" }
+    if ($Hostname -match '[^a-zA-Z0-9-]') { return "Invalid characters (letters, digits, and hyphens only)" }
+    if ($Hostname.StartsWith('-')) { return "Cannot start with a hyphen" }
+    if ($Hostname.EndsWith('-')) { return "Cannot end with a hyphen" }
+    return $null
+}
+
 # Function to validate IPv4 address
 function Test-ValidIPAddress {
     param (

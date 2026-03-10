@@ -6,7 +6,7 @@ function Install-HyperVRole {
 
     # Check if already installed using the working function
     if (Test-HyperVInstalled) {
-        Write-OutputColor "Hyper-V is already installed." -color "Success"
+        Write-OutputColor "  Hyper-V is already installed." -color "Success"
         return
     }
 
@@ -21,23 +21,23 @@ function Install-HyperVRole {
     }
     $isServer = $osInfo.ProductType -ne 1  # 1 = Workstation, 2 = Domain Controller, 3 = Server
 
-    Write-OutputColor "Hyper-V is not currently installed." -color "Info"
-    Write-OutputColor "Operating System: $($osInfo.Caption)" -color "Info"
+    Write-OutputColor "  Hyper-V is not currently installed." -color "Info"
+    Write-OutputColor "  Operating System: $($osInfo.Caption)" -color "Info"
 
     # Pre-flight validation
     $preFlightOK = Show-PreFlightCheck -Feature "Hyper-V"
     if (-not $preFlightOK) {
         if (-not (Confirm-UserAction -Message "Continue despite blocking issues?")) {
-            Write-OutputColor "Installation cancelled." -color "Info"
+            Write-OutputColor "  Installation cancelled." -color "Info"
             return
         }
     }
 
-    Write-OutputColor "Hyper-V will be installed with management tools." -color "Info"
-    Write-OutputColor "A reboot will be required after installation." -color "Warning"
+    Write-OutputColor "  Hyper-V will be installed with management tools." -color "Info"
+    Write-OutputColor "  A reboot will be required after installation." -color "Warning"
 
     if (-not (Confirm-UserAction -Message "Install Hyper-V now?")) {
-        Write-OutputColor "Hyper-V installation cancelled." -color "Info"
+        Write-OutputColor "  Hyper-V installation cancelled." -color "Info"
         return
     }
 
@@ -59,7 +59,7 @@ function Install-HyperVRole {
                 Clear-MenuCache
             }
             else {
-                Write-OutputColor "Hyper-V installation may not have completed successfully." -color "Error"
+                Write-OutputColor "  Hyper-V installation may not have completed successfully." -color "Error"
                 Add-SessionChange -Category "System" -Description "Hyper-V installation failed"
             }
         }
@@ -109,16 +109,16 @@ function Install-HyperVRole {
 
                 # Check for common issues
                 if ($jobError -match "0x800F0906\|source files could not be found") {
-                    Write-OutputColor "Tip: You may need to enable Windows Features through Settings > Apps > Optional Features" -color "Warning"
+                    Write-OutputColor "  Tip: You may need to enable Windows Features through Settings > Apps > Optional Features" -color "Warning"
                 }
                 elseif ($jobError -match "0x80070422") {
-                    Write-OutputColor "Tip: Windows Update service may need to be running" -color "Warning"
+                    Write-OutputColor "  Tip: Windows Update service may need to be running" -color "Warning"
                 }
             }
             else {
                 Complete-ProgressMessage -Activity "Hyper-V installation" -Status "Complete" -Success
                 Write-OutputColor "`nHyper-V installed successfully!" -color "Success"
-                Write-OutputColor "A reboot is required to complete the installation." -color "Warning"
+                Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
                 $global:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V (Windows Client)"
                 Clear-MenuCache  # Invalidate cache after change
@@ -126,7 +126,7 @@ function Install-HyperVRole {
         }
     }
     catch {
-        Write-OutputColor "Failed to install Hyper-V: $_" -color "Error"
+        Write-OutputColor "  Failed to install Hyper-V: $_" -color "Error"
     }
 }
 #endregion

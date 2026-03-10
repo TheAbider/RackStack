@@ -7,10 +7,10 @@ function Add-LocalAdminAccount {
     $accountName = $localadminaccountname
     $accountFullName = $FullName
 
-    Write-OutputColor "Default account name: $localadminaccountname" -color "Info"
+    Write-OutputColor "  Default account name: $localadminaccountname" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Use default account name ($localadminaccountname)?" -DefaultYes)) {
-        Write-OutputColor "Enter account name (alphanumeric, 1-20 chars):" -color "Info"
+        Write-OutputColor "  Enter account name (alphanumeric, 1-20 chars):" -color "Info"
         $customName = Read-Host
         $navResult = Test-NavigationCommand -UserInput $customName
         if ($navResult.ShouldReturn) { return }
@@ -19,7 +19,7 @@ function Add-LocalAdminAccount {
             if ($customName -match '^[a-zA-Z][a-zA-Z0-9_-]{0,19}$') {
                 $accountName = $customName
 
-                Write-OutputColor "Enter full name for the account:" -color "Info"
+                Write-OutputColor "  Enter full name for the account:" -color "Info"
                 $customFullName = Read-Host
                 $navResult = Test-NavigationCommand -UserInput $customFullName
                 if ($navResult.ShouldReturn) { return }
@@ -35,19 +35,19 @@ function Add-LocalAdminAccount {
     $existingUser = Get-LocalUser -Name $accountName -ErrorAction SilentlyContinue
 
     if ($existingUser) {
-        Write-OutputColor "Account '$accountName' already exists." -color "Warning"
+        Write-OutputColor "  Account '$accountName' already exists." -color "Warning"
         return
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Creating account: $accountName ($accountFullName)" -color "Info"
+    Write-OutputColor "  Creating account: $accountName ($accountFullName)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Get password
     $Password = Get-SecurePassword -localadminaccountname $accountName
 
     if ($null -eq $Password) {
-        Write-OutputColor "Account creation cancelled due to password validation failure." -color "Error"
+        Write-OutputColor "  Account creation cancelled due to password validation failure." -color "Error"
         return
     }
 
@@ -61,15 +61,15 @@ function Add-LocalAdminAccount {
         # Verify group membership
         $isMember = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$accountName" }
         if ($null -ne $isMember) {
-            Write-OutputColor "Account '$accountName' created and verified in Administrators group." -color "Success"
+            Write-OutputColor "  Account '$accountName' created and verified in Administrators group." -color "Success"
         } else {
-            Write-OutputColor "Account '$accountName' created, but group membership could not be verified." -color "Warning"
+            Write-OutputColor "  Account '$accountName' created, but group membership could not be verified." -color "Warning"
         }
         Add-SessionChange -Category "Security" -Description "Created local admin account '$accountName'"
         Clear-MenuCache
     }
     catch {
-        Write-OutputColor "Failed to create account: $_" -color "Error"
+        Write-OutputColor "  Failed to create account: $_" -color "Error"
     }
     Write-PressEnter
 }

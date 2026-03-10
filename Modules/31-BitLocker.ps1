@@ -220,6 +220,7 @@ function Show-BitLockerManagement {
                             $blVolInfo = Get-BitLockerVolume -MountPoint $vol.MountPoint -ErrorAction Stop
                             if ($null -eq $blVolInfo) {
                                 Write-OutputColor "  Could not retrieve BitLocker volume info." -color "Error"
+                                Write-OutputColor "  Tip: Ensure BitLocker is enabled on this volume and try again after a reboot." -color "Warning"
                                 Write-PressEnter
                                 continue
                             }

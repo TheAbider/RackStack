@@ -434,7 +434,9 @@ function Enable-VMReplicationWizard {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  REPLICATION CONFIGURATION SUMMARY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  VM: $vmName".PadRight(72))│" -color "Info"
+    $vmLine = "  VM: $vmName"
+    if ($vmLine.Length -gt 72) { $vmLine = $vmLine.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($vmLine.PadRight(72))│" -color "Info"
     $lineStr = "  Replica Server: $replicaServer"
     if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
     Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"

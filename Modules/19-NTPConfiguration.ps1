@@ -132,6 +132,7 @@ function Set-NTPServer {
 
         if ($LASTEXITCODE -ne 0) {
             Write-OutputColor "  Failed to configure NTP server (exit code $LASTEXITCODE)." -color "Error"
+            Write-OutputColor "  Tip: Verify the W32Time service is running and the NTP server address is reachable." -color "Warning"
             return
         }
 

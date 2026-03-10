@@ -16,16 +16,22 @@ function Set-HostName {
     Write-OutputColor "" -color "Info"
 
     $newHostname = Get-ValidatedInput -Prompt "Enter new hostname" `
-        -ValidationScript { param($h) Test-ValidHostname -Hostname $h } `
-        -ErrorMessage "Invalid hostname format. See requirements above."
+        -ValidationScript {
+            param($h)
+            if (Test-ValidHostname -Hostname $h) { return $true }
+            $reason = Get-HostnameValidationError -Hostname $h
+            if ($reason) { Write-OutputColor "  $reason" -color "Warning" }
+            return $false
+        } `
+        -ErrorMessage "Invalid hostname format."
 
     if ($null -eq $newHostname) {
-        Write-OutputColor "Hostname change cancelled." -color "Warning"
+        Write-OutputColor "  Hostname change cancelled." -color "Warning"
         return
     }
 
     if ($newHostname -eq $currentHostname) {
-        Write-OutputColor "Hostname is already '$currentHostname'. No change needed." -color "Info"
+        Write-OutputColor "  Hostname is already '$currentHostname'. No change needed." -color "Info"
         return
     }
 
@@ -59,16 +65,16 @@ function Set-HostName {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Changing hostname: '$currentHostname' -> '$newHostname'" -color "Warning"
+    Write-OutputColor "  Changing hostname: '$currentHostname' -> '$newHostname'" -color "Warning"
 
     if (-not (Confirm-UserAction -Message "Apply hostname change? (Requires reboot)")) {
-        Write-OutputColor "Hostname change cancelled." -color "Info"
+        Write-OutputColor "  Hostname change cancelled." -color "Info"
         return
     }
 
     try {
         Rename-Computer -NewName $newHostname -Force -ErrorAction Stop
-        Write-OutputColor "Hostname changed to '$newHostname'. Reboot required!" -color "Success"
+        Write-OutputColor "  Hostname changed to '$newHostname'. Reboot required!" -color "Success"
         $global:RebootNeeded = $true
         Add-SessionChange -Category "System" -Description "Changed hostname from '$currentHostname' to '$newHostname'"
         Clear-MenuCache
@@ -78,7 +84,8 @@ function Set-HostName {
         }.GetNewClosure() -UndoParams @{ OldName = $currentHostname }
     }
     catch {
-        Write-OutputColor "Failed to change hostname: $_" -color "Error"
+        Write-OutputColor "  Failed to change hostname: $_" -color "Error"
     }
+    Write-PressEnter
 }
 #endregion

@@ -823,7 +823,9 @@ function Install-ReadOnlyDC {
     Write-OutputColor "  │$("  Site:             $siteName".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Read-Only:        Yes".PadRight(72))│" -color "Info"
     if (-not [string]::IsNullOrWhiteSpace($delegatedAdmin)) {
-        Write-OutputColor "  │$("  Delegated Admin:  $delegatedAdmin".PadRight(72))│" -color "Info"
+        $adminLine = "  Delegated Admin:  $delegatedAdmin"
+        if ($adminLine.Length -gt 72) { $adminLine = $adminLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($adminLine.PadRight(72))│" -color "Info"
     }
     Write-OutputColor "  │$("  Install DNS:      Yes".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Database Path:    $env:SystemRoot\NTDS".PadRight(72))│" -color "Info"

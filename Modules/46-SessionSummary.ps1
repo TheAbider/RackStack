@@ -38,14 +38,14 @@ function Show-SessionSummary {
     $runtime = (Get-Date) - $script:ScriptStartTime
     $runtimeStr = "{0:D2}:{1:D2}:{2:D2}" -f [int][math]::Floor($runtime.TotalHours), $runtime.Minutes, $runtime.Seconds
 
-    Write-OutputColor "Session Runtime: $runtimeStr" -color "Info"
+    Write-OutputColor "  Session Runtime: $runtimeStr" -color "Info"
     Write-OutputColor "" -color "Info"
 
     if ($script:SessionChanges.Count -eq 0) {
-        Write-OutputColor "No changes were made during this session." -color "Info"
+        Write-OutputColor "  No changes were made during this session." -color "Info"
     }
     else {
-        Write-OutputColor "Changes made during this session:" -color "Info"
+        Write-OutputColor "  Changes made during this session:" -color "Info"
         Write-OutputColor ("-" * 60) -color "Info"
 
         # Group by category for easier scanning
@@ -60,14 +60,14 @@ function Show-SessionSummary {
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor ("-" * 60) -color "Info"
-        Write-OutputColor "Total: $($script:SessionChanges.Count) change(s) across $($categories.Count) category(ies)" -color "Info"
+        Write-OutputColor "  Total: $($script:SessionChanges.Count) change(s) across $($categories.Count) category(ies)" -color "Info"
     }
 
     # Show persistent log path
     $logFile = "$script:AppConfigDir\session-log.txt"
     if (Test-Path -LiteralPath $logFile) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Session log saved to: $logFile" -color "Info"
+        Write-OutputColor "  Session log saved to: $logFile" -color "Info"
     }
 
     # Offer to export summary to Desktop

@@ -480,7 +480,7 @@ function Connect-StandaloneHost {
         "1" {
             # Local connection
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "Testing local Hyper-V connection..." -color "Info"
+            Write-OutputColor "  Testing local Hyper-V connection..." -color "Info"
 
             $result = Test-HyperVConnection -ComputerName "localhost"
 
@@ -490,15 +490,15 @@ function Connect-StandaloneHost {
                 $script:VMDeploymentCredential = $null
                 $script:VMDeploymentConnected = $true
 
-                Write-OutputColor "Connected to local Hyper-V host: $env:COMPUTERNAME" -color "Success"
-                Write-OutputColor "Default VHD Path: $($result.VirtualHardDiskPath)" -color "Info"
-                Write-OutputColor "Default VM Path: $($result.VirtualMachinePath)" -color "Info"
+                Write-OutputColor "  Connected to local Hyper-V host: $env:COMPUTERNAME" -color "Success"
+                Write-OutputColor "  Default VHD Path: $($result.VirtualHardDiskPath)" -color "Info"
+                Write-OutputColor "  Default VM Path: $($result.VirtualMachinePath)" -color "Info"
                 return $true
             }
             else {
-                Write-OutputColor "Failed to connect: $($result.Message)" -color "Error"
+                Write-OutputColor "  Failed to connect: $($result.Message)" -color "Error"
                 Write-OutputColor "" -color "Info"
-                Write-OutputColor "Make sure Hyper-V is installed on this server." -color "Warning"
+                Write-OutputColor "  Make sure Hyper-V is installed on this server." -color "Warning"
                 return $false
             }
         }
@@ -510,12 +510,12 @@ function Connect-StandaloneHost {
             if ($navResult.ShouldReturn) { return $false }
 
             if ([string]::IsNullOrWhiteSpace($remoteHost)) {
-                Write-OutputColor "No server specified." -color "Warning"
+                Write-OutputColor "  No server specified." -color "Warning"
                 return $false
             }
 
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "Attempting connection with current credentials..." -color "Info"
+            Write-OutputColor "  Attempting connection with current credentials..." -color "Info"
 
             $result = Test-HyperVConnection -ComputerName $remoteHost
 
@@ -525,17 +525,17 @@ function Connect-StandaloneHost {
                 $script:VMDeploymentCredential = $null
                 $script:VMDeploymentConnected = $true
 
-                Write-OutputColor "Connected to: $($result.HostName)" -color "Success"
+                Write-OutputColor "  Connected to: $($result.HostName)" -color "Success"
                 return $true
             }
             else {
-                Write-OutputColor "Connection failed with current credentials." -color "Warning"
+                Write-OutputColor "  Connection failed with current credentials." -color "Warning"
                 Write-OutputColor "  Error: $($result.Message)" -color "Info"
                 Write-OutputColor "" -color "Info"
 
                 if (Confirm-UserAction -Message "Try with different credentials?") {
                     Write-OutputColor "" -color "Info"
-                    Write-OutputColor "Enter credentials for remote server:" -color "Info"
+                    Write-OutputColor "  Enter credentials for remote server:" -color "Info"
 
                     try {
                         $cred = Get-Credential -Message "Enter credentials for $remoteHost"
@@ -549,16 +549,16 @@ function Connect-StandaloneHost {
                                 $script:VMDeploymentCredential = $cred
                                 $script:VMDeploymentConnected = $true
 
-                                Write-OutputColor "Connected to: $($result.HostName)" -color "Success"
+                                Write-OutputColor "  Connected to: $($result.HostName)" -color "Success"
                                 return $true
                             }
                             else {
-                                Write-OutputColor "Connection failed: $($result.Message)" -color "Error"
+                                Write-OutputColor "  Connection failed: $($result.Message)" -color "Error"
                             }
                         }
                     }
                     catch {
-                        Write-OutputColor "Credential error: $_" -color "Error"
+                        Write-OutputColor "  Credential error: $_" -color "Error"
                     }
                 }
 
@@ -717,9 +717,9 @@ function Connect-FailoverCluster {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Error"
         Write-OutputColor "  │$("  CONNECTION FAILED".PadRight(72))│" -color "Error"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        $errorLine = "  │  $($result.Message)"
-        if ($errorLine.Length -gt 74) { $errorLine = $errorLine.Substring(0, 71) + "..." }
-        Write-OutputColor "$($errorLine.PadRight(75))│" -color "Warning"
+        $errorMsg = "  $($result.Message)"
+        if ($errorMsg.Length -gt 72) { $errorMsg = $errorMsg.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($errorMsg.PadRight(72))│" -color "Warning"
         Write-OutputColor "  │                                                                        │" -color "Info"
         Write-OutputColor "  │  Troubleshooting:                                                      │" -color "Info"
         Write-OutputColor "  │$("   - Verify the cluster name is correct".PadRight(72))│" -color "Info"
@@ -740,7 +740,7 @@ function Set-DeploymentSiteNumber {
     # If VMNaming has a static SiteId configured, use it directly
     if ($script:VMNaming.SiteIdSource -eq "static" -and $script:VMNaming.SiteId -ne "") {
         $script:VMDeploymentSiteNumber = $script:VMNaming.SiteId
-        Write-OutputColor "Site identifier set from configuration: $($script:VMNaming.SiteId)" -color "Success"
+        Write-OutputColor "  Site identifier set from configuration: $($script:VMNaming.SiteId)" -color "Success"
         return $true
     }
 
@@ -759,21 +759,21 @@ function Set-DeploymentSiteNumber {
     }
 
     if ($detectedSite) {
-        Write-OutputColor "Detected site identifier from hostname: $detectedSite" -color "Success"
+        Write-OutputColor "  Detected site identifier from hostname: $detectedSite" -color "Success"
         Write-OutputColor "" -color "Info"
 
         if (Confirm-UserAction -Message "Is this your site identifier?") {
             $script:VMDeploymentSiteNumber = $detectedSite
-            Write-OutputColor "Site identifier set to: $detectedSite" -color "Success"
+            Write-OutputColor "  Site identifier set to: $detectedSite" -color "Success"
             return $true
         }
     }
     else {
-        Write-OutputColor "Could not detect site identifier from hostname." -color "Warning"
+        Write-OutputColor "  Could not detect site identifier from hostname." -color "Warning"
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter site identifier (e.g., 123456, CRV, ACME):" -color "Info"
+    Write-OutputColor "  Enter site identifier (e.g., 123456, CRV, ACME):" -color "Info"
     $siteInput = Read-Host
 
     $navResult = Test-NavigationCommand -UserInput $siteInput
@@ -784,7 +784,7 @@ function Set-DeploymentSiteNumber {
     # Accept any alphanumeric string (letters, digits, hyphens)
     if ($siteInput -match '^[A-Za-z0-9\-]+$') {
         $script:VMDeploymentSiteNumber = $siteInput
-        Write-OutputColor "Site identifier set to: $siteInput" -color "Success"
+        Write-OutputColor "  Site identifier set to: $siteInput" -color "Success"
         return $true
     }
     else {
@@ -1066,12 +1066,12 @@ function Set-VMConfigName {
     Write-CenteredOutput "VM Name Configuration" -color "Info"
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Site Number: $($script:VMDeploymentSiteNumber)" -color "Info"
-    Write-OutputColor "VM Type: $($Config.Prefix)" -color "Info"
+    Write-OutputColor "  Site Number: $($script:VMDeploymentSiteNumber)" -color "Info"
+    Write-OutputColor "  VM Type: $($Config.Prefix)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Suggest next available name
-    Write-OutputColor "Checking for existing VMs..." -color "Info"
+    Write-OutputColor "  Checking for existing VMs..." -color "Info"
 
     $suggested = Get-NextAvailableVMName -SiteNumber $script:VMDeploymentSiteNumber `
                                           -Prefix $Config.Prefix `
@@ -1080,10 +1080,10 @@ function Set-VMConfigName {
                                           -Credential $script:VMDeploymentCredential
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Suggested name: $($suggested.Name)" -color "Success"
+    Write-OutputColor "  Suggested name: $($suggested.Name)" -color "Success"
 
     if (-not $suggested.Available) {
-        Write-OutputColor "Warning: Could not find an available name up to 99. Please enter manually." -color "Warning"
+        Write-OutputColor "  Warning: Could not find an available name up to 99. Please enter manually." -color "Warning"
     }
 
     Write-OutputColor "" -color "Info"
@@ -1093,7 +1093,7 @@ function Set-VMConfigName {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter custom VM name (or 'back' to cancel):" -color "Info"
+    Write-OutputColor "  Enter custom VM name (or 'back' to cancel):" -color "Info"
     $customName = Read-Host
 
     $navResult = Test-NavigationCommand -UserInput $customName
@@ -1102,7 +1102,13 @@ function Set-VMConfigName {
     }
 
     if ([string]::IsNullOrWhiteSpace($customName)) {
-        Write-OutputColor "No name entered." -color "Warning"
+        Write-OutputColor "  No name entered." -color "Warning"
+        return $false
+    }
+
+    # Reject invalid filesystem characters
+    if ($customName -match '[\\/:*?"<>|]') {
+        Write-OutputColor "  VM name cannot contain: \ / : * ? `" < > |" -color "Error"
         return $false
     }
 
@@ -1113,13 +1119,13 @@ function Set-VMConfigName {
                                   -Credential $script:VMDeploymentCredential
 
     if ($vmCheck.Exists) {
-        Write-OutputColor "VM '$customName' already exists on $($vmCheck.Location)!" -color "Error"
+        Write-OutputColor "  VM '$customName' already exists on $($vmCheck.Location)!" -color "Error"
         return $false
     }
 
     $dnsCheck = Test-VMNameInDNS -VMName $customName
     if ($dnsCheck.Exists) {
-        Write-OutputColor "Warning: '$customName' exists in DNS ($($dnsCheck.IPAddress))" -color "Warning"
+        Write-OutputColor "  Warning: '$customName' exists in DNS ($($dnsCheck.IPAddress))" -color "Warning"
         if (-not (Confirm-UserAction -Message "Use this name anyway?")) {
             return $false
         }
@@ -1142,9 +1148,9 @@ function Set-VMConfigCPU {
         Write-CenteredOutput "CPU Configuration" -color "Info"
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Current setting: $($Config.vCPU) vCPU(s)" -color "Info"
+        Write-OutputColor "  Current setting: $($Config.vCPU) vCPU(s)" -color "Info"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Enter number of virtual CPUs (1-64):" -color "Info"
+        Write-OutputColor "  Enter number of virtual CPUs (1-64):" -color "Info"
         Write-OutputColor "(Press Enter to keep current value)" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -1154,7 +1160,7 @@ function Set-VMConfigCPU {
         if ($navResult.ShouldReturn) { return $false }
 
         if ([string]::IsNullOrWhiteSpace($userResponse)) {
-            Write-OutputColor "Keeping current value: $($Config.vCPU)" -color "Info"
+            Write-OutputColor "  Keeping current value: $($Config.vCPU)" -color "Info"
             return $true
         }
 
@@ -1162,7 +1168,7 @@ function Set-VMConfigCPU {
             $cpuCount = [int]$userResponse
             if ($cpuCount -ge 1 -and $cpuCount -le 64) {
                 $Config.vCPU = $cpuCount
-                Write-OutputColor "CPU set to: $cpuCount" -color "Success"
+                Write-OutputColor "  CPU set to: $cpuCount" -color "Success"
                 return $true
             }
         }
@@ -1183,9 +1189,9 @@ function Set-VMConfigMemory {
     Write-CenteredOutput "Memory Configuration" -color "Info"
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Current setting: $($Config.MemoryGB) GB ($($Config.MemoryType))" -color "Info"
+    Write-OutputColor "  Current setting: $($Config.MemoryGB) GB ($($Config.MemoryType))" -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Memory Type:" -color "Info"
+    Write-OutputColor "  Memory Type:" -color "Info"
     Write-OutputColor "  [1] Static (fixed amount, always allocated)" -color "Success"
     Write-OutputColor "  [2] Dynamic (adjusts based on demand)" -color "Success"
     Write-OutputColor "" -color "Info"
@@ -1205,7 +1211,7 @@ function Set-VMConfigMemory {
     while ($true) {
         if ($global:ReturnToMainMenu) { return $false }
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Enter memory size in GB (1-1024):" -color "Info"
+        Write-OutputColor "  Enter memory size in GB (1-1024):" -color "Info"
         Write-OutputColor "(Press Enter to keep current value: $($Config.MemoryGB) GB)" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -1229,7 +1235,7 @@ function Set-VMConfigMemory {
         Write-OutputColor "  Invalid value. Must be between 1 and 1024 GB." -color "Error"
     }
 
-    Write-OutputColor "Memory set to: $($Config.MemoryGB) GB ($($Config.MemoryType))" -color "Success"
+    Write-OutputColor "  Memory set to: $($Config.MemoryGB) GB ($($Config.MemoryType))" -color "Success"
     return $true
 }
 
@@ -1246,7 +1252,7 @@ function Set-VMConfigDisks {
         Write-CenteredOutput "Disk Configuration" -color "Info"
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Current disks:" -color "Info"
+        Write-OutputColor "  Current disks:" -color "Info"
         Write-OutputColor "" -color "Info"
 
         $index = 1
@@ -1256,7 +1262,7 @@ function Set-VMConfigDisks {
         }
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Options:" -color "Info"
+        Write-OutputColor "  Options:" -color "Info"
         Write-OutputColor "  [A] Add disk" -color "Success"
         Write-OutputColor "  [E] Edit disk" -color "Success"
         Write-OutputColor "  [D] Delete disk" -color "Warning"
@@ -1272,20 +1278,20 @@ function Set-VMConfigDisks {
             "A" {
                 # Add disk
                 Write-OutputColor "" -color "Info"
-                Write-OutputColor "Disk name (e.g., Data, Logs, TempDB):" -color "Info"
+                Write-OutputColor "  Disk name (e.g., Data, Logs, TempDB):" -color "Info"
                 $diskName = Read-Host
                 if ([string]::IsNullOrWhiteSpace($diskName)) { $diskName = "Disk$($Config.Disks.Count + 1)" }
 
-                Write-OutputColor "Disk size in GB:" -color "Info"
+                Write-OutputColor "  Disk size in GB (1-65536):" -color "Info"
                 $diskSize = Read-Host
                 $diskSizeInt = 0
-                if ($diskSize -notmatch '^\d+$' -or -not [int]::TryParse($diskSize, [ref]$diskSizeInt) -or $diskSizeInt -lt 1) {
-                    Write-OutputColor "  Invalid size." -color "Error"
+                if ($diskSize -notmatch '^\d+$' -or -not [int]::TryParse($diskSize, [ref]$diskSizeInt) -or $diskSizeInt -lt 1 -or $diskSizeInt -gt 65536) {
+                    Write-OutputColor "  Invalid size. Enter 1-65536 GB." -color "Error"
                     Start-Sleep -Seconds 1
                     continue
                 }
 
-                Write-OutputColor "Disk type: [1] Fixed (Recommended) [2] Dynamic" -color "Info"
+                Write-OutputColor "  Disk type: [1] Fixed (Recommended) [2] Dynamic" -color "Info"
                 $diskTypeChoice = Read-Host
                 $diskType = if ($diskTypeChoice -eq "2") { "Dynamic" } else { "Fixed" }
 
@@ -1295,7 +1301,7 @@ function Set-VMConfigDisks {
                     Name = $diskName
                 }
 
-                Write-OutputColor "Disk added: $diskName ($diskSize GB, $diskType)" -color "Success"
+                Write-OutputColor "  Disk added: $diskName ($diskSize GB, $diskType)" -color "Success"
                 Start-Sleep -Seconds 1
             }
             "E" {
@@ -1307,18 +1313,22 @@ function Set-VMConfigDisks {
                     if ($idx -ge 0 -and $idx -lt $Config.Disks.Count) {
                         $disk = $Config.Disks[$idx]
 
-                        Write-OutputColor "Current size: $($disk.SizeGB) GB. New size (Enter to keep):" -color "Info"
+                        Write-OutputColor "  Current size: $($disk.SizeGB) GB. New size in GB, 1-65536 (Enter to keep):" -color "Info"
                         $newSize = Read-Host
-                        if ($newSize -match '^\d+$' -and [int]$newSize -ge 1) {
+                        if ($newSize -match '^\d+$' -and [int]$newSize -ge 1 -and [int]$newSize -le 65536) {
                             $disk.SizeGB = [int]$newSize
                         }
+                        elseif ($newSize -ne '') {
+                            Write-OutputColor "  Invalid size. Enter 1-65536 GB." -color "Error"
+                            Start-Sleep -Seconds 1
+                        }
 
-                        Write-OutputColor "Current type: $($disk.Type). [1] Fixed [2] Dynamic (Enter to keep):" -color "Info"
+                        Write-OutputColor "  Current type: $($disk.Type). [1] Fixed [2] Dynamic (Enter to keep):" -color "Info"
                         $newType = Read-Host
                         if ($newType -eq "1") { $disk.Type = "Fixed" }
                         elseif ($newType -eq "2") { $disk.Type = "Dynamic" }
 
-                        Write-OutputColor "Disk updated." -color "Success"
+                        Write-OutputColor "  Disk updated." -color "Success"
                         Start-Sleep -Seconds 1
                     }
                 }
@@ -1326,7 +1336,7 @@ function Set-VMConfigDisks {
             "D" {
                 # Delete disk
                 if ($Config.Disks.Count -le 1) {
-                    Write-OutputColor "Cannot delete the last disk. VM must have at least one disk." -color "Warning"
+                    Write-OutputColor "  Cannot delete the last disk. VM must have at least one disk." -color "Warning"
                     Start-Sleep -Seconds 1
                     continue
                 }
@@ -1338,7 +1348,7 @@ function Set-VMConfigDisks {
                     if ($idx -ge 0 -and $idx -lt $Config.Disks.Count) {
                         $diskName = $Config.Disks[$idx].Name
                         $Config.Disks = @(for ($j = 0; $j -lt $Config.Disks.Count; $j++) { if ($j -ne $idx) { $Config.Disks[$j] } })
-                        Write-OutputColor "Deleted disk: $diskName" -color "Success"
+                        Write-OutputColor "  Deleted disk: $diskName" -color "Success"
                         Start-Sleep -Seconds 1
                     }
                 }
@@ -1414,7 +1424,7 @@ function Set-VMConfigNICs {
         Write-CenteredOutput "Network Adapter Configuration" -color "Info"
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Current NICs:" -color "Info"
+        Write-OutputColor "  Current NICs:" -color "Info"
         Write-OutputColor "" -color "Info"
 
         $index = 1
@@ -1426,7 +1436,7 @@ function Set-VMConfigNICs {
         }
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Available Virtual Switches:" -color "Info"
+        Write-OutputColor "  Available Virtual Switches:" -color "Info"
         foreach ($sw in $switches) {
             $typeLabel = $sw.SwitchType.ToString()
             if ($sw.SwitchType -eq "External" -and $sw.EmbeddedTeamingEnabled) { $typeLabel = "SET" }
@@ -1434,7 +1444,7 @@ function Set-VMConfigNICs {
         }
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Options:" -color "Info"
+        Write-OutputColor "  Options:" -color "Info"
         Write-OutputColor "  [A] Add NIC" -color "Success"
         Write-OutputColor "  [E] Edit NIC" -color "Success"
         Write-OutputColor "  [D] Delete NIC" -color "Warning"
@@ -1450,7 +1460,7 @@ function Set-VMConfigNICs {
             "A" {
                 # Add NIC
                 Write-OutputColor "" -color "Info"
-                Write-OutputColor "Select virtual switch (or Enter for not connected):" -color "Info"
+                Write-OutputColor "  Select virtual switch (or Enter for not connected):" -color "Info"
 
                 $swIndex = 1
                 foreach ($sw in $switches) {
@@ -1468,7 +1478,7 @@ function Set-VMConfigNICs {
                     }
                 }
 
-                Write-OutputColor "VLAN ID (Enter for none, 1-4094):" -color "Info"
+                Write-OutputColor "  VLAN ID (Enter for none, 1-4094):" -color "Info"
                 $vlanInput = Read-Host
                 $vlanId = $null
                 if ($vlanInput -match '^\d+$') {
@@ -1483,7 +1493,7 @@ function Set-VMConfigNICs {
                     VLAN = $vlanId
                 }
 
-                Write-OutputColor "NIC added." -color "Success"
+                Write-OutputColor "  NIC added." -color "Success"
                 Start-Sleep -Seconds 1
             }
             "E" {
@@ -1495,7 +1505,7 @@ function Set-VMConfigNICs {
                     if ($idx -ge 0 -and $idx -lt $Config.NICs.Count) {
                         $nic = $Config.NICs[$idx]
 
-                        Write-OutputColor "Select new virtual switch:" -color "Info"
+                        Write-OutputColor "  Select new virtual switch:" -color "Info"
                         $swIndex = 1
                         foreach ($sw in $switches) {
                             Write-OutputColor "  [$swIndex] $($sw.Name)" -color "Info"
@@ -1516,7 +1526,7 @@ function Set-VMConfigNICs {
                             }
                         }
 
-                        Write-OutputColor "VLAN ID (Enter for none, current: $(if ($nic.VLAN) { $nic.VLAN } else { 'None' })):" -color "Info"
+                        Write-OutputColor "  VLAN ID (Enter for none, current: $(if ($nic.VLAN) { $nic.VLAN } else { 'None' })):" -color "Info"
                         $vlanInput = Read-Host
                         if ($vlanInput -eq "0" -or $vlanInput -eq "") {
                             $nic.VLAN = $null
@@ -1528,7 +1538,7 @@ function Set-VMConfigNICs {
                             }
                         }
 
-                        Write-OutputColor "NIC updated." -color "Success"
+                        Write-OutputColor "  NIC updated." -color "Success"
                         Start-Sleep -Seconds 1
                     }
                 }
@@ -1536,7 +1546,7 @@ function Set-VMConfigNICs {
             "D" {
                 # Delete NIC
                 if ($Config.NICs.Count -le 1) {
-                    Write-OutputColor "Cannot delete the last NIC. VM must have at least one NIC." -color "Warning"
+                    Write-OutputColor "  Cannot delete the last NIC. VM must have at least one NIC." -color "Warning"
                     Start-Sleep -Seconds 1
                     continue
                 }
@@ -1547,7 +1557,7 @@ function Set-VMConfigNICs {
                     $idx = [int]$deleteIndex - 1
                     if ($idx -ge 0 -and $idx -lt $Config.NICs.Count) {
                         $Config.NICs = @(for ($j = 0; $j -lt $Config.NICs.Count; $j++) { if ($j -ne $idx) { $Config.NICs[$j] } })
-                        Write-OutputColor "NIC deleted." -color "Success"
+                        Write-OutputColor "  NIC deleted." -color "Success"
                         Start-Sleep -Seconds 1
                     }
                 }
@@ -1922,7 +1932,7 @@ function New-DeployedVM {
     Write-CenteredOutput "Creating Virtual Machine" -color "Info"
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Creating VM: $($Config.VMName)..." -color "Info"
+    Write-OutputColor "  Creating VM: $($Config.VMName)..." -color "Info"
     Write-OutputColor "" -color "Info"
 
     try {
@@ -1960,19 +1970,19 @@ function New-DeployedVM {
         Write-OutputColor "  VM '$($Config.VMName)' created successfully!" -color "Success"
         Write-OutputColor ("=" * 55) -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "VM Location: $($paths.VMSpecificPath)" -color "Info"
-        Write-OutputColor "VHD Location: $($paths.VHDSpecificPath)" -color "Info"
+        Write-OutputColor "  VM Location: $($paths.VMSpecificPath)" -color "Info"
+        Write-OutputColor "  VHD Location: $($paths.VHDSpecificPath)" -color "Info"
         Write-OutputColor "" -color "Info"
 
         if ($Config.UseVHD) {
-            Write-OutputColor "Next steps:" -color "Info"
+            Write-OutputColor "  Next steps:" -color "Info"
             Write-OutputColor "  1. Start the VM (OS is pre-installed from sysprepped VHD)" -color "Info"
             Write-OutputColor "  2. Complete Windows mini-setup/OOBE" -color "Info"
             Write-OutputColor "  3. Configure networking inside the VM" -color "Info"
             Write-OutputColor "  4. Join domain, install roles/features as needed" -color "Info"
         }
         else {
-            Write-OutputColor "Next steps:" -color "Info"
+            Write-OutputColor "  Next steps:" -color "Info"
             Write-OutputColor "  1. Attach installation media (ISO) via Hyper-V Manager" -color "Info"
             Write-OutputColor "  2. Start the VM" -color "Info"
             Write-OutputColor "  3. Install the operating system" -color "Info"
@@ -1987,9 +1997,9 @@ function New-DeployedVM {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ERROR creating VM: $_" -color "Error"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "The VM may have been partially created. Check Hyper-V Manager." -color "Warning"
+        Write-OutputColor "  The VM may have been partially created. Check Hyper-V Manager." -color "Warning"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Troubleshooting tips:" -color "Info"
+        Write-OutputColor "  Troubleshooting tips:" -color "Info"
         Write-OutputColor "  - Verify Hyper-V is installed and running" -color "Info"
         Write-OutputColor "  - Check that storage paths exist and are writable" -color "Info"
         Write-OutputColor "  - Ensure sufficient disk space for VHD files" -color "Info"
@@ -2005,7 +2015,7 @@ function Show-ExistingVMs {
     Write-CenteredOutput "Existing Virtual Machines" -color "Info"
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Retrieving VMs from $($script:VMDeploymentTarget)..." -color "Info"
+    Write-OutputColor "  Retrieving VMs from $($script:VMDeploymentTarget)..." -color "Info"
 
     try {
         $params = @{
@@ -2023,7 +2033,7 @@ function Show-ExistingVMs {
 
         if ($vms.Count -eq 0) {
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "No VMs found on $($script:VMDeploymentTarget)." -color "Warning"
+            Write-OutputColor "  No VMs found on $($script:VMDeploymentTarget)." -color "Warning"
             return
         }
 
@@ -2064,7 +2074,7 @@ function Show-ExistingVMs {
         }
 
         Write-OutputColor ("=" * 80) -color "Info"
-        Write-OutputColor "Total VMs: $($vms.Count)" -color "Info"
+        Write-OutputColor "  Total VMs: $($vms.Count)" -color "Info"
     }
     catch {
         Write-OutputColor "  Error retrieving VMs: $_" -color "Error"
@@ -2138,7 +2148,7 @@ function Publish-StandardVM {
 
     # Step through configuration
     if (-not (Set-VMConfigName -Config $config)) {
-        Write-OutputColor "VM deployment cancelled." -color "Warning"
+        Write-OutputColor "  VM deployment cancelled." -color "Warning"
         Write-PressEnter
         return
     }
@@ -2182,7 +2192,7 @@ function Publish-StandardVM {
         Show-VMConfigSummary -Config $config
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Options:" -color "Info"
+        Write-OutputColor "  Options:" -color "Info"
         Write-OutputColor "  [1] Edit CPU" -color "Success"
         Write-OutputColor "  [2] Edit Memory" -color "Success"
         Write-OutputColor "  [3] Edit Disks" -color "Success"
@@ -2215,7 +2225,7 @@ function Publish-StandardVM {
                     }
                 }
                 "X" {
-                    Write-OutputColor "VM deployment cancelled." -color "Warning"
+                    Write-OutputColor "  VM deployment cancelled." -color "Warning"
                     Write-PressEnter
                     return
                 }
@@ -2232,13 +2242,13 @@ function Publish-CustomVM {
     Clear-Host
     Write-CenteredOutput "Custom VM Deployment" -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter VM prefix (e.g., VM, APP, TEST):" -color "Info"
+    Write-OutputColor "  Enter VM prefix (e.g., VM, APP, TEST):" -color "Info"
     $prefix = Read-Host
     if ([string]::IsNullOrWhiteSpace($prefix)) { $prefix = "VM" }
     $config.Prefix = $prefix.ToUpper()
 
     if (-not (Set-VMConfigName -Config $config)) {
-        Write-OutputColor "VM deployment cancelled." -color "Warning"
+        Write-OutputColor "  VM deployment cancelled." -color "Warning"
         Write-PressEnter
         return
     }
@@ -2285,7 +2295,7 @@ function Publish-CustomVM {
         Show-VMConfigSummary -Config $config
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Options:" -color "Info"
+        Write-OutputColor "  Options:" -color "Info"
         Write-OutputColor "  [1] Edit CPU" -color "Success"
         Write-OutputColor "  [2] Edit Memory" -color "Success"
         Write-OutputColor "  [3] Edit Disks" -color "Success"
@@ -2316,7 +2326,7 @@ function Publish-CustomVM {
                     }
                 }
                 "X" {
-                    Write-OutputColor "VM deployment cancelled." -color "Warning"
+                    Write-OutputColor "  VM deployment cancelled." -color "Warning"
                     Write-PressEnter
                     return
                 }
@@ -2633,9 +2643,32 @@ function Add-VMToQueue {
         [hashtable]$Config
     )
 
+    # Check for duplicate VM name in queue
+    $vmName = $Config.VMName
+    $duplicate = $script:VMDeploymentQueue | Where-Object { $_.VMName -eq $vmName }
+    if ($null -ne $duplicate) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  A VM named '$vmName' is already in the queue." -color "Warning"
+        if (-not (Confirm-UserAction -Message "Add duplicate VM name to queue?")) {
+            Write-OutputColor "  VM not added." -color "Info"
+            return
+        }
+    }
+
+    # Check for existing VM on host with same name
+    $existingVM = Get-VM -Name $vmName -ErrorAction SilentlyContinue
+    if ($null -ne $existingVM) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  A VM named '$vmName' already exists on this host." -color "Warning"
+        if (-not (Confirm-UserAction -Message "Add VM with conflicting name to queue?")) {
+            Write-OutputColor "  VM not added." -color "Info"
+            return
+        }
+    }
+
     $script:VMDeploymentQueue += $Config
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  VM '$($Config.VMName)' added to deployment queue." -color "Success"
+    Write-OutputColor "  VM '$vmName' added to deployment queue." -color "Success"
     Write-OutputColor "  Queue now has $($script:VMDeploymentQueue.Count) VM(s)." -color "Info"
 }
 

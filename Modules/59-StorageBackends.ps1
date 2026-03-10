@@ -631,7 +631,9 @@ function Show-SMB3Status {
             $share = $session.ShareName
             $server = $session.ServerName
             $dialect = $session.Dialect
-            Write-OutputColor "  │$("  \\$server\$share (SMB $dialect)".PadRight(72))│" -color "Success"
+            $smbLine = "  \\$server\$share (SMB $dialect)"
+            if ($smbLine.Length -gt 72) { $smbLine = $smbLine.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($smbLine.PadRight(72))│" -color "Success"
         }
     }
     else {

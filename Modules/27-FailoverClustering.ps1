@@ -20,27 +20,27 @@ function Install-FailoverClusteringFeature {
     Write-CenteredOutput "Install Failover Clustering" -color "Info"
 
     if (Test-FailoverClusteringInstalled) {
-        Write-OutputColor "Failover Clustering is already installed." -color "Success"
+        Write-OutputColor "  Failover Clustering is already installed." -color "Success"
         return
     }
 
-    Write-OutputColor "Failover Clustering is not currently installed." -color "Info"
+    Write-OutputColor "  Failover Clustering is not currently installed." -color "Info"
 
     # Pre-flight validation
     $preFlightOK = Show-PreFlightCheck -Feature "FailoverClustering"
     if (-not $preFlightOK) {
         if (-not (Confirm-UserAction -Message "Continue despite blocking issues?")) {
-            Write-OutputColor "Installation cancelled." -color "Info"
+            Write-OutputColor "  Installation cancelled." -color "Info"
             return
         }
     }
 
-    Write-OutputColor "Failover Clustering enables high availability by allowing" -color "Info"
-    Write-OutputColor "multiple servers to work together as a cluster." -color "Info"
-    Write-OutputColor "A reboot may be required after installation." -color "Warning"
+    Write-OutputColor "  Failover Clustering enables high availability by allowing" -color "Info"
+    Write-OutputColor "  multiple servers to work together as a cluster." -color "Info"
+    Write-OutputColor "  A reboot may be required after installation." -color "Warning"
 
     if (-not (Confirm-UserAction -Message "Install Failover Clustering now?")) {
-        Write-OutputColor "Failover Clustering installation cancelled." -color "Info"
+        Write-OutputColor "  Failover Clustering installation cancelled." -color "Info"
         return
     }
 
@@ -60,11 +60,12 @@ function Install-FailoverClusteringFeature {
             Clear-MenuCache
         }
         else {
-            Write-OutputColor "Failover Clustering installation may not have completed successfully." -color "Error"
+            Write-OutputColor "  Failover Clustering installation may not have completed successfully." -color "Error"
         }
     }
     catch {
-        Write-OutputColor "Failed to install Failover Clustering: $_" -color "Error"
+        Write-OutputColor "  Failed to install Failover Clustering: $_" -color "Error"
+        Write-OutputColor "  Tip: Ensure Windows Update service is running and the server edition supports clustering." -color "Warning"
     }
 }
 
@@ -942,7 +943,9 @@ function Show-ClusterStatus {
     }
     foreach ($node in $nodes) {
         $color = if ($node.State -eq "Up") { "Success" } else { "Error" }
-        Write-OutputColor "  │$("  $($node.Name) - $($node.State)".PadRight(72))│" -color $color
+        $nodeLine = "  $($node.Name) - $($node.State)"
+        if ($nodeLine.Length -gt 72) { $nodeLine = $nodeLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($nodeLine.PadRight(72))│" -color $color
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"

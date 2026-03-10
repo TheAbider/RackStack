@@ -87,7 +87,7 @@ function Select-PhysicalAdaptersSmart {
         $results = @(Test-AdapterInternetConnectivity)
 
         if ($results.Count -eq 0) {
-            Write-OutputColor "No physical adapters found." -color "Error"
+            Write-OutputColor "  No physical adapters found." -color "Error"
             return $null
         }
 
@@ -113,19 +113,19 @@ function Select-PhysicalAdaptersSmart {
         $noInternetAdapters = @($results | Where-Object { -not $_.HasInternet })
 
         if ($internetAdapters.Count -eq 0) {
-            Write-OutputColor "No adapters with internet connectivity found." -color "Warning"
-            Write-OutputColor "Please use manual selection or check network configuration." -color "Info"
+            Write-OutputColor "  No adapters with internet connectivity found." -color "Warning"
+            Write-OutputColor "  Please use manual selection or check network configuration." -color "Info"
             return $null
         }
 
-        Write-OutputColor "Adapters with internet (will be used for SET):" -color "Success"
+        Write-OutputColor "  Adapters with internet (will be used for SET):" -color "Success"
         foreach ($adapter in $internetAdapters) {
             Write-OutputColor "  - $($adapter.Name) ($($adapter.IPAddress))" -color "Success"
         }
 
         if ($noInternetAdapters.Count -gt 0) {
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "Adapters WITHOUT internet (candidates for iSCSI):" -color "Warning"
+            Write-OutputColor "  Adapters WITHOUT internet (candidates for iSCSI):" -color "Warning"
             foreach ($adapter in $noInternetAdapters) {
                 Write-OutputColor "  - $($adapter.Name)" -color "Warning"
             }
@@ -135,7 +135,7 @@ function Select-PhysicalAdaptersSmart {
 
         Write-OutputColor "" -color "Info"
         if (-not (Confirm-UserAction -Message "Use adapters with internet for SET?")) {
-            Write-OutputColor "Selection cancelled." -color "Info"
+            Write-OutputColor "  Selection cancelled." -color "Info"
             return $null
         }
 
@@ -192,13 +192,13 @@ function New-SwitchEmbeddedTeam {
     $existingSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" } | Select-Object -First 1
 
     if ($existingSwitch) {
-        Write-OutputColor "Existing external switch found: '$($existingSwitch.Name)'" -color "Warning"
+        Write-OutputColor "  Existing external switch found: '$($existingSwitch.Name)'" -color "Warning"
 
         if ($existingSwitch.EmbeddedTeamingEnabled) {
-            Write-OutputColor "This switch has embedded teaming enabled." -color "Info"
+            Write-OutputColor "  This switch has embedded teaming enabled." -color "Info"
             $teamNics = (Get-VMSwitchTeam -Name $existingSwitch.Name -ErrorAction SilentlyContinue).NetAdapterInterfaceDescription
             if ($teamNics) {
-                Write-OutputColor "Team members: $($teamNics -join ', ')" -color "Info"
+                Write-OutputColor "  Team members: $($teamNics -join ', ')" -color "Info"
             }
         }
 
@@ -207,31 +207,31 @@ function New-SwitchEmbeddedTeam {
             $_ | Get-VMNetworkAdapter -ErrorAction SilentlyContinue | Where-Object { $_.SwitchName -eq $existingSwitch.Name }
         })
         if ($connectedVMs.Count -gt 0) {
-            Write-OutputColor "WARNING: $($connectedVMs.Count) VM(s) are connected to this switch:" -color "Warning"
+            Write-OutputColor "  WARNING: $($connectedVMs.Count) VM(s) are connected to this switch:" -color "Warning"
             foreach ($vm in $connectedVMs) {
                 Write-OutputColor "  - $($vm.Name) ($($vm.State))" -color "Warning"
             }
         }
 
         if (-not (Confirm-UserAction -Message "`nRemove existing switch and create new SET?")) {
-            Write-OutputColor "Keeping existing configuration." -color "Info"
+            Write-OutputColor "  Keeping existing configuration." -color "Info"
             return
         }
 
-        Write-OutputColor "Removing existing switch..." -color "Warning"
+        Write-OutputColor "  Removing existing switch..." -color "Warning"
         Remove-VMSwitch -Name $existingSwitch.Name -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
     }
 
     Write-OutputColor "`nSelect physical adapters for the Switch Embedded Team:" -color "Info"
-    Write-OutputColor "Note: Select at least 2 adapters for redundancy" -color "Warning"
+    Write-OutputColor "  Note: Select at least 2 adapters for redundancy" -color "Warning"
     Write-OutputColor "" -color "Info"
 
     # Use smart selection with auto-detect option
     $selectedAdapters = Select-PhysicalAdaptersSmart
 
     if ($null -eq $selectedAdapters -or @($selectedAdapters).Count -eq 0) {
-        Write-OutputColor "No adapters selected. Aborting SET creation." -color "Error"
+        Write-OutputColor "  No adapters selected. Aborting SET creation." -color "Error"
         return
     }
 
@@ -240,7 +240,7 @@ function New-SwitchEmbeddedTeam {
     if ($adapterCount -eq 1) {
         Write-OutputColor "`nWarning: Only 1 adapter selected. No redundancy!" -color "Critical"
         if (-not (Confirm-UserAction -Message "Continue with single adapter?")) {
-            Write-OutputColor "SET creation cancelled." -color "Info"
+            Write-OutputColor "  SET creation cancelled." -color "Info"
             return
         }
     }
@@ -256,28 +256,41 @@ function New-SwitchEmbeddedTeam {
         $uniqueSpeeds = @($speeds | Select-Object -Unique)
         if ($uniqueSpeeds.Count -gt 1) {
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "Warning: Selected adapters have mismatched link speeds!" -color "Critical"
+            Write-OutputColor "  Warning: Selected adapters have mismatched link speeds!" -color "Critical"
             foreach ($adapter in $selectedAdapters) {
                 Write-OutputColor "  - $($adapter.Name): $($adapter.LinkSpeed)" -color "Warning"
             }
-            Write-OutputColor "SET performance will be limited to the slowest adapter." -color "Warning"
+            Write-OutputColor "  SET performance will be limited to the slowest adapter." -color "Warning"
+        }
+    }
+
+    # Check if any selected adapters are already bound to a VM switch
+    $existingSwitches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
+    foreach ($adapter in $selectedAdapters) {
+        $boundSwitch = $existingSwitches | Where-Object {
+            $_.NetAdapterInterfaceDescriptions -contains $adapter.InterfaceDescription
+        }
+        if ($null -ne $boundSwitch) {
+            Write-OutputColor "  '$($adapter.Name)' is already bound to VM switch '$($boundSwitch.Name)'." -color "Error"
+            Write-OutputColor "  Remove it from the existing switch first." -color "Warning"
+            return
         }
     }
 
     if (-not (Confirm-UserAction -Message "`nCreate Switch Embedded Team with these adapters?")) {
-        Write-OutputColor "SET creation cancelled." -color "Info"
+        Write-OutputColor "  SET creation cancelled." -color "Info"
         return
     }
 
     try {
-        Write-OutputColor "Creating VM Switch '$SwitchName'..." -color "Info"
+        Write-OutputColor "  Creating VM Switch '$SwitchName'..." -color "Info"
         $adapterNames = $selectedAdapters.Name
         New-VMSwitch -Name $SwitchName -NetAdapterName $adapterNames -EnableEmbeddedTeaming $true -AllowManagementOS $true -ErrorAction Stop
 
-        Write-OutputColor "Setting load balancing algorithm to Dynamic..." -color "Info"
+        Write-OutputColor "  Setting load balancing algorithm to Dynamic..." -color "Info"
         Set-VMSwitchTeam -Name $SwitchName -LoadBalancingAlgorithm Dynamic -ErrorAction SilentlyContinue
 
-        Write-OutputColor "Waiting for management adapter to appear..." -color "Info"
+        Write-OutputColor "  Waiting for management adapter to appear..." -color "Info"
         $vnicReady = $false
         for ($wait = 0; $wait -lt 15; $wait++) {
             $vnic = Get-VMNetworkAdapter -ManagementOS -Name $SwitchName -ErrorAction SilentlyContinue
@@ -286,15 +299,15 @@ function New-SwitchEmbeddedTeam {
         }
 
         if ($vnicReady) {
-            Write-OutputColor "Renaming management adapter to '$ManagementName'..." -color "Info"
+            Write-OutputColor "  Renaming management adapter to '$ManagementName'..." -color "Info"
             Rename-VMNetworkAdapter -ManagementOS -Name $SwitchName -NewName $ManagementName -ErrorAction SilentlyContinue
         } else {
-            Write-OutputColor "Management adapter not yet available. You may need to rename it manually." -color "Warning"
+            Write-OutputColor "  Management adapter not yet available. You may need to rename it manually." -color "Warning"
         }
 
         Write-OutputColor "`nSwitch Embedded Team created successfully!" -color "Success"
-        Write-OutputColor "Switch Name: $SwitchName" -color "Info"
-        Write-OutputColor "Management NIC: vEthernet ($ManagementName)" -color "Info"
+        Write-OutputColor "  Switch Name: $SwitchName" -color "Info"
+        Write-OutputColor "  Management NIC: vEthernet ($ManagementName)" -color "Info"
         Add-SessionChange -Category "Network" -Description "Created SET '$SwitchName' with $adapterCount adapters"
         Clear-MenuCache
 
@@ -320,8 +333,8 @@ function New-SwitchEmbeddedTeam {
         }
     }
     catch {
-        Write-OutputColor "Failed to create Switch Embedded Team: $_" -color "Error"
-        Write-OutputColor "Tip: Make sure Hyper-V is installed and adapters are not in use." -color "Warning"
+        Write-OutputColor "  Failed to create Switch Embedded Team: $_" -color "Error"
+        Write-OutputColor "  Tip: Make sure Hyper-V is installed and adapters are not in use." -color "Warning"
     }
 }
 
@@ -338,8 +351,8 @@ function Add-CustomVNIC {
     $externalSwitches = @(Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" })
 
     if ($externalSwitches.Count -eq 0) {
-        Write-OutputColor "No external virtual switch found." -color "Error"
-        Write-OutputColor "Please create a virtual switch first (SET or External)." -color "Warning"
+        Write-OutputColor "  No external virtual switch found." -color "Error"
+        Write-OutputColor "  Please create a virtual switch first (SET or External)." -color "Warning"
         return
     }
 
@@ -368,7 +381,7 @@ function Add-CustomVNIC {
     }
 
     $typeLabel = if ($existingSwitch.EmbeddedTeamingEnabled) { "SET" } else { "External" }
-    Write-OutputColor "Using switch: $($existingSwitch.Name) ($typeLabel)" -color "Success"
+    Write-OutputColor "  Using switch: $($existingSwitch.Name) ($typeLabel)" -color "Success"
 
     # Show existing management adapters
     $existingAdapters = Get-VMNetworkAdapter -ManagementOS -SwitchName $existingSwitch.Name -ErrorAction SilentlyContinue
@@ -433,13 +446,13 @@ function Add-CustomVNIC {
             return
         }
 
-        Write-OutputColor "Removing existing vNIC '$vnicName'..." -color "Info"
+        Write-OutputColor "  Removing existing vNIC '$vnicName'..." -color "Info"
         Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
         # Verify removal succeeded
         $stillExists = Get-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
         if ($stillExists) {
-            Write-OutputColor "Could not remove existing vNIC '$vnicName' (may be in use). Aborting." -color "Error"
+            Write-OutputColor "  Could not remove existing vNIC '$vnicName' (may be in use). Aborting." -color "Error"
             return
         }
     }
@@ -451,7 +464,7 @@ function Add-CustomVNIC {
         Write-OutputColor "  vNIC created: vEthernet ($vnicName)" -color "Success"
     }
     catch {
-        Write-OutputColor "Failed to create virtual NIC: $_" -color "Error"
+        Write-OutputColor "  Failed to create virtual NIC: $_" -color "Error"
         return
     }
 

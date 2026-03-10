@@ -229,6 +229,25 @@ function Copy-VHDForVM {
         }
     }
 
+    # Pre-check: verify destination has enough free space for VHD copy
+    $sourceItem = Get-Item -LiteralPath $SourceVHDPath -ErrorAction SilentlyContinue
+    if ($null -ne $sourceItem -and $DestinationFolder -match '^[A-Za-z]:') {
+        $destDriveLetter = $DestinationFolder.Substring(0, 1)
+        $destVolume = Get-Volume -DriveLetter $destDriveLetter -ErrorAction SilentlyContinue
+        if ($null -ne $destVolume) {
+            $requiredBytes = $sourceItem.Length
+            $freeBytes = $destVolume.SizeRemaining
+            if ($requiredBytes -gt $freeBytes) {
+                $reqGB = [math]::Round($requiredBytes / 1GB, 1)
+                $freeGB = [math]::Round($freeBytes / 1GB, 1)
+                Write-OutputColor "  Insufficient disk space on ${destDriveLetter}: drive." -color "Error"
+                Write-OutputColor "  Required: $reqGB GB | Available: $freeGB GB" -color "Error"
+                Write-OutputColor "  Tip: Free up space or choose a different storage path." -color "Warning"
+                return $null
+            }
+        }
+    }
+
     Write-OutputColor "  Copying base VHD to VM folder..." -color "Info"
     Write-OutputColor "  Source: $SourceVHDPath" -color "Info"
     Write-OutputColor "  Dest:   $destPath" -color "Info"

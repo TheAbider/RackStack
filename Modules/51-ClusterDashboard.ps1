@@ -19,7 +19,9 @@ function Show-ClusterDashboard {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("           CLUSTER DASHBOARD: " + $cluster.Name.ToUpper()).PadRight(72))║" -color "Info"
+    $clusterTitle = "           CLUSTER DASHBOARD: " + $cluster.Name.ToUpper()
+    if ($clusterTitle.Length -gt 72) { $clusterTitle = $clusterTitle.Substring(0, 69) + "..." }
+    Write-OutputColor "  ║$($clusterTitle.PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 

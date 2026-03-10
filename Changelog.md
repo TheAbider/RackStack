@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## v1.21.2
+
+- **Bug Fix:** Company defaults loading — first-run wizard no longer saves built-in defaults that overwrite company values on reload; company defaults files (*.defaults.json) are now properly detected and prompted even when defaults.json already exists (56-OperationsMenu).
+- **Bug Fix:** Nested defaults deep merge — personal defaults.json no longer overwrites company FileServer/AgentInstaller config with empty values; Tier 3 merge now deep-merges nested objects instead of replacing them (56-OperationsMenu).
+- **Bug Fix:** KaseyaFolder remap — `KaseyaFolder` key in FileServer config now always remaps to `AgentFolder`, fixing agent installer file discovery when using legacy config format (56-OperationsMenu).
+- **Bug Fix:** License keys and VM naming now load from merged defaults (company + personal) instead of only from personal defaults.json (56-OperationsMenu).
+- **Bug Fix:** Negative uptime display — dashboard uptime calculation now uses UTC on both sides to prevent timezone mismatch showing negative hours (48-MenuDisplay).
+- **Bug Fix:** Mojibake on System Configuration menu — corrupted UTF-8 arrow character restored (48-MenuDisplay).
+- **Bug Fix:** NuGet provider prompt — added `-ForceBootstrap` to suppress interactive Y/N prompt during Windows Update setup (14-WindowsUpdates).
+- **Bug Fix:** Update install progress no longer shows elapsed time twice (14-WindowsUpdates).
+- **UX:** Hostname validation now shows specific rejection reason (e.g., "Too long: 16 characters, max 15") instead of generic "See requirements above" (03-InputValidation, 11-Hostname).
+- 64 modules, 2291 tests
+
 ## v1.21.1
 
 - **Robustness:** CIM timeout hardening — 25+ bare `Get-CimInstance` calls wrapped with `Invoke-WithTimeout` to prevent UI hangs when WMI is slow or unresponsive (12-DomainJoin, 19-NTP, 24-DisableAdmin, 25-HyperV, 35-Utilities, 36-BatchConfig, 40-HostStorage, 44-VMDeployment, 45-ConfigExport, 50-EntryPoint, 55-QoLFeatures).

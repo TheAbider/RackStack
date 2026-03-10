@@ -54,7 +54,7 @@ function Select-PhysicalAdapters {
         $selectedAdapters = $adapters | Where-Object { $_.InterfaceIndex -in $selectedIndexes }
 
         if ($null -eq $selectedAdapters -or @($selectedAdapters).Count -eq 0) {
-            Write-OutputColor "No valid adapters selected." -color "Error"
+            Write-OutputColor "  No valid adapters selected." -color "Error"
             Start-Sleep -Seconds 1
             continue
         }
@@ -74,7 +74,7 @@ function Select-Host-Network-Adapter {
         $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "vEthernet*" }
 
         if ($null -eq $adapters -or @($adapters).Count -eq 0) {
-            Write-OutputColor "No virtual adapters found. Please create a Switch Embedded Team first." -color "Error"
+            Write-OutputColor "  No virtual adapters found. Please create a Switch Embedded Team first." -color "Error"
             return $null
         }
 
@@ -88,7 +88,7 @@ function Select-Host-Network-Adapter {
 
         Show-AdaptersTable -adapters $adapters -columnWidths $columnWidths
 
-        Write-OutputColor "Enter adapter Index, or 'R' to refresh, 'B' to go back:" -color "Warning"
+        Write-OutputColor "  Enter adapter Index, or 'R' to refresh, 'B' to go back:" -color "Warning"
         $selection = Read-Host
 
         # Check for refresh
@@ -135,7 +135,7 @@ function Select-VM-Network-Adapter {
         $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "vEthernet*" }
 
         if ($null -eq $adapters -or @($adapters).Count -eq 0) {
-            Write-OutputColor "No network adapters found." -color "Error"
+            Write-OutputColor "  No network adapters found." -color "Error"
             return $null
         }
 
@@ -149,7 +149,7 @@ function Select-VM-Network-Adapter {
 
         Show-AdaptersTable -adapters $adapters -columnWidths $columnWidths
 
-        Write-OutputColor "Enter adapter Index, or 'R' to refresh, 'B' to go back:" -color "Warning"
+        Write-OutputColor "  Enter adapter Index, or 'R' to refresh, 'B' to go back:" -color "Warning"
         $selection = Read-Host
 
         # Check for refresh
@@ -199,7 +199,7 @@ function Select-iSCSI-Adapters {
         }
 
         if ($null -eq $adapters -or @($adapters).Count -eq 0) {
-            Write-OutputColor "No adapters found for iSCSI configuration." -color "Error"
+            Write-OutputColor "  No adapters found for iSCSI configuration." -color "Error"
             return $null
         }
 
@@ -213,7 +213,7 @@ function Select-iSCSI-Adapters {
 
         Show-AdaptersTable -adapters $adapters -columnWidths $columnWidths
 
-        Write-OutputColor "Enter adapter index numbers for iSCSI (comma-separated, e.g., 1,2):" -color "Warning"
+        Write-OutputColor "  Enter adapter index numbers for iSCSI (comma-separated, e.g., 1,2):" -color "Warning"
         Write-OutputColor "(Type 'R' to refresh, 'back' to cancel)" -color "Debug"
         $selection = Read-Host
 
@@ -236,7 +236,7 @@ function Select-iSCSI-Adapters {
         $selectedAdapters = $adapters | Where-Object { $_.InterfaceIndex -in $selectedIndexes }
 
         if ($null -eq $selectedAdapters -or @($selectedAdapters).Count -eq 0) {
-            Write-OutputColor "No valid adapters selected." -color "Error"
+            Write-OutputColor "  No valid adapters selected." -color "Error"
             Start-Sleep -Seconds 1
             continue
         }
@@ -343,26 +343,26 @@ function Show-AdapterStatus {
 
     $adapter = Get-NetAdapter -Name $AdapterName -ErrorAction SilentlyContinue
     if (-not $adapter) {
-        Write-OutputColor "Could not retrieve adapter status." -color "Warning"
+        Write-OutputColor "  Could not retrieve adapter status." -color "Warning"
         return
     }
 
-    Write-OutputColor "Adapter: $AdapterName" -color "Info"
-    Write-OutputColor "Status: $($adapter.Status)" -color $(if ($adapter.Status -eq "Up") { "Success" } else { "Warning" })
+    Write-OutputColor "  Adapter: $AdapterName" -color "Info"
+    Write-OutputColor "  Status: $($adapter.Status)" -color $(if ($adapter.Status -eq "Up") { "Success" } else { "Warning" })
 
     $ipConfig = Get-NetIPAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($ipConfig) {
-        Write-OutputColor "IPv4: $($ipConfig.IPAddress)/$($ipConfig.PrefixLength)" -color "Success"
+        Write-OutputColor "  IPv4: $($ipConfig.IPAddress)/$($ipConfig.PrefixLength)" -color "Success"
     }
 
     $gateway = Get-NetRoute -InterfaceAlias $AdapterName -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue
     if ($gateway) {
-        Write-OutputColor "Gateway: $($gateway.NextHop)" -color "Success"
+        Write-OutputColor "  Gateway: $($gateway.NextHop)" -color "Success"
     }
 
     $dns = Get-DnsClientServerAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue
     if ($dns -and $dns.ServerAddresses) {
-        Write-OutputColor "DNS: $($dns.ServerAddresses -join ', ')" -color "Success"
+        Write-OutputColor "  DNS: $($dns.ServerAddresses -join ', ')" -color "Success"
     }
 
     Write-OutputColor "-----------------------------" -color "Info"

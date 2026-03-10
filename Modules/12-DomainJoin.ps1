@@ -10,7 +10,9 @@ function Join-Domain {
         $agentToolName = $script:AgentInstaller.ToolName
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  $($agentToolName.ToUpper()) AGENT NOT INSTALLED".PadRight(72))│" -color "Warning"
+        $agentHeader = "  $($agentToolName.ToUpper()) AGENT NOT INSTALLED"
+        if ($agentHeader.Length -gt 72) { $agentHeader = $agentHeader.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($agentHeader.PadRight(72))│" -color "Warning"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         $lineStr = "  $agentToolName Agent should be installed before joining the domain."
         if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }

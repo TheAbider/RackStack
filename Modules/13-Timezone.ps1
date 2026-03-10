@@ -171,8 +171,10 @@ function Show-RegionTimezones {
         for ($i = 0; $i -lt $timezones.Count; $i++) {
             $tz = $timezones[$i]
             $marker = if ($tz.Id -eq $currentTz.Id) { " <-- Current" } else { "" }
-            $label = "  [$($i + 1)]  $($tz.Display)$marker"
-            if ($label.Length -gt 72) { $label = $label.Substring(0, 69) + "..." }
+            $prefix = "  [$($i + 1)]  "
+            $maxDisplay = 72 - $prefix.Length - $marker.Length
+            $display = if ($tz.Display.Length -gt $maxDisplay) { $tz.Display.Substring(0, $maxDisplay - 3) + "..." } else { $tz.Display }
+            $label = "$prefix$display$marker"
             Write-OutputColor "  │$($label.PadRight(72))│" -color "Info"
         }
 

@@ -4,38 +4,38 @@ function Compare-ConfigurationProfiles {
     Clear-Host
     Write-CenteredOutput "Compare Configuration Profiles" -color "Info"
 
-    Write-OutputColor "This tool compares two JSON configuration profiles." -color "Info"
+    Write-OutputColor "  This tool compares two JSON configuration profiles." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Get first profile path
-    Write-OutputColor "Enter path to FIRST profile (drag and drop or type full path):" -color "Warning"
+    Write-OutputColor "  Enter path to FIRST profile (drag and drop or type full path):" -color "Warning"
     $path1 = Read-Host
     $navResult = Test-NavigationCommand -UserInput $path1
     if ($navResult.ShouldReturn) { return }
 
     $path1 = $path1.Trim('"')
     if ([string]::IsNullOrWhiteSpace($path1)) {
-        Write-OutputColor "No path entered." -color "Error"
+        Write-OutputColor "  No path entered." -color "Error"
         return
     }
     if (-not (Test-Path -LiteralPath $path1)) {
-        Write-OutputColor "File not found: $path1" -color "Error"
+        Write-OutputColor "  File not found: $path1" -color "Error"
         return
     }
 
     # Get second profile path
-    Write-OutputColor "Enter path to SECOND profile (drag and drop or type full path):" -color "Warning"
+    Write-OutputColor "  Enter path to SECOND profile (drag and drop or type full path):" -color "Warning"
     $path2 = Read-Host
     $navResult = Test-NavigationCommand -UserInput $path2
     if ($navResult.ShouldReturn) { return }
 
     $path2 = $path2.Trim('"')
     if ([string]::IsNullOrWhiteSpace($path2)) {
-        Write-OutputColor "No path entered." -color "Error"
+        Write-OutputColor "  No path entered." -color "Error"
         return
     }
     if (-not (Test-Path -LiteralPath $path2)) {
-        Write-OutputColor "File not found: $path2" -color "Error"
+        Write-OutputColor "  File not found: $path2" -color "Error"
         return
     }
 
@@ -157,6 +157,15 @@ function Test-ScriptUpdate {
     Write-OutputColor "  Current Version: $($script:ScriptVersion)" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Checking GitHub for updates..." -color "Info"
+
+    # Check network connectivity if no cached result available
+    if (-not $script:LatestRelease -and -not (Test-NetworkConnectivity)) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  No network connectivity. Cannot check for updates." -color "Error"
+        Write-OutputColor "  Tip: Verify network configuration and DNS settings." -color "Warning"
+        Write-PressEnter
+        return
+    }
 
     try {
         # Use cached release from startup check if available, otherwise fetch fresh
@@ -301,7 +310,8 @@ function Install-ScriptUpdate {
         }
 
         if ($actualHash -eq $expectedHash) {
-            Write-OutputColor "  SHA256 verified: $($actualHash.Substring(0,16))..." -color "Success"
+            $hashDisplay = if ($actualHash.Length -ge 16) { $actualHash.Substring(0,16) + "..." } else { $actualHash }
+            Write-OutputColor "  SHA256 verified: $hashDisplay" -color "Success"
         }
         else {
             Write-OutputColor "  SHA256 MISMATCH - download may be corrupted or tampered with!" -color "Error"
@@ -345,7 +355,15 @@ del "%~f0"
             Read-Host
         }
 
-        Start-Process cmd.exe -ArgumentList "/c `"$batchPath`"" -WindowStyle Hidden
+        try {
+            Start-Process cmd.exe -ArgumentList "/c `"$batchPath`"" -WindowStyle Hidden -ErrorAction Stop
+        }
+        catch {
+            Remove-Item -LiteralPath $batchPath -Force -ErrorAction SilentlyContinue
+            Write-OutputColor "  Failed to launch update process: $_" -color "Error"
+            Write-PressEnter
+            return
+        }
         [Environment]::Exit(0)
     }
     else {
@@ -469,39 +487,39 @@ function Invoke-RemoteProfileApply {
     Clear-Host
     Write-CenteredOutput "Remote Profile Application" -color "Info"
 
-    Write-OutputColor "This will apply a configuration profile to a remote server via WinRM." -color "Info"
+    Write-OutputColor "  This will apply a configuration profile to a remote server via WinRM." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Get remote computer name
-    Write-OutputColor "Enter the remote server name or IP:" -color "Warning"
+    Write-OutputColor "  Enter the remote server name or IP:" -color "Warning"
     $remoteComputer = Read-Host
     $navResult = Test-NavigationCommand -UserInput $remoteComputer
     if ($navResult.ShouldReturn) { return }
 
     if ([string]::IsNullOrWhiteSpace($remoteComputer)) {
-        Write-OutputColor "No server specified." -color "Error"
+        Write-OutputColor "  No server specified." -color "Error"
         return
     }
 
     # Get profile path
-    Write-OutputColor "Enter path to the configuration profile JSON:" -color "Warning"
+    Write-OutputColor "  Enter path to the configuration profile JSON:" -color "Warning"
     $profilePath = Read-Host
     $navResult = Test-NavigationCommand -UserInput $profilePath
     if ($navResult.ShouldReturn) { return }
 
     $profilePath = $profilePath.Trim('"')
     if ([string]::IsNullOrWhiteSpace($profilePath)) {
-        Write-OutputColor "No path entered." -color "Error"
+        Write-OutputColor "  No path entered." -color "Error"
         return
     }
     if (-not (Test-Path -LiteralPath $profilePath)) {
-        Write-OutputColor "Profile file not found: $profilePath" -color "Error"
+        Write-OutputColor "  Profile file not found: $profilePath" -color "Error"
         return
     }
 
     # Get credentials
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter credentials for remote server (domain\username):" -color "Info"
+    Write-OutputColor "  Enter credentials for remote server (domain\username):" -color "Info"
 
     # Try to get stored credential first
     $storedCred = Get-StoredCredential -Target "$($script:ToolName)Config-Remote"
@@ -518,13 +536,13 @@ function Invoke-RemoteProfileApply {
     }
 
     if (-not $credential) {
-        Write-OutputColor "No credentials provided." -color "Error"
+        Write-OutputColor "  No credentials provided." -color "Error"
         return
     }
 
     # Pre-flight check
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Running pre-flight checks on $remoteComputer..." -color "Info"
+    Write-OutputColor "  Running pre-flight checks on $remoteComputer..." -color "Info"
 
     $preflight = Test-RemoteReadiness -ComputerName $remoteComputer -Credential $credential
     Show-PreflightResults -Results $preflight
@@ -540,7 +558,7 @@ function Invoke-RemoteProfileApply {
         $session = New-PSSession -ComputerName $remoteComputer -Credential $credential -ErrorAction Stop
     }
     catch {
-        Write-OutputColor "Failed to connect: $_" -color "Error"
+        Write-OutputColor "  Failed to connect: $_" -color "Error"
         return
     }
 
@@ -549,7 +567,7 @@ function Invoke-RemoteProfileApply {
         $profileContent = Get-Content -LiteralPath $profilePath -Raw
 
         # Copy profile to remote - use remote machine's temp path, not local
-        Write-OutputColor "Copying profile to remote server..." -color "Info"
+        Write-OutputColor "  Copying profile to remote server..." -color "Info"
         $remoteTempDir = Invoke-Command -Session $session -ScriptBlock { $env:TEMP } -ErrorAction SilentlyContinue
         if ([string]::IsNullOrWhiteSpace($remoteTempDir)) { $remoteTempDir = "$env:SystemRoot\Temp" }
         $remotePath = "$remoteTempDir\$($script:ToolName)ConfigProfile_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
@@ -560,10 +578,10 @@ function Invoke-RemoteProfileApply {
             $content | Out-File -LiteralPath $path -Encoding UTF8 -Force
         } -ArgumentList $remotePath, $profileContent, $remoteTempDir -ErrorAction Stop
 
-        Write-OutputColor "Profile copied to: $remotePath" -color "Success"
+        Write-OutputColor "  Profile copied to: $remotePath" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "To apply the profile, run the $($script:ToolFullName) on the remote server" -color "Info"
-        Write-OutputColor "and use 'Load Configuration Profile' with the path above." -color "Info"
+        Write-OutputColor "  To apply the profile, run the $($script:ToolFullName) on the remote server" -color "Info"
+        Write-OutputColor "  and use 'Load Configuration Profile' with the path above." -color "Info"
     }
     catch {
         Write-OutputColor "  Error during remote operation: $_" -color "Error"
@@ -731,7 +749,7 @@ function Save-StoredCredential {
     }
     catch {
         $password = $null
-        Write-OutputColor "Failed to save credential: $_" -color "Error"
+        Write-OutputColor "  Failed to save credential: $_" -color "Error"
         return $false
     }
 }
@@ -819,7 +837,7 @@ function Show-CredentialManager {
             $cred = Get-Credential -Message "Enter remote server credentials"
             if ($cred) {
                 if (Save-StoredCredential -Target "$($script:ToolName)Config-Remote" -Credential $cred) {
-                    Write-OutputColor "Credential saved successfully." -color "Success"
+                    Write-OutputColor "  Credential saved successfully." -color "Success"
                 }
             }
         }
@@ -828,7 +846,7 @@ function Show-CredentialManager {
             $cred = Get-Credential -Message "Enter domain join credentials"
             if ($cred) {
                 if (Save-StoredCredential -Target "$($script:ToolName)Config-Domain" -Credential $cred) {
-                    Write-OutputColor "Credential saved successfully." -color "Success"
+                    Write-OutputColor "  Credential saved successfully." -color "Success"
                 }
             }
         }
@@ -837,7 +855,7 @@ function Show-CredentialManager {
                 foreach ($target in $credentials) {
                     $null = cmdkey /delete:$target 2>&1
                 }
-                Write-OutputColor "All credentials cleared." -color "Success"
+                Write-OutputColor "  All credentials cleared." -color "Success"
             }
         }
         "B" { return }
@@ -1058,7 +1076,7 @@ function Show-InstalledSoftware {
 
     Write-OutputColor "  Scanning installed software (registry)..." -color "Info"
 
-    $software = @()
+    $softwareList = [System.Collections.Generic.List[PSCustomObject]]::new()
     $regPaths = @(
         "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
         "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
@@ -1069,7 +1087,7 @@ function Show-InstalledSoftware {
             $entries = @(Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue |
                 Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne "" })
             foreach ($entry in $entries) {
-                $software += [PSCustomObject]@{
+                $softwareList.Add([PSCustomObject]@{
                     Name      = $entry.DisplayName
                     Version   = if ($entry.DisplayVersion) { $entry.DisplayVersion } else { "N/A" }
                     Publisher = if ($entry.Publisher) { $entry.Publisher } else { "Unknown" }
@@ -1077,7 +1095,7 @@ function Show-InstalledSoftware {
                         "$($entry.InstallDate.Substring(4,2))/$($entry.InstallDate.Substring(6,2))/$($entry.InstallDate.Substring(0,4))"
                     } else { "N/A" }
                     Size      = if ($entry.EstimatedSize) { [math]::Round($entry.EstimatedSize / 1024, 1) } else { $null }
-                }
+                })
             }
         } catch {
             Write-OutputColor "  Could not read registry path $regPath : $_" -color "Warning"
@@ -1085,7 +1103,7 @@ function Show-InstalledSoftware {
     }
 
     # Deduplicate by name+version
-    $software = @($software | Sort-Object Name, Version -Unique)
+    $software = @($softwareList | Sort-Object Name, Version -Unique)
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -1204,7 +1222,7 @@ function Show-CertificateExpiryCheck {
                 $allCerts += [PSCustomObject]@{
                     Store     = $store.Name
                     Subject   = $subject
-                    Thumbprint = $cert.Thumbprint.Substring(0, 16) + "..."
+                    Thumbprint = if ($cert.Thumbprint -and $cert.Thumbprint.Length -ge 16) { $cert.Thumbprint.Substring(0, 16) + "..." } else { $cert.Thumbprint }
                     Expires   = $cert.NotAfter.ToString("MM/dd/yyyy")
                     DaysLeft  = $daysLeft
                 }
@@ -1380,13 +1398,13 @@ function Show-EventLogAlerts {
 
     $cutoff = (Get-Date).AddHours(-24)
     $logs = @("System", "Application")
-    $allEvents = @()
+    $allEvents = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     foreach ($logName in $logs) {
         Write-OutputColor "  Scanning $logName log..." -color "Info"
         try {
-            $events = @(Get-WinEvent -FilterHashtable @{ LogName = $logName; Level = 1,2,3; StartTime = $cutoff } -ErrorAction Stop)
-            foreach ($e in $events) { $allEvents += [PSCustomObject]@{ Log = $logName; Event = $e } }
+            $events = @(Get-WinEvent -FilterHashtable @{ LogName = $logName; Level = 1,2,3; StartTime = $cutoff } -MaxEvents 500 -ErrorAction Stop)
+            foreach ($e in $events) { $allEvents.Add([PSCustomObject]@{ Log = $logName; Event = $e }) }
         } catch {
             if ($_.Exception.Message -notmatch "No events were found") {
                 Write-OutputColor "  Could not read $logName log: $_" -color "Warning"
@@ -1847,7 +1865,7 @@ function Show-ListeningPorts {
     }
 
     # Group by port and get process info
-    $portInfo = @()
+    $portInfoList = [System.Collections.Generic.List[PSCustomObject]]::new()
     $seenPorts = @{}
     foreach ($conn in $listeners) {
         $port = $conn.LocalPort
@@ -1864,13 +1882,14 @@ function Show-ListeningPorts {
             $processName = "PID $($conn.OwningProcess)"
         }
 
-        $portInfo += [PSCustomObject]@{
+        $portInfoList.Add([PSCustomObject]@{
             Port = $port
             Address = $addr
             Process = $processName
             PID = $conn.OwningProcess
-        }
+        })
     }
+    $portInfo = @($portInfoList)
 
     # Summary
     $uniquePorts = @($portInfo | Select-Object -Property Port -Unique)
@@ -1954,19 +1973,20 @@ function Show-ScheduledTaskOverview {
     Write-OutputColor "" -color "Info"
 
     # Show failed tasks (last run result != 0 and not disabled)
-    $taskInfoList = @()
+    $taskInfoCollector = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($task in $allTasks) {
         $info = Get-ScheduledTaskInfo -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue
         if ($info) {
-            $taskInfoList += [PSCustomObject]@{
+            $taskInfoCollector.Add([PSCustomObject]@{
                 Name = $task.TaskName
                 State = $task.State
                 LastResult = $info.LastTaskResult
                 LastRun = $info.LastRunTime
                 NextRun = $info.NextRunTime
-            }
+            })
         }
     }
+    $taskInfoList = @($taskInfoCollector)
 
     $failed = @($taskInfoList | Where-Object { $_.LastResult -ne 0 -and $_.State -ne 'Disabled' -and $null -ne $_.LastRun -and $_.LastRun -ne [DateTime]::MinValue })
     if ($failed.Count -gt 0) {

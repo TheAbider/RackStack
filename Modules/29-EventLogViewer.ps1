@@ -87,6 +87,9 @@ function Show-EventLogViewer {
                 }
                 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
                 $csvPath = "$script:TempPath\EventLog_$timestamp.csv"
+                if (-not (Test-Path -LiteralPath $script:TempPath)) {
+                    New-Item -Path $script:TempPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+                }
                 try {
                     $lastEvents | Select-Object TimeCreated, LevelDisplayName, Id, ProviderName, Message |
                         Export-Csv -LiteralPath $csvPath -NoTypeInformation -Encoding UTF8 -ErrorAction Stop

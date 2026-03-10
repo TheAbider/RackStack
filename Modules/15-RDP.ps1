@@ -10,11 +10,11 @@ function Enable-RDP {
         $rdpAlreadyEnabled = ($rdpStatus.fDenyTSConnections -eq 0)
 
         if ($rdpAlreadyEnabled) {
-            Write-OutputColor "Remote Desktop is already enabled." -color "Info"
+            Write-OutputColor "  Remote Desktop is already enabled." -color "Info"
         }
         else {
             if (-not (Confirm-UserAction -Message "Enable Remote Desktop on this server?")) {
-                Write-OutputColor "Remote Desktop configuration cancelled." -color "Info"
+                Write-OutputColor "  Remote Desktop configuration cancelled." -color "Info"
                 return
             }
 
@@ -24,34 +24,35 @@ function Enable-RDP {
             # Verify
             $rdpStatus = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections"
             if ($rdpStatus.fDenyTSConnections -eq 0) {
-                Write-OutputColor "Remote Desktop has been enabled." -color "Success"
+                Write-OutputColor "  Remote Desktop has been enabled." -color "Success"
             }
             else {
-                Write-OutputColor "Failed to enable Remote Desktop." -color "Error"
+                Write-OutputColor "  Failed to enable Remote Desktop." -color "Error"
+                Write-OutputColor "  Tip: Verify administrator privileges and check Group Policy for RDP restrictions." -color "Warning"
             }
         }
 
         # Enable firewall rules - pre-check firewall service
         $fwService = Get-Service -Name mpssvc -ErrorAction SilentlyContinue
         if ($null -eq $fwService -or $fwService.Status -ne 'Running') {
-            Write-OutputColor "Windows Firewall service (mpssvc) is not running." -color "Warning"
-            Write-OutputColor "Firewall rules cannot be managed. RDP may be accessible but unprotected." -color "Warning"
+            Write-OutputColor "  Windows Firewall service (mpssvc) is not running." -color "Warning"
+            Write-OutputColor "  Firewall rules cannot be managed. RDP may be accessible but unprotected." -color "Warning"
         }
         else {
             $firewallRule = Get-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq $true }
 
             if ($firewallRule) {
-                Write-OutputColor "RDP firewall rules are already enabled." -color "Info"
+                Write-OutputColor "  RDP firewall rules are already enabled." -color "Info"
             }
             else {
                 Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
 
                 $firewallRule = Get-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq $true }
                 if ($firewallRule) {
-                    Write-OutputColor "RDP firewall rules have been enabled." -color "Success"
+                    Write-OutputColor "  RDP firewall rules have been enabled." -color "Success"
                 }
                 else {
-                    Write-OutputColor "Warning: Could not enable RDP firewall rules." -color "Warning"
+                    Write-OutputColor "  Warning: Could not enable RDP firewall rules." -color "Warning"
                 }
             }
         }
@@ -59,11 +60,11 @@ function Enable-RDP {
         # Enable Network Level Authentication (recommended)
         try {
             Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1 -ErrorAction Stop
-            Write-OutputColor "Network Level Authentication enabled (recommended for security)." -color "Success"
+            Write-OutputColor "  Network Level Authentication enabled (recommended for security)." -color "Success"
         }
         catch {
-            Write-OutputColor "Warning: Could not enable Network Level Authentication." -color "Warning"
-            Write-OutputColor "RDP is enabled but without NLA. Consider enabling manually." -color "Warning"
+            Write-OutputColor "  Warning: Could not enable Network Level Authentication." -color "Warning"
+            Write-OutputColor "  RDP is enabled but without NLA. Consider enabling manually." -color "Warning"
         }
 
         Add-SessionChange -Category "System" -Description "Enabled Remote Desktop"
@@ -114,7 +115,7 @@ function Enable-PowerShellRemoting {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "This will configure PowerShell Remoting with the following SECURE settings:" -color "Info"
+    Write-OutputColor "  This will configure PowerShell Remoting with the following SECURE settings:" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [Security Features]" -color "Success"
     Write-OutputColor "  - Kerberos authentication (domain environments)" -color "Info"
@@ -135,13 +136,13 @@ function Enable-PowerShellRemoting {
     Write-OutputColor "" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Enable PowerShell Remoting with these settings?")) {
-        Write-OutputColor "PowerShell Remoting configuration cancelled." -color "Info"
+        Write-OutputColor "  PowerShell Remoting configuration cancelled." -color "Info"
         return
     }
 
     try {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Configuring PowerShell Remoting..." -color "Info"
+        Write-OutputColor "  Configuring PowerShell Remoting..." -color "Info"
 
         # First, ensure WinRM service can start
         Write-OutputColor "  Setting WinRM service to Automatic..." -color "Info"
@@ -216,7 +217,7 @@ function Enable-PowerShellRemoting {
 
         # Verify configuration
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Verifying configuration..." -color "Info"
+        Write-OutputColor "  Verifying configuration..." -color "Info"
 
         $winrmService = Get-Service -Name WinRM -ErrorAction Stop
         if ($winrmService.Status -eq "Running") {
@@ -246,7 +247,7 @@ function Enable-PowerShellRemoting {
 
         # Verify security settings
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Security verification:" -color "Info"
+        Write-OutputColor "  Security verification:" -color "Info"
 
         try {
             $basicAuth = (Get-Item -Path WSMan:\localhost\Service\Auth\Basic -ErrorAction SilentlyContinue).Value
@@ -288,9 +289,9 @@ function Enable-PowerShellRemoting {
         }
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "PowerShell Remoting enabled successfully!" -color "Success"
+        Write-OutputColor "  PowerShell Remoting enabled successfully!" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Firewall rules enabled:" -color "Info"
+        Write-OutputColor "  Firewall rules enabled:" -color "Info"
         Write-OutputColor "  - Windows Remote Management (WinRM)" -color "Success"
         Write-OutputColor "  - Remote Event Log Management" -color "Success"
         Write-OutputColor "  - Remote Service Management" -color "Success"
@@ -298,7 +299,7 @@ function Enable-PowerShellRemoting {
         Write-OutputColor "  - Remote Scheduled Tasks Management" -color "Success"
         Write-OutputColor "  - File and Printer Sharing" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "You can now connect to this server using:" -color "Info"
+        Write-OutputColor "  You can now connect to this server using:" -color "Info"
         Write-OutputColor "  Enter-PSSession -ComputerName $env:COMPUTERNAME" -color "Success"
         Write-OutputColor "  Invoke-Command -ComputerName $env:COMPUTERNAME -ScriptBlock { ... }" -color "Success"
 
@@ -315,7 +316,7 @@ function Enable-PowerShellRemoting {
     catch {
         Write-OutputColor "  Error configuring PowerShell Remoting: $_" -color "Error"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Troubleshooting tips:" -color "Warning"
+        Write-OutputColor "  Troubleshooting tips:" -color "Warning"
         Write-OutputColor "  - Run this script as Administrator" -color "Info"
         Write-OutputColor "  - Check if WinRM service exists: Get-Service WinRM" -color "Info"
         Write-OutputColor "  - Try manual config: winrm quickconfig" -color "Info"

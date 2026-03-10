@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.21.1
+    Automated Test Runner for RackStack v1.21.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -2586,7 +2586,8 @@ try {
 }
 
 Write-TestResult "FileServer: VHDsFolder defaults to 'VirtualHardDrives'" ($script:FileServer.VHDsFolder -eq "VirtualHardDrives")
-Write-TestResult "FileServer: AgentFolder defaults to 'Agents'" ($script:FileServer.AgentFolder -eq "Agents")
+# AgentFolder may be overridden by KaseyaFolder remap from defaults.json
+Write-TestResult "FileServer: AgentFolder is non-empty string" (-not [string]::IsNullOrWhiteSpace($script:FileServer.AgentFolder))
 # ClientId/ClientSecret may be populated by company defaults — check they're strings (empty or from company file)
 $clientIdIsString = $script:FileServer.ClientId -is [string]
 $clientSecretIsString = $script:FileServer.ClientSecret -is [string]
@@ -2605,9 +2606,15 @@ try {
     $origDefaultsPath2 = $script:DefaultsPath
     $origConfigDir2 = $script:AppConfigDir
     $origFileServer = $script:FileServer.Clone()
+    $origCompanyPath = $script:CompanyDefaultsPath
+    $origCompanyName = $script:CompanyDefaultsName
+    $origModuleRoot = $script:ModuleRoot
 
     $script:AppConfigDir = $testDir
     $script:DefaultsPath = "$testDir\defaults.json"
+    $script:ModuleRoot = $testDir  # Isolate from real company defaults files
+    $script:CompanyDefaultsPath = $null
+    $script:CompanyDefaultsName = $null
 
     # Use variables to avoid false-positive secret scan matches
     $_tcid = "test-client-id"
@@ -2636,12 +2643,18 @@ try {
     $script:DefaultsPath = $origDefaultsPath2
     $script:AppConfigDir = $origConfigDir2
     $script:FileServer = $origFileServer
+    $script:CompanyDefaultsPath = $origCompanyPath
+    $script:CompanyDefaultsName = $origCompanyName
+    $script:ModuleRoot = $origModuleRoot
     Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
 } catch {
     Write-TestResult "Import-Defaults: FileServer merge" $false $_.Exception.Message
     $script:DefaultsPath = $origDefaultsPath2
     $script:AppConfigDir = $origConfigDir2
     $script:FileServer = $origFileServer
+    $script:CompanyDefaultsPath = $origCompanyPath
+    $script:CompanyDefaultsName = $origCompanyName
+    $script:ModuleRoot = $origModuleRoot
 }
 
 # --- 35g: Export-Defaults includes FileServer block ---
@@ -6027,8 +6040,8 @@ try {
     Write-TestResult "Show-FirstRunWizard: prompts for FileServer" ($omContent -match 'Show-FirstRunWizard[\s\S]*?FileServer')
     Write-TestResult "Show-FirstRunWizard: prompts for iSCSI subnet" ($omContent -match 'Show-FirstRunWizard[\s\S]*?iSCSI subnet')
 
-    # VMNaming import from defaults.json
-    Write-TestResult "Import-Defaults: imports VMNaming config" ($omContent -match 'fileData\.VMNaming')
+    # VMNaming import from merged defaults
+    Write-TestResult "Import-Defaults: imports VMNaming config" ($omContent -match 'mergedVMNaming.*merged\["VMNaming"\]')
 
     # Import-Defaults derives ConfigDirName from ToolName
     Write-TestResult "Import-Defaults: derives ConfigDirName" ($omContent -match 'script:ConfigDirName\s*=.*ToolName')
@@ -8524,6 +8537,243 @@ Write-TestResult "17-DefenderExclusions: Clear-MenuCache after all exclusion ops
 # Clear-MenuCache: DiskCleanup deep/WU
 $dcCacheCount = ([regex]::Matches($dcContent2, 'Clear-MenuCache')).Count
 Write-TestResult "20-DiskCleanup: Clear-MenuCache after deep clean and WU cache" ($dcCacheCount -ge 2)
+
+# v1.21.2 improvements: catch blocks include actual error details
+$fwTplContent2 = Get-Content (Join-Path $modulesPath "18-FirewallTemplates.ps1") -Raw
+Write-TestResult "18-FirewallTemplates: catch blocks include error details" ($fwTplContent2 -match "Could not enable.*rules: \`$_")
+$hcContent3 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
+Write-TestResult "37-HealthCheck: uptime check-failed includes error" ($hcContent3 -match 'Uptime.*Check failed: \$_')
+Write-TestResult "37-HealthCheck: disk health check-failed includes error" ($hcContent3 -match 'Disk Health.*Check failed: \$_')
+Write-TestResult "37-HealthCheck: disk temp check-failed includes error" ($hcContent3 -match 'Disk Temperature.*Check failed: \$_')
+Write-TestResult "37-HealthCheck: C: drive check-failed includes error" ($hcContent3 -match 'C: Drive Space.*Check failed: \$_')
+
+# v1.21.2: network connectivity checks before downloads
+$isoContent = Get-Content (Join-Path $modulesPath "42-ISODownload.ps1") -Raw
+Write-TestResult "42-ISODownload: network check before download" ($isoContent -match 'Test-NetworkConnectivity[\s\S]{0,200}Cannot download ISO')
+$utilContent4 = Get-Content (Join-Path $modulesPath "35-Utilities.ps1") -Raw
+Write-TestResult "35-Utilities: update check has network pre-check" ($utilContent4 -match 'Test-NetworkConnectivity[\s\S]{0,200}Cannot check for updates')
+
+# v1.21.2: null-safe MPIO hardware display
+$iscsiContent3 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
+Write-TestResult "10-iSCSI: null-safe VendorId in MPIO display" ($iscsiContent3 -match 'if \(\$hw\.VendorId\)')
+$ceContent4 = Get-Content (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw
+Write-TestResult "45-ConfigExport: null-safe VendorId in MPIO export" ($ceContent4 -match 'if \(\$dev\.VendorId\)')
+
+# v1.21.2: ChildJobs bounds check in Invoke-WithTimeout
+$navContent = Get-Content (Join-Path $modulesPath "04-Navigation.ps1") -Raw
+Write-TestResult "04-Navigation: ChildJobs bounds check in timeout handler" ($navContent -match 'ChildJobs\.Count -gt 0.*ChildJobs\[0\]')
+
+# v1.21.2: HTML report empty table fallbacks
+$htmlContent2 = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
+Write-TestResult "54-HTMLReports: disk table fallback for null data" ($htmlContent2 -match 'Disk information unavailable')
+Write-TestResult "54-HTMLReports: network table fallback for null data" ($htmlContent2 -match 'No active network adapters found')
+
+# v1.21.2: actionable error tips
+$rdpContent2 = Get-Content (Join-Path $modulesPath "15-RDP.ps1") -Raw
+Write-TestResult "15-RDP: tip after RDP enable failure" ($rdpContent2 -match 'Failed to enable Remote Desktop[\s\S]{0,200}Tip:')
+Write-TestResult "10-iSCSI: tip when MSiSCSI service missing" ($iscsiContent3 -match 'MSiSCSI.*not found[\s\S]{0,200}Tip:')
+$fcContent2 = Get-Content (Join-Path $modulesPath "27-FailoverClustering.ps1") -Raw
+Write-TestResult "27-FailoverClustering: tip after install failure" ($fcContent2 -match 'Failed to install Failover Clustering[\s\S]{0,200}Tip:')
+$ntpContent3 = Get-Content (Join-Path $modulesPath "19-NTPConfiguration.ps1") -Raw
+Write-TestResult "19-NTP: tip after config failure" ($ntpContent3 -match 'Failed to configure NTP[\s\S]{0,200}Tip:')
+$licContent3 = Get-Content (Join-Path $modulesPath "21-Licensing.ps1") -Raw
+Write-TestResult "21-Licensing: tip for SKU not found error" ($licContent3 -match '0xC004F069[\s\S]{0,200}Verify the key type')
+Write-TestResult "21-Licensing: tip for access denied error" ($licContent3 -match '0x80070005[\s\S]{0,200}Tip:')
+
+# v1.21.2: -LiteralPath for GUID registry paths
+$ovhdContent2 = Get-Content (Join-Path $modulesPath "43-OfflineVHD.ps1") -Raw
+Write-TestResult "43-OfflineVHD: LiteralPath for GUID registry check" ($ovhdContent2 -match 'Test-Path -LiteralPath \$powerKey')
+Write-TestResult "43-OfflineVHD: LiteralPath for Windows partition check" ($ovhdContent2 -match 'Test-Path -LiteralPath \$testPath')
+Write-TestResult "43-OfflineVHD: LiteralPath for registry hive checks" ($ovhdContent2 -match 'Test-Path -LiteralPath \$offlineSystemHive' -and $ovhdContent2 -match 'Test-Path -LiteralPath \$offlineSoftwareHive')
+
+# v1.21.2: TempPath directory creation before export
+$elvContent2 = Get-Content (Join-Path $modulesPath "29-EventLogViewer.ps1") -Raw
+Write-TestResult "29-EventLogViewer: creates TempPath before CSV export" ($elvContent2 -match 'Test-Path -LiteralPath \$script:TempPath[\s\S]{0,100}New-Item.*TempPath')
+
+# v1.21.2: Batch file cleanup on Start-Process failure
+$utilContent3 = Get-Content (Join-Path $modulesPath "35-Utilities.ps1") -Raw
+Write-TestResult "35-Utilities: cleans up batch file on update launch failure" ($utilContent3 -match 'Remove-Item -LiteralPath \$batchPath -Force[\s\S]{0,150}Failed to launch update process')
+
+# v1.21.2: PerformanceDashboard volume filter for zero-size
+$perfContent = Get-Content (Join-Path $modulesPath "28-PerformanceDashboard.ps1") -Raw
+Write-TestResult "28-PerformanceDashboard: filters zero-size volumes" ($perfContent -match 'Where-Object.*\$_\.Size -gt 0')
+
+# v1.21.2: Defensive Substring on hash/thumbprint values
+Write-TestResult "35-Utilities: defensive SHA256 hash display" ($utilContent3 -match '\$actualHash\.Length -ge 16')
+Write-TestResult "35-Utilities: defensive cert thumbprint display" ($utilContent3 -match '\$cert\.Thumbprint -and \$cert\.Thumbprint\.Length -ge 16')
+
+$fsContent = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
+Write-TestResult "39-FileServer: defensive hash mismatch display" ($fsContent -match '\$result\.Hash\.Length -ge 16')
+
+$hcContent2 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
+Write-TestResult "37-HealthCheck: defensive cert thumbprint display" ($hcContent2 -match '\$cert\.Thumbprint -and \$cert\.Thumbprint\.Length -ge 8')
+
+$qolContent2 = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
+Write-TestResult "55-QoLFeatures: defensive cert thumbprint for export" ($qolContent2 -match '\$selectedCert\.Thumbprint -and \$selectedCert\.Thumbprint\.Length -ge 8')
+
+# v1.21.2: Box-drawing overflow protection for dynamic values
+$iscsiContent2 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
+Write-TestResult "10-iSCSI: truncates long portal addresses for box UI" ($iscsiContent2 -match '\$portalStr\.Length -gt 72.*\$portalStr\.Substring')
+
+$sbContent = Get-Content (Join-Path $modulesPath "59-StorageBackends.ps1") -Raw
+Write-TestResult "59-StorageBackends: truncates long SMB share paths for box UI" ($sbContent -match '\$smbLine\.Length -gt 72.*\$smbLine\.Substring')
+
+$fcContent2 = Get-Content (Join-Path $modulesPath "27-FailoverClustering.ps1") -Raw
+Write-TestResult "27-FailoverClustering: truncates long node names for box UI" ($fcContent2 -match '\$nodeLine\.Length -gt 72.*\$nodeLine\.Substring')
+
+$helpContent = Get-Content (Join-Path $modulesPath "34-Help.ps1") -Raw
+Write-TestResult "34-Help: truncates long ToolFullName in header" ($helpContent -match '\$helpTitle\.Length -gt 72.*\$helpTitle\.Substring')
+
+$menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+Write-TestResult "48-MenuDisplay: truncates long ToolFullName in main menu" ($menuContent -match '\$mainTitle\.Length -gt 72.*\$mainTitle\.Substring')
+Write-TestResult "48-MenuDisplay: truncates long ToolName in roles description" ($menuContent -match '\$rolesDesc\.Length -gt 72.*\$rolesDesc\.Substring')
+Write-TestResult "48-MenuDisplay: truncates long ToolName in quick actions" ($menuContent -match '\$quickDesc\.Length -gt 72.*\$quickDesc\.Substring')
+
+$cdContent = Get-Content (Join-Path $modulesPath "51-ClusterDashboard.ps1") -Raw
+Write-TestResult "51-ClusterDashboard: truncates long cluster name in header" ($cdContent -match '\$clusterTitle\.Length -gt 72.*\$clusterTitle\.Substring')
+
+# v1.21.2: BitLocker error tip
+$blContent = Get-Content (Join-Path $modulesPath "31-BitLocker.ps1") -Raw
+Write-TestResult "31-BitLocker: tip after volume info retrieval failure" ($blContent -match 'Could not retrieve BitLocker volume info[\s\S]{0,100}Tip:.*reboot')
+
+# v1.21.2: Get-WinEvent bounded with -MaxEvents for event log alerts
+Write-TestResult "35-Utilities: bounds event log alert scan with -MaxEvents" ($utilContent3 -match 'Get-WinEvent -FilterHashtable.*Level.*1,2,3.*-MaxEvents 500')
+
+# v1.21.2: VHD copy disk space pre-check
+$vhdContent = Get-Content (Join-Path $modulesPath "41-VHDManagement.ps1") -Raw
+Write-TestResult "41-VHDManagement: checks disk space before VHD copy" ($vhdContent -match 'Insufficient disk space.*drive[\s\S]{0,100}Required:.*Available:')
+
+# v1.21.2: Offline VHD already-mounted check
+$offlineContent = Get-Content (Join-Path $modulesPath "43-OfflineVHD.ps1") -Raw
+Write-TestResult "43-OfflineVHD: checks if VHD is already mounted before mount" ($offlineContent -match 'Get-VHD -Path \$VHDPath[\s\S]{0,250}already mounted or in use')
+
+# v1.21.2: Box UI overflow in modules 60-63
+$replContent = Get-Content (Join-Path $modulesPath "62-HyperVReplica.ps1") -Raw
+Write-TestResult "62-HyperVReplica: truncates VM name in replication summary" ($replContent -match '\$vmLine\.Length -gt 72.*\$vmLine\.Substring')
+
+$adContent = Get-Content (Join-Path $modulesPath "61-ActiveDirectory.ps1") -Raw
+Write-TestResult "61-ActiveDirectory: truncates delegated admin name in RODC summary" ($adContent -match '\$adminLine\.Length -gt 72.*\$adminLine\.Substring')
+
+# v1.21.2: Null-safe task.State.ToString() in ScheduledTasks
+$stContent = Get-Content (Join-Path $modulesPath "63-ScheduledTasks.ps1") -Raw
+Write-TestResult "63-ScheduledTasks: null-safe task State.ToString()" ($stContent -match 'if \(\$null -ne \$task\.State\).*\$task\.State\.ToString')
+
+# v1.21.2: Additional HTML encoding in 54-HTMLReports.ps1
+$htmlContent2 = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
+Write-TestResult "54-HTMLReports: HTML-encodes disk DeviceID" ($htmlContent2 -match 'ConvertTo-HtmlSafe \$disk\.DeviceID')
+Write-TestResult "54-HTMLReports: HTML-encodes service display name" ($htmlContent2 -match 'ConvertTo-HtmlSafe \$svc\.Display')
+Write-TestResult "54-HTMLReports: HTML-encodes time sync offset" ($htmlContent2 -match 'ConvertTo-HtmlSafe \$offsetStr')
+Write-TestResult "54-HTMLReports: HTML-encodes firewall profile name" ($htmlContent2 -match 'ConvertTo-HtmlSafe \$fwProf\.Name')
+Write-TestResult "54-HTMLReports: HTML-encodes profile comparison filenames" ($htmlContent2 -match 'ConvertTo-HtmlSafe \(Split-Path \$Profile1Path -Leaf\)')
+Write-TestResult "54-HTMLReports: HTML-encodes trend report drive letter" ($htmlContent2 -match 'ConvertTo-HtmlSafe \$disk\.Drive')
+
+# v1.21.2: Batch mode exits on JSON parse failure
+$epContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+Write-TestResult "50-EntryPoint: exits on batch config parse failure" ($epContent -match 'Failed to load batch config[\s\S]{0,50}\[Environment\]::Exit\(1\)')
+
+# v1.21.2: Firewall port range validation
+$fwContent = Get-Content (Join-Path $modulesPath "16-Firewall.ps1") -Raw
+Write-TestResult "16-Firewall: validates port number range 1-65535" ($fwContent -match '\$portStr -gt 65535')
+
+# v1.21.2: VM name collision detection in Add-VMToQueue
+$vmContent = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+Write-TestResult "44-VMDeployment: Add-VMToQueue checks for duplicate name in queue" ($vmContent -match 'Add-VMToQueue[\s\S]*?VMDeploymentQueue.*Where-Object.*VMName -eq')
+Write-TestResult "44-VMDeployment: Add-VMToQueue checks for existing VM on host" ($vmContent -match 'Add-VMToQueue[\s\S]*?Get-VM -Name \$vmName')
+Write-TestResult "44-VMDeployment: Add-VMToQueue warns on duplicate" ($vmContent -match 'already in the queue')
+Write-TestResult "44-VMDeployment: Add-VMToQueue warns on existing VM" ($vmContent -match 'already exists on this host')
+
+# v1.21.2: Max disk size validation (64 TB = 65536 GB)
+Write-TestResult "44-VMDeployment: disk size upper bound validation" ($vmContent -match 'diskSizeInt -gt 65536')
+
+# v1.21.2: DNS IP validation in wizard and settings
+$opsContent = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+Write-TestResult "56-OperationsMenu: wizard validates primary DNS IP" ($opsContent -match 'Show-FirstRunWizard[\s\S]*?Test-ValidIPAddress.*dns1')
+Write-TestResult "56-OperationsMenu: wizard validates secondary DNS IP" ($opsContent -match 'Show-FirstRunWizard[\s\S]*?Test-ValidIPAddress.*dns2')
+Write-TestResult "56-OperationsMenu: settings validates primary DNS IP" ($opsContent -match 'Enter primary DNS server IP[\s\S]{0,200}Test-ValidIPAddress.*dns1')
+
+# v1.21.2: iSCSI subnet validation in wizard and settings
+Write-TestResult "56-OperationsMenu: wizard validates iSCSI subnet format" ($opsContent -match 'iSCSI subnet[\s\S]{0,300}octets\.Count -eq 3')
+Write-TestResult "56-OperationsMenu: settings validates iSCSI subnet format" ($opsContent -match 'Enter iSCSI subnet.*e\.g\.[\s\S]{0,300}octets\.Count -eq 3')
+Write-TestResult "56-OperationsMenu: iSCSI subnet rejects invalid octets" ($opsContent -match 'Invalid subnet format')
+
+# v1.21.2: List-based collection for O(n) append performance
+$utilContent3 = Get-Content (Join-Path $modulesPath "35-Utilities.ps1") -Raw
+Write-TestResult "35-Utilities: software inventory uses List<T> instead of array +=" ($utilContent3 -match 'softwareList\s*=\s*\[System\.Collections\.Generic\.List')
+Write-TestResult "35-Utilities: event alerts uses List<T> instead of array +=" ($utilContent3 -match 'allEvents\s*=\s*\[System\.Collections\.Generic\.List')
+Write-TestResult "35-Utilities: port scanner uses List<T> instead of array +=" ($utilContent3 -match 'portInfoList\s*=\s*\[System\.Collections\.Generic\.List')
+Write-TestResult "35-Utilities: task audit uses List<T> instead of array +=" ($utilContent3 -match 'taskInfoCollector\s*=\s*\[System\.Collections\.Generic\.List')
+$htmlContent3 = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
+Write-TestResult "54-HTMLReports: snapshot loading uses List<T> instead of array +=" ($htmlContent3 -match 'snapshotList\s*=\s*\[System\.Collections\.Generic\.List')
+
+# v1.21.2: Atomic defaults.json write (temp file + move)
+$opsContent2 = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+Write-TestResult "56-OperationsMenu: Export-Defaults writes to temp file first" ($opsContent2 -match 'Export-Defaults[\s\S]*?DefaultsPath\)\.tmp')
+Write-TestResult "56-OperationsMenu: Export-Defaults moves temp to final path" ($opsContent2 -match 'Export-Defaults[\s\S]*?Move-Item.*tempPath.*DefaultsPath')
+Write-TestResult "56-OperationsMenu: Export-Defaults cleans up temp on failure" ($opsContent2 -match 'Export-Defaults[\s\S]*?catch[\s\S]{0,100}Remove-Item.*\.tmp')
+Write-TestResult "56-OperationsMenu: Export-Defaults returns success/failure" ($opsContent2 -match 'Export-Defaults[\s\S]*?return \$true[\s\S]*?return \$false')
+Write-TestResult "56-OperationsMenu: callers check Export-Defaults return value" ($opsContent2 -match 'if \(Export-Defaults\)')
+
+# v1.21.2: SessionChanges capped at 500
+$navContent = Get-Content (Join-Path $modulesPath "04-Navigation.ps1") -Raw
+Write-TestResult "04-Navigation: SessionChanges capped to prevent unbounded growth" ($navContent -match 'SessionChanges\.Count -gt 500')
+
+# v1.21.2: Additional box UI overflow guards
+$vmContent2 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+Write-TestResult "44-VMDeployment: connection error message truncated for box UI" ($vmContent2 -match 'errorMsg\.Length -gt 72.*errorMsg\.Substring')
+$agentContent = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
+Write-TestResult "57-AgentInstaller: site name truncated for box UI" ($agentContent -match 'siteNameLine\.Length -gt 72')
+Write-TestResult "57-AgentInstaller: site numbers truncated for box UI" ($agentContent -match 'siteNumLine\.Length -gt 72')
+Write-TestResult "57-AgentInstaller: install result lines truncated for box UI" ($agentContent -match 'installLine\.Length -gt 72')
+Write-TestResult "57-AgentInstaller: header lines truncated for box UI" ($agentContent -match 'headerLine\.Length -gt 72')
+$djContent = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1") -Raw
+Write-TestResult "12-DomainJoin: agent header truncated for box UI" ($djContent -match 'agentHeader\.Length -gt 72')
+
+# v1.21.2: VM name and disk size edit validation
+$vmContent3 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+Write-TestResult "44-VMDeployment: disk edit enforces upper bound 65536" ($vmContent3 -match 'newSize -le 65536')
+Write-TestResult "44-VMDeployment: VM name rejects invalid filesystem chars" ($vmContent3 -match 'customName -match.*\\\\/:')
+
+# v1.21.2: Timezone display truncation preserves marker
+$tzContent = Get-Content (Join-Path $modulesPath "13-Timezone.ps1") -Raw
+Write-TestResult "13-Timezone: truncates display name before adding Current marker" ($tzContent -match 'maxDisplay.*prefix\.Length.*marker\.Length')
+
+# v1.21.2: SET adapter pre-check for existing switch bindings
+$setContent = Get-Content (Join-Path $modulesPath "09-SET.ps1") -Raw
+Write-TestResult "09-SET: checks if adapters are already bound to a VM switch" ($setContent -match 'NetAdapterInterfaceDescriptions -contains')
+
+# v1.21.2: Uptime calculation uses UTC to avoid negative values from timezone mismatch
+$menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+Write-TestResult "48-MenuDisplay: uptime uses UTC to avoid negative values" ($menuContent -match 'UtcNow.*ToUniversalTime\(\)')
+
+# v1.21.2: Mojibake fix — System Configuration menu uses correct ► character
+Write-TestResult "48-MenuDisplay: System Configuration uses correct arrow character" ($menuContent -match '\[2\]\s+System Configuration ►')
+
+# v1.21.2: NuGet provider install uses -ForceBootstrap to suppress Y/N prompt
+$wuContent = Get-Content (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw
+Write-TestResult "14-WindowsUpdates: NuGet install uses -ForceBootstrap" ($wuContent -match 'Install-PackageProvider.*-ForceBootstrap')
+
+# v1.21.2: Windows update install progress doesn't show time twice
+Write-TestResult "14-WindowsUpdates: install progress uses generic status (no time duplication)" ($wuContent -match 'Show-ProgressMessage.*-Status\s+"In progress"')
+
+# v1.21.2: Get-HostnameValidationError provides specific rejection reasons
+$ivContent = Get-Content (Join-Path $modulesPath "03-InputValidation.ps1") -Raw
+Write-TestResult "03-InputValidation: Get-HostnameValidationError exists" ($ivContent -match 'function Get-HostnameValidationError')
+Write-TestResult "03-InputValidation: reports too-long hostnames with char count" ($ivContent -match 'Too long.*characters.*max 15')
+Write-TestResult "03-InputValidation: reports invalid characters" ($ivContent -match 'Invalid characters.*letters.*digits.*hyphens')
+
+# v1.21.2: Hostname caller uses detailed error from Get-HostnameValidationError
+$hnContent = Get-Content (Join-Path $modulesPath "11-Hostname.ps1") -Raw
+Write-TestResult "11-Hostname: shows specific validation reason" ($hnContent -match 'Get-HostnameValidationError')
+
+# v1.21.2: First-run wizard saves minimal defaults.json when adopting company defaults
+$opsContent2 = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+Write-TestResult "56-OperationsMenu: wizard saves minimal defaults for company adoption" ($opsContent2 -match '\$minimalDefaults\s*=' -and $opsContent2 -match 'Do NOT use Export-Defaults here')
+
+# v1.21.2: Import-Defaults Tier 3 does deep merge for nested objects
+Write-TestResult "56-OperationsMenu: Tier 3 deep-merges nested objects" ($opsContent2 -match 'Deep-merge nested objects')
+
+# v1.21.2: Import-Defaults prompts for company defaults even when defaults.json exists without _companyDefaults
+Write-TestResult "56-OperationsMenu: prompts for company defaults when missing from existing defaults.json" ($opsContent2 -match 'companyDefaultsResolved')
 
 $elapsed = (Get-Date) - $script:StartTime
 

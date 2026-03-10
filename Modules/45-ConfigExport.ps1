@@ -3,7 +3,7 @@ function Export-ServerConfiguration {
     Clear-Host
     Write-CenteredOutput "Export Configuration" -color "Info"
 
-    Write-OutputColor "This will export the current server configuration to a text file." -color "Info"
+    Write-OutputColor "  This will export the current server configuration to a text file." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Default filename
@@ -11,13 +11,13 @@ function Export-ServerConfiguration {
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $defaultPath = "$env:USERPROFILE\Desktop\${hostname}_Config_$timestamp.txt"
 
-    Write-OutputColor "Default export path: $defaultPath" -color "Info"
+    Write-OutputColor "  Default export path: $defaultPath" -color "Info"
 
     if (Confirm-UserAction -Message "Use default path?" -DefaultYes) {
         $exportPath = $defaultPath
     }
     else {
-        Write-OutputColor "Enter export path (full path with filename):" -color "Info"
+        Write-OutputColor "  Enter export path (full path with filename):" -color "Info"
         $exportPath = Read-Host
         $navResult = Test-NavigationCommand -UserInput $exportPath
         if ($navResult.ShouldReturn) { return }
@@ -179,7 +179,9 @@ function Export-ServerConfiguration {
             if ($mpioDevices) {
                 $config += "  Supported Hardware:"
                 foreach ($dev in $mpioDevices) {
-                    $config += "    $($dev.VendorId.Trim()) - $($dev.ProductId.Trim())"
+                    $vendor = if ($dev.VendorId) { $dev.VendorId.Trim() } else { "Unknown" }
+                    $product = if ($dev.ProductId) { $dev.ProductId.Trim() } else { "Unknown" }
+                    $config += "    $vendor - $product"
                 }
             }
         } else {
@@ -329,11 +331,11 @@ function Export-ServerConfiguration {
         $config | Out-File -LiteralPath $exportPath -Encoding UTF8 -Force
 
         Write-OutputColor "`nConfiguration exported successfully!" -color "Success"
-        Write-OutputColor "File: $exportPath" -color "Info"
+        Write-OutputColor "  File: $exportPath" -color "Info"
         Add-SessionChange -Category "Export" -Description "Exported configuration to $exportPath"
     }
     catch {
-        Write-OutputColor "Failed to export configuration: $_" -color "Error"
+        Write-OutputColor "  Failed to export configuration: $_" -color "Error"
     }
 }
 
@@ -342,12 +344,12 @@ function Save-ConfigurationProfile {
     Clear-Host
     Write-CenteredOutput "Save Configuration Profile" -color "Info"
 
-    Write-OutputColor "This will save the current server's configuration as a JSON profile" -color "Info"
-    Write-OutputColor "that can be loaded onto other servers to clone settings." -color "Info"
+    Write-OutputColor "  This will save the current server's configuration as a JSON profile" -color "Info"
+    Write-OutputColor "  that can be loaded onto other servers to clone settings." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Gather current configuration
-    Write-OutputColor "Gathering current configuration..." -color "Info"
+    Write-OutputColor "  Gathering current configuration..." -color "Info"
 
     $csCim = Invoke-WithTimeout -ScriptBlock {
         Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
@@ -435,13 +437,13 @@ function Save-ConfigurationProfile {
     $defaultPath = "$env:USERPROFILE\Desktop\${hostname}_Profile_$timestamp.json"
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Default save location: $defaultPath" -color "Info"
+    Write-OutputColor "  Default save location: $defaultPath" -color "Info"
 
     if (Confirm-UserAction -Message "Use default path?" -DefaultYes) {
         $savePath = $defaultPath
     }
     else {
-        Write-OutputColor "Enter save path (full path with filename):" -color "Info"
+        Write-OutputColor "  Enter save path (full path with filename):" -color "Info"
         $savePath = Read-Host
         $navResult = Test-NavigationCommand -UserInput $savePath
         if ($navResult.ShouldReturn) { return }
@@ -455,10 +457,10 @@ function Save-ConfigurationProfile {
         $configProfile | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Configuration profile saved successfully!" -color "Success"
-        Write-OutputColor "File: $savePath" -color "Info"
+        Write-OutputColor "  Configuration profile saved successfully!" -color "Success"
+        Write-OutputColor "  File: $savePath" -color "Info"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "To use this profile on another server:" -color "Info"
+        Write-OutputColor "  To use this profile on another server:" -color "Info"
         Write-OutputColor "  1. Copy the JSON file to the new server" -color "Success"
         Write-OutputColor "  2. Edit the file: set Hostname, IPAddress, Gateway" -color "Success"
         Write-OutputColor "  3. Run this script and choose 'Load Configuration Profile'" -color "Success"
@@ -467,7 +469,7 @@ function Save-ConfigurationProfile {
         Add-SessionChange -Category "Export" -Description "Saved configuration profile to $savePath"
     }
     catch {
-        Write-OutputColor "Failed to save profile: $_" -color "Error"
+        Write-OutputColor "  Failed to save profile: $_" -color "Error"
     }
 }
 
@@ -476,9 +478,9 @@ function Import-ConfigurationProfile {
     Clear-Host
     Write-CenteredOutput "Load Configuration Profile" -color "Info"
 
-    Write-OutputColor "This will apply settings from a previously saved configuration profile." -color "Info"
+    Write-OutputColor "  This will apply settings from a previously saved configuration profile." -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Enter the path to the profile JSON file:" -color "Info"
+    Write-OutputColor "  Enter the path to the profile JSON file:" -color "Info"
     $profilePath = Read-Host
 
     # Check for navigation
@@ -489,12 +491,12 @@ function Import-ConfigurationProfile {
 
     if (-not [string]::IsNullOrWhiteSpace($profilePath)) { $profilePath = $profilePath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($profilePath)) {
-        Write-OutputColor "No path entered." -color "Warning"
+        Write-OutputColor "  No path entered." -color "Warning"
         return
     }
 
     if (-not (Test-Path -LiteralPath $profilePath)) {
-        Write-OutputColor "File not found: $profilePath" -color "Error"
+        Write-OutputColor "  File not found: $profilePath" -color "Error"
         return
     }
 
@@ -590,7 +592,7 @@ function Import-ConfigurationProfile {
         Write-OutputColor "" -color "Info"
 
         if (-not (Confirm-UserAction -Message "Apply these settings?")) {
-            Write-OutputColor "Profile import cancelled." -color "Info"
+            Write-OutputColor "  Profile import cancelled." -color "Info"
             return
         }
 
@@ -904,8 +906,8 @@ function Import-ConfigurationProfile {
         Add-SessionChange -Category "Import" -Description "Applied configuration profile from $profilePath ($changesApplied changes)"
     }
     catch {
-        Write-OutputColor "Failed to load profile: $_" -color "Error"
-        Write-OutputColor "Make sure the file is valid JSON." -color "Info"
+        Write-OutputColor "  Failed to load profile: $_" -color "Error"
+        Write-OutputColor "  Make sure the file is valid JSON." -color "Info"
     }
 }
 # Compare current server state against a saved configuration profile

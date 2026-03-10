@@ -664,6 +664,7 @@ function Import-Defaults {
 
     # Tier 2: Merge company defaults if available and not yet loaded
     if ($companyFiles.Count -gt 0 -and -not $script:CompanyDefaultsPath) {
+        $companyDefaultsResolved = $false
         if (Test-Path -LiteralPath $script:DefaultsPath) {
             # defaults.json exists: silently re-load company file if previously selected
             try {
@@ -673,12 +674,30 @@ function Import-Defaults {
                     if ($matchingFile) {
                         $script:CompanyDefaultsName = $matchingFile.Name
                         $script:CompanyDefaultsPath = $matchingFile.Path
+                        $companyDefaultsResolved = $true
                     }
                 }
             } catch {
                 Write-OutputColor "  Warning: Could not read defaults.json for company defaults: $_" -color "Warning"
             }
-            # Don't prompt — user already has personal defaults
+            # If defaults.json exists but has no _companyDefaults, prompt the user
+            if (-not $companyDefaultsResolved) {
+                if ($companyFiles.Count -eq 1) {
+                    $compFile = $companyFiles[0]
+                    if (Confirm-UserAction -Message "Company defaults found: '$($compFile.Name).defaults.json'. Load it?" -DefaultYes) {
+                        $script:CompanyDefaultsName = $compFile.Name
+                        $script:CompanyDefaultsPath = $compFile.Path
+                    }
+                }
+                else {
+                    Write-OutputColor "  Multiple company defaults files found." -color "Info"
+                    $picked = Show-CompanyDefaultsPicker
+                    if ($null -ne $picked -and $picked -ne "__skip__") {
+                        $script:CompanyDefaultsName = $picked.Name
+                        $script:CompanyDefaultsPath = $picked.Path
+                    }
+                }
+            }
         }
         else {
             # No defaults.json: offer company defaults
@@ -710,12 +729,29 @@ function Import-Defaults {
             foreach ($prop in $fileDefaults.PSObject.Properties) {
                 if ($prop.Name -like "_*") { continue }  # Skip metadata fields
                 if ($null -ne $prop.Value -and $prop.Value -ne "") {
-                    $merged[$prop.Name] = $prop.Value
+                    # Deep-merge nested objects (FileServer, AgentInstaller, etc.)
+                    # so empty sub-properties in personal defaults don't overwrite
+                    # non-empty values from company defaults
+                    if ($prop.Value -is [PSCustomObject] -and $merged.ContainsKey($prop.Name) -and $null -ne $merged[$prop.Name]) {
+                        $existing = $merged[$prop.Name]
+                        foreach ($subProp in $prop.Value.PSObject.Properties) {
+                            if ($null -ne $subProp.Value -and $subProp.Value -ne "") {
+                                if ($existing -is [hashtable]) {
+                                    $existing[$subProp.Name] = $subProp.Value
+                                } elseif ($existing -is [PSCustomObject]) {
+                                    $existing | Add-Member -NotePropertyName $subProp.Name -NotePropertyValue $subProp.Value -Force
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        $merged[$prop.Name] = $prop.Value
+                    }
                 }
             }
         }
         catch {
-            Write-OutputColor "Warning: Could not read defaults.json: $_" -color "Warning"
+            Write-OutputColor "  Warning: Could not read defaults.json: $_" -color "Warning"
         }
     }
 
@@ -914,45 +950,50 @@ function Import-Defaults {
                 $script:FileServer[$key] = $acCloud[$key]
             }
         }
-        # Backward compat: remap old KaseyaFolder key to AgentFolder
-        if ($script:FileServer.ContainsKey("KaseyaFolder") -and -not $script:FileServer.ContainsKey("AgentFolder")) {
+        # Backward compat: remap old KaseyaFolder key to AgentFolder (always overwrite)
+        if ($script:FileServer.ContainsKey("KaseyaFolder")) {
             $script:FileServer["AgentFolder"] = $script:FileServer["KaseyaFolder"]
+            $script:FileServer.Remove("KaseyaFolder")
         }
-        $script:FileServer.Remove("KaseyaFolder") 2>$null
     }
 
-    # Import custom license keys from defaults.json
+    # Import custom license keys from merged defaults (supports company + personal)
     $script:CustomKMSKeys = @{}
     $script:CustomAVMAKeys = @{}
+    $mergedKMS = $merged["CustomKMSKeys"]
+    if ($mergedKMS -and $mergedKMS -is [PSCustomObject]) {
+        foreach ($verProp in $mergedKMS.PSObject.Properties) {
+            $editionHash = @{}
+            foreach ($edProp in $verProp.Value.PSObject.Properties) {
+                $editionHash[$edProp.Name] = $edProp.Value
+            }
+            $script:CustomKMSKeys[$verProp.Name] = $editionHash
+        }
+    }
+    $mergedAVMA = $merged["CustomAVMAKeys"]
+    if ($mergedAVMA -and $mergedAVMA -is [PSCustomObject]) {
+        foreach ($verProp in $mergedAVMA.PSObject.Properties) {
+            $editionHash = @{}
+            foreach ($edProp in $verProp.Value.PSObject.Properties) {
+                $editionHash[$edProp.Name] = $edProp.Value
+            }
+            $script:CustomAVMAKeys[$verProp.Name] = $editionHash
+        }
+    }
+
+    # Import VM naming convention from merged defaults
+    $mergedVMNaming = $merged["VMNaming"]
+    if ($mergedVMNaming -and $mergedVMNaming -is [PSCustomObject]) {
+        foreach ($prop in $mergedVMNaming.PSObject.Properties) {
+            if ($prop.Name -like '_*') { continue }
+            $script:VMNaming[$prop.Name] = $prop.Value
+        }
+    }
+
+    # Import custom VM templates and role templates from file (complex nested structures)
     if ((Test-Path -LiteralPath $script:DefaultsPath)) {
         try {
             $fileData = Get-Content -LiteralPath $script:DefaultsPath -Raw | ConvertFrom-Json
-            if ($fileData.CustomKMSKeys) {
-                foreach ($verProp in $fileData.CustomKMSKeys.PSObject.Properties) {
-                    $editionHash = @{}
-                    foreach ($edProp in $verProp.Value.PSObject.Properties) {
-                        $editionHash[$edProp.Name] = $edProp.Value
-                    }
-                    $script:CustomKMSKeys[$verProp.Name] = $editionHash
-                }
-            }
-            if ($fileData.CustomAVMAKeys) {
-                foreach ($verProp in $fileData.CustomAVMAKeys.PSObject.Properties) {
-                    $editionHash = @{}
-                    foreach ($edProp in $verProp.Value.PSObject.Properties) {
-                        $editionHash[$edProp.Name] = $edProp.Value
-                    }
-                    $script:CustomAVMAKeys[$verProp.Name] = $editionHash
-                }
-            }
-
-            # Import VM naming convention
-            if ($fileData.VMNaming) {
-                foreach ($prop in $fileData.VMNaming.PSObject.Properties) {
-                    if ($prop.Name -like '_*') { continue }
-                    $script:VMNaming[$prop.Name] = $prop.Value
-                }
-            }
 
             # Import custom VM templates (merge with built-in StandardVMTemplates)
             if ($null -eq $script:BuiltInVMTemplates) {
@@ -1134,10 +1175,15 @@ function Export-Defaults {
     }
 
     try {
-        $defaults | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $script:DefaultsPath -Encoding UTF8 -Force
+        $tempPath = "$($script:DefaultsPath).tmp"
+        $defaults | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $tempPath -Encoding UTF8 -Force -ErrorAction Stop
+        Move-Item -LiteralPath $tempPath -Destination $script:DefaultsPath -Force -ErrorAction Stop
+        return $true
     }
     catch {
-        Write-OutputColor "Failed to save defaults: $_" -color "Error"
+        Remove-Item -LiteralPath "$($script:DefaultsPath).tmp" -Force -ErrorAction SilentlyContinue
+        Write-OutputColor "  Failed to save defaults: $_" -color "Error"
+        return $false
     }
 }
 
@@ -1210,13 +1256,13 @@ function Show-EditDefaults {
 
         switch ("$choice".ToUpper()) {
             "1" {
-                Write-OutputColor "Enter domain name (e.g., contoso.local) or leave empty to clear:" -color "Info"
+                Write-OutputColor "  Enter domain name (e.g., contoso.local) or leave empty to clear:" -color "Info"
                 $val = Read-Host
                 $domain = $val
                 $script:domain = $val
             }
             "2" {
-                Write-OutputColor "Enter local admin account name:" -color "Info"
+                Write-OutputColor "  Enter local admin account name:" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) {
                     $localadminaccountname = $val
@@ -1224,7 +1270,7 @@ function Show-EditDefaults {
                 }
             }
             "3" {
-                Write-OutputColor "Enter local admin full name:" -color "Info"
+                Write-OutputColor "  Enter local admin full name:" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) {
                     $FullName = $val
@@ -1232,15 +1278,15 @@ function Show-EditDefaults {
                 }
             }
             "4" {
-                Write-OutputColor "Enter SET name (current: $SwitchName):" -color "Info"
+                Write-OutputColor "  Enter SET name (current: $SwitchName):" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $SwitchName = $val; $script:SwitchName = $val }
 
-                Write-OutputColor "Enter Management NIC name (current: $ManagementName):" -color "Info"
+                Write-OutputColor "  Enter Management NIC name (current: $ManagementName):" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $ManagementName = $val; $script:ManagementName = $val }
 
-                Write-OutputColor "Enter Backup NIC name (current: $BackupName):" -color "Info"
+                Write-OutputColor "  Enter Backup NIC name (current: $BackupName):" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $BackupName = $val; $script:BackupName = $val }
             }
@@ -1261,31 +1307,44 @@ function Show-EditDefaults {
 
                 switch ("$dnsChoice".ToUpper()) {
                     "A" {
-                        Write-OutputColor "Enter preset name (e.g., 'Company DNS'):" -color "Info"
+                        Write-OutputColor "  Enter preset name (e.g., 'Company DNS'):" -color "Info"
                         $presetName = Read-Host
                         if (-not [string]::IsNullOrWhiteSpace($presetName)) {
-                            Write-OutputColor "Enter primary DNS server IP:" -color "Info"
+                            Write-OutputColor "  Enter primary DNS server IP:" -color "Info"
                             $dns1 = Read-Host
-                            Write-OutputColor "Enter secondary DNS server IP (or leave empty):" -color "Info"
-                            $dns2 = Read-Host
-                            $servers = @($dns1)
-                            if (-not [string]::IsNullOrWhiteSpace($dns2)) { $servers += $dns2 }
-                            $script:DNSPresets[$presetName] = $servers
-                            Write-OutputColor "Added DNS preset '$presetName'." -color "Success"
+                            if (-not (Test-ValidIPAddress -IPAddress $dns1)) {
+                                Write-OutputColor "  Invalid IP address." -color "Error"
+                                Start-Sleep -Seconds 1
+                            }
+                            else {
+                                Write-OutputColor "  Enter secondary DNS server IP (or leave empty):" -color "Info"
+                                $dns2 = Read-Host
+                                $servers = @($dns1)
+                                if (-not [string]::IsNullOrWhiteSpace($dns2)) {
+                                    if (Test-ValidIPAddress -IPAddress $dns2) {
+                                        $servers += $dns2
+                                    }
+                                    else {
+                                        Write-OutputColor "  Invalid secondary IP, skipping." -color "Warning"
+                                    }
+                                }
+                                $script:DNSPresets[$presetName] = $servers
+                                Write-OutputColor "  Added DNS preset '$presetName'." -color "Success"
+                            }
                         }
                     }
                     "D" {
-                        Write-OutputColor "Enter name of custom preset to delete:" -color "Info"
+                        Write-OutputColor "  Enter name of custom preset to delete:" -color "Info"
                         $delName = Read-Host
                         if ($delName -in $builtinDNSNames) {
-                            Write-OutputColor "Cannot delete built-in presets." -color "Error"
+                            Write-OutputColor "  Cannot delete built-in presets." -color "Error"
                         }
                         elseif ($script:DNSPresets.Contains($delName)) {
                             $script:DNSPresets.Remove($delName)
-                            Write-OutputColor "Deleted '$delName'." -color "Success"
+                            Write-OutputColor "  Deleted '$delName'." -color "Success"
                         }
                         else {
-                            Write-OutputColor "Preset not found." -color "Error"
+                            Write-OutputColor "  Preset not found." -color "Error"
                         }
                     }
                     default {
@@ -1295,39 +1354,47 @@ function Show-EditDefaults {
                 Start-Sleep -Seconds 1
             }
             "6" {
-                Write-OutputColor "Enter FileServer base URL:" -color "Info"
+                Write-OutputColor "  Enter FileServer base URL:" -color "Info"
                 Write-OutputColor "  Leave empty to disable cloud features." -color "Debug"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.BaseURL = $val }
                 elseif ($val -eq "") { $script:FileServer.BaseURL = "" }
 
-                Write-OutputColor "Enter CF-Access-Client-Id:" -color "Info"
+                Write-OutputColor "  Enter CF-Access-Client-Id:" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.ClientId = $val }
 
-                Write-OutputColor "Enter CF-Access-Client-Secret:" -color "Info"
+                Write-OutputColor "  Enter CF-Access-Client-Secret:" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.ClientSecret = $val }
 
-                Write-OutputColor "Enter ISOs subfolder name (default: ISOs):" -color "Info"
+                Write-OutputColor "  Enter ISOs subfolder name (default: ISOs):" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.ISOsFolder = $val }
 
-                Write-OutputColor "Enter VHDs subfolder name (default: VirtualHardDrives):" -color "Info"
+                Write-OutputColor "  Enter VHDs subfolder name (default: VirtualHardDrives):" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.VHDsFolder = $val }
 
-                Write-OutputColor "Enter agent installer subfolder name (default: Agents):" -color "Info"
+                Write-OutputColor "  Enter agent installer subfolder name (default: Agents):" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.AgentFolder = $val }
             }
             "7" {
-                Write-OutputColor "Enter iSCSI subnet (first 3 octets, e.g., 172.16.1):" -color "Info"
+                Write-OutputColor "  Enter iSCSI subnet (first 3 octets, e.g., 172.16.1):" -color "Info"
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) {
-                    $script:iSCSISubnet = $val
-                    Initialize-SANTargetPairs
-                    Write-OutputColor "iSCSI subnet set to $val.x" -color "Success"
+                    $octets = $val -split '\.'
+                    $validSubnet = ($octets.Count -eq 3) -and ($octets | ForEach-Object { $_ -match '^\d{1,3}$' -and [int]$_ -ge 0 -and [int]$_ -le 255 }) -notcontains $false
+                    if ($validSubnet) {
+                        $script:iSCSISubnet = $val
+                        Initialize-SANTargetPairs
+                        Write-OutputColor "  iSCSI subnet set to $val.x" -color "Success"
+                    }
+                    else {
+                        Write-OutputColor "  Invalid subnet format. Expected 3 octets (e.g., 172.16.1)." -color "Error"
+                        Start-Sleep -Seconds 1
+                    }
                 }
             }
             "8" {
@@ -1408,8 +1475,9 @@ function Show-EditDefaults {
                 Start-Sleep -Seconds 1
             }
             "S" {
-                Export-Defaults
-                Write-OutputColor "Defaults saved to $($script:DefaultsPath)" -color "Success"
+                if (Export-Defaults) {
+                    Write-OutputColor "  Defaults saved to $($script:DefaultsPath)" -color "Success"
+                }
                 Start-Sleep -Seconds 1
             }
             "R" {
@@ -1436,7 +1504,7 @@ function Show-EditDefaults {
                     $script:FileServer = @{ BaseURL = ""; ClientId = ""; ClientSecret = ""; ISOsFolder = "ISOs"; VHDsFolder = "VirtualHardDrives"; AgentFolder = "Agents" }
                     Initialize-SANTargetPairs
 
-                    Write-OutputColor "Defaults reset to generic values." -color "Success"
+                    Write-OutputColor "  Defaults reset to generic values." -color "Success"
                     Start-Sleep -Seconds 1
                 }
             }
@@ -1493,7 +1561,7 @@ function Show-EditLicenses {
 
         switch ("$choice".ToUpper()) {
             "A" {
-                Write-OutputColor "License type:" -color "Info"
+                Write-OutputColor "  License type:" -color "Info"
                 Write-OutputColor "  1. KMS (for hosts)" -color "Info"
                 Write-OutputColor "  2. AVMA (for VMs on Datacenter hosts)" -color "Info"
                 $typeChoice = Read-Host "  Select"
@@ -1505,17 +1573,17 @@ function Show-EditLicenses {
                     continue
                 }
 
-                Write-OutputColor "Enter Windows Server version (e.g., Windows Server 2022):" -color "Info"
+                Write-OutputColor "  Enter Windows Server version (e.g., Windows Server 2022):" -color "Info"
                 $version = Read-Host
                 $navResult = Test-NavigationCommand -UserInput $version
                 if ($navResult.ShouldReturn) { continue }
 
-                Write-OutputColor "Enter edition (e.g., Datacenter, Standard):" -color "Info"
+                Write-OutputColor "  Enter edition (e.g., Datacenter, Standard):" -color "Info"
                 $edition = Read-Host
                 $navResult = Test-NavigationCommand -UserInput $edition
                 if ($navResult.ShouldReturn) { continue }
 
-                Write-OutputColor "Enter product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX):" -color "Info"
+                Write-OutputColor "  Enter product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX):" -color "Info"
                 $key = Read-Host
                 $navResult = Test-NavigationCommand -UserInput $key
                 if ($navResult.ShouldReturn) { continue }
@@ -1526,23 +1594,23 @@ function Show-EditLicenses {
                             $script:CustomKMSKeys[$version] = @{}
                         }
                         $script:CustomKMSKeys[$version][$edition] = $key.ToUpper()
-                        Write-OutputColor "Added custom KMS key for $version $edition." -color "Success"
+                        Write-OutputColor "  Added custom KMS key for $version $edition." -color "Success"
                     }
                     else {
                         if (-not $script:CustomAVMAKeys.ContainsKey($version)) {
                             $script:CustomAVMAKeys[$version] = @{}
                         }
                         $script:CustomAVMAKeys[$version][$edition] = $key.ToUpper()
-                        Write-OutputColor "Added custom AVMA key for $version $edition." -color "Success"
+                        Write-OutputColor "  Added custom AVMA key for $version $edition." -color "Success"
                     }
                 }
                 else {
-                    Write-OutputColor "All fields are required." -color "Error"
+                    Write-OutputColor "  All fields are required." -color "Error"
                 }
                 Start-Sleep -Seconds 1
             }
             "D" {
-                Write-OutputColor "Delete from: 1. KMS  2. AVMA" -color "Info"
+                Write-OutputColor "  Delete from: 1. KMS  2. AVMA" -color "Info"
                 $typeChoice = Read-Host "  Select"
                 $navResult = Test-NavigationCommand -UserInput $typeChoice
                 if ($navResult.ShouldReturn) { return }
@@ -1555,7 +1623,7 @@ function Show-EditLicenses {
                 $typeName = if ($typeChoice -eq "1") { "KMS" } else { "AVMA" }
 
                 if ($targetKeys.Count -eq 0) {
-                    Write-OutputColor "No custom $typeName keys to delete." -color "Warning"
+                    Write-OutputColor "  No custom $typeName keys to delete." -color "Warning"
                 }
                 else {
                     $idx = 1
@@ -1567,7 +1635,7 @@ function Show-EditLicenses {
                             $idx++
                         }
                     }
-                    Write-OutputColor "Enter number to delete (or B to cancel):" -color "Info"
+                    Write-OutputColor "  Enter number to delete (or B to cancel):" -color "Info"
                     $delChoice = Read-Host
                     $navResult = Test-NavigationCommand -UserInput $delChoice
                     if ($navResult.ShouldReturn) { continue }
@@ -1579,7 +1647,7 @@ function Show-EditLicenses {
                             if ($targetKeys[$item.Version].Count -eq 0) {
                                 $targetKeys.Remove($item.Version)
                             }
-                            Write-OutputColor "Deleted." -color "Success"
+                            Write-OutputColor "  Deleted." -color "Success"
                         }
                     }
                 }
@@ -1621,7 +1689,7 @@ function Show-EditLicenses {
             }
             "S" {
                 Export-CustomLicenses
-                Write-OutputColor "Licenses saved to $($script:DefaultsPath)" -color "Success"
+                Write-OutputColor "  Licenses saved to $($script:DefaultsPath)" -color "Success"
                 Start-Sleep -Seconds 1
             }
             "B" { return }
@@ -1668,9 +1736,24 @@ function Show-FirstRunWizard {
         }
 
         if ($script:CompanyDefaultsPath) {
-            # Save minimal defaults.json so wizard doesn't run again
-            Export-Defaults
-            Write-OutputColor "  Configuration saved. Customize anytime in Settings > Edit Environment Defaults." -color "Info"
+            # Save minimal defaults.json that just references the company defaults file
+            # Do NOT use Export-Defaults here — script variables haven't been merged yet,
+            # so it would save built-in defaults (empty FileServer/AgentInstaller) that
+            # would overwrite company values on subsequent loads.
+            $minimalDefaults = [ordered]@{
+                "_description"     = "Environment defaults for $($script:ToolFullName)"
+                "_companyDefaults" = $script:CompanyDefaultsName
+            }
+            try {
+                $tempPath = "$($script:DefaultsPath).tmp"
+                $minimalDefaults | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $tempPath -Encoding UTF8 -Force -ErrorAction Stop
+                Move-Item -LiteralPath $tempPath -Destination $script:DefaultsPath -Force -ErrorAction Stop
+                Write-OutputColor "  Configuration saved. Customize anytime in Settings > Edit Environment Defaults." -color "Info"
+            }
+            catch {
+                Remove-Item -LiteralPath "$($script:DefaultsPath).tmp" -Force -ErrorAction SilentlyContinue
+                Write-OutputColor "  Failed to save defaults: $_" -color "Error"
+            }
             Start-Sleep -Seconds 2
             return
         }
@@ -1685,8 +1768,9 @@ function Show-FirstRunWizard {
 
     if (-not (Confirm-UserAction -Message "Configure environment defaults now?")) {
         # User declined - save generic defaults so wizard won't run again
-        Export-Defaults
-        Write-OutputColor "  Generic defaults saved. You can configure later in Settings." -color "Info"
+        if (Export-Defaults) {
+            Write-OutputColor "  Generic defaults saved. You can configure later in Settings." -color "Info"
+        }
         Start-Sleep -Seconds 2
         return
     }
@@ -1726,12 +1810,25 @@ function Show-FirstRunWizard {
         if (-not [string]::IsNullOrWhiteSpace($presetName)) {
             Write-OutputColor "  Enter primary DNS server IP:" -color "Info"
             $dns1 = Read-Host "  Primary"
-            Write-OutputColor "  Enter secondary DNS server IP (or press Enter to skip):" -color "Info"
-            $dns2 = Read-Host "  Secondary"
-            $servers = @($dns1)
-            if (-not [string]::IsNullOrWhiteSpace($dns2)) { $servers += $dns2 }
-            $script:DNSPresets[$presetName] = $servers
-            Write-OutputColor "  Added DNS preset '$presetName'." -color "Success"
+            if (-not (Test-ValidIPAddress -IPAddress $dns1)) {
+                Write-OutputColor "  Invalid IP address." -color "Error"
+                Start-Sleep -Seconds 1
+            }
+            else {
+                Write-OutputColor "  Enter secondary DNS server IP (or press Enter to skip):" -color "Info"
+                $dns2 = Read-Host "  Secondary"
+                $servers = @($dns1)
+                if (-not [string]::IsNullOrWhiteSpace($dns2)) {
+                    if (Test-ValidIPAddress -IPAddress $dns2) {
+                        $servers += $dns2
+                    }
+                    else {
+                        Write-OutputColor "  Invalid secondary IP, skipping." -color "Warning"
+                    }
+                }
+                $script:DNSPresets[$presetName] = $servers
+                Write-OutputColor "  Added DNS preset '$presetName'." -color "Success"
+            }
         }
     }
 
@@ -1768,14 +1865,23 @@ function Show-FirstRunWizard {
     Write-OutputColor "  Enter iSCSI subnet (first 3 octets, default: 172.16.1):" -color "Info"
     $val = Read-Host "  Subnet"
     if (-not [string]::IsNullOrWhiteSpace($val)) {
-        $script:iSCSISubnet = $val
-        Initialize-SANTargetPairs
+        $octets = $val -split '\.'
+        $validSubnet = ($octets.Count -eq 3) -and ($octets | ForEach-Object { $_ -match '^\d{1,3}$' -and [int]$_ -ge 0 -and [int]$_ -le 255 }) -notcontains $false
+        if ($validSubnet) {
+            $script:iSCSISubnet = $val
+            Initialize-SANTargetPairs
+        }
+        else {
+            Write-OutputColor "  Invalid subnet format. Expected 3 octets (e.g., 172.16.1)." -color "Error"
+            Start-Sleep -Seconds 1
+        }
     }
 
     # Save
-    Export-Defaults
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Configuration saved to $($script:DefaultsPath)" -color "Success"
+    if (Export-Defaults) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Configuration saved to $($script:DefaultsPath)" -color "Success"
+    }
     Write-OutputColor "  You can edit these anytime from: Settings > Edit Environment Defaults" -color "Info"
     Write-PressEnter
 }

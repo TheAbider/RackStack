@@ -5,7 +5,9 @@ function Show-Help {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("               $($script:ToolFullName.ToUpper()) v" + $script:ScriptVersion).PadRight(72))║" -color "Info"
+    $helpTitle = "               $($script:ToolFullName.ToUpper()) v" + $script:ScriptVersion
+    if ($helpTitle.Length -gt 72) { $helpTitle = $helpTitle.Substring(0, 69) + "..." }
+    Write-OutputColor "  ║$($helpTitle.PadRight(72))║" -color "Info"
     Write-OutputColor "  ║$(("                         Help & Documentation").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
@@ -47,7 +49,9 @@ function Show-Help {
     Write-OutputColor "  │$("  [2] System Config           Hostname, Domain, Timezone, Updates".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("      > [1] Set Hostname   [2] Join Domain   [3] Set Timezone".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("      > [4] Windows Updates [5] License       [6] Power Plan".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$(("  [3] Roles & Features        Hyper-V, MPIO, Clustering, $($script:AgentInstaller.ToolName)").PadRight(72))│" -color "Success"
+    $rolesLine = "  [3] Roles & Features        Hyper-V, MPIO, Clustering, $($script:AgentInstaller.ToolName)"
+    if ($rolesLine.Length -gt 72) { $rolesLine = $rolesLine.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($rolesLine.PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [4] Security & Access       RDP, PS Remoting, Firewall, Defender".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("      > [1] RDP  [2] PS Remoting  [3] Firewall  [4] FW Templates".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("      > [5] FW Search  [6] Defender Exclusions  [7] Defender Status".PadRight(72))│" -color "Info"
@@ -215,10 +219,10 @@ function Set-ColorTheme {
     Clear-Host
     Write-CenteredOutput "Color Theme Settings" -color "Info"
 
-    Write-OutputColor "Current Theme: $($script:ColorTheme)" -color "Info"
+    Write-OutputColor "  Current Theme: $($script:ColorTheme)" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    Write-OutputColor "Available Themes:" -color "Info"
+    Write-OutputColor "  Available Themes:" -color "Info"
     $themeNum = 1
     $themeMap = @{}
     foreach ($themeName in ($script:ColorThemes.Keys | Sort-Object)) {
@@ -238,7 +242,7 @@ function Set-ColorTheme {
     if ($themeMap.ContainsKey($choice)) {
         $prevTheme = $script:ColorTheme
         $script:ColorTheme = $themeMap[$choice]
-        Write-OutputColor "Theme changed to: $($script:ColorTheme)" -color "Success"
+        Write-OutputColor "  Theme changed to: $($script:ColorTheme)" -color "Success"
         Add-SessionChange -Category "System" -Description "Changed color theme to $($script:ColorTheme)"
         Add-UndoAction -Category "System" -Description "Changed color theme to $($script:ColorTheme)" -UndoScript {
             param($OldTheme)
@@ -246,7 +250,7 @@ function Set-ColorTheme {
         }.GetNewClosure() -UndoParams @{ OldTheme = $prevTheme }
     }
     else {
-        Write-OutputColor "Theme not changed." -color "Info"
+        Write-OutputColor "  Theme not changed." -color "Info"
     }
 }
 

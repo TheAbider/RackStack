@@ -29,6 +29,13 @@ function Set-OfflineVHDConfiguration {
         return $false
     }
 
+    # Verify VHD is not already mounted
+    $existingMount = Get-VHD -Path $VHDPath -ErrorAction SilentlyContinue
+    if ($null -ne $existingMount -and $existingMount.Attached) {
+        Write-OutputColor "  VHD is already mounted or in use. Skipping offline customization." -color "Warning"
+        return $false
+    }
+
     $mountedVHD = $null
     $systemHiveLoaded = $false
     $softwareHiveLoaded = $false
@@ -49,7 +56,7 @@ function Set-OfflineVHDConfiguration {
         $windowsDrive = $null
         foreach ($part in $partitions) {
             $testPath = "$($part.DriveLetter):\Windows"
-            if (Test-Path $testPath) {
+            if (Test-Path -LiteralPath $testPath) {
                 $windowsDrive = "$($part.DriveLetter):"
                 break
             }
@@ -72,7 +79,7 @@ function Set-OfflineVHDConfiguration {
                 }
             }
 
-            if (-not $windowsDrive -or -not (Test-Path "$windowsDrive\Windows")) {
+            if (-not $windowsDrive -or -not (Test-Path -LiteralPath "$windowsDrive\Windows")) {
                 Write-OutputColor "  Could not find Windows partition in mounted VHD." -color "Error"
                 Dismount-VHD -Path $VHDPath -ErrorAction SilentlyContinue
                 return $false
@@ -86,7 +93,7 @@ function Set-OfflineVHDConfiguration {
         $offlineSoftwareHive = "$windowsDrive\Windows\System32\config\SOFTWARE"
 
         # Load SYSTEM hive
-        if (Test-Path $offlineSystemHive) {
+        if (Test-Path -LiteralPath $offlineSystemHive) {
             Write-OutputColor "  Loading SYSTEM registry hive..." -color "Info"
             reg load "HKLM\OFFLINE_SYSTEM" $offlineSystemHive 2>$null
             if ($LASTEXITCODE -eq 0) {
@@ -98,7 +105,7 @@ function Set-OfflineVHDConfiguration {
         }
 
         # Load SOFTWARE hive
-        if (Test-Path $offlineSoftwareHive) {
+        if (Test-Path -LiteralPath $offlineSoftwareHive) {
             Write-OutputColor "  Loading SOFTWARE registry hive..." -color "Info"
             reg load "HKLM\OFFLINE_SOFTWARE" $offlineSoftwareHive 2>$null
             if ($LASTEXITCODE -eq 0) {
@@ -180,7 +187,7 @@ function Set-OfflineVHDConfiguration {
             Write-OutputColor "  Setting power plan to High Performance..." -color "Info"
             try {
                 $powerKey = "HKLM:\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{025A5937-A6BE-4686-A844-36FE4BEC8B6D}"
-                if (-not (Test-Path $powerKey)) {
+                if (-not (Test-Path -LiteralPath $powerKey)) {
                     New-Item -Path $powerKey -Force -ErrorAction Stop | Out-Null
                 }
                 $highPerfGUID = $script:PowerPlanGUID["High Performance"]

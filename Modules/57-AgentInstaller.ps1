@@ -361,8 +361,12 @@ function Install-SelectedAgent {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  SELECTED AGENT".PadRight(72))│" -color "Success"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  Site Name:    $($Agent.SiteName)".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("  Site Numbers: $($Agent.SiteNumbers -join ', ')".PadRight(72))│" -color "Info"
+    $siteNameLine = "  Site Name:    $($Agent.SiteName)"
+    if ($siteNameLine.Length -gt 72) { $siteNameLine = $siteNameLine.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($siteNameLine.PadRight(72))│" -color "Info"
+    $siteNumLine = "  Site Numbers: $($Agent.SiteNumbers -join ', ')"
+    if ($siteNumLine.Length -gt 72) { $siteNumLine = $siteNumLine.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($siteNumLine.PadRight(72))│" -color "Info"
     $lineStr = "  File:         $($Agent.FileName)"
     if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
     Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
@@ -500,9 +504,15 @@ function Install-SelectedAgent {
         $lineStr = "  Agent:     $($Agent.DisplayName)"
         if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  Install:   $exitDesc".PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  Service:   $serviceStatus".PadRight(72))│" -color $serviceColor
-        Write-OutputColor "  │$("  Status:    $overallStatus".PadRight(72))│" -color $overallColor
+        $installLine = "  Install:   $exitDesc"
+        if ($installLine.Length -gt 72) { $installLine = $installLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($installLine.PadRight(72))│" -color "Info"
+        $serviceLine = "  Service:   $serviceStatus"
+        if ($serviceLine.Length -gt 72) { $serviceLine = $serviceLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($serviceLine.PadRight(72))│" -color $serviceColor
+        $statusLine = "  Status:    $overallStatus"
+        if ($statusLine.Length -gt 72) { $statusLine = $statusLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($statusLine.PadRight(72))│" -color $overallColor
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
         if ($installOK) {
@@ -654,7 +664,9 @@ function Install-Agent {
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-        Write-OutputColor "  ║$("                    $($toolName.ToUpper()) ALREADY INSTALLED".PadRight(72))║" -color "Success"
+        $alreadyLine = "                    $($toolName.ToUpper()) ALREADY INSTALLED"
+        if ($alreadyLine.Length -gt 72) { $alreadyLine = $alreadyLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  ║$($alreadyLine.PadRight(72))║" -color "Success"
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  $toolName Agent is already installed on this server." -color "Success"
@@ -676,7 +688,9 @@ function Install-Agent {
             Clear-Host
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-            Write-OutputColor "  ║$("                  $($toolName.ToUpper()) AGENT MATCH FOUND".PadRight(72))║" -color "Success"
+            $matchLine = "                  $($toolName.ToUpper()) AGENT MATCH FOUND"
+        if ($matchLine.Length -gt 72) { $matchLine = $matchLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  ║$($matchLine.PadRight(72))║" -color "Success"
             Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
             Write-OutputColor "" -color "Info"
 
@@ -805,7 +819,9 @@ function Install-Agent {
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-        Write-OutputColor "  ║$("                    $($toolName.ToUpper()) AGENT INSTALLER".PadRight(72))║" -color "Info"
+        $headerLine = "                    $($toolName.ToUpper()) AGENT INSTALLER"
+        if ($headerLine.Length -gt 72) { $headerLine = $headerLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  ║$($headerLine.PadRight(72))║" -color "Info"
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -813,10 +829,16 @@ function Install-Agent {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  STATUS".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │$("  Hostname:     $hostname".PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  $($toolName):$((' ' * [math]::Max(1, 14 - $toolName.Length)))Not Installed".PadRight(72))│" -color "Warning"
+        $hostLine = "  Hostname:     $hostname"
+        if ($hostLine.Length -gt 72) { $hostLine = $hostLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($hostLine.PadRight(72))│" -color "Info"
+        $toolLine = "  $($toolName):$((' ' * [math]::Max(1, 14 - $toolName.Length)))Not Installed"
+        if ($toolLine.Length -gt 72) { $toolLine = $toolLine.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($toolLine.PadRight(72))│" -color "Warning"
         if ($detectedSite) {
-            Write-OutputColor "  │$("  Detected Site: $detectedSite (no agent match)".PadRight(72))│" -color "Warning"
+            $siteLine = "  Detected Site: $detectedSite (no agent match)"
+            if ($siteLine.Length -gt 72) { $siteLine = $siteLine.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($siteLine.PadRight(72))│" -color "Warning"
         } else {
             Write-OutputColor "  │$("  Detected Site: Unable to detect from hostname".PadRight(72))│" -color "Warning"
         }

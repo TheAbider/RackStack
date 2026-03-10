@@ -8,12 +8,12 @@ function Disable-BuiltInAdminAccount {
         $adminAccount = Get-LocalUser -Name "Administrator" -ErrorAction Stop
 
         if (-not $adminAccount.Enabled) {
-            Write-OutputColor "Built-in Administrator account is already disabled." -color "Info"
+            Write-OutputColor "  Built-in Administrator account is already disabled." -color "Info"
             $global:DisabledAdminReboot = $false
             return
         }
 
-        Write-OutputColor "The built-in Administrator account is currently ENABLED." -color "Warning"
+        Write-OutputColor "  The built-in Administrator account is currently ENABLED." -color "Warning"
         Write-OutputColor "" -color "Info"
 
         # Verify alternate admin access exists before allowing disable
@@ -53,7 +53,7 @@ function Disable-BuiltInAdminAccount {
         Write-OutputColor "" -color "Info"
 
         if (-not (Confirm-UserAction -Message "Disable built-in Administrator account?")) {
-            Write-OutputColor "Operation cancelled." -color "Info"
+            Write-OutputColor "  Operation cancelled." -color "Info"
             $global:DisabledAdminReboot = $false
             return
         }
@@ -63,7 +63,7 @@ function Disable-BuiltInAdminAccount {
         # Verify
         $adminAccount = Get-LocalUser -Name "Administrator"
         if (-not $adminAccount.Enabled) {
-            Write-OutputColor "Built-in Administrator account has been disabled." -color "Success"
+            Write-OutputColor "  Built-in Administrator account has been disabled." -color "Success"
             $global:DisabledAdminReboot = $true
             Add-SessionChange -Category "Security" -Description "Disabled built-in Administrator account"
             Add-UndoAction -Category "Security" -Description "Disabled built-in Administrator account" -UndoScript {
@@ -72,13 +72,14 @@ function Disable-BuiltInAdminAccount {
             Clear-MenuCache  # Invalidate cache after change
         }
         else {
-            Write-OutputColor "Failed to disable the account." -color "Error"
+            Write-OutputColor "  Failed to disable the account." -color "Error"
             $global:DisabledAdminReboot = $false
         }
     }
     catch {
-        Write-OutputColor "Failed to disable Administrator account: $_" -color "Error"
+        Write-OutputColor "  Failed to disable Administrator account: $_" -color "Error"
         $global:DisabledAdminReboot = $false
     }
+    Write-PressEnter
 }
 #endregion

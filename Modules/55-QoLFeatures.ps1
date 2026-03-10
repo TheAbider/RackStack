@@ -1317,7 +1317,7 @@ function Show-CertificateMenu {
                     $null = New-Item -Path $exportDir -ItemType Directory -Force -ErrorAction SilentlyContinue
                 }
 
-                $safeName = "$($selectedCert.Thumbprint)".Substring(0, 8)
+                $safeName = if ($selectedCert.Thumbprint -and $selectedCert.Thumbprint.Length -ge 8) { $selectedCert.Thumbprint.Substring(0, 8) } else { "cert_export" }
                 $exportPath = Join-Path $exportDir "$safeName.cer"
 
                 Write-OutputColor "" -color "Info"

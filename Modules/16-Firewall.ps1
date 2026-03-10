@@ -7,7 +7,7 @@ function Disable-WindowsFirewallDomainPrivate {
     # Get current status
     $profiles = @("Domain", "Private", "Public")
 
-    Write-OutputColor "Current firewall status:" -color "Info"
+    Write-OutputColor "  Current firewall status:" -color "Info"
     foreach ($fwProfile in $profiles) {
         $state = (Get-NetFirewallProfile -Profile $fwProfile -ErrorAction SilentlyContinue).Enabled
         $isEnabled = ($state -eq $true)
@@ -38,7 +38,7 @@ function Disable-WindowsFirewallDomainPrivate {
     switch ($choice) {
         "1" {
             if (-not (Confirm-UserAction -Message "Apply recommended firewall configuration?")) {
-                Write-OutputColor "Firewall configuration cancelled." -color "Info"
+                Write-OutputColor "  Firewall configuration cancelled." -color "Info"
                 return
             }
 
@@ -61,7 +61,7 @@ function Disable-WindowsFirewallDomainPrivate {
                 }.GetNewClosure() -UndoParams @{ States = $previousStates }
             }
             catch {
-                Write-OutputColor "Failed to configure firewall: $_" -color "Error"
+                Write-OutputColor "  Failed to configure firewall: $_" -color "Error"
             }
         }
         "2" {
@@ -176,8 +176,8 @@ function Show-FirewallRuleSearch {
                 $portStr = Read-Host "  Port"
                 $navResult = Test-NavigationCommand -UserInput $portStr
                 if ($navResult.ShouldReturn) { return }
-                if ($portStr -notmatch '^\d+$') {
-                    Write-OutputColor "  Invalid port number." -color "Error"
+                if ($portStr -notmatch '^\d+$' -or [int]$portStr -lt 1 -or [int]$portStr -gt 65535) {
+                    Write-OutputColor "  Invalid port number. Enter 1-65535." -color "Error"
                     Start-Sleep -Seconds 1
                     continue
                 }

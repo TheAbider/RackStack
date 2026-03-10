@@ -4,9 +4,9 @@ function New-BatchConfigTemplate {
     Clear-Host
     Write-CenteredOutput "Generate Batch Config Template" -color "Info"
 
-    Write-OutputColor "This will create a batch_config.json template file." -color "Info"
-    Write-OutputColor "Edit the file with your settings, then place it next to the script." -color "Info"
-    Write-OutputColor "The script will auto-run those settings on next launch." -color "Info"
+    Write-OutputColor "  This will create a batch_config.json template file." -color "Info"
+    Write-OutputColor "  Edit the file with your settings, then place it next to the script." -color "Info"
+    Write-OutputColor "  The script will auto-run those settings on next launch." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Build the config template
@@ -186,15 +186,15 @@ function New-BatchConfigTemplate {
     # Default path
     $defaultPath = "$env:USERPROFILE\Desktop\batch_config.json"
 
-    Write-OutputColor "Default location: $defaultPath" -color "Info"
+    Write-OutputColor "  Default location: $defaultPath" -color "Info"
     Write-OutputColor "" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Create batch config template?")) {
-        Write-OutputColor "Cancelled." -color "Info"
+        Write-OutputColor "  Cancelled." -color "Info"
         return
     }
 
-    Write-OutputColor "Enter path (press Enter for default):" -color "Info"
+    Write-OutputColor "  Enter path (press Enter for default):" -color "Info"
     $customPath = Read-Host
 
     $navResult = Test-NavigationCommand -UserInput $customPath
@@ -210,7 +210,7 @@ function New-BatchConfigTemplate {
     # Validate save directory exists
     $parentDir = Split-Path $savePath -Parent
     if ($parentDir -and -not (Test-Path -LiteralPath $parentDir)) {
-        Write-OutputColor "Directory does not exist: $parentDir" -color "Error"
+        Write-OutputColor "  Directory does not exist: $parentDir" -color "Error"
         return
     }
     if (Test-Path -LiteralPath $savePath) {
@@ -220,21 +220,21 @@ function New-BatchConfigTemplate {
     try {
         $configTemplate | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Batch config template created: $savePath" -color "Success"
+        Write-OutputColor "  Batch config template created: $savePath" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Next steps:" -color "Info"
+        Write-OutputColor "  Next steps:" -color "Info"
         Write-OutputColor "  1. Open the file in Notepad or VS Code" -color "Success"
         Write-OutputColor "  2. Edit the values for your server" -color "Success"
         Write-OutputColor "  3. Set unwanted options to null or false" -color "Success"
         Write-OutputColor "  4. Save as 'batch_config.json' next to this script" -color "Success"
         Write-OutputColor "  5. Run the script - it auto-detects and applies the config" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Tip: The '_Help' fields explain each setting and are ignored." -color "Info"
+        Write-OutputColor "  Tip: The '_Help' fields explain each setting and are ignored." -color "Info"
 
         Add-SessionChange -Category "Export" -Description "Created batch config template at $savePath"
     }
     catch {
-        Write-OutputColor "Failed to create file: $_" -color "Error"
+        Write-OutputColor "  Failed to create file: $_" -color "Error"
     }
 }
 
@@ -263,10 +263,10 @@ function Export-BatchConfigFromState {
     Clear-Host
     Write-CenteredOutput "Generate Batch Config from Current State" -color "Info"
 
-    Write-OutputColor "This will detect the current server configuration and generate a" -color "Info"
-    Write-OutputColor "batch_config.json pre-filled with live settings." -color "Info"
+    Write-OutputColor "  This will detect the current server configuration and generate a" -color "Info"
+    Write-OutputColor "  batch_config.json pre-filled with live settings." -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "Gathering current server state..." -color "Info"
+    Write-OutputColor "  Gathering current server state..." -color "Info"
 
     try {
         # ----- Detect ConfigType -----
@@ -526,15 +526,15 @@ function Export-BatchConfigFromState {
         # ----- Prompt for save path -----
         $defaultPath = "$env:USERPROFILE\Desktop\batch_config.json"
 
-        Write-OutputColor "Default location: $defaultPath" -color "Info"
+        Write-OutputColor "  Default location: $defaultPath" -color "Info"
         Write-OutputColor "" -color "Info"
 
         if (-not (Confirm-UserAction -Message "Save batch config from current state?")) {
-            Write-OutputColor "Cancelled." -color "Info"
+            Write-OutputColor "  Cancelled." -color "Info"
             return
         }
 
-        Write-OutputColor "Enter path (press Enter for default):" -color "Info"
+        Write-OutputColor "  Enter path (press Enter for default):" -color "Info"
         $customPath = Read-Host
 
         $navResult = Test-NavigationCommand -UserInput $customPath
@@ -550,7 +550,7 @@ function Export-BatchConfigFromState {
         # Validate save directory exists
         $parentDir = Split-Path $savePath -Parent
         if ($parentDir -and -not (Test-Path -LiteralPath $parentDir)) {
-            Write-OutputColor "Directory does not exist: $parentDir" -color "Error"
+            Write-OutputColor "  Directory does not exist: $parentDir" -color "Error"
             return
         }
         if (Test-Path -LiteralPath $savePath) {
@@ -560,21 +560,21 @@ function Export-BatchConfigFromState {
         $config | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Batch config generated from current state: $savePath" -color "Success"
+        Write-OutputColor "  Batch config generated from current state: $savePath" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Next steps:" -color "Info"
+        Write-OutputColor "  Next steps:" -color "Info"
         Write-OutputColor "  1. Review the generated file - all values are pre-filled" -color "Success"
         Write-OutputColor "  2. Edit Hostname and IPAddress for the target server" -color "Success"
         Write-OutputColor "  3. Set any unwanted options to null or false" -color "Success"
         Write-OutputColor "  4. Save as 'batch_config.json' next to the script on the target" -color "Success"
         Write-OutputColor "  5. Run the script - it auto-detects and applies the config" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "Tip: This config mirrors your current server. Great for cloning to similar servers." -color "Info"
+        Write-OutputColor "  Tip: This config mirrors your current server. Great for cloning to similar servers." -color "Info"
 
         Add-SessionChange -Category "Export" -Description "Generated batch config from current state at $savePath"
     }
     catch {
-        Write-OutputColor "Failed to generate batch config: $_" -color "Error"
+        Write-OutputColor "  Failed to generate batch config: $_" -color "Error"
     }
 }
 #endregion
