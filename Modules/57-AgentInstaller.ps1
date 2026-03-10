@@ -835,7 +835,7 @@ function Install-Agent {
                 if (Confirm-UserAction -Message "Install this $toolName Agent now?") {
                     Install-SelectedAgent -Agent $agent
                     Write-PressEnter
-                    if ($ReturnAfterInstall) { return }
+                    return
                 } else {
                     Write-OutputColor "" -color "Info"
                     Write-OutputColor "  Continuing to full agent menu..." -color "Info"
@@ -847,7 +847,7 @@ function Install-Agent {
                 if ($selected) {
                     Install-SelectedAgent -Agent $selected
                     Write-PressEnter
-                    if ($ReturnAfterInstall) { return }
+                    return
                 }
             }
         } else {
@@ -941,6 +941,24 @@ function Install-Agent {
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
+        # Re-check agent status each iteration (install may have just completed)
+        $currentStatus = Test-AgentInstalled
+        if ($currentStatus.Installed) {
+            Clear-Host
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+            $alreadyLine = "                    $($toolName.ToUpper()) ALREADY INSTALLED"
+            if ($alreadyLine.Length -gt 72) { $alreadyLine = $alreadyLine.Substring(0, 69) + "..." }
+            Write-OutputColor "  ║$($alreadyLine.PadRight(72))║" -color "Success"
+            Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  $toolName Agent is already installed on this server." -color "Success"
+            Write-OutputColor "  Status: $($currentStatus.Status)" -color "Info"
+            Write-OutputColor "" -color "Info"
+            Write-PressEnter
+            return
+        }
+
         # Show current status
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  STATUS".PadRight(72))│" -color "Info"
@@ -983,7 +1001,6 @@ function Install-Agent {
                 if ($selected) {
                     Install-SelectedAgent -Agent $selected
                     Write-PressEnter
-                    if ($ReturnAfterInstall) { return }
                 }
             }
             'S' {
@@ -1022,7 +1039,6 @@ function Install-Agent {
                 elseif ($results.Count -eq 1) {
                     Install-SelectedAgent -Agent $results[0]
                     Write-PressEnter
-                    if ($ReturnAfterInstall) { return }
                 }
                 else {
                     Write-OutputColor "  Found $($results.Count) matching agents:" -color "Success"
@@ -1030,7 +1046,6 @@ function Install-Agent {
                     if ($selected) {
                         Install-SelectedAgent -Agent $selected
                         Write-PressEnter
-                        if ($ReturnAfterInstall) { return }
                     }
                 }
             }

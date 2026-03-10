@@ -436,128 +436,110 @@ function Register-ServerLicense {
         }
         "2" {
             # VIRTUAL MACHINE licensing path
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  Is your Hyper-V host running Windows Server Datacenter edition?" -color "Info"
-            Write-OutputColor "(Datacenter hosts can automatically activate VMs using AVMA)" -color "Debug"
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [1] Yes - Host is Datacenter (use AVMA)" -color "Info"
-            Write-OutputColor "  [2] No - Host is Standard or other" -color "Info"
-            Write-OutputColor "  [B] ◄ Back" -color "Info"
-
-            $hostType = Read-Host "  Select"
-
-            $navResult = Test-NavigationCommand -UserInput $hostType
-            if ($navResult.ShouldReturn) {
-                if (Invoke-NavigationAction -NavResult $navResult) { return }
+            # Try AVMA first (auto-activates if host is Datacenter, harmless if not)
+            $avmaKey = $null
+            if ($avmaKeys.ContainsKey($windowsInfo.WindowsVersion)) {
+                $versionKeys = $avmaKeys[$windowsInfo.WindowsVersion]
+                if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
+                    $avmaKey = $versionKeys[$windowsInfo.WindowsEdition]
+                }
             }
 
-            switch ($hostType) {
-                "1" {
-                    # Host is Datacenter - can use AVMA
-                    if ($avmaKeys.ContainsKey($windowsInfo.WindowsVersion)) {
-                        $versionKeys = $avmaKeys[$windowsInfo.WindowsVersion]
-                        if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
-                            $productKey = $versionKeys[$windowsInfo.WindowsEdition]
-                            Write-OutputColor "" -color "Info"
-                            Write-OutputColor "  AVMA key found for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)" -color "Success"
-                            Write-OutputColor "  This VM will automatically activate against the Datacenter host." -color "Info"
-                            Write-OutputColor "" -color "Info"
+            if ($avmaKey) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  AVMA key found for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)" -color "Success"
+                Write-OutputColor "  AVMA auto-activates VMs running on Datacenter hosts." -color "Info"
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  [1] Apply AVMA key (recommended for Datacenter hosts)" -color "Info"
+                Write-OutputColor "  [2] Use KMS client key instead (requires KMS server)" -color "Info"
+                Write-OutputColor "  [3] Enter product key manually" -color "Info"
+                Write-OutputColor "  [B] ◄ Back" -color "Info"
 
-                            if (Confirm-UserAction -Message "Apply AVMA key?") {
+                $vmChoice = Read-Host "  Select"
+
+                $navResult = Test-NavigationCommand -UserInput $vmChoice
+                if ($navResult.ShouldReturn) {
+                    if (Invoke-NavigationAction -NavResult $navResult) { return }
+                }
+
+                switch ($vmChoice) {
+                    "1" {
+                        Enable-ServerActivation -productKey $avmaKey
+                    }
+                    "2" {
+                        if ($keys.ContainsKey($windowsInfo.WindowsVersion)) {
+                            $versionKeys = $keys[$windowsInfo.WindowsVersion]
+                            if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
+                                $productKey = $versionKeys[$windowsInfo.WindowsEdition]
+                                Write-OutputColor "  Using KMS client key for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)..." -color "Info"
                                 Enable-ServerActivation -productKey $productKey
+                            } else {
+                                Write-OutputColor "  No KMS key for $($windowsInfo.WindowsEdition). Enter manually." -color "Warning"
+                                $productKey = Enter-ManualKey
+                                if ($null -ne $productKey) { Enable-ServerActivation -productKey $productKey }
+                            }
+                        } else {
+                            Write-OutputColor "  No KMS keys for $($windowsInfo.WindowsVersion). Enter manually." -color "Warning"
+                            $productKey = Enter-ManualKey
+                            if ($null -ne $productKey) { Enable-ServerActivation -productKey $productKey }
+                        }
+                    }
+                    "3" {
+                        $productKey = Enter-ManualKey
+                        if ($null -ne $productKey) { Enable-ServerActivation -productKey $productKey }
+                    }
+                    default {
+                        Write-OutputColor "  Returning to main menu." -color "Info"
+                        return
+                    }
+                }
+            }
+            else {
+                # No AVMA key available — offer KMS/manual
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  No AVMA key available for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)." -color "Warning"
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  VM Licensing Options:" -color "Info"
+                Write-OutputColor "  [1] Use default KMS client key (requires KMS server)" -color "Info"
+                Write-OutputColor "  [2] Enter product key manually" -color "Info"
+                Write-OutputColor "  [B] ◄ Back" -color "Info"
+
+                $vmChoice = Read-Host "  Select"
+
+                $navResult = Test-NavigationCommand -UserInput $vmChoice
+                if ($navResult.ShouldReturn) {
+                    if (Invoke-NavigationAction -NavResult $navResult) { return }
+                }
+
+                switch ($vmChoice) {
+                    "1" {
+                        if ($keys.ContainsKey($windowsInfo.WindowsVersion)) {
+                            $versionKeys = $keys[$windowsInfo.WindowsVersion]
+                            if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
+                                $productKey = $versionKeys[$windowsInfo.WindowsEdition]
+                                Write-OutputColor "  Using KMS client key for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)..." -color "Info"
+                                Enable-ServerActivation -productKey $productKey
+                            }
+                            else {
+                                Write-OutputColor "  No default key for $($windowsInfo.WindowsEdition)" -color "Error"
+                                $productKey = Enter-ManualKey
+                                if ($null -ne $productKey) { Enable-ServerActivation -productKey $productKey }
                             }
                         }
                         else {
-                            Write-OutputColor "  No AVMA key available for $($windowsInfo.WindowsEdition)" -color "Error"
-                            Write-OutputColor "  Available editions for AVMA: $($versionKeys.Keys -join ', ')" -color "Info"
-                            Write-OutputColor "" -color "Info"
-
-                            $manualChoice = Read-Host "Enter key manually? (yes/no)"
-                            $navResult = Test-NavigationCommand -UserInput $manualChoice
-                            if ($navResult.ShouldReturn) {
-                                if (Invoke-NavigationAction -NavResult $navResult) { return }
-                            }
-                            if ($manualChoice -eq "yes" -or $manualChoice -eq "y") {
-                                $productKey = Enter-ManualKey
-                                if ($null -ne $productKey) {
-                                    Enable-ServerActivation -productKey $productKey
-                                }
-                            }
-                        }
-                    }
-                    else {
-                        Write-OutputColor "  No AVMA keys available for $($windowsInfo.WindowsVersion)" -color "Error"
-                        Write-OutputColor "  AVMA is supported on Server 2012 R2 and later." -color "Info"
-                        Write-OutputColor "" -color "Info"
-
-                        $manualChoice = Read-Host "Enter key manually? (yes/no)"
-                        $navResult = Test-NavigationCommand -UserInput $manualChoice
-                        if ($navResult.ShouldReturn) {
-                            if (Invoke-NavigationAction -NavResult $navResult) { return }
-                        }
-                        if ($manualChoice -eq "yes" -or $manualChoice -eq "y") {
+                            Write-OutputColor "  No default keys for $($windowsInfo.WindowsVersion)" -color "Error"
                             $productKey = Enter-ManualKey
-                            if ($null -ne $productKey) {
-                                Enable-ServerActivation -productKey $productKey
-                            }
+                            if ($null -ne $productKey) { Enable-ServerActivation -productKey $productKey }
                         }
                     }
-                }
-                "2" {
-                    # Host is NOT Datacenter - use regular keys
-                    Write-OutputColor "" -color "Info"
-                    Write-OutputColor "  VM Licensing Options (non-Datacenter host):" -color "Info"
-                    Write-OutputColor "  [1] Use default KMS client key (requires KMS server)" -color "Info"
-                    Write-OutputColor "  [2] Enter product key manually" -color "Info"
-                    Write-OutputColor "  [B] ◄ Back" -color "Info"
-
-                    $vmChoice = Read-Host "  Select"
-
-                    $navResult = Test-NavigationCommand -UserInput $vmChoice
-                    if ($navResult.ShouldReturn) {
-                        if (Invoke-NavigationAction -NavResult $navResult) { return }
+                    "2" {
+                        $productKey = Enter-ManualKey
+                        if ($null -ne $productKey) { Enable-ServerActivation -productKey $productKey }
                     }
-
-                    switch ($vmChoice) {
-                        "1" {
-                            if ($keys.ContainsKey($windowsInfo.WindowsVersion)) {
-                                $versionKeys = $keys[$windowsInfo.WindowsVersion]
-                                if ($versionKeys.ContainsKey($windowsInfo.WindowsEdition)) {
-                                    $productKey = $versionKeys[$windowsInfo.WindowsEdition]
-                                    Write-OutputColor "  Using KMS client key for $($windowsInfo.WindowsVersion) $($windowsInfo.WindowsEdition)..." -color "Info"
-                                    Enable-ServerActivation -productKey $productKey
-                                }
-                                else {
-                                    Write-OutputColor "  No default key for $($windowsInfo.WindowsEdition)" -color "Error"
-                                    $productKey = Enter-ManualKey
-                                    if ($null -ne $productKey) {
-                                        Enable-ServerActivation -productKey $productKey
-                                    }
-                                }
-                            }
-                            else {
-                                Write-OutputColor "  No default keys for $($windowsInfo.WindowsVersion)" -color "Error"
-                                $productKey = Enter-ManualKey
-                                if ($null -ne $productKey) {
-                                    Enable-ServerActivation -productKey $productKey
-                                }
-                            }
-                        }
-                        "2" {
-                            $productKey = Enter-ManualKey
-                            if ($null -ne $productKey) {
-                                Enable-ServerActivation -productKey $productKey
-                            }
-                        }
-                        default {
-                            Write-OutputColor "  Returning to main menu." -color "Info"
-                            return
-                        }
+                    default {
+                        Write-OutputColor "  Returning to main menu." -color "Info"
+                        return
                     }
-                }
-                default {
-                    Write-OutputColor "  Returning to main menu." -color "Info"
-                    return
                 }
             }
         }

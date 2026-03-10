@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.21.14
+
+- **Bug Fix:** Agent installer returned to selection menu after successful install instead of going back to main menu — now returns immediately after install completes (57-AgentInstaller).
+- **Bug Fix:** Agent installer Step 4 menu always showed "Not Installed" even after successful install — now re-checks agent status each iteration (57-AgentInstaller).
+- **UX:** VM licensing no longer asks "Is your host Datacenter?" — instead offers AVMA key directly as first option with KMS and manual as alternatives (21-Licensing).
+- 64 modules, 2291 tests
+
 ## v1.21.13
 
 - **Bug Fix:** Agent detection still reported "already installed" after uninstall — leftover files in install directory triggered false positive. Detection now requires the agent service to exist OR the agent to appear in Programs and Features; orphaned files alone no longer block reinstallation (57-AgentInstaller).
