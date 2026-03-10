@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.21.13
+
+- **Bug Fix:** Agent detection still reported "already installed" after uninstall — leftover files in install directory triggered false positive. Detection now requires the agent service to exist OR the agent to appear in Programs and Features; orphaned files alone no longer block reinstallation (57-AgentInstaller).
+- 64 modules, 2291 tests
+
 ## v1.21.12
 
 - **Bug Fix:** Agent detection false positive after uninstall — `InstallPaths` check now verifies actual agent executables exist in the directory, not just the directory itself (57-AgentInstaller).

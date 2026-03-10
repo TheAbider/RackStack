@@ -9,6 +9,7 @@ function Test-AgentInstallerConfigured {
 }
 
 # Function to check if the configured agent is installed
+# Service detection is authoritative — file/registry remnants after uninstall do NOT count
 function Test-AgentInstalled {
     $toolName = $script:AgentInstaller.ToolName
 
@@ -30,26 +31,8 @@ function Test-AgentInstalled {
         return @{ Installed = $true; Status = $agentService.Status; ServiceName = $agentService.Name }
     }
 
-    # Check configured installation paths (verify actual agent files exist, not just empty dirs)
-    foreach ($path in $script:AgentInstaller.InstallPaths) {
-        $expandedPath = [Environment]::ExpandEnvironmentVariables($path)
-        if (Test-Path -LiteralPath $expandedPath) {
-            # Directory: check for executables/DLLs inside (empty or near-empty dirs = uninstalled)
-            if ((Get-Item -LiteralPath $expandedPath) -is [System.IO.DirectoryInfo]) {
-                $agentFiles = Get-ChildItem -LiteralPath $expandedPath -Recurse -File -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Extension -in '.exe', '.dll', '.sys' } |
-                    Select-Object -First 1
-                if ($agentFiles) {
-                    return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
-                }
-            } else {
-                # Direct file path
-                return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
-            }
-        }
-    }
-
-    # Fallback: check Windows uninstall registry for agent
+    # No service found — check Programs and Features (uninstall registry) as secondary confirmation
+    $inPrograms = $false
     if ($toolName -ne "MSP") {
         $regPaths = @(
             'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
@@ -60,11 +43,26 @@ function Test-AgentInstalled {
                 Where-Object { $_.DisplayName -like "*$toolName*" } |
                 Select-Object -First 1
             if ($match) {
-                return @{ Installed = $true; Status = "Registry"; Path = $match.InstallLocation }
+                $inPrograms = $true
+                break
             }
         }
     }
 
+    # Only report installed if BOTH registry entry exists AND files exist
+    # (prevents false positives from leftover files or orphaned registry keys after uninstall)
+    if ($inPrograms) {
+        foreach ($path in $script:AgentInstaller.InstallPaths) {
+            $expandedPath = [Environment]::ExpandEnvironmentVariables($path)
+            if (Test-Path -LiteralPath $expandedPath) {
+                return @{ Installed = $true; Status = "Registry"; Path = $expandedPath }
+            }
+        }
+        # Registry entry but no files — likely stale registry key
+        return @{ Installed = $true; Status = "Registry Only"; Path = "" }
+    }
+
+    # No service, not in Programs and Features — not installed (leftover files are just remnants)
     return @{ Installed = $false }
 }
 
