@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.21.11
+
+- **Bug Fix:** Manual "Check for Updates" used stale cached results from startup — now always fetches fresh from GitHub API so newly published releases are detected immediately (35-Utilities).
+- 64 modules, 2291 tests
+
 ## v1.21.10
 
 - **Bug Fix:** Double "Press Enter" on multiple screens — removed redundant `Write-PressEnter` from menu runner for 15+ functions that already pause internally (49-MenuRunner).

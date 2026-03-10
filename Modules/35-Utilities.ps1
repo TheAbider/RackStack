@@ -168,17 +168,18 @@ function Test-ScriptUpdate {
     }
 
     try {
-        # Use cached release from startup check if available, otherwise fetch fresh
-        if ($script:LatestRelease) {
-            $release = $script:LatestRelease
-        }
-        else {
-            $repoApiUrl = "https://api.github.com/repos/TheAbider/RackStack/releases/latest"
-            $release = Invoke-RestMethod -Uri $repoApiUrl -TimeoutSec 10 -ErrorAction Stop
-        }
+        # Always fetch fresh when user manually checks for updates
+        $repoApiUrl = "https://api.github.com/repos/TheAbider/RackStack/releases/latest"
+        $release = Invoke-RestMethod -Uri $repoApiUrl -TimeoutSec 10 -ErrorAction Stop
+
+        # Update cached state so menu banner reflects latest check
         $remoteVersion = $release.tag_name -replace '^v', ''
+        $script:UpdateCheckCompleted = $true
+        $script:LatestRelease = $release
+        $script:LatestVersion = $remoteVersion
 
         if ([version]$remoteVersion -gt [version]$script:ScriptVersion) {
+            $script:UpdateAvailable = $true
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  UPDATE AVAILABLE!".PadRight(72))│" -color "Success"
