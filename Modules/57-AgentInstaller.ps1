@@ -621,8 +621,9 @@ function Install-Agent {
         # Diagnostic info to help troubleshoot
         Write-OutputColor "  Debug: ModuleRoot = $script:ModuleRoot" -color "Debug"
         Write-OutputColor "  Debug: CompanyDefaults = $script:CompanyDefaultsPath" -color "Debug"
-        Write-OutputColor "  Debug: ToolName = $script:AgentInstaller.ToolName" -color "Debug"
-        Write-OutputColor "  Debug: BaseURL = $script:FileServer.BaseURL" -color "Debug"
+        Write-OutputColor "  Debug: ToolName = $($script:AgentInstaller.ToolName)" -color "Debug"
+        Write-OutputColor "  Debug: BaseURL = $($script:FileServer.BaseURL)" -color "Debug"
+        Write-OutputColor "  Debug: FileServer configured = $(Test-FileServerConfigured)" -color "Debug"
         Write-OutputColor "" -color "Info"
         Write-PressEnter
         return

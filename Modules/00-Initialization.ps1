@@ -131,10 +131,15 @@ if (-not $script:ScriptPath) {
     try { $script:ScriptPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName } catch {}
 }
 if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
+# ps2exe: $PSScriptRoot may point to a temp extraction dir, not the EXE folder.
+# Always prefer the EXE directory when running compiled (detected by empty $PSCommandPath).
+if (-not $PSCommandPath -and $script:ScriptPath) {
+    $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
+}
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.21.3"
+$script:ScriptVersion = "1.21.5"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)

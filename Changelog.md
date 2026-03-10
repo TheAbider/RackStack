@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.21.5
+
+- **Bug Fix:** Agent installer diagnostic output now correctly shows ToolName, BaseURL, and FileServer status instead of `System.Collections.Hashtable.ToolName` (PowerShell string interpolation fix in 57-AgentInstaller).
+- **Bug Fix:** ps2exe ModuleRoot — compiled EXE now always uses the EXE's own directory for finding defaults files, not the temp extraction directory that `$PSScriptRoot` may point to (00-Initialization).
+- 64 modules, 2291 tests
+
 ## v1.21.3
 
 - **Bug Fix:** Agent installer failsafe — if company defaults weren't loaded during startup, automatically retry loading when agent installer is accessed. Shows diagnostic info if still misconfigured.
