@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.21.8
+
+- **Bug Fix:** Download progress bar crash — ETA calculation used a format specifier incompatible with floating-point values, causing "Format specifier was invalid" error during file downloads (04-Navigation).
+- 64 modules, 2291 tests
+
 ## v1.21.7
 
 - **UX:** Agent installer "NOT CONFIGURED" screen cleaned up — removed debug output, now shows a concise error message if the company defaults JSON file has syntax errors (57-AgentInstaller).

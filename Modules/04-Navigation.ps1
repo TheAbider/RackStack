@@ -442,7 +442,7 @@ function Write-ProgressBar {
         $etaStr = ""
         if ($SpeedBytesPerSec -gt 0 -and $CurrentBytes -lt $TotalBytes) {
             $remaining = $TotalBytes - $CurrentBytes
-            $etaSec = [math]::Ceiling($remaining / $SpeedBytesPerSec)
+            $etaSec = [int][math]::Ceiling($remaining / $SpeedBytesPerSec)
             $etaMin = [math]::Floor($etaSec / 60)
             $etaSecRem = $etaSec % 60
             $etaStr = "  ETA ${etaMin}m $("{0:D2}" -f $etaSecRem)s"
