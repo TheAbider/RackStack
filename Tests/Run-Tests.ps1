@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.21.8
+    Automated Test Runner for RackStack v1.21.9
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8497,9 +8497,9 @@ Write-TestResult "33-StorageReplica: Clear-MenuCache after partnership" ($srCont
 $fsContent2 = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
 Write-TestResult "39-FileServer: null-safe Get-Content before match" ($fsContent2 -match '\$null -ne \$content -and \$content -match')
 
-# 12-DomainJoin: indentation consistency and Invoke-WithTimeout
+# 12-DomainJoin: indentation consistency and Add-Computer direct call
 $djContent3 = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1") -Raw
-Write-TestResult "12-DomainJoin: Add-Computer uses Invoke-WithTimeout" ($djContent3 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Joining domain')
+Write-TestResult "12-DomainJoin: Add-Computer runs directly (not in job)" ($djContent3 -match 'Add-Computer -DomainName \$targetDomain -Credential \$credential')
 # Check that key messages are indented (no bare starts)
 $djLines = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1")
 $djUnindented = 0

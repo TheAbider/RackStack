@@ -1,7 +1,12 @@
 ﻿# Changelog
 
-## v1.21.8
+## v1.21.9
 
+- **Bug Fix:** Domain join broken — `Add-Computer` was wrapped in `Invoke-WithTimeout` which runs in a separate job where local variables (`$targetDomain`, `$credential`) are null. Domain join reported success despite never executing. Now runs `Add-Computer` directly (12-DomainJoin).
+- **Bug Fix:** Agent installer hung after install — replaced background job with direct process monitoring; installer now detects agent service within 10 seconds of install completing instead of waiting for process tree to exit. Press Escape to skip waiting. Installer window now hidden (57-AgentInstaller).
+- **Bug Fix:** Agent detection — added display name fallback for service matching; some agents use internal service names that differ from the display name pattern (57-AgentInstaller).
+- **Bug Fix:** Disable Admin blocked despite alternate admin existing — `PrincipalSource` filter excluded accounts where the property was null (common on some OS versions). Now validates locality via `Get-LocalUser` instead (24-DisableAdmin).
+- **Bug Fix:** WinRM status showed "Enabled" (green) when only the service was running — now checks service startup type, PSSession configuration, and firewall rules before reporting fully enabled. Shows "Partial" (yellow) when only partially configured (05-SystemCheck).
 - **Bug Fix:** Download progress bar crash — ETA calculation used a format specifier incompatible with floating-point values, causing "Format specifier was invalid" error during file downloads (04-Navigation).
 - 64 modules, 2291 tests
 

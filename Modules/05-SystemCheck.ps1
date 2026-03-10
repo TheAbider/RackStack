@@ -134,23 +134,46 @@ function Get-WinRMState {
             return "N/A"
         }
 
-        if ($winrmService.Status -eq "Running") {
-            # Service is running, check if listeners are configured
-            try {
-                $listener = Get-ChildItem -Path WSMan:\localhost\Listener -ErrorAction Stop 2>$null
-                if ($listener) {
-                    return "Enabled"
-                }
-                else {
-                    return "Partial"
-                }
-            }
-            catch {
-                return "Partial"
-            }
-        }
-        else {
+        if ($winrmService.Status -ne "Running") {
             return "Disabled"
+        }
+
+        # Service is running — check if fully configured (not just default state)
+        $checks = 0
+        $passed = 0
+
+        # 1. Listener configured
+        $checks++
+        try {
+            $listener = Get-ChildItem -Path WSMan:\localhost\Listener -ErrorAction Stop 2>$null
+            if ($listener) { $passed++ }
+        } catch {}
+
+        # 2. Service set to Automatic (not just manually started)
+        $checks++
+        if ($winrmService.StartType -eq 'Automatic') { $passed++ }
+
+        # 3. PSSession configuration exists (Enable-PSRemoting creates these)
+        $checks++
+        try {
+            $sessions = @(Get-PSSessionConfiguration -ErrorAction Stop 2>$null)
+            if ($sessions.Count -gt 0) { $passed++ }
+        } catch {}
+
+        # 4. WinRM firewall rules enabled
+        $checks++
+        try {
+            $fwRules = @(Get-NetFirewallRule -DisplayGroup "Windows Remote Management" -ErrorAction Stop |
+                Where-Object { $_.Enabled -eq $true -and $_.Direction -eq 'Inbound' })
+            if ($fwRules.Count -gt 0) { $passed++ }
+        } catch {}
+
+        if ($passed -eq $checks) {
+            return "Enabled"
+        } elseif ($passed -gt 0) {
+            return "Partial"
+        } else {
+            return "Partial"
         }
     }
     catch {

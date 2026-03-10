@@ -148,15 +148,11 @@ function Join-Domain {
         }
 
         try {
-            $joinResult = Invoke-WithTimeout -ScriptBlock {
-                Add-Computer -DomainName $targetDomain -Credential $credential -ErrorAction Stop
-            } -TimeoutSeconds 120 -Activity "Joining domain '$targetDomain'"
-            if ($joinResult.TimedOut) {
-                Write-OutputColor "  Domain join timed out after 2 minutes." -color "Error"
-                Write-OutputColor "  The operation may still be in progress. Check Event Viewer." -color "Warning"
-                continue
-            }
-            if ($joinResult.Error) { throw $joinResult.Error }
+            # Run Add-Computer directly (not in Invoke-WithTimeout) because
+            # Start-Job cannot access $targetDomain/$credential from parent scope
+            Write-Host "`r  [|] Joining domain '$targetDomain'...    " -NoNewline
+            Add-Computer -DomainName $targetDomain -Credential $credential -ErrorAction Stop
+            Write-Host ""
             Write-OutputColor "  Successfully joined domain '$targetDomain'!" -color "Success"
             Write-OutputColor "  A reboot is required to complete the domain join." -color "Warning"
             $global:RebootNeeded = $true

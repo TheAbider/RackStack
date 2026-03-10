@@ -18,8 +18,9 @@ function Disable-BuiltInAdminAccount {
 
         # Verify alternate admin access exists before allowing disable
         $adminMembers = @(Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue)
+        # Filter to local users via Get-LocalUser (PrincipalSource can be null on some OS versions)
         $enabledLocalAdmins = @($adminMembers | Where-Object {
-            $_.ObjectClass -eq 'User' -and $_.PrincipalSource -eq 'Local'
+            $_.ObjectClass -eq 'User'
         } | ForEach-Object {
             $userName = $_.Name -replace '^.*\\', ''
             $localUser = Get-LocalUser -Name $userName -ErrorAction SilentlyContinue

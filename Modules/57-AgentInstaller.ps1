@@ -10,8 +10,14 @@ function Test-AgentInstallerConfigured {
 
 # Function to check if the configured agent is installed
 function Test-AgentInstalled {
-    # Check for agent service
+    # Check for agent service by name (supports wildcards)
     $agentService = Get-Service -Name $script:AgentInstaller.ServiceName -ErrorAction SilentlyContinue
+    # Fallback: check by display name (some agents use different internal service names)
+    if (-not $agentService) {
+        $agentService = Get-Service -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like $script:AgentInstaller.ServiceName } |
+            Select-Object -First 1
+    }
     if ($agentService) {
         return @{ Installed = $true; Status = $agentService.Status; ServiceName = $agentService.Name }
     }
@@ -393,55 +399,88 @@ function Install-SelectedAgent {
 
     $installTimeout = $script:AgentInstaller.TimeoutSeconds
 
+    $installProcess = $null
     try {
         $elapsed = 0
-        $installJob = Start-Job -ScriptBlock {
-            param($installerPath, $argString)
-            try {
-                $process = Start-Process -FilePath $installerPath -ArgumentList $argString -Wait -PassThru -ErrorAction Stop
-                return @{ Success = $true; ExitCode = $process.ExitCode }
-            }
-            catch {
-                return @{ Success = $false; Error = $_.Exception.Message }
-            }
-        } -ArgumentList $tempPath, $script:AgentInstaller.InstallArgs
+        $earlyDetect = $false
+        $userSkipped = $false
+        $installProcess = Start-Process -FilePath $tempPath -ArgumentList $script:AgentInstaller.InstallArgs -PassThru -WindowStyle Hidden -ErrorAction Stop
 
-        while ($installJob.State -eq "Running") {
-            Show-ProgressMessage -Activity "Installing $toolName Agent" -Status "Please wait..." -SecondsElapsed $elapsed
+        # Monitor installer: check process exit, agent detection, keypress, and timeout
+        while (-not $installProcess.HasExited) {
+            Show-ProgressMessage -Activity "Installing $toolName Agent" -Status "Please wait (Esc=skip)..." -SecondsElapsed $elapsed
             Start-Sleep -Seconds 1
             $elapsed++
 
+            # Check for Escape keypress to skip waiting
+            if ([Console]::KeyAvailable) {
+                $key = [Console]::ReadKey($true)
+                if ($key.Key -eq 'Escape') {
+                    $userSkipped = $true
+                    break
+                }
+            }
+
+            # Every 5 seconds (after initial 10s), check if agent is already installed
+            # Catches installers that hang after completing (e.g., waiting on child services)
+            if ($elapsed -ge 10 -and $elapsed % 5 -eq 0) {
+                $earlyCheck = Test-AgentInstalled
+                if ($earlyCheck.Installed) {
+                    $earlyDetect = $true
+                    break
+                }
+            }
+
             if ($elapsed -gt $installTimeout) {
-                Stop-Job $installJob -ErrorAction SilentlyContinue
-                Remove-Job $installJob -Force -ErrorAction SilentlyContinue
+                $timeoutCheck = Test-AgentInstalled
+                if ($timeoutCheck.Installed) {
+                    $earlyDetect = $true
+                    break
+                }
                 Write-Host ""
                 Write-OutputColor "  Installation timed out after $installTimeout seconds." -color "Warning"
+                try { $installProcess.Kill() } catch {}
                 Add-SessionChange -Category "Software" -Description "$toolName Agent installation timed out after ${installTimeout}s"
                 return
             }
         }
         Write-Host ""
 
-        $result = Receive-Job $installJob
-        Remove-Job $installJob -Force -ErrorAction SilentlyContinue
+        # Determine install result
+        $exitCode = $null
+        $exitDesc = $null
+        $installOK = $false
+        $agentResult = $null
 
-        if (-not $result.Success) {
-            Write-OutputColor "  Installer failed to launch: $($result.Error)" -color "Error"
-            return
+        if ($earlyDetect) {
+            # Agent detected as installed while installer process still running
+            $installOK = $true
+            $exitCode = 0
+            $exitDesc = "Success (agent detected)"
+            $agentResult = Test-AgentInstalled
+        } elseif ($userSkipped) {
+            # User pressed Escape — check if agent installed anyway
+            $agentResult = Test-AgentInstalled
+            if ($agentResult.Installed) {
+                $installOK = $true
+                $exitCode = 0
+                $exitDesc = "Success (agent detected)"
+            } else {
+                $exitDesc = "Skipped by user"
+            }
+        } else {
+            # Process exited normally — check exit code
+            $exitCode = $installProcess.ExitCode
+            $exitDesc = switch ($exitCode) {
+                0       { "Success" }
+                1641    { "Reboot initiated by installer" }
+                3010    { "Success (reboot required)" }
+                1602    { "User cancelled" }
+                1603    { "Fatal error during installation" }
+                default { "Error (code $exitCode)" }
+            }
+            $installOK = $exitCode -in $script:AgentInstaller.SuccessExitCodes
         }
-
-        $exitCode = $result.ExitCode
-        $exitDesc = switch ($exitCode) {
-            0       { "Success" }
-            1641    { "Reboot initiated by installer" }
-            3010    { "Success (reboot required)" }
-            1602    { "User cancelled" }
-            1603    { "Fatal error during installation" }
-            default { "Error (code $exitCode)" }
-        }
-
-        # Determine if install was successful based on configured success codes
-        $installOK = $exitCode -in $script:AgentInstaller.SuccessExitCodes
 
         # Post-install service verification
         $serviceStatus = "Not checked"
@@ -450,22 +489,24 @@ function Install-SelectedAgent {
         $overallColor = "Warning"
 
         if ($installOK) {
-            # Poll for agent service to appear
-            $verifyElapsed = 0
-            $verifyTimeout = 60
-            $agentResult = $null
+            # If we already confirmed agent installed (early detect / skip), use that result
+            if (-not $agentResult -or -not $agentResult.Installed) {
+                # Poll for agent service to appear (process exited normally)
+                $verifyElapsed = 0
+                $verifyTimeout = 30
 
-            while ($verifyElapsed -lt $verifyTimeout) {
-                Show-ProgressMessage -Activity "Waiting for $toolName Agent service" -Status "Verifying..." -SecondsElapsed $verifyElapsed
-                Start-Sleep -Seconds 2
-                $verifyElapsed += 2
+                while ($verifyElapsed -lt $verifyTimeout) {
+                    Show-ProgressMessage -Activity "Waiting for $toolName Agent service" -Status "Verifying..." -SecondsElapsed $verifyElapsed
+                    Start-Sleep -Seconds 2
+                    $verifyElapsed += 2
 
-                $agentResult = Test-AgentInstalled
-                if ($agentResult.Installed) {
-                    break
+                    $agentResult = Test-AgentInstalled
+                    if ($agentResult.Installed) {
+                        break
+                    }
                 }
+                Write-Host ""
             }
-            Write-Host ""
 
             if ($null -ne $agentResult -and $agentResult.Installed) {
                 if ($agentResult.Status -eq "Running") {
@@ -485,6 +526,10 @@ function Install-SelectedAgent {
                 $overallStatus = "NEEDS VERIFICATION"
                 $overallColor = "Warning"
             }
+        } elseif ($userSkipped) {
+            $overallStatus = "SKIPPED"
+            $overallColor = "Warning"
+            $serviceStatus = "Not checked (user skipped)"
         } else {
             if ($exitCode -eq 1602) {
                 $overallStatus = "CANCELLED"
@@ -529,9 +574,8 @@ function Install-SelectedAgent {
         }
     }
     finally {
-        if ($installJob) {
-            Stop-Job -Job $installJob -ErrorAction SilentlyContinue
-            Remove-Job -Job $installJob -Force -ErrorAction SilentlyContinue
+        if ($installProcess -and -not $installProcess.HasExited) {
+            try { $installProcess.Kill() } catch {}
         }
         Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
     }
