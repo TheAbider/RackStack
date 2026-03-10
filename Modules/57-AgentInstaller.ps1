@@ -577,11 +577,10 @@ function Install-Agent {
 
     # --- Section: Pre-check - Feature Configuration ---
     if (-not (Test-AgentInstallerConfigured)) {
-        # Safety net: if company defaults exist but weren't loaded, retry now
+        # Safety net 1: discover company defaults if not already found
         if (-not $script:CompanyDefaultsPath) {
             $retryFiles = @(Get-CompanyDefaultsFiles)
             if ($retryFiles.Count -gt 0) {
-                # Company defaults file exists but wasn't loaded — force reload
                 if ($retryFiles.Count -eq 1) {
                     $script:CompanyDefaultsName = $retryFiles[0].Name
                     $script:CompanyDefaultsPath = $retryFiles[0].Path
@@ -592,14 +591,55 @@ function Install-Agent {
                         $script:CompanyDefaultsPath = $picked.Path
                     }
                 }
-                if ($script:CompanyDefaultsPath) {
-                    Import-Defaults
-                    if (Test-AgentInstallerConfigured) {
-                        # Retry succeeded — continue to agent installer
-                        Install-Agent @PSBoundParameters
-                        return
+            }
+        }
+
+        # Safety net 2: if company defaults file exists, force re-import
+        if ($script:CompanyDefaultsPath -and (Test-Path -LiteralPath $script:CompanyDefaultsPath)) {
+            Import-Defaults
+            if (Test-AgentInstallerConfigured) {
+                Install-Agent @PSBoundParameters
+                return
+            }
+
+            # Safety net 3: Import-Defaults didn't work — apply company defaults directly
+            try {
+                $directData = Get-Content -LiteralPath $script:CompanyDefaultsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                # Apply FileServer directly
+                if ($directData.FileServer) {
+                    foreach ($prop in $directData.FileServer.PSObject.Properties) {
+                        $script:FileServer[$prop.Name] = $prop.Value
+                    }
+                    if ($script:FileServer.ContainsKey("KaseyaFolder")) {
+                        $script:FileServer["AgentFolder"] = $script:FileServer["KaseyaFolder"]
+                        $script:FileServer.Remove("KaseyaFolder")
                     }
                 }
+                # Apply AgentInstaller directly
+                if ($directData.AgentInstaller) {
+                    foreach ($prop in $directData.AgentInstaller.PSObject.Properties) {
+                        if ($prop.Name -like '_*') { continue }
+                        if ($prop.Name -eq 'SuccessExitCodes' -and $prop.Value -is [array]) {
+                            $script:AgentInstaller[$prop.Name] = @($prop.Value | ForEach-Object { [int]$_ })
+                        }
+                        elseif ($prop.Name -eq 'InstallPaths' -and $prop.Value -is [array]) {
+                            $script:AgentInstaller[$prop.Name] = @($prop.Value)
+                        }
+                        elseif ($prop.Name -eq 'TimeoutSeconds') {
+                            $script:AgentInstaller[$prop.Name] = [int]$prop.Value
+                        }
+                        else {
+                            $script:AgentInstaller[$prop.Name] = $prop.Value
+                        }
+                    }
+                }
+                if (Test-AgentInstallerConfigured) {
+                    Install-Agent @PSBoundParameters
+                    return
+                }
+            }
+            catch {
+                # Direct parse failed — fall through to error display
             }
         }
 
@@ -620,10 +660,23 @@ function Install-Agent {
         Write-OutputColor "" -color "Info"
         # Diagnostic info to help troubleshoot
         Write-OutputColor "  Debug: ModuleRoot = $script:ModuleRoot" -color "Debug"
+        Write-OutputColor "  Debug: DefaultsPath = $($script:DefaultsPath)" -color "Debug"
         Write-OutputColor "  Debug: CompanyDefaults = $script:CompanyDefaultsPath" -color "Debug"
         Write-OutputColor "  Debug: ToolName = $($script:AgentInstaller.ToolName)" -color "Debug"
         Write-OutputColor "  Debug: BaseURL = $($script:FileServer.BaseURL)" -color "Debug"
-        Write-OutputColor "  Debug: FileServer configured = $(Test-FileServerConfigured)" -color "Debug"
+        Write-OutputColor "  Debug: StorageType = $($script:FileServer.StorageType)" -color "Debug"
+        if ($script:CompanyDefaultsPath -and (Test-Path -LiteralPath $script:CompanyDefaultsPath)) {
+            try {
+                $debugData = Get-Content -LiteralPath $script:CompanyDefaultsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                $debugAI = if ($debugData.AgentInstaller) { $debugData.AgentInstaller.ToolName } else { "(missing)" }
+                $debugFS = if ($debugData.FileServer) { $debugData.FileServer.BaseURL } else { "(missing)" }
+                Write-OutputColor "  Debug: File has AgentInstaller.ToolName = $debugAI" -color "Debug"
+                Write-OutputColor "  Debug: File has FileServer.BaseURL = $debugFS" -color "Debug"
+            }
+            catch {
+                Write-OutputColor "  Debug: PARSE ERROR reading company file: $_" -color "Error"
+            }
+        }
         Write-OutputColor "" -color "Info"
         Write-PressEnter
         return
