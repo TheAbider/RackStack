@@ -182,12 +182,12 @@ function Start-Show-SystemConfigMenu {
         if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
-            "1" { Set-HostName; Write-PressEnter }
+            "1" { Set-HostName }
             "2" { Join-Domain; Write-PressEnter }
             "3" { Show-ADDSPromotionMenu }
             "4" { Set-ServerTimeZone; Write-PressEnter }
-            "5" { Install-WindowsUpdates; Write-PressEnter }
-            "6" { Register-ServerLicense; Write-PressEnter }
+            "5" { Install-WindowsUpdates }
+            "6" { Register-ServerLicense }
             "7" { Set-ServerPowerPlan; Write-PressEnter }
             "back" { return }
             default {
@@ -214,7 +214,7 @@ function Start-Show-RolesFeaturesMenu {
             "1" { Install-HyperVRole; Write-PressEnter }
             "2" { Install-MPIOFeature; Write-PressEnter }
             "3" { Install-FailoverClusteringFeature; Write-PressEnter }
-            "4" { Install-Agent; Write-PressEnter }
+            "4" { Install-Agent }
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"
@@ -240,13 +240,13 @@ function Start-Show-SecurityAccessMenu {
             "1" { Enable-RDP; Write-PressEnter }
             "2" { Enable-PowerShellRemoting; Write-PressEnter }
             "3" { Disable-WindowsFirewallDomainPrivate; Write-PressEnter }
-            "4" { Set-FirewallRuleTemplates; Write-PressEnter }
+            "4" { Set-FirewallRuleTemplates }
             "5" { Show-FirewallRuleSearch }
-            "6" { Set-DefenderExclusions; Write-PressEnter }
+            "6" { Set-DefenderExclusions }
             "7" { Show-DefenderStatus; Write-PressEnter }
-            "8" { Add-LocalAdminAccount; Write-PressEnter }
-            "9" { Disable-BuiltInAdminAccount; Write-PressEnter }
-            "10" { Show-LocalAccountAudit; Write-PressEnter }
+            "8" { Add-LocalAdminAccount }
+            "9" { Disable-BuiltInAdminAccount }
+            "10" { Show-LocalAccountAudit }
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"
@@ -269,13 +269,13 @@ function Start-Show-ToolsUtilitiesMenu {
         if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
-            "1" { Set-NTPConfiguration; Write-PressEnter }
-            "2" { Start-DiskCleanup; Write-PressEnter }
+            "1" { Set-NTPConfiguration }
+            "2" { Start-DiskCleanup }
             "3" { Show-PerformanceDashboard }
-            "4" { Show-EventLogViewer; Write-PressEnter }
+            "4" { Show-EventLogViewer }
             "5" { Show-ServiceManager }
             "6" { Show-NetworkDiagnostics }
-            "7" { Show-ServerReadiness; Write-PressEnter }
+            "7" { Show-ServerReadiness }
             "8" { Show-RoleTemplateSelector }
             "9" { Set-PagefileConfiguration }
             "10" { Set-SNMPConfiguration }
@@ -305,10 +305,10 @@ function Start-Show-StorageClusteringMenu {
 
         switch ($choice) {
             "1" { Start-StorageManager }
-            "2" { Show-BitLockerManagement; Write-PressEnter }
-            "3" { Show-DeduplicationManagement; Write-PressEnter }
-            "4" { Show-StorageReplicaManagement; Write-PressEnter }
-            "5" { Show-ClusterManagementMenu; Write-PressEnter }
+            "2" { Show-BitLockerManagement }
+            "3" { Show-DeduplicationManagement }
+            "4" { Show-StorageReplicaManagement }
+            "5" { Show-ClusterManagementMenu }
             "6" { Show-HyperVReplicaMenu }
             "back" { return }
             default {

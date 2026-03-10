@@ -10,12 +10,20 @@ function Test-AgentInstallerConfigured {
 
 # Function to check if the configured agent is installed
 function Test-AgentInstalled {
+    $toolName = $script:AgentInstaller.ToolName
+
     # Check for agent service by name (supports wildcards)
     $agentService = Get-Service -Name $script:AgentInstaller.ServiceName -ErrorAction SilentlyContinue
     # Fallback: check by display name (some agents use different internal service names)
     if (-not $agentService) {
         $agentService = Get-Service -ErrorAction SilentlyContinue |
             Where-Object { $_.DisplayName -like $script:AgentInstaller.ServiceName } |
+            Select-Object -First 1
+    }
+    # Fallback: broad match on ToolName (e.g., any service with "Kaseya" in the name)
+    if (-not $agentService -and $toolName -ne "MSP") {
+        $agentService = Get-Service -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "*$toolName*" -or $_.DisplayName -like "*$toolName*" } |
             Select-Object -First 1
     }
     if ($agentService) {
@@ -27,6 +35,22 @@ function Test-AgentInstalled {
         $expandedPath = [Environment]::ExpandEnvironmentVariables($path)
         if (Test-Path -LiteralPath $expandedPath) {
             return @{ Installed = $true; Status = "Files Found"; Path = $expandedPath }
+        }
+    }
+
+    # Fallback: check Windows uninstall registry for agent
+    if ($toolName -ne "MSP") {
+        $regPaths = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        )
+        foreach ($regPath in $regPaths) {
+            $match = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -like "*$toolName*" } |
+                Select-Object -First 1
+            if ($match) {
+                return @{ Installed = $true; Status = "Registry"; Path = $match.InstallLocation }
+            }
         }
     }
 

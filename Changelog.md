@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.21.10
+
+- **Bug Fix:** Double "Press Enter" on multiple screens — removed redundant `Write-PressEnter` from menu runner for 15+ functions that already pause internally (49-MenuRunner).
+- **Bug Fix:** Agent detection — added broad ToolName service match and Windows registry (Uninstall) check as fallbacks; catches agents whose service names don't match the configured pattern (57-AgentInstaller).
+- **UX:** Self-destruct countdown now updates the number in-place instead of printing a new line each second (47-ExitCleanup).
+- 64 modules, 2291 tests
+
 ## v1.21.9
 
 - **Bug Fix:** Domain join broken — `Add-Computer` was wrapped in `Invoke-WithTimeout` which runs in a separate job where local variables (`$targetDomain`, `$credential`) are null. Domain join reported success despite never executing. Now runs `Add-Computer` directly (12-DomainJoin).

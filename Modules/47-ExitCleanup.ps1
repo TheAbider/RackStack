@@ -24,9 +24,10 @@ function Exit-Script {
         Write-OutputColor "  As always, should you or any member of your IT Force be caught or killed, the Abider will disavow any knowledge of your actions" -color "Error"
 
         for ($i = 5; $i -gt 0; $i--) {
-            Write-OutputColor "  This script will now self destruct in $i seconds" -color "Error"
+            Write-Host "`r  This script will now self destruct in $i seconds   " -ForegroundColor Red -NoNewline
             Start-Sleep -Seconds 1
         }
+        Write-Host ""
 
         Write-OutputColor "  Good luck." -color "Error"
         Clear-Host
