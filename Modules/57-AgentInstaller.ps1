@@ -11,6 +11,11 @@ function Test-AgentInstallerConfigured {
 # Function to check if the configured agent is installed
 # Service detection is authoritative — file/registry remnants after uninstall do NOT count
 function Test-AgentInstalled {
+    # If agent was confirmed installed this session (by Install-SelectedAgent), trust that
+    if ($script:AgentInstalledConfirmed -and $script:AgentInstalledConfirmed.Installed) {
+        return $script:AgentInstalledConfirmed
+    }
+
     $toolName = $script:AgentInstaller.ToolName
 
     # Check for agent service by name (supports wildcards)
@@ -595,6 +600,12 @@ function Install-SelectedAgent {
 
         if ($installOK) {
             Add-SessionChange -Category "Software" -Description "Installed $toolName Agent ($($Agent.SiteName))"
+            # Cache the confirmed install result for this session (survives Test-AgentInstalled re-checks)
+            if ($null -ne $agentResult -and $agentResult.Installed) {
+                $script:AgentInstalledConfirmed = $agentResult
+            } else {
+                $script:AgentInstalledConfirmed = @{ Installed = $true; Status = "Installed"; ServiceName = "Unknown" }
+            }
             # Clear menu cache so Roles & Features shows updated status
             $script:MenuCache["AgentInstalled"] = $null
             $script:MenuCache["AgentInstalled_LastUpdate"] = $null

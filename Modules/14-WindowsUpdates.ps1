@@ -20,7 +20,7 @@ function Install-WindowsUpdates {
         $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
         if (-not $nuget) {
             Write-OutputColor "  Installing NuGet provider..." -color "Info"
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ForceBootstrap -ErrorAction Stop | Out-Null
+            $null = Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ForceBootstrap -Confirm:$false -ErrorAction Stop
         }
 
         # Install PSWindowsUpdate module if needed

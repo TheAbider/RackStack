@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.21.15
+
+- **Bug Fix:** Agent not detected before domain join despite being installed this session — agent detection now caches confirmed install result so subsequent checks (domain join, menu status) don't lose track of the agent (57-AgentInstaller).
+- **Bug Fix:** NuGet provider prompt during Windows Update — added `-Confirm:$false` to suppress interactive Y/N prompt on some OS versions (14-WindowsUpdates).
+- 64 modules, 2291 tests
+
 ## v1.21.14
 
 - **Bug Fix:** Agent installer returned to selection menu after successful install instead of going back to main menu — now returns immediately after install completes (57-AgentInstaller).
