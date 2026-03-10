@@ -1,9 +1,9 @@
 ﻿# Changelog
 
-## v1.21.6
+## v1.21.7
 
-- **Bug Fix:** Agent installer failsafe — if company defaults were loaded during startup but values didn't apply (e.g., encoding issues, silent parse errors), the agent installer now directly reads and applies company defaults as a last resort before showing "NOT CONFIGURED" (57-AgentInstaller).
-- **Bug Fix:** Agent installer diagnostic output now correctly shows ToolName, BaseURL, StorageType, and file contents instead of `System.Collections.Hashtable.ToolName` (57-AgentInstaller).
+- **UX:** Agent installer "NOT CONFIGURED" screen cleaned up — removed debug output, now shows a concise error message if the company defaults JSON file has syntax errors (57-AgentInstaller).
+- **Bug Fix:** Agent installer failsafe retry when company defaults weren't applied during startup (57-AgentInstaller).
 - **Bug Fix:** ps2exe ModuleRoot — compiled EXE now always uses the EXE's own directory for finding defaults files (00-Initialization).
 - 64 modules, 2291 tests
 
