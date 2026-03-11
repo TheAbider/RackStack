@@ -132,8 +132,13 @@ function Show-Favorites {
             Write-OutputColor "  │$("  YOUR FAVORITES".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
+            # Sort favorites by AddedDate descending (most recently added first)
+            $sortedFavorites = @($script:Favorites) | Sort-Object {
+                if ($null -ne $_.AddedDate) { [datetime]::Parse($_.AddedDate) } else { [datetime]::MinValue }
+            } -Descending
+
             $index = 1
-            foreach ($fav in $script:Favorites) {
+            foreach ($fav in $sortedFavorites) {
                 if ($null -eq $fav.Name) { $fav.Name = "Unknown" }
                 if ($null -eq $fav.MenuPath) { $fav.MenuPath = "" }
                 $favName = if ($fav.Name.Length -gt 40) { $fav.Name.Substring(0,37) + "..." } else { $fav.Name.PadRight(40) }
@@ -181,10 +186,13 @@ function Show-Favorites {
                 if ($navResult.ShouldReturn) { continue }
                 if ($delNum -notmatch '^\d+$') { continue }
                 $delIndex = [int]$delNum - 1
-                if ($delIndex -ge 0 -and $delIndex -lt $script:Favorites.Count) {
+                if ($delIndex -ge 0 -and $delIndex -lt $sortedFavorites.Count) {
+                    $targetFav = $sortedFavorites[$delIndex]
                     $tempFavorites = @()
-                    for ($i = 0; $i -lt $script:Favorites.Count; $i++) {
-                        if ($i -ne $delIndex) { $tempFavorites += $script:Favorites[$i] }
+                    foreach ($fav in $script:Favorites) {
+                        if ($fav.Name -ne $targetFav.Name -or $fav.AddedDate -ne $targetFav.AddedDate) {
+                            $tempFavorites += $fav
+                        }
                     }
                     $script:Favorites = $tempFavorites
                     Export-Favorites
@@ -203,8 +211,8 @@ function Show-Favorites {
             '^[Bb]$' { return }
             '^\d+$' {
                 $favIndex = [int]$choice - 1
-                if ($favIndex -ge 0 -and $favIndex -lt $script:Favorites.Count) {
-                    $selectedFav = $script:Favorites[$favIndex]
+                if ($favIndex -ge 0 -and $favIndex -lt $sortedFavorites.Count) {
+                    $selectedFav = $sortedFavorites[$favIndex]
                     $funcName = $selectedFav.FunctionName
                     if ($funcName -and (Get-Command $funcName -ErrorAction SilentlyContinue)) {
                         & $funcName
@@ -213,7 +221,7 @@ function Show-Favorites {
                         Write-PressEnter
                     }
                 } else {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($sortedFavorites.Count) or B." -color "Error"
                     Start-Sleep -Seconds 1
                 }
             }
@@ -337,6 +345,8 @@ function Show-CommandHistory {
 
 # Save session state for resume
 function Save-SessionState {
+    param([string]$Description = "Auto-save")
+
     Initialize-AppConfigDir
 
     $sessionState = @{
@@ -353,6 +363,37 @@ function Save-SessionState {
     }
     catch {
         Write-OutputColor "  Warning: Could not save session state: $($_.Exception.Message)" -color "Warning"
+    }
+
+    # Also write a snapshot file for session resume detection
+    $stateFile = Join-Path $script:TempPath "session-state.json"
+
+    $state = @{
+        Timestamp = (Get-Date).ToString('o')
+        Description = $Description
+        Hostname = $env:COMPUTERNAME
+        ScriptVersion = $script:ScriptVersion
+        CompletedOperations = @()
+        SessionChanges = @()
+    }
+
+    # Capture completed operations from session changes
+    if ($null -ne $script:SessionChanges) {
+        $state.SessionChanges = @($script:SessionChanges | ForEach-Object {
+            @{
+                Timestamp = $_.Timestamp
+                Category = $_.Category
+                Description = $_.Description
+            }
+        })
+    }
+
+    try {
+        $json = $state | ConvertTo-Json -Depth 4
+        Set-Content -LiteralPath $stateFile -Value $json -Encoding UTF8
+    }
+    catch {
+        # Non-critical, don't break flow
     }
 }
 
@@ -426,6 +467,57 @@ function Restore-SessionState {
     catch {
         Remove-Item -LiteralPath $script:SessionStatePath -Force -ErrorAction SilentlyContinue
         return $false
+    }
+}
+
+# Detect and offer resume of previous session via snapshot file
+function Test-SessionResume {
+    $stateFile = Join-Path $script:TempPath "session-state.json"
+
+    if (-not (Test-Path -LiteralPath $stateFile)) { return }
+
+    try {
+        $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+
+        # Only offer resume if session is less than 24 hours old
+        $stateTime = [datetime]::Parse($state.Timestamp)
+        $age = (Get-Date) - $stateTime
+        if ($age.TotalHours -gt 24) {
+            Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
+            return
+        }
+
+        $changeCount = @($state.SessionChanges).Count
+        if ($changeCount -eq 0) {
+            Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
+            return
+        }
+
+        Write-OutputColor "`n  Previous session detected ($([math]::Round($age.TotalMinutes)) minutes ago)" -color "Info"
+        Write-OutputColor "  $changeCount operation(s) were completed:" -color "Info"
+
+        # Show last 5 operations
+        $recent = @($state.SessionChanges) | Select-Object -Last 5
+        foreach ($change in $recent) {
+            Write-OutputColor "    - $($change.Description)" -color "Info"
+        }
+
+        if ($changeCount -gt 5) {
+            Write-OutputColor "    ... and $($changeCount - 5) more" -color "Info"
+        }
+
+        Write-OutputColor "`n  Clear previous session data? [Y/N]" -color "Info"
+        $response = Read-Host "  Choice"
+        if ($response -eq 'Y' -or $response -eq 'y') {
+            Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
+            Write-OutputColor "  Session data cleared" -color "Success"
+        }
+        else {
+            Write-OutputColor "  Previous session data preserved" -color "Info"
+        }
+    }
+    catch {
+        Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -546,6 +638,7 @@ function Set-PagefileConfiguration {
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
                     $global:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Set pagefile to System Managed (Automatic)"
+                    Clear-MenuCache
                 }
                 catch {
                     Write-OutputColor "  Failed to set pagefile: $_" -color "Error"
@@ -648,6 +741,7 @@ function Set-PagefileConfiguration {
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
                     $global:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Set custom pagefile: ${initialMB}MB - ${maxMB}MB on $currentDrive"
+                    Clear-MenuCache
                 }
                 catch {
                     Write-OutputColor "  Failed to configure pagefile: $_" -color "Error"
@@ -681,7 +775,7 @@ function Set-PagefileConfiguration {
                 $navResult = Test-NavigationCommand -UserInput $driveChoice
                 if ($navResult.ShouldReturn) { continue }
                 if (-not ($driveChoice -match '^\d+$') -or [int]$driveChoice -lt 1 -or [int]$driveChoice -gt $drives.Count) {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($drives.Count) or B." -color "Error"
                     Write-PressEnter
                     continue
                 }
@@ -726,6 +820,7 @@ function Set-PagefileConfiguration {
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
                     $global:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Moved pagefile to $targetLetter"
+                    Clear-MenuCache
                 }
                 catch {
                     Write-OutputColor "  Failed to move pagefile: $_" -color "Error"
@@ -777,6 +872,7 @@ function Set-SNMPConfiguration {
                 if ($installResult.TimedOut) {
                     Write-OutputColor "  SNMP installation timed out." -color "Error"
                     Add-SessionChange -Category "System" -Description "SNMP Service installation timed out"
+                    Clear-MenuCache
                     Write-PressEnter
                     return
                 }
@@ -788,6 +884,7 @@ function Set-SNMPConfiguration {
                 else {
                     Write-OutputColor "  SNMP Service installation failed." -color "Error"
                     Add-SessionChange -Category "System" -Description "SNMP Service installation failed"
+                    Clear-MenuCache
                     Write-PressEnter
                     return
                 }
@@ -861,6 +958,7 @@ function Set-SNMPConfiguration {
                     New-ItemProperty -Path $regPath -Name $communityName -Value $permValue -PropertyType DWord -Force -ErrorAction Stop | Out-Null
                     Write-OutputColor "  Community string '$communityName' added with $permName permission." -color "Success"
                     Add-SessionChange -Category "System" -Description "Added SNMP community string '$communityName' ($permName)"
+                    Clear-MenuCache
 
                     # Restart SNMP service to apply
                     Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
@@ -907,7 +1005,7 @@ function Set-SNMPConfiguration {
                 if ([string]::IsNullOrWhiteSpace($removeChoice)) { continue }
 
                 if (-not ($removeChoice -match '^\d+$') -or [int]$removeChoice -lt 1 -or [int]$removeChoice -gt $propNames.Count) {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($propNames.Count) or B." -color "Error"
                     Write-PressEnter
                     continue
                 }
@@ -918,6 +1016,7 @@ function Set-SNMPConfiguration {
                         Remove-ItemProperty -Path $regPath -Name $removeName -Force -ErrorAction Stop
                         Write-OutputColor "  Community string '$removeName' removed." -color "Success"
                         Add-SessionChange -Category "System" -Description "Removed SNMP community string '$removeName'"
+                        Clear-MenuCache
                         Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
                         Write-OutputColor "  SNMP service restarted." -color "Info"
                     }
@@ -984,6 +1083,7 @@ function Set-SNMPConfiguration {
                             New-ItemProperty -Path $regPath -Name "$nextNum" -Value $mgrHost -PropertyType String -Force -ErrorAction Stop | Out-Null
                             Write-OutputColor "  Permitted manager '$mgrHost' added." -color "Success"
                             Add-SessionChange -Category "System" -Description "Added SNMP permitted manager '$mgrHost'"
+                            Clear-MenuCache
                             Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
                         }
                         catch {
@@ -1000,6 +1100,7 @@ function Set-SNMPConfiguration {
                                 }
                                 Write-OutputColor "  All permitted managers removed." -color "Success"
                                 Add-SessionChange -Category "System" -Description "Removed all SNMP permitted managers"
+                                Clear-MenuCache
                                 Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
                             }
                             catch {
@@ -1007,6 +1108,10 @@ function Set-SNMPConfiguration {
                             }
                             Write-PressEnter
                         }
+                    }
+                    default {
+                        Write-OutputColor "  Invalid choice. Enter A, R, or B." -color "Error"
+                        Start-Sleep -Seconds 1
                     }
                 }
             }
@@ -1129,6 +1234,7 @@ function Install-WindowsServerBackup {
         if ($installResult.TimedOut) {
             Write-OutputColor "  Installation timed out." -color "Error"
             Add-SessionChange -Category "System" -Description "Windows Server Backup installation timed out"
+            Clear-MenuCache
             return
         }
         elseif ($installResult.Success) {
@@ -1151,6 +1257,7 @@ function Install-WindowsServerBackup {
         else {
             Write-OutputColor "  Windows Server Backup installation failed." -color "Error"
             Add-SessionChange -Category "System" -Description "Windows Server Backup installation failed"
+            Clear-MenuCache
         }
     }
     catch {
@@ -1304,7 +1411,7 @@ function Show-CertificateMenu {
                 if ([string]::IsNullOrWhiteSpace($certChoice)) { continue }
 
                 if (-not ($certChoice -match '^\d+$') -or [int]$certChoice -lt 1 -or [int]$certChoice -gt $certs.Count) {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($certs.Count) or B." -color "Error"
                     Write-PressEnter
                     continue
                 }

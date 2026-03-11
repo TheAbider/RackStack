@@ -71,6 +71,43 @@ function Test-AgentInstalled {
     return @{ Installed = $false }
 }
 
+# Get the installed version of an agent by inspecting its service executable
+function Get-InstalledAgentVersion {
+    param([string]$AgentName)
+
+    $version = $null
+
+    # Try getting version from service executable
+    $service = Get-Service -Name $AgentName -ErrorAction SilentlyContinue
+    if ($null -eq $service) {
+        $service = Get-Service -DisplayName "*$AgentName*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+
+    if ($null -ne $service) {
+        try {
+            $servicePath = (Get-CimInstance -ClassName Win32_Service -Filter "Name='$($service.Name)'" -ErrorAction SilentlyContinue).PathName
+            if (-not [string]::IsNullOrWhiteSpace($servicePath)) {
+                # Strip quotes and arguments from path
+                $exePath = $servicePath.Trim('"').Split('"')[0]
+                if ($exePath -match '\s-') { $exePath = $exePath.Split(' -')[0] }
+                $exePath = $exePath.Trim()
+
+                if (Test-Path -LiteralPath $exePath) {
+                    $fileInfo = Get-Item -LiteralPath $exePath
+                    $version = $fileInfo.VersionInfo.ProductVersion
+                    if ([string]::IsNullOrWhiteSpace($version)) {
+                        $version = $fileInfo.VersionInfo.FileVersion
+                    }
+                }
+            }
+        } catch {
+            # Version detection is best-effort
+        }
+    }
+
+    return $version
+}
+
 # Function to get agent installers from FileServer (with caching)
 function Get-AgentInstallerList {
     param([switch]$ForceRefresh)
@@ -479,6 +516,7 @@ function Install-SelectedAgent {
                 Write-OutputColor "  Installation timed out after $installTimeout seconds." -color "Warning"
                 try { $installProcess.Kill() } catch {}
                 Add-SessionChange -Category "Software" -Description "$toolName Agent installation timed out after ${installTimeout}s"
+                Clear-MenuCache
                 return
             }
         }
@@ -600,6 +638,7 @@ function Install-SelectedAgent {
 
         if ($installOK) {
             Add-SessionChange -Category "Software" -Description "Installed $toolName Agent ($($Agent.SiteName))"
+            Clear-MenuCache
             # Cache the confirmed install result for this session (survives Test-AgentInstalled re-checks)
             if ($null -ne $agentResult -and $agentResult.Installed) {
                 $script:AgentInstalledConfirmed = $agentResult
@@ -798,6 +837,10 @@ function Install-Agent {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  $toolName Agent is already installed on this server." -color "Success"
         Write-OutputColor "  Status: $($agentStatus.Status)" -color "Info"
+        $agentVersion = Get-InstalledAgentVersion -AgentName $script:AgentInstaller.ServiceName
+        if (-not [string]::IsNullOrWhiteSpace($agentVersion)) {
+            Write-OutputColor "  Agent Version: $agentVersion" -color "Info"
+        }
         Write-OutputColor "" -color "Info"
         Write-PressEnter
         return
@@ -965,6 +1008,10 @@ function Install-Agent {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  $toolName Agent is already installed on this server." -color "Success"
             Write-OutputColor "  Status: $($currentStatus.Status)" -color "Info"
+            $agentVersion = Get-InstalledAgentVersion -AgentName $script:AgentInstaller.ServiceName
+            if (-not [string]::IsNullOrWhiteSpace($agentVersion)) {
+                Write-OutputColor "  Agent Version: $agentVersion" -color "Info"
+            }
             Write-OutputColor "" -color "Info"
             Write-PressEnter
             return
@@ -1065,6 +1112,10 @@ function Install-Agent {
                 Write-PressEnter
             }
             'B' { return }
+            default {
+                Write-OutputColor "  Invalid choice. Enter L, S, R, or B." -color "Error"
+                Start-Sleep -Seconds 1
+            }
         }
     }
 }
@@ -1168,7 +1219,14 @@ function Show-AgentManagement {
             $color = if ($status.Installed -and $status.Status -eq "Running") { "Success" } elseif ($status.Installed) { "Warning" } else { "Error" }
             $icon = if ($status.Installed) { "[OK]" } else { "[--]" }
             $primary = if ($config.IsPrimary) { " (primary)" } else { "" }
-            $line = "  $icon [$idx] $($config.ToolName)$primary`: $statusText"
+            $versionSuffix = ""
+            if ($status.Installed) {
+                $agentVer = Get-InstalledAgentVersion -AgentName $config.ServiceName
+                if (-not [string]::IsNullOrWhiteSpace($agentVer)) {
+                    $versionSuffix = " v$agentVer"
+                }
+            }
+            $line = "  $icon [$idx] $($config.ToolName)$primary`: $statusText$versionSuffix"
             if ($line.Length -gt 69) { $line = $line.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($line.PadRight(72))│" -color $color
             $idx++
@@ -1217,7 +1275,7 @@ function Show-AgentManagement {
                 }
             }
             else {
-                Write-OutputColor "  Invalid selection." -color "Error"
+                Write-OutputColor "  Invalid selection. Enter 1-$($allConfigs.Count), A, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

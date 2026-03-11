@@ -1,4 +1,292 @@
 ﻿#region ===== SYSTEM HEALTH CHECK =====
+
+# Check certificates in LocalMachine\My for expiration within 30 days
+function Test-CertificateExpiration {
+    Write-OutputColor "=== CERTIFICATE EXPIRATION CHECK ===" -color "Success"
+    $certIssues = @()
+    try {
+        $now = Get-Date
+        $allCerts = @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue)
+        if ($allCerts.Count -eq 0) {
+            Write-OutputColor "  No certificates in LocalMachine\My store." -color "Info"
+        } else {
+            $expiringSoon = @($allCerts | Where-Object { $_.NotAfter -lt $now.AddDays(30) } | Sort-Object NotAfter)
+            if ($expiringSoon.Count -eq 0) {
+                Write-OutputColor "  All $($allCerts.Count) certificate(s) valid for 30+ days." -color "Success"
+            } else {
+                foreach ($cert in $expiringSoon) {
+                    $subject = if ($cert.Subject) { $cert.Subject } else { "(no subject)" }
+                    if ($subject.Length -gt 40) { $subject = $subject.Substring(0, 37) + "..." }
+                    $daysLeft = [math]::Floor(($cert.NotAfter - $now).TotalDays)
+                    $thumbShort = if ($cert.Thumbprint -and $cert.Thumbprint.Length -ge 8) { $cert.Thumbprint.Substring(0, 8) + "..." } else { "N/A" }
+                    $expiryStr = $cert.NotAfter.ToString('yyyy-MM-dd')
+
+                    $certColor = if ($daysLeft -lt 0) { "Error" }
+                                 elseif ($daysLeft -lt 3) { "Error" }
+                                 elseif ($daysLeft -lt 7) { "Error" }
+                                 elseif ($daysLeft -le 30) { "Warning" }
+                                 else { "Success" }
+
+                    $statusTag = if ($daysLeft -lt 0) { "EXPIRED" }
+                                 elseif ($daysLeft -lt 3) { "CRITICAL" }
+                                 elseif ($daysLeft -lt 7) { "URGENT" }
+                                 else { "EXPIRING" }
+
+                    Write-OutputColor "  [$statusTag] $subject" -color $certColor
+                    Write-OutputColor "           Thumbprint: $thumbShort  Expires: $expiryStr  Days: $daysLeft" -color $certColor
+
+                    if ($daysLeft -lt 0) {
+                        $certIssues += "Expired certificate: $subject"
+                    } elseif ($daysLeft -lt 7) {
+                        $certIssues += "Certificate expiring in ${daysLeft}d: $subject"
+                    }
+                }
+            }
+        }
+    } catch {
+        Write-OutputColor "  Certificate expiration check unavailable: $_" -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+    return $certIssues
+}
+
+# Check Secure Boot and TPM status
+function Test-SecureBootStatus {
+    Write-OutputColor "=== SECURE BOOT / TPM STATUS ===" -color "Success"
+    $securityIssues = @()
+
+    # Secure Boot
+    try {
+        $secureBoot = Confirm-SecureBootUEFI -ErrorAction Stop
+        if ($secureBoot) {
+            Write-OutputColor "  Secure Boot: Enabled" -color "Success"
+        } else {
+            Write-OutputColor "  Secure Boot: Disabled" -color "Warning"
+            $securityIssues += "Secure Boot is disabled"
+        }
+    } catch {
+        Write-OutputColor "  Secure Boot: Not available (non-UEFI or unsupported)" -color "Info"
+    }
+
+    # TPM
+    try {
+        $tpm = Get-Tpm -ErrorAction Stop
+        if ($null -ne $tpm -and $tpm.TpmPresent) {
+            $tpmColor = if ($tpm.TpmReady) { "Success" } else { "Warning" }
+            Write-OutputColor "  TPM Present: Yes (Ready: $($tpm.TpmReady))" -color $tpmColor
+            # Get TPM version from WMI
+            try {
+                $tpmWmi = Get-CimInstance -Namespace 'root\cimv2\security\microsofttpm' -ClassName Win32_Tpm -ErrorAction SilentlyContinue
+                $tpmVersion = if ($null -ne $tpmWmi -and $null -ne $tpmWmi.SpecVersion) {
+                    ($tpmWmi.SpecVersion -split ',')[0].Trim()
+                } else { "Unknown" }
+                Write-OutputColor "  TPM Version: $tpmVersion" -color "Info"
+            } catch {
+                Write-OutputColor "  TPM Version: Unable to determine" -color "Debug"
+            }
+            if (-not $tpm.TpmReady) {
+                $securityIssues += "TPM is present but not ready"
+            }
+        } else {
+            Write-OutputColor "  TPM Present: No" -color "Warning"
+            $securityIssues += "No TPM detected"
+        }
+    } catch {
+        Write-OutputColor "  TPM: Check unavailable ($_)" -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+    return $securityIssues
+}
+
+# Check network adapter speed negotiation for physical adapters
+function Test-AdapterSpeedNegotiation {
+    Write-OutputColor "=== ADAPTER SPEED NEGOTIATION ===" -color "Success"
+    $adapterIssues = @()
+    try {
+        $physAdapters = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue)
+        if ($physAdapters.Count -eq 0) {
+            Write-OutputColor "  No physical network adapters found." -color "Info"
+        } else {
+            foreach ($adapter in $physAdapters) {
+                $name = $adapter.Name
+                $status = $adapter.Status
+                $linkSpeed = if ($adapter.LinkSpeed) { $adapter.LinkSpeed } else { "N/A" }
+                $mediaType = if ($adapter.MediaType) { $adapter.MediaType } else { "Unknown" }
+
+                if ($status -ne "Up") {
+                    Write-OutputColor "  $($name.PadRight(25)) Status: DOWN   Speed: N/A   Media: $mediaType" -color "Error"
+                    $adapterIssues += "Adapter '$name' is down"
+                    continue
+                }
+
+                # Parse speed value for comparison
+                $speedMbps = 0
+                if ($linkSpeed -match '(\d+(?:\.\d+)?)\s*Gbps') {
+                    $regexMatches = $matches
+                    $speedMbps = [double]$regexMatches[1] * 1000
+                } elseif ($linkSpeed -match '(\d+(?:\.\d+)?)\s*Mbps') {
+                    $regexMatches = $matches
+                    $speedMbps = [double]$regexMatches[1]
+                }
+
+                $speedColor = if ($speedMbps -ge 10000) { "Success" }
+                              elseif ($speedMbps -ge 1000) { "Success" }
+                              elseif ($speedMbps -ge 100) { "Warning" }
+                              else { "Error" }
+
+                Write-OutputColor "  $($name.PadRight(25)) Status: Up     Speed: $($linkSpeed.PadRight(12)) Media: $mediaType" -color $speedColor
+
+                if ($speedMbps -gt 0 -and $speedMbps -lt 1000) {
+                    Write-OutputColor "    ^ Negotiated below 1 Gbps — check cable or switch port" -color "Warning"
+                    $adapterIssues += "Adapter '$name' running at $linkSpeed (below 1 Gbps)"
+                }
+            }
+        }
+    } catch {
+        Write-OutputColor "  Adapter speed check unavailable: $_" -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+    return $adapterIssues
+}
+
+# Check SMB connection dialects and flag non-3.x connections
+function Test-SMBDialect {
+    Write-OutputColor "=== SMB DIALECT CHECK ===" -color "Success"
+    $smbIssues = @()
+    try {
+        $smbConnections = @(Get-SmbConnection -ErrorAction Stop)
+        if ($smbConnections.Count -eq 0) {
+            Write-OutputColor "  No active SMB connections." -color "Info"
+        } else {
+            foreach ($conn in $smbConnections) {
+                $server = if ($conn.ServerName) { $conn.ServerName } else { "Unknown" }
+                $share = if ($conn.ShareName) { $conn.ShareName } else { "Unknown" }
+                $dialect = if ($conn.Dialect) { $conn.Dialect.ToString() } else { "Unknown" }
+                $encrypted = if ($conn.Encrypted) { "Yes" } else { "No" }
+
+                # Truncate server and share for display
+                if ($server.Length -gt 20) { $server = $server.Substring(0, 17) + "..." }
+                if ($share.Length -gt 20) { $share = $share.Substring(0, 17) + "..." }
+
+                $dialectColor = if ($dialect -match '^3\.') { "Success" }
+                                elseif ($dialect -match '^2\.') { "Warning" }
+                                else { "Error" }
+
+                Write-OutputColor "  $($server.PadRight(22)) Share: $($share.PadRight(22)) Dialect: $($dialect.PadRight(8)) Encrypted: $encrypted" -color $dialectColor
+
+                if ($dialect -notmatch '^3\.' -and $dialect -ne "Unknown") {
+                    $smbIssues += "SMB connection to \\$server\$share using dialect $dialect (not SMB 3.x)"
+                }
+            }
+        }
+    } catch {
+        if ($_.Exception.Message -match 'not recognized|CommandNotFoundException') {
+            Write-OutputColor "  SMB cmdlets not available on this edition." -color "Debug"
+        } else {
+            Write-OutputColor "  SMB dialect check unavailable: $_" -color "Debug"
+        }
+    }
+    Write-OutputColor "" -color "Info"
+    return $smbIssues
+}
+
+# Check NUMA topology and VM memory allocation on Hyper-V hosts
+function Test-NUMATopology {
+    Write-OutputColor "=== NUMA TOPOLOGY ===" -color "Success"
+    $numaIssues = @()
+
+    if (-not (Test-HyperVInstalled)) {
+        Write-OutputColor "  Hyper-V not installed — NUMA check skipped." -color "Info"
+        Write-OutputColor "" -color "Info"
+        return $numaIssues
+    }
+
+    try {
+        # Get NUMA node info
+        $numaNodes = @(Get-CimInstance -ClassName Win32_PerfFormattedData_Counters_HyperVHypervisorLogicalProcessor -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^NUMA Node \d+ Total$' })
+
+        if ($numaNodes.Count -eq 0) {
+            # Fall back to processor NUMA info
+            $cpuResult = Invoke-WithTimeout -ScriptBlock {
+                Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+            } -TimeoutSeconds 10 -Activity "Querying NUMA info"
+            $cpus = if ($cpuResult.TimedOut) { @() } else { @($cpuResult.Result) }
+            $numaCount = if ($cpus.Count -gt 0) { $cpus.Count } else { 1 }
+            Write-OutputColor "  NUMA Nodes: $numaCount (based on physical processor count)" -color "Info"
+        } else {
+            $numaCount = $numaNodes.Count
+            Write-OutputColor "  NUMA Nodes: $numaCount" -color "Info"
+        }
+
+        # Get per-node memory from CIM
+        $numaNodeMemory = @(Get-CimInstance -ClassName Win32_PerfFormattedData_Counters_HyperVHypervisorNUMANode -ErrorAction SilentlyContinue)
+        if ($numaNodeMemory.Count -gt 0) {
+            foreach ($node in $numaNodeMemory) {
+                $nodeName = if ($node.Name) { $node.Name } else { "Node" }
+                $totalPagesMB = if ($null -ne $node.TotalPagesMByte) { $node.TotalPagesMByte } else { 0 }
+                Write-OutputColor "  $nodeName`: ${totalPagesMB} MB" -color "Info"
+            }
+        }
+
+        # Check running VMs for cross-NUMA allocation
+        $runningVMs = @(Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Running" })
+        if ($runningVMs.Count -eq 0) {
+            Write-OutputColor "  No running VMs to check." -color "Info"
+        } else {
+            # Determine per-node memory capacity (approximate from total/nodes)
+            $osResult = Invoke-WithTimeout -ScriptBlock {
+                Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+            } -TimeoutSeconds 10 -Activity "Querying memory for NUMA"
+            $osInfo = if ($osResult.TimedOut) { $null } else { $osResult.Result }
+            $totalMemGB = if ($null -ne $osInfo) { [math]::Round($osInfo.TotalVisibleMemorySize / 1MB, 1) } else { 0 }
+            $perNodeGB = if ($numaCount -gt 0 -and $totalMemGB -gt 0) { [math]::Round($totalMemGB / $numaCount, 1) } else { 0 }
+
+            if ($perNodeGB -gt 0) {
+                Write-OutputColor "  Estimated per-node memory: ${perNodeGB} GB" -color "Info"
+            }
+
+            foreach ($vm in $runningVMs) {
+                try {
+                    $vmMemory = Get-VMMemory -VM $vm -ErrorAction SilentlyContinue
+                    $vmProc = Get-VMProcessor -VM $vm -ErrorAction SilentlyContinue
+                    $vmMemGB = if ($null -ne $vmMemory -and $null -ne $vmMemory.Startup) {
+                        [math]::Round($vmMemory.Startup / 1GB, 1)
+                    } else {
+                        [math]::Round($vm.MemoryAssigned / 1GB, 1)
+                    }
+                    $vmCPU = if ($null -ne $vmProc) { $vmProc.Count } else { $vm.ProcessorCount }
+                    $numaSpan = if ($null -ne $vmProc -and $null -ne $vmProc.MaximumCountPerNumaNode) {
+                        if ($vmCPU -gt $vmProc.MaximumCountPerNumaNode) { "Yes" } else { "No" }
+                    } else { "Unknown" }
+
+                    $vmColor = "Success"
+                    $crossNuma = $false
+                    if ($perNodeGB -gt 0 -and $vmMemGB -gt $perNodeGB) {
+                        $vmColor = "Warning"
+                        $crossNuma = $true
+                    }
+
+                    $vmName = $vm.Name
+                    if ($vmName.Length -gt 25) { $vmName = $vmName.Substring(0, 22) + "..." }
+                    Write-OutputColor "  $($vmName.PadRight(27)) RAM: ${vmMemGB}GB  vCPU: $vmCPU  NUMA Spanning: $numaSpan" -color $vmColor
+
+                    if ($crossNuma) {
+                        Write-OutputColor "    ^ VM memory (${vmMemGB}GB) exceeds single NUMA node capacity (${perNodeGB}GB)" -color "Warning"
+                        $numaIssues += "VM '$($vm.Name)' may span NUMA nodes (${vmMemGB}GB > ${perNodeGB}GB/node)"
+                    }
+                } catch {
+                    Write-OutputColor "  $($vm.Name): Unable to check ($_)" -color "Debug"
+                }
+            }
+        }
+    } catch {
+        Write-OutputColor "  NUMA topology check unavailable: $_" -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+    return $numaIssues
+}
+
 # Function to display system health information
 function Show-SystemHealthCheck {
     Clear-Host
@@ -389,6 +677,26 @@ function Show-SystemHealthCheck {
         Write-OutputColor "  Firewall status unavailable." -color "Debug"
     }
     Write-OutputColor "" -color "Info"
+
+    # Certificate Expiration Check
+    $certIssues = Test-CertificateExpiration
+    if ($null -ne $certIssues) { $issues += $certIssues }
+
+    # Secure Boot / TPM Status
+    $securityIssues = Test-SecureBootStatus
+    if ($null -ne $securityIssues) { $issues += $securityIssues }
+
+    # Adapter Speed Negotiation
+    $adapterIssues = Test-AdapterSpeedNegotiation
+    if ($null -ne $adapterIssues) { $issues += $adapterIssues }
+
+    # SMB Dialect Check
+    $smbIssues = Test-SMBDialect
+    if ($null -ne $smbIssues) { $issues += $smbIssues }
+
+    # NUMA Topology (Hyper-V hosts only)
+    $numaIssues = Test-NUMATopology
+    if ($null -ne $numaIssues) { $issues += $numaIssues }
 
     # Final Summary (at end, captures all issues from all checks)
     Write-OutputColor "=== HEALTH SUMMARY ===" -color "Success"
@@ -855,7 +1163,7 @@ function Show-QuickSetupWizard {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    if (-not $cs.PartOfDomain) {
+    if (-not $cs -or -not $cs.PartOfDomain) {
         if (Confirm-UserAction -Message "Join a domain now?") {
             Join-Domain
             $completed++
@@ -952,18 +1260,19 @@ function Show-QuickSetupWizard {
     Write-OutputColor "" -color "Info"
 
     $powerPlan = Get-CurrentPowerPlan
+    $powerPlanName = if ($null -ne $powerPlan) { $powerPlan.Name } else { "Unknown" }
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    if ($powerPlan.Name -eq "High performance") {
+    if ($powerPlanName -eq "High performance") {
         Write-OutputColor "  │$("  Current:  High Performance".PadRight(72))│" -color "Success"
     } else {
-        $ppLine = "  Current:  $($powerPlan.Name)"
+        $ppLine = "  Current:  $powerPlanName"
         if ($ppLine.Length -gt 72) { $ppLine = $ppLine.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($ppLine.PadRight(72))│" -color "Warning"
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    if ($powerPlan.Name -ne "High performance") {
+    if ($powerPlanName -ne "High performance") {
         if (Confirm-UserAction -Message "Set power plan to High Performance?" -DefaultYes) {
             Set-ServerPowerPlan
             $completed++
@@ -1032,6 +1341,7 @@ function Show-QuickSetupWizard {
     }
 
     Add-SessionChange -Category "System" -Description "Quick Setup Wizard finished ($completed completed, $skipped skipped)"
+    Clear-MenuCache
 }
 
 # Server Role Templates - guided checklists for common server configurations
@@ -1105,7 +1415,7 @@ function Show-RoleTemplates {
             if (Test-AgentInstallerConfigured) { $checks += @{ Name = "$($script:AgentInstaller.ToolName) Agent"; Test = { (Test-AgentInstalled).Installed }; Action = "Install-Agent"; Category = "Software" } }
         }
         default {
-            Write-OutputColor "  Invalid selection." -color "Warning"
+            Write-OutputColor "  Invalid selection. Enter 1-3 or B." -color "Warning"
             return
         }
     }
@@ -1181,6 +1491,7 @@ function Show-RoleTemplates {
                     Write-OutputColor "" -color "Info"
                     Write-OutputColor "  A reboot is needed. Remaining items will be available after restart." -color "Warning"
                     Add-SessionChange -Category "System" -Description "Role template $templateName paused at step $stepNum (reboot needed)"
+                    Clear-MenuCache
                     return
                 }
             }
@@ -1196,6 +1507,7 @@ function Show-RoleTemplates {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Role template $templateName setup complete!" -color "Success"
     Add-SessionChange -Category "System" -Description "Completed role template: $templateName"
+    Clear-MenuCache
     Write-PressEnter
 }
 #endregion

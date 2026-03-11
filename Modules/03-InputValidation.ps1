@@ -146,4 +146,44 @@ function Get-ValidatedInput {
     Write-OutputColor "  Maximum attempts reached." -color "Critical"
     return $null
 }
+
+# Function to validate UNC paths (\\server\share format)
+function Test-ValidUNCPath {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    # Strip surrounding quotes (drag-and-drop paths)
+    $Path = $Path.Trim('"', "'")
+    # Must start with \\ and have at least server\share
+    return $Path -match '^\\\\[a-zA-Z0-9._-]+\\[a-zA-Z0-9$._-]+'
+}
+
+# Escape special characters for LDAP queries (RFC 4515)
+function ConvertTo-SafeLDAPFilter {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $Value }
+    # RFC 4515: escape special LDAP filter characters
+    $Value = $Value.Replace('\', '\5c')  # Must be first
+    $Value = $Value.Replace('*', '\2a')
+    $Value = $Value.Replace('(', '\28')
+    $Value = $Value.Replace(')', '\29')
+    $Value = $Value.Replace([string][char]0, '\00')
+    return $Value
+}
+
+# Function to validate file path doesn't contain dangerous characters
+function Test-ValidFilePath {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $Path = $Path.Trim('"', "'")
+    # Check for path traversal attempts
+    if ($Path -match '\.\.[/\\]') { return $false }
+    # Check for invalid Windows filename characters in the leaf
+    $leaf = Split-Path -Leaf $Path -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($leaf)) { return $false }
+    $invalidChars = [System.IO.Path]::GetInvalidFileNameChars()
+    foreach ($char in $invalidChars) {
+        if ($leaf.Contains($char)) { return $false }
+    }
+    return $true
+}
 #endregion

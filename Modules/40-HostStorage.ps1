@@ -308,12 +308,12 @@ function Initialize-HostStorage {
             return $false
         }
         if ($choiceNum -lt 1 -or $choiceNum -gt $validDrives.Count) {
-            Write-OutputColor "  Invalid choice." -color "Error"
+            Write-OutputColor "  Invalid choice. Enter 0-$diskMgmtIndex." -color "Error"
             return $false
         }
     }
     else {
-        Write-OutputColor "  Invalid choice." -color "Error"
+        Write-OutputColor "  Invalid choice. Enter 0-$diskMgmtIndex." -color "Error"
         return $false
     }
 
@@ -400,6 +400,7 @@ function Initialize-HostStorage {
 
             if ($changed) {
                 Add-SessionChange -Category "Host Storage" -Description "Set Hyper-V default paths to $targetVMPath"
+                Clear-MenuCache
                 Add-UndoAction -Category "Host Storage" -Description "Set Hyper-V default paths to $targetVMPath" -UndoScript {
                     param($OldVM, $OldVHD)
                     Set-VMHost -VirtualMachinePath $OldVM -ErrorAction SilentlyContinue
@@ -431,9 +432,50 @@ function Initialize-HostStorage {
     # Update Defender exclusion paths to match the selected drive
     Update-DefenderVMPaths
 
+    # Show storage analysis after setup
+    Show-HostStorageAnalysis
+
     Add-SessionChange -Category "Host Storage" -Description "Initialized $($driveLetter): drive for VM storage"
+    Clear-MenuCache
     $script:StorageInitialized = $true
 
     return $true
+}
+
+# Function to show storage utilization across host data drives
+function Show-HostStorageAnalysis {
+    Write-OutputColor "`n  Host Storage Analysis:" -color "Info"
+
+    $dataDrive = $script:SelectedHostDrive
+    if ([string]::IsNullOrWhiteSpace($dataDrive)) {
+        Write-OutputColor "  No host data drive configured" -color "Warning"
+        return
+    }
+
+    try {
+        $drive = Get-PSDrive -Name $dataDrive.TrimEnd(':\') -ErrorAction Stop
+        $totalGB = [math]::Round(($drive.Used + $drive.Free) / 1GB, 1)
+        $usedGB = [math]::Round($drive.Used / 1GB, 1)
+        $freeGB = [math]::Round($drive.Free / 1GB, 1)
+        $usedPercent = if ($totalGB -gt 0) { [math]::Round(($usedGB / $totalGB) * 100, 0) } else { 0 }
+
+        $color = if ($usedPercent -gt 90) { "Error" } elseif ($usedPercent -gt 75) { "Warning" } else { "Success" }
+        Write-OutputColor "  Drive ${dataDrive}: ${usedGB}/${totalGB} GB used (${usedPercent}%)" -color $color
+        Write-OutputColor "  Free: ${freeGB} GB" -color "Info"
+
+        # Show subfolder breakdown
+        $subfolders = @('ISOs', 'VHDs', 'VMs', 'Exports')
+        foreach ($folder in $subfolders) {
+            $folderPath = Join-Path $dataDrive $folder
+            if (Test-Path -LiteralPath $folderPath) {
+                $folderSize = (Get-ChildItem -LiteralPath $folderPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                $folderGB = [math]::Round($folderSize / 1GB, 1)
+                $fileCount = @(Get-ChildItem -LiteralPath $folderPath -File -Recurse -ErrorAction SilentlyContinue).Count
+                Write-OutputColor "    ${folder}: ${folderGB} GB ($fileCount files)" -color "Info"
+            }
+        }
+    } catch {
+        Write-OutputColor "  Could not analyze storage: $($_.Exception.Message)" -color "Warning"
+    }
 }
 #endregion

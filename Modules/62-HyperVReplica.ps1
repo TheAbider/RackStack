@@ -12,6 +12,76 @@ function Test-HyperVReplicaEnabled {
     }
 }
 
+# Check replication health for all replicated VMs
+function Test-ReplicationHealth {
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                    REPLICATION HEALTH CHECK").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Get all replicated VMs
+    $replicatedVMs = Get-VMReplication -ErrorAction SilentlyContinue
+    if ($null -eq $replicatedVMs -or @($replicatedVMs).Count -eq 0) {
+        Write-OutputColor "  No VM replication configured on this host." -color "Info"
+        return
+    }
+
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  VM REPLICATION HEALTH".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    $warningCount = 0
+    $criticalCount = 0
+
+    foreach ($vm in $replicatedVMs) {
+        $status = "$($vm.ReplicationHealth)"
+        $color = switch ($status) {
+            'Normal'   { "Success" }
+            'Warning'  { "Warning" }
+            'Critical' { "Error" }
+            default    { "Info" }
+        }
+
+        if ($status -eq 'Warning') { $warningCount++ }
+        if ($status -eq 'Critical') { $criticalCount++ }
+
+        $lastSync = if ($null -ne $vm.LastReplicationTime -and $vm.LastReplicationTime -ne [DateTime]::MinValue) {
+            $vm.LastReplicationTime.ToString("yyyy-MM-dd HH:mm:ss")
+        }
+        else { "Never" }
+
+        $lineStr = "  $($vm.Name): $status (Last sync: $lastSync)"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $color
+
+        # Check replication lag
+        if ($null -ne $vm.LastReplicationTime -and $vm.LastReplicationTime -ne [DateTime]::MinValue) {
+            $lag = (Get-Date) - $vm.LastReplicationTime
+            if ($lag.TotalMinutes -gt 15) {
+                $lagStr = "    Replication lag: $([math]::Round($lag.TotalMinutes)) minutes"
+                if ($lagStr.Length -gt 69) { $lagStr = $lagStr.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($lagStr.PadRight(72))│" -color "Warning"
+            }
+        }
+    }
+
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    # Overall summary
+    $totalVMs = @($replicatedVMs).Count
+    $overallColor = if ($criticalCount -gt 0) { "Error" } elseif ($warningCount -gt 0) { "Warning" } else { "Success" }
+    $overallStatus = if ($criticalCount -gt 0) { "CRITICAL ($criticalCount VM(s) in critical state)" }
+        elseif ($warningCount -gt 0) { "WARNING ($warningCount VM(s) with warnings)" }
+        else { "HEALTHY (all $totalVMs VM(s) normal)" }
+    Write-OutputColor "  │$("  Overall: $overallStatus".PadRight(72))│" -color $overallColor
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Total replicated VMs: $totalVMs" -color "Info"
+}
+
 # Main Hyper-V Replica Management menu
 function Show-HyperVReplicaMenu {
     if (-not (Test-HyperVInstalled)) {
@@ -61,6 +131,7 @@ function Show-HyperVReplicaMenu {
         Write-MenuItem -Text "[5]  Planned Failover"
         Write-MenuItem -Text "[6]  Reverse Replication"
         Write-MenuItem -Text "[7]  Remove Replication"
+        Write-MenuItem -Text "[8]  Replication Health Check"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -99,10 +170,14 @@ function Show-HyperVReplicaMenu {
                 Remove-VMReplicationWizard
                 Write-PressEnter
             }
+            "8" {
+                Test-ReplicationHealth
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -157,7 +232,7 @@ function Enable-ReplicaServer {
         "1" { "Kerberos" }
         "2" { "Certificate" }
         default {
-            Write-OutputColor "  Invalid selection." -color "Error"
+            Write-OutputColor "  Invalid selection. Enter 1 or 2." -color "Error"
             return
         }
     }
@@ -177,6 +252,10 @@ function Enable-ReplicaServer {
     if ($navResult.ShouldReturn) { return }
 
     $script:ReplicaAllowedServers = @()
+    if ($serverChoice -ne "1" -and $serverChoice -ne "2") {
+        Write-OutputColor "  Invalid selection. Enter 1 or 2." -color "Error"
+        return
+    }
     if ($serverChoice -eq "2") {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Enter comma-separated list of primary server names/IPs:" -color "Info"
@@ -266,6 +345,7 @@ function Enable-ReplicaServer {
             Write-OutputColor "  Firewall rules partially enabled ($fwErrors group(s) unavailable)." -color "Warning"
         }
         Add-SessionChange -Category "Hyper-V" -Description "Enabled Hyper-V Replica Server ($authType, storage: $storagePath)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to enable Replica Server: $_" -color "Error"
@@ -327,7 +407,7 @@ function Enable-VMReplicationWizard {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $vmMap.ContainsKey($vmChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($vmIndex - 1)." -color "Error"
         return
     }
 
@@ -409,6 +489,16 @@ function Enable-VMReplicationWizard {
         "3" { 900 }
         default { 300 }
     }
+
+    # RPO validation
+    if ($freqSec -lt 30) {
+        Write-OutputColor "  Minimum replication interval is 30 seconds." -color "Warning"
+        $freqSec = 30
+    }
+    if ($freqSec -gt 900) {
+        Write-OutputColor "  WARNING: RPO of $freqSec seconds means up to $([math]::Round($freqSec/60)) minutes of potential data loss" -color "Warning"
+    }
+
     $freqDisplay = switch ($freqSec) {
         30  { "30 seconds" }
         300 { "5 minutes" }
@@ -488,6 +578,7 @@ function Enable-VMReplicationWizard {
         }
 
         Add-SessionChange -Category "Hyper-V" -Description "Enabled replication for VM '$vmName' to $replicaServer"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to enable replication: $_" -color "Error"
@@ -599,6 +690,109 @@ function Show-ReplicationStatus {
     Write-OutputColor "  Green = Normal, Yellow = Warning, Red = Critical" -color "Info"
 }
 
+# Pre-flight checks before initiating failover
+function Test-FailoverPreFlight {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$VMName,
+        [Parameter(Mandatory=$true)]
+        $ReplicationInfo,
+        [switch]$IsPlanned
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  FAILOVER PRE-FLIGHT CHECKS".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    $issueCount = 0
+
+    # Check 1: Replica VM state
+    $replState = "$($ReplicationInfo.State)"
+    $replHealth = "$($ReplicationInfo.ReplicationHealth)"
+    if ($replState -eq "Replicating" -or $replState -eq "ReadyForInitialReplication" -or $replState -eq "WaitingForInitialReplication") {
+        Write-OutputColor "  │$("  [OK]   Replication state: $replState".PadRight(72))│" -color "Success"
+    }
+    else {
+        $lineStr = "  [WARN] Replication state: $replState"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
+        $issueCount++
+    }
+
+    # Check 2: Replication health
+    if ($replHealth -eq "Normal") {
+        Write-OutputColor "  │$("  [OK]   Replication health: Normal".PadRight(72))│" -color "Success"
+    }
+    elseif ($replHealth -eq "Warning") {
+        Write-OutputColor "  │$("  [WARN] Replication health: Warning".PadRight(72))│" -color "Warning"
+        $issueCount++
+    }
+    else {
+        Write-OutputColor "  │$("  [WARN] Replication health: $replHealth".PadRight(72))│" -color "Error"
+        $issueCount++
+    }
+
+    # Check 3: Network connectivity to replica server
+    $replicaServer = "$($ReplicationInfo.ReplicaServerName)"
+    if (-not [string]::IsNullOrWhiteSpace($replicaServer)) {
+        $pingOk = $false
+        try {
+            $pingResult = Test-Connection -ComputerName $replicaServer -Count 1 -Quiet -ErrorAction SilentlyContinue
+            $pingOk = $pingResult
+        }
+        catch {
+            $pingOk = $false
+        }
+        if ($pingOk) {
+            $lineStr = "  [OK]   Replica server reachable: $replicaServer"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
+        }
+        else {
+            $lineStr = "  [WARN] Replica server unreachable: $replicaServer"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
+            $issueCount++
+        }
+    }
+
+    # Check 4: Last replication time and potential data loss
+    if ($null -ne $ReplicationInfo.LastReplicationTime -and $ReplicationInfo.LastReplicationTime -ne [DateTime]::MinValue) {
+        $lastSync = $ReplicationInfo.LastReplicationTime
+        $lag = (Get-Date) - $lastSync
+        $lastSyncStr = $lastSync.ToString("yyyy-MM-dd HH:mm:ss")
+        Write-OutputColor "  │$("  Last successful replication: $lastSyncStr".PadRight(72))│" -color "Info"
+
+        if (-not $IsPlanned -and $lag.TotalMinutes -gt 5) {
+            $lagStr = "  [WARN] Potential data loss: ~$([math]::Round($lag.TotalMinutes)) minutes"
+            if ($lagStr.Length -gt 69) { $lagStr = $lagStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lagStr.PadRight(72))│" -color "Warning"
+            $issueCount++
+        }
+    }
+    else {
+        Write-OutputColor "  │$("  [WARN] No successful replication recorded".PadRight(72))│" -color "Warning"
+        if (-not $IsPlanned) {
+            Write-OutputColor "  │$("         Unplanned failover may result in significant data loss".PadRight(72))│" -color "Warning"
+        }
+        $issueCount++
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    if ($issueCount -gt 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  $issueCount issue(s) detected. Review before proceeding." -color "Warning"
+    }
+    else {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  All pre-flight checks passed." -color "Success"
+    }
+
+    return $issueCount
+}
+
 # Start a test failover for a replicated VM
 function Start-TestFailover {
     Clear-Host
@@ -643,7 +837,7 @@ function Start-TestFailover {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $vmMap.ContainsKey($vmChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($vmIndex - 1)." -color "Error"
         return
     }
 
@@ -668,6 +862,15 @@ function Start-TestFailover {
     }
     catch {
         Write-OutputColor "  Could not enumerate recovery points. Using latest available." -color "Warning"
+    }
+
+    # Failover pre-flight checks
+    $preFlightIssues = Test-FailoverPreFlight -VMName $vmName -ReplicationInfo $selectedRepl
+    if ($preFlightIssues -gt 0) {
+        if (-not (Confirm-UserAction -Message "Continue despite $preFlightIssues issue(s)?")) {
+            Write-OutputColor "  Cancelled." -color "Info"
+            return
+        }
     }
 
     # Confirm
@@ -702,6 +905,7 @@ function Start-TestFailover {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
         Add-SessionChange -Category "Hyper-V" -Description "Started test failover for VM '$vmName'"
+        Clear-MenuCache
 
         # Offer to clean up now or later
         Write-OutputColor "" -color "Info"
@@ -718,6 +922,7 @@ function Start-TestFailover {
             Stop-VMFailover -VMName $vmName -ErrorAction Stop
             Write-OutputColor "  Test failover cleaned up successfully." -color "Success"
             Add-SessionChange -Category "Hyper-V" -Description "Cleaned up test failover for VM '$vmName'"
+            Clear-MenuCache
         }
     }
     catch {
@@ -770,12 +975,21 @@ function Start-PlannedFailover {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $vmMap.ContainsKey($vmChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($vmIndex - 1)." -color "Error"
         return
     }
 
     $selectedRepl = $vmMap[$vmChoice]
     $vmName = $selectedRepl.VMName
+
+    # Failover pre-flight checks
+    $preFlightIssues = Test-FailoverPreFlight -VMName $vmName -ReplicationInfo $selectedRepl -IsPlanned
+    if ($preFlightIssues -gt 0) {
+        if (-not (Confirm-UserAction -Message "Continue despite $preFlightIssues issue(s)?")) {
+            Write-OutputColor "  Cancelled." -color "Info"
+            return
+        }
+    }
 
     # Warn about shutdown
     Write-OutputColor "" -color "Info"
@@ -844,6 +1058,7 @@ function Start-PlannedFailover {
         }
 
         Add-SessionChange -Category "Hyper-V" -Description "Planned failover for VM '$vmName' ($($selectedRepl.Mode) role)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Planned failover failed: $_" -color "Error"
@@ -917,7 +1132,7 @@ function Set-ReverseReplication {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $vmMap.ContainsKey($vmChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($vmIndex - 1)." -color "Error"
         return
     }
 
@@ -954,6 +1169,7 @@ function Set-ReverseReplication {
         Write-OutputColor "  Reverse replication configured successfully!" -color "Success"
         Write-OutputColor "  VM '$vmName' will now replicate to $originalServer." -color "Info"
         Add-SessionChange -Category "Hyper-V" -Description "Reversed replication for VM '$vmName' to $originalServer"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to reverse replication: $_" -color "Error"
@@ -1012,7 +1228,7 @@ function Remove-VMReplicationWizard {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $vmMap.ContainsKey($vmChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($vmIndex - 1)." -color "Error"
         return
     }
 
@@ -1038,6 +1254,7 @@ function Remove-VMReplicationWizard {
 
         Write-OutputColor "  Replication removed successfully for VM '$vmName'." -color "Success"
         Add-SessionChange -Category "Hyper-V" -Description "Removed replication for VM '$vmName'"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to remove replication: $_" -color "Error"

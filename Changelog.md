@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.21.16
+
+- **Bug Fix:** Color severity mismatches across 7 modules — actual failures (connection failures, task errors, catch blocks) now consistently use error color instead of warning color (44-VMDeployment, 63-ScheduledTasks, 32-Deduplication, 47-ExitCleanup, 08-VLAN, 11-Hostname).
+- **Bug Fix:** Null-safety fixes across 5 modules — property access (.Length, .Substring) on potentially null display names, resource names, and version strings now guarded against null reference errors (44-VMDeployment, 35-Utilities, 14-WindowsUpdates, 39-FileServer).
+- **Bug Fix:** Hash file written with empty hash when computation failed — now only writes .sha256 file when a valid hash exists (39-FileServer).
+- **Bug Fix:** OS build detection crashed if both registry and CIM queries failed — added nested fallback so startup survives degraded environments (00-Initialization).
+- **Bug Fix:** HttpWebRequest not aborted on resume failure — added request cleanup in download error path (39-FileServer).
+- **UX:** Silent invalid input in 4 menu locations now shows error feedback instead of silently returning (35-Utilities, 31-BitLocker, 32-Deduplication).
+- **Reliability:** Menu cache invalidation added after ~30 state-changing operations across 12 modules to prevent stale menu display after system changes (55-QoLFeatures, 50-EntryPoint, 61-ActiveDirectory, 45-ConfigExport, 57-AgentInstaller, 37-HealthCheck, 04-Navigation, 16-Firewall, 20-DiskCleanup, 22-Password, 63-ScheduledTasks, 10-iSCSI).
+- 64 modules, 2501 tests
+
 ## v1.21.15
 
 - **Bug Fix:** Agent not detected before domain join despite being installed this session — agent detection now caches confirmed install result so subsequent checks (domain join, menu status) don't lose track of the agent (57-AgentInstaller).

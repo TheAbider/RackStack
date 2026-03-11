@@ -1,4 +1,54 @@
 ﻿#region ===== SERVICE MANAGER =====
+# Function to show service dependency tree
+function Show-ServiceDependencies {
+    param([string]$ServiceName)
+
+    if ([string]::IsNullOrWhiteSpace($ServiceName)) {
+        Write-OutputColor "  Enter service name:" -color "Info"
+        $ServiceName = Read-Host "  Service"
+        $navResult = Test-NavigationCommand -UserInput $ServiceName
+        if ($navResult.ShouldReturn) { return }
+    }
+
+    $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($null -eq $service) {
+        $service = Get-Service -DisplayName "*$ServiceName*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if ($null -eq $service) {
+        Write-OutputColor "  Service '$ServiceName' not found" -color "Warning"
+        return
+    }
+
+    Write-OutputColor "`n  Service: $($service.DisplayName) ($($service.Name))" -color "Info"
+    Write-OutputColor "  Status: $($service.Status)" -color $(if ($service.Status -eq 'Running') { "Success" } else { "Warning" })
+
+    # Dependencies (services this service depends ON)
+    $deps = @($service.ServicesDependedOn)
+    if ($deps.Count -gt 0) {
+        Write-OutputColor "`n  Depends on ($($deps.Count)):" -color "Info"
+        foreach ($dep in $deps) {
+            $depStatus = $dep.Status.ToString()
+            $color = if ($depStatus -eq 'Running') { "Success" } else { "Error" }
+            Write-OutputColor "    -> $($dep.DisplayName) ($depStatus)" -color $color
+        }
+    }
+
+    # Dependents (services that depend on THIS service)
+    $dependents = @($service.DependentServices)
+    if ($dependents.Count -gt 0) {
+        Write-OutputColor "`n  Required by ($($dependents.Count)):" -color "Info"
+        foreach ($dep in $dependents) {
+            $depStatus = $dep.Status.ToString()
+            $color = if ($depStatus -eq 'Running') { "Success" } else { "Warning" }
+            Write-OutputColor "    <- $($dep.DisplayName) ($depStatus)" -color $color
+        }
+    }
+
+    if ($deps.Count -eq 0 -and $dependents.Count -eq 0) {
+        Write-OutputColor "  No dependencies" -color "Info"
+    }
+}
+
 # Function to manage Windows services
 function Show-ServiceManager {
     while ($true) {
@@ -81,6 +131,7 @@ function Show-ServiceManager {
         Write-MenuItem -Text "[C]  Change Startup Type (enter number)"
         Write-MenuItem -Text "[A]  Search All Services"
         Write-MenuItem -Text "[D]  View Service Dependencies"
+        Write-MenuItem -Text "[F]  Find Service Dependencies (by name)"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -113,6 +164,9 @@ function Show-ServiceManager {
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
                     }
+                }
+                else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($serviceList.Count)." -color "Error"
                 }
             }
             "^[Tt]$" {
@@ -147,6 +201,9 @@ function Show-ServiceManager {
                         Write-OutputColor "  Failed: $_" -color "Error"
                     }
                 }
+                else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($serviceList.Count)." -color "Error"
+                }
             }
             "^[Rr]$" {
                 $num = Read-Host "  Enter service number to restart"
@@ -175,6 +232,9 @@ function Show-ServiceManager {
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
                     }
+                }
+                else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($serviceList.Count)." -color "Error"
                 }
             }
             "^[Cc]$" {
@@ -217,6 +277,9 @@ function Show-ServiceManager {
                             Write-OutputColor "  Failed: $_" -color "Error"
                         }
                     }
+                }
+                else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($serviceList.Count)." -color "Error"
                 }
             }
             "^[Aa]$" {
@@ -285,6 +348,12 @@ function Show-ServiceManager {
 
                     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
                 }
+                else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($serviceList.Count)." -color "Error"
+                }
+            }
+            "^[Ff]$" {
+                Show-ServiceDependencies
             }
             "^[Bb]$" { return }
         }

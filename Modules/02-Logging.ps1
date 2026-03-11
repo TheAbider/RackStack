@@ -12,6 +12,148 @@ function Write-LogMessage {
     }
 }
 
+# Write a structured log entry with category, level, and optional key-value data
+# Useful for machine-parseable logging alongside the human-readable transcript
+function Write-StructuredLog {
+    param (
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Message,
+
+        [Parameter(Mandatory=$false)]
+        [ValidateSet("INFO", "WARN", "ERROR", "SUCCESS", "DEBUG")]
+        [string]$Level = "INFO",
+
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Category = "General",
+
+        [Parameter(Mandatory=$false)]
+        [hashtable]$Data,
+
+        [Parameter(Mandatory=$false)]
+        [string]$LogFilePath
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
+    $hostname = $env:COMPUTERNAME
+
+    # Build structured line: TIMESTAMP | LEVEL | CATEGORY | HOSTNAME | MESSAGE | KEY=VALUE pairs
+    $entry = "${timestamp} | ${Level} | ${Category} | ${hostname} | ${Message}"
+
+    if ($null -ne $Data -and $Data.Count -gt 0) {
+        $kvPairs = @()
+        foreach ($key in $Data.Keys) {
+            $val = $Data[$key]
+            if ($null -eq $val) { $val = "(null)" }
+            $kvPairs += "${key}=$val"
+        }
+        $entry += " | $($kvPairs -join '; ')"
+    }
+
+    # Write to specified log file, or fall back to transcript path
+    $targetPath = $LogFilePath
+    if (-not $targetPath) {
+        $targetPath = $script:TranscriptPath
+    }
+
+    if ($targetPath) {
+        Add-Content -LiteralPath $targetPath -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
+    }
+}
+
+# Rotate transcript logs: archive old transcripts into a compressed zip
+# Called during startup to keep the transcript directory tidy
+function Invoke-LogRotation {
+    param(
+        [int]$DaysToArchive = 7,
+        [int]$MaxArchivesMB = 200
+    )
+
+    $tempPath = $script:TempPath
+    if (-not (Test-Path -LiteralPath $tempPath)) { return }
+
+    try {
+        $logFilter = "$($script:ToolName)Config_*.log"
+        $allLogs = @(Get-ChildItem -LiteralPath $tempPath -Filter $logFilter -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime)
+
+        if ($allLogs.Count -eq 0) { return }
+
+        # Find logs older than DaysToArchive that are eligible for archiving
+        $cutoffDate = (Get-Date).AddDays(-$DaysToArchive)
+        $archivable = @($allLogs | Where-Object { $_.LastWriteTime -lt $cutoffDate })
+
+        if ($archivable.Count -eq 0) { return }
+
+        # Create archive subdirectory
+        $archivePath = Join-Path $tempPath "transcript_archive"
+        if (-not (Test-Path -LiteralPath $archivePath)) {
+            New-Item -Path $archivePath -ItemType Directory -Force | Out-Null
+        }
+
+        # Load compression assembly (required for PS 5.1)
+        Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+
+        # Group archivable logs by month for organized zip files
+        $grouped = $archivable | Group-Object { $_.LastWriteTime.ToString("yyyy-MM") }
+
+        foreach ($group in $grouped) {
+            $zipName = "$($script:ToolName)_transcripts_$($group.Name).zip"
+            $zipPath = Join-Path $archivePath $zipName
+
+            try {
+                # Add files to zip (append if zip already exists)
+                if (Test-Path -LiteralPath $zipPath) {
+                    # Open existing zip and add new entries
+                    $zip = [System.IO.Compression.ZipFile]::Open($zipPath, 'Update')
+                }
+                else {
+                    $zip = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
+                }
+
+                foreach ($logFile in $group.Group) {
+                    # Skip if entry already exists in the archive
+                    $existingEntry = $zip.GetEntry($logFile.Name)
+                    if ($null -eq $existingEntry) {
+                        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                            $zip, $logFile.FullName, $logFile.Name, [System.IO.Compression.CompressionLevel]::Optimal)
+                    }
+                }
+
+                $zip.Dispose()
+
+                # Remove archived source files
+                foreach ($logFile in $group.Group) {
+                    Remove-Item -LiteralPath $logFile.FullName -Force -ErrorAction SilentlyContinue
+                }
+            }
+            catch {
+                # If zip operations fail, leave the files in place
+                if ($null -ne $zip) { $zip.Dispose() }
+            }
+        }
+
+        # Enforce archive size limit
+        $archives = @(Get-ChildItem -LiteralPath $archivePath -Filter "*.zip" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime)
+        if ($archives.Count -gt 0) {
+            $totalSize = ($archives | Measure-Object -Property Length -Sum).Sum
+            $maxBytes = $MaxArchivesMB * 1MB
+            if ($totalSize -gt $maxBytes) {
+                foreach ($oldZip in $archives) {
+                    if ($totalSize -le $maxBytes) { break }
+                    $totalSize -= $oldZip.Length
+                    Remove-Item -LiteralPath $oldZip.FullName -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
+    catch {
+        # Silently ignore rotation errors - this is a maintenance task
+    }
+}
+
 # Function to output messages with color and optional logging
 function Write-OutputColor {
     param (

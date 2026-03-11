@@ -103,7 +103,7 @@ function New-VMCheckpointWizard {
     }
 
     if ($vms.Count -eq 0) {
-        Write-OutputColor "  No VMs available for checkpoint." -color "Warning"
+        Write-OutputColor "  No VMs available for checkpoint." -color "Error"
         return
     }
 
@@ -130,7 +130,7 @@ function New-VMCheckpointWizard {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $vmMap.ContainsKey($vmChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($vms.Count) or B." -color "Error"
         return
     }
 
@@ -217,6 +217,7 @@ function New-VMCheckpointWizard {
 
         Write-OutputColor "  Checkpoint created successfully!" -color "Success"
         Add-SessionChange -Category "VM" -Description "Created $cpType checkpoint '$cpName' on VM '$($selectedVM.Name)'"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error creating checkpoint: $_" -color "Error"
@@ -240,7 +241,7 @@ function Restore-VMCheckpointWizard {
     $result = Get-VMCheckpointList -ComputerName $ComputerName -Credential $Credential
 
     if (-not $result.Success -or $result.Checkpoints.Count -eq 0) {
-        Write-OutputColor "  No checkpoints available to restore." -color "Warning"
+        Write-OutputColor "  No checkpoints available to restore." -color "Error"
         return
     }
 
@@ -268,7 +269,7 @@ function Restore-VMCheckpointWizard {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $cpMap.ContainsKey($cpChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($result.Checkpoints.Count) or B." -color "Error"
         return
     }
 
@@ -295,6 +296,7 @@ function Restore-VMCheckpointWizard {
 
         Write-OutputColor "  Checkpoint restored successfully!" -color "Success"
         Add-SessionChange -Category "VM" -Description "Restored checkpoint '$($selectedCP.Name)' on VM '$($selectedCP.VMName)'"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error restoring checkpoint: $_" -color "Error"
@@ -318,7 +320,7 @@ function Remove-VMCheckpointWizard {
     $result = Get-VMCheckpointList -ComputerName $ComputerName -Credential $Credential
 
     if (-not $result.Success -or $result.Checkpoints.Count -eq 0) {
-        Write-OutputColor "  No checkpoints available to delete." -color "Warning"
+        Write-OutputColor "  No checkpoints available to delete." -color "Error"
         return
     }
 
@@ -367,6 +369,7 @@ function Remove-VMCheckpointWizard {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Deleted $deleted of $($result.Checkpoints.Count) checkpoints." -color "Success"
         Add-SessionChange -Category "VM" -Description "Deleted $deleted VM checkpoints"
+        Clear-MenuCache
     }
     elseif ($cpMap.ContainsKey($cpChoice)) {
         $selectedCP = $cpMap[$cpChoice]
@@ -382,13 +385,60 @@ function Remove-VMCheckpointWizard {
             Remove-VMSnapshot -VMSnapshot $selectedCP -Confirm:$false -ErrorAction Stop
             Write-OutputColor "  Checkpoint deleted successfully!" -color "Success"
             Add-SessionChange -Category "VM" -Description "Deleted checkpoint '$($selectedCP.Name)' from VM '$($selectedCP.VMName)'"
+            Clear-MenuCache
         }
         catch {
             Write-OutputColor "  Error deleting checkpoint: $_" -color "Error"
         }
     }
     else {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($result.Checkpoints.Count), A, or B." -color "Error"
+    }
+}
+
+# Function to show checkpoint age warnings
+function Show-CheckpointAgeWarnings {
+    try {
+        $checkpoints = Get-VMCheckpoint -VMName * -ErrorAction SilentlyContinue
+        if ($null -eq $checkpoints -or @($checkpoints).Count -eq 0) {
+            Write-OutputColor "  No VM checkpoints found" -color "Success"
+            return
+        }
+
+        $oldCount = 0
+        $totalSize = 0
+
+        Write-OutputColor "`n  VM Checkpoint Age Report:" -color "Info"
+
+        foreach ($cp in $checkpoints) {
+            $age = (Get-Date) - $cp.CreationTime
+            $vmName = $cp.VMName
+            $cpName = if ($cp.Name.Length -gt 30) { $cp.Name.Substring(0, 27) + "..." } else { $cp.Name }
+
+            $color = "Success"
+            $warning = ""
+            if ($age.TotalDays -gt 30) {
+                $color = "Error"
+                $warning = " [CRITICAL: $([math]::Round($age.TotalDays)) days old]"
+                $oldCount++
+            } elseif ($age.TotalDays -gt 7) {
+                $color = "Warning"
+                $warning = " [$([math]::Round($age.TotalDays)) days old]"
+                $oldCount++
+            }
+
+            Write-OutputColor "  $vmName / $cpName - Created: $($cp.CreationTime.ToString('yyyy-MM-dd'))$warning" -color $color
+        }
+
+        Write-OutputColor "`n  Total checkpoints: $(@($checkpoints).Count)" -color "Info"
+        if ($oldCount -gt 0) {
+            Write-OutputColor "  WARNING: $oldCount checkpoint(s) older than 7 days" -color "Warning"
+            Write-OutputColor "  Old checkpoints degrade VM performance and consume disk space" -color "Warning"
+        } else {
+            Write-OutputColor "  All checkpoints are recent" -color "Success"
+        }
+    } catch {
+        Write-OutputColor "  Could not check VM checkpoints: $($_.Exception.Message)" -color "Error"
     }
 }
 
@@ -426,6 +476,7 @@ function Show-VMCheckpointManagement {
         Write-MenuItem -Text "[2]  Create Checkpoint"
         Write-MenuItem -Text "[3]  Restore Checkpoint"
         Write-MenuItem -Text "[4]  Delete Checkpoint"
+        Write-MenuItem -Text "[5]  Checkpoint Age Warnings"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -452,10 +503,20 @@ function Show-VMCheckpointManagement {
                 Remove-VMCheckpointWizard -ComputerName $ComputerName -Credential $Credential
                 Write-PressEnter
             }
+            "5" {
+                Clear-Host
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+                Write-OutputColor "  ║$(("                     CHECKPOINT AGE WARNINGS").PadRight(72))║" -color "Info"
+                Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+                Write-OutputColor "" -color "Info"
+                Show-CheckpointAgeWarnings
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

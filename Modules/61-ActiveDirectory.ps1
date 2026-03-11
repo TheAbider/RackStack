@@ -138,6 +138,7 @@ function Install-ADDSRoleIfNeeded {
     $installResult = Install-WindowsFeatureWithTimeout -FeatureName "AD-Domain-Services" -DisplayName "AD Domain Services" -IncludeManagementTools
     if ($installResult.Success) {
         Add-SessionChange -Category "AD DS" -Description "Installed AD-Domain-Services role"
+        Clear-MenuCache
         return $true
     }
     else {
@@ -228,6 +229,193 @@ function Read-DSRMPassword {
     }
 
     return $dsrmPassword
+}
+
+# Pre-promotion validation checks (NTP, DNS self-resolution, network connectivity)
+function Test-PrePromotionReadiness {
+    param (
+        [string]$DomainName,
+        [switch]$IsNewForest
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  PRE-PROMOTION VALIDATION".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    $warningCount = 0
+
+    # Check 1: NTP Sync — verify time service is running and synchronized
+    $w32timeStatus = try { w32tm /query /status 2>&1 } catch { $null }
+    if ($null -eq $w32timeStatus -or "$w32timeStatus" -match 'error|not found|stopped') {
+        Write-OutputColor "  │$("  [WARN] Windows Time Service may not be synchronized".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  │$("         Time drift can cause AD replication failures".PadRight(72))│" -color "Warning"
+        $warningCount++
+    }
+    else {
+        Write-OutputColor "  │$("  [OK]   Windows Time Service is running".PadRight(72))│" -color "Success"
+    }
+
+    # Check 2: DNS self-resolution — verify this server can resolve its own hostname
+    $selfResolve = try { [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME) } catch { $null }
+    if ($null -eq $selfResolve) {
+        Write-OutputColor "  │$("  [WARN] Cannot resolve own hostname via DNS".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  │$("         DNS resolution issues may impact AD functionality".PadRight(72))│" -color "Warning"
+        $warningCount++
+    }
+    else {
+        $resolvedIP = @($selfResolve.AddressList | Where-Object { $_.AddressFamily -eq 'InterNetwork' })[0]
+        $lineStr = "  [OK]   Hostname resolves to $resolvedIP"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
+    }
+
+    # Check 3: Network connectivity to existing DC (only for additional DC / RODC)
+    if (-not $IsNewForest -and -not [string]::IsNullOrWhiteSpace($DomainName)) {
+        # Try to resolve the domain name
+        $domainResolve = try { [System.Net.Dns]::GetHostEntry($DomainName) } catch { $null }
+        if ($null -eq $domainResolve) {
+            Write-OutputColor "  │$("  [WARN] Cannot resolve domain: $DomainName".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$("         Verify DNS is configured to reach the domain".PadRight(72))│" -color "Warning"
+            $warningCount++
+        }
+        else {
+            $dcIP = @($domainResolve.AddressList | Where-Object { $_.AddressFamily -eq 'InterNetwork' })[0]
+            $lineStr = "  [OK]   Domain '$DomainName' resolves to $dcIP"
+            if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
+
+            # Test LDAP (port 389)
+            $ldapOk = $false
+            $tcp = $null
+            try {
+                $tcp = New-Object System.Net.Sockets.TcpClient
+                $connectResult = $tcp.BeginConnect("$dcIP", 389, $null, $null)
+                $ldapOk = $connectResult.AsyncWaitHandle.WaitOne(3000, $false)
+            }
+            catch {
+                $ldapOk = $false
+            }
+            finally {
+                if ($null -ne $tcp) { $tcp.Close() }
+            }
+            if ($ldapOk) {
+                Write-OutputColor "  │$("  [OK]   LDAP (port 389) reachable on $dcIP".PadRight(72))│" -color "Success"
+            }
+            else {
+                Write-OutputColor "  │$("  [WARN] LDAP (port 389) not reachable on $dcIP".PadRight(72))│" -color "Warning"
+                $warningCount++
+            }
+
+            # Test Kerberos (port 88)
+            $kerberosOk = $false
+            $tcp = $null
+            try {
+                $tcp = New-Object System.Net.Sockets.TcpClient
+                $connectResult = $tcp.BeginConnect("$dcIP", 88, $null, $null)
+                $kerberosOk = $connectResult.AsyncWaitHandle.WaitOne(3000, $false)
+            }
+            catch {
+                $kerberosOk = $false
+            }
+            finally {
+                if ($null -ne $tcp) { $tcp.Close() }
+            }
+            if ($kerberosOk) {
+                Write-OutputColor "  │$("  [OK]   Kerberos (port 88) reachable on $dcIP".PadRight(72))│" -color "Success"
+            }
+            else {
+                Write-OutputColor "  │$("  [WARN] Kerberos (port 88) not reachable on $dcIP".PadRight(72))│" -color "Warning"
+                $warningCount++
+            }
+        }
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    if ($warningCount -gt 0) {
+        Write-OutputColor "  $warningCount warning(s) detected. Review before proceeding." -color "Warning"
+    }
+    else {
+        Write-OutputColor "  All pre-promotion checks passed." -color "Success"
+    }
+
+    return $warningCount
+}
+
+# Post-promotion validation (DNS, NTDS service, SYSVOL share)
+function Test-PostPromotionStatus {
+    param ([string]$DomainName)
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  POST-PROMOTION VALIDATION".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    # Check 1: DNS points to self (127.0.0.1 or own IP should be primary DNS)
+    $dnsSelf = $false
+    try {
+        $dnsServers = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.ServerAddresses.Count -gt 0 }
+        $ownIPs = @([System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).AddressList |
+            Where-Object { $_.AddressFamily -eq 'InterNetwork' } |
+            ForEach-Object { $_.IPAddressToString })
+        $ownIPs += "127.0.0.1"
+
+        foreach ($dns in $dnsServers) {
+            $primaryDNS = $dns.ServerAddresses[0]
+            if ($primaryDNS -in $ownIPs) {
+                $dnsSelf = $true
+                break
+            }
+        }
+    }
+    catch {
+        # Ignore
+    }
+    if ($dnsSelf) {
+        Write-OutputColor "  │$("  [OK]   Primary DNS points to this server".PadRight(72))│" -color "Success"
+    }
+    else {
+        Write-OutputColor "  │$("  [WARN] Primary DNS does not point to this server".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  │$("         Set DNS to 127.0.0.1 or this server's IP".PadRight(72))│" -color "Warning"
+    }
+
+    # Check 2: AD DS (NTDS) service is running
+    $ntdsService = Get-Service NTDS -ErrorAction SilentlyContinue
+    if ($null -ne $ntdsService -and $ntdsService.Status -eq "Running") {
+        Write-OutputColor "  │$("  [OK]   AD DS service (NTDS) is running".PadRight(72))│" -color "Success"
+    }
+    else {
+        $ntdsStatus = if ($null -ne $ntdsService) { "$($ntdsService.Status)" } else { "Not found" }
+        Write-OutputColor "  │$("  [WARN] AD DS service (NTDS): $ntdsStatus".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  │$("         Service should be running after reboot".PadRight(72))│" -color "Warning"
+    }
+
+    # Check 3: SYSVOL share exists
+    $sysvolShare = Get-SmbShare -Name SYSVOL -ErrorAction SilentlyContinue
+    if ($null -ne $sysvolShare) {
+        Write-OutputColor "  │$("  [OK]   SYSVOL share exists".PadRight(72))│" -color "Success"
+    }
+    else {
+        Write-OutputColor "  │$("  [WARN] SYSVOL share not found (may need reboot)".PadRight(72))│" -color "Warning"
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    # Summary
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  POST-PROMOTION SUMMARY".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    $lineStr = "  Domain: $DomainName"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  Server: $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  A reboot is required to finalize promotion.".PadRight(72))│" -color "Warning"
+    Write-OutputColor "  │$("  Run 'Check AD DS Status' after reboot to verify.".PadRight(72))│" -color "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 }
 
 # Post-promotion replication health check
@@ -424,6 +612,7 @@ function Show-ReplicationMonitor {
                     $null = repadmin /syncall /AdeP 2>&1
                     Write-OutputColor "  Replication sync initiated." -color "Success"
                     Add-SessionChange -Category "AD DS" -Description "Forced AD replication sync"
+                    Clear-MenuCache
                 }
                 catch {
                     Write-OutputColor "  Replication sync failed: $_" -color "Error"
@@ -560,14 +749,24 @@ function Install-NewForest {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Step 7: Confirm
+    # Step 7: Pre-promotion validation
+    $preWarnings = Test-PrePromotionReadiness -DomainName $domainName -IsNewForest
+    if ($preWarnings -gt 0) {
+        if (-not (Confirm-UserAction -Message "Continue despite $preWarnings warning(s)?")) {
+            Write-OutputColor "  Promotion cancelled." -color "Info"
+            Write-PressEnter
+            return
+        }
+    }
+
+    # Step 8: Confirm
     if (-not (Confirm-UserAction -Message "Promote this server to Domain Controller?")) {
         Write-OutputColor "  Promotion cancelled." -color "Info"
         Write-PressEnter
         return
     }
 
-    # Step 8: Execute
+    # Step 9: Execute
     try {
         Write-OutputColor "`n  Promoting server to Domain Controller... This will take several minutes." -color "Info"
         Write-OutputColor "  Do NOT close this window." -color "Warning"
@@ -589,13 +788,16 @@ function Install-NewForest {
         Write-OutputColor "`n  Domain Controller promotion completed successfully!" -color "Success"
         $global:RebootNeeded = $true
         Add-SessionChange -Category "AD DS" -Description "Promoted to DC: New forest $domainName"
+        Clear-MenuCache
         Write-OutputColor "  A reboot is required to complete the promotion." -color "Warning"
 
+        Test-PostPromotionStatus -DomainName $domainName
         Test-ADDSReplicationHealth -DomainName $domainName
     }
     catch {
         Write-OutputColor "  Failed to promote Domain Controller: $_" -color "Error"
         Add-SessionChange -Category "AD DS" -Description "DC promotion failed: New forest $domainName - $_"
+        Clear-MenuCache
     }
 
     Write-PressEnter
@@ -690,14 +892,24 @@ function Install-AdditionalDC {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Step 8: Confirm
+    # Step 8: Pre-promotion validation
+    $preWarnings = Test-PrePromotionReadiness -DomainName $domainName
+    if ($preWarnings -gt 0) {
+        if (-not (Confirm-UserAction -Message "Continue despite $preWarnings warning(s)?")) {
+            Write-OutputColor "  Promotion cancelled." -color "Info"
+            Write-PressEnter
+            return
+        }
+    }
+
+    # Step 9: Confirm
     if (-not (Confirm-UserAction -Message "Promote this server as an additional Domain Controller?")) {
         Write-OutputColor "  Promotion cancelled." -color "Info"
         Write-PressEnter
         return
     }
 
-    # Step 9: Execute
+    # Step 10: Execute
     try {
         Write-OutputColor "`n  Promoting server as additional DC... This will take several minutes." -color "Info"
         Write-OutputColor "  Do NOT close this window." -color "Warning"
@@ -717,13 +929,16 @@ function Install-AdditionalDC {
         Write-OutputColor "`n  Additional Domain Controller promotion completed successfully!" -color "Success"
         $global:RebootNeeded = $true
         Add-SessionChange -Category "AD DS" -Description "Promoted to additional DC in domain $domainName"
+        Clear-MenuCache
         Write-OutputColor "  A reboot is required to complete the promotion." -color "Warning"
 
+        Test-PostPromotionStatus -DomainName $domainName
         Test-ADDSReplicationHealth -DomainName $domainName
     }
     catch {
         Write-OutputColor "  Failed to promote additional DC: $_" -color "Error"
         Add-SessionChange -Category "AD DS" -Description "Additional DC promotion failed: $domainName - $_"
+        Clear-MenuCache
     }
 
     Write-PressEnter
@@ -834,14 +1049,24 @@ function Install-ReadOnlyDC {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Step 9: Confirm
+    # Step 9: Pre-promotion validation
+    $preWarnings = Test-PrePromotionReadiness -DomainName $domainName
+    if ($preWarnings -gt 0) {
+        if (-not (Confirm-UserAction -Message "Continue despite $preWarnings warning(s)?")) {
+            Write-OutputColor "  Promotion cancelled." -color "Info"
+            Write-PressEnter
+            return
+        }
+    }
+
+    # Step 10: Confirm
     if (-not (Confirm-UserAction -Message "Promote this server as a Read-Only Domain Controller?")) {
         Write-OutputColor "  Promotion cancelled." -color "Info"
         Write-PressEnter
         return
     }
 
-    # Step 10: Execute
+    # Step 11: Execute
     try {
         Write-OutputColor "`n  Promoting server as RODC... This will take several minutes." -color "Info"
         Write-OutputColor "  Do NOT close this window." -color "Warning"
@@ -869,13 +1094,16 @@ function Install-ReadOnlyDC {
         Write-OutputColor "`n  Read-Only Domain Controller promotion completed successfully!" -color "Success"
         $global:RebootNeeded = $true
         Add-SessionChange -Category "AD DS" -Description "Promoted to RODC in domain $domainName"
+        Clear-MenuCache
         Write-OutputColor "  A reboot is required to complete the promotion." -color "Warning"
 
+        Test-PostPromotionStatus -DomainName $domainName
         Test-ADDSReplicationHealth -DomainName $domainName
     }
     catch {
         Write-OutputColor "  Failed to promote RODC: $_" -color "Error"
         Add-SessionChange -Category "AD DS" -Description "RODC promotion failed: $domainName - $_"
+        Clear-MenuCache
     }
 
     Write-PressEnter

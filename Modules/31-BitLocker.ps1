@@ -1,4 +1,66 @@
 ﻿#region ===== BITLOCKER MANAGEMENT =====
+# Function to verify BitLocker recovery keys are properly backed up
+function Test-BitLockerRecoveryBackup {
+    try {
+        $volumes = Get-BitLockerVolume -ErrorAction SilentlyContinue
+        if ($null -eq $volumes) {
+            Write-OutputColor "  BitLocker not available or no encrypted volumes" -color "Info"
+            return
+        }
+
+        foreach ($vol in $volumes) {
+            $mountPoint = $vol.MountPoint
+            $status = $vol.VolumeStatus.ToString()
+
+            if ($status -eq 'FullyDecrypted') { continue }
+
+            Write-OutputColor "`n  Volume: $mountPoint ($status)" -color "Info"
+
+            $protectors = $vol.KeyProtector
+            $hasRecoveryPassword = $false
+            $hasTPM = $false
+
+            foreach ($protector in $protectors) {
+                $type = $protector.KeyProtectorType.ToString()
+                switch ($type) {
+                    'RecoveryPassword' {
+                        $hasRecoveryPassword = $true
+                        Write-OutputColor "    Recovery Password: $($protector.KeyProtectorId)" -color "Success"
+                    }
+                    'Tpm' {
+                        $hasTPM = $true
+                        Write-OutputColor "    TPM Protector: Present" -color "Success"
+                    }
+                    'TpmPin' {
+                        $hasTPM = $true
+                        Write-OutputColor "    TPM+PIN Protector: Present" -color "Success"
+                    }
+                    default {
+                        Write-OutputColor "    $type Protector: Present" -color "Info"
+                    }
+                }
+            }
+
+            if (-not $hasRecoveryPassword) {
+                Write-OutputColor "    WARNING: No recovery password protector found!" -color "Error"
+                Write-OutputColor "    Run: Add-BitLockerKeyProtector -MountPoint $mountPoint -RecoveryPasswordProtector" -color "Warning"
+            }
+
+            # Check if recovery key is backed up to AD
+            try {
+                $adBackup = Get-ADObject -Filter "objectClass -eq 'msFVE-RecoveryInformation'" -SearchBase (Get-ADComputer $env:COMPUTERNAME).DistinguishedName -ErrorAction SilentlyContinue
+                if ($null -ne $adBackup) {
+                    Write-OutputColor "    AD Backup: Found ($(@($adBackup).Count) key(s))" -color "Success"
+                }
+            } catch {
+                Write-OutputColor "    AD Backup: Cannot verify (not domain-joined or AD tools not available)" -color "Info"
+            }
+        }
+    } catch {
+        Write-OutputColor "  BitLocker check failed: $($_.Exception.Message)" -color "Error"
+    }
+}
+
 # Function to manage BitLocker encryption
 function Show-BitLockerManagement {
     Clear-Host
@@ -54,7 +116,7 @@ function Show-BitLockerManagement {
                 }
                 Write-PressEnter
             }
-            default { }
+            default { Write-OutputColor "  Invalid selection. Enter I or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
         return
     }
@@ -112,6 +174,7 @@ function Show-BitLockerManagement {
         }
         Write-MenuItem -Text "[4]  Show Recovery Key"
         Write-MenuItem -Text "[5]  Check Encryption Progress"
+        Write-MenuItem -Text "[6]  Verify Recovery Key Backup"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -182,12 +245,15 @@ function Show-BitLockerManagement {
                                     Write-OutputColor "  Please use option [3] or [4] from the menu to save your key." -color "Warning"
                                 }
                                 Add-SessionChange -Category "Security" -Description "Enabled BitLocker on $($vol.MountPoint)"
+                                Clear-MenuCache
                             }
                         }
                         catch {
                             Write-OutputColor "  Failed: $_" -color "Error"
                         }
                     }
+                } else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($volumes.Count)." -color "Error"
                 }
             }
             "2" {
@@ -201,11 +267,14 @@ function Show-BitLockerManagement {
                             Disable-BitLocker -MountPoint $vol.MountPoint -ErrorAction Stop
                             Write-OutputColor "  BitLocker disabled. Decryption in progress." -color "Success"
                             Add-SessionChange -Category "Security" -Description "Disabled BitLocker on $($vol.MountPoint)"
+                            Clear-MenuCache
                         }
                         catch {
                             Write-OutputColor "  Failed: $_" -color "Error"
                         }
                     }
+                } else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($volumes.Count)." -color "Error"
                 }
             }
             "3" {
@@ -276,6 +345,8 @@ function Show-BitLockerManagement {
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
                     }
+                } else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($volumes.Count)." -color "Error"
                 }
             }
             "4" {
@@ -298,6 +369,8 @@ function Show-BitLockerManagement {
                     else {
                         Write-OutputColor "  No recovery password found." -color "Warning"
                     }
+                } else {
+                    Write-OutputColor "  Invalid selection. Enter 1-$($volumes.Count)." -color "Error"
                 }
             }
             "5" {
@@ -321,8 +394,17 @@ function Show-BitLockerManagement {
                 }
                 Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             }
+            "6" {
+                Clear-Host
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+                Write-OutputColor "  ║$(("                   RECOVERY KEY BACKUP VERIFICATION").PadRight(72))║" -color "Info"
+                Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+                Write-OutputColor "" -color "Info"
+                Test-BitLockerRecoveryBackup
+            }
             { $_ -eq "b" -or $_ -eq "B" } { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter

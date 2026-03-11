@@ -6,8 +6,27 @@ function Exit-Script {
         Save-SessionState
     }
 
+    # Clean up temporary session files
+    $stateFile = Join-Path $script:TempPath "session-state.json"
+    if (Test-Path -LiteralPath $stateFile) {
+        Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
+    }
+
+    $undoFile = Join-Path $script:TempPath "batch-undo.json"
+    if (Test-Path -LiteralPath $undoFile) {
+        Remove-Item -LiteralPath $undoFile -Force -ErrorAction SilentlyContinue
+    }
+
     # Show session summary first
     Show-SessionSummary
+
+    # Notify about old transcript files
+    if ($null -ne $script:TempPath -and (Test-Path -LiteralPath $script:TempPath)) {
+        $oldTranscripts = @(Get-ChildItem -LiteralPath $script:TempPath -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) })
+        if ($oldTranscripts.Count -gt 0) {
+            Write-OutputColor "  Tip: $($oldTranscripts.Count) transcript(s) older than 30 days in $($script:TempPath)" -color "Info"
+        }
+    }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Press Enter to continue to exit..." -color "Info"
@@ -114,7 +133,7 @@ function Exit-Script {
             Register-ScheduledTask -TaskName "$($script:ToolName)Cleanup" -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
         }
         catch {
-            Write-OutputColor "  Could not schedule cleanup: $_" -color "Warning"
+            Write-OutputColor "  Could not schedule cleanup: $_" -color "Error"
         }
 
         Restart-Computer -Force

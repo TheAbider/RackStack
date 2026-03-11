@@ -172,6 +172,7 @@ function Get-ServerISO {
         Write-OutputColor "  ISO downloaded and verified!" -color "Success"
         Write-OutputColor "  Path: $($result.FilePath)" -color "Info"
         Add-SessionChange -Category "ISO Download" -Description "Downloaded Server $OSVersion ISO to $isoPath"
+        Clear-MenuCache
         return $result.FilePath
     }
     else {
@@ -232,7 +233,9 @@ function Show-ISODownloadMenu {
     Write-OutputColor "  │$("   [3]  Download Server 2019 ISO".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("   [4]  Download All Missing ISOs".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("   [5]  ◄ Back".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("   [5]  Show ISO Inventory".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("   [6]  ◄ Back".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -276,13 +279,52 @@ function Start-ISODownload {
                 Write-PressEnter
             }
             "5" {
+                Show-ISOInventory
+                Write-PressEnter
+            }
+            "6" {
                 return
             }
             default {
                 $navResult = Test-NavigationCommand -UserInput $choice
                 if ($navResult.ShouldReturn) { return }
+                Write-OutputColor "  Invalid selection. Enter 1-6 or B." -color "Error"
+                Start-Sleep -Seconds 1
             }
         }
     }
+}
+
+# Function to show all downloaded ISOs with details
+function Show-ISOInventory {
+    $isoPath = $script:HostISOPath
+    if ([string]::IsNullOrWhiteSpace($isoPath) -or -not (Test-Path -LiteralPath $isoPath)) {
+        Write-OutputColor "  ISO directory not configured or doesn't exist" -color "Warning"
+        return
+    }
+
+    $isos = @(Get-ChildItem -LiteralPath $isoPath -Filter '*.iso' -ErrorAction SilentlyContinue)
+
+    if ($isos.Count -eq 0) {
+        Write-OutputColor "  No ISO files found in $isoPath" -color "Info"
+        return
+    }
+
+    Write-OutputColor "`n  ISO Inventory ($($isos.Count) files):" -color "Info"
+
+    $totalSize = 0
+    foreach ($iso in $isos | Sort-Object Name) {
+        $sizeGB = [math]::Round($iso.Length / 1GB, 1)
+        $totalSize += $iso.Length
+        $age = (Get-Date) - $iso.LastWriteTime
+        $ageStr = if ($age.TotalDays -gt 365) { "$([math]::Round($age.TotalDays / 365, 0))y old" }
+                  elseif ($age.TotalDays -gt 30) { "$([math]::Round($age.TotalDays / 30, 0))mo old" }
+                  else { "$([math]::Round($age.TotalDays, 0))d old" }
+
+        Write-OutputColor "  $($iso.Name)  ${sizeGB} GB  ($ageStr)" -color "Info"
+    }
+
+    $totalGB = [math]::Round($totalSize / 1GB, 1)
+    Write-OutputColor "`n  Total: ${totalGB} GB across $($isos.Count) ISO(s)" -color "Info"
 }
 #endregion

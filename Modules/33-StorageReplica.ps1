@@ -1,4 +1,49 @@
 ﻿#region ===== STORAGE REPLICA =====
+# Function to show Storage Replica partnership health
+function Show-ReplicaPartnershipHealth {
+    try {
+        $partnerships = Get-SRPartnership -ErrorAction Stop
+        if ($null -eq $partnerships -or @($partnerships).Count -eq 0) {
+            Write-OutputColor "  No Storage Replica partnerships configured" -color "Info"
+            return
+        }
+
+        Write-OutputColor "`n  Storage Replica Partnership Health:" -color "Info"
+
+        foreach ($partnership in $partnerships) {
+            $srcGroup = $partnership.SourceRGName
+            $destGroup = $partnership.DestinationRGName
+            $destComp = $partnership.DestinationComputerName
+
+            Write-OutputColor "`n  Partnership: $srcGroup -> $destGroup" -color "Info"
+            Write-OutputColor "  Destination: $destComp" -color "Info"
+
+            # Get replication group details
+            try {
+                $srGroup = Get-SRGroup -Name $srcGroup -ErrorAction Stop
+                foreach ($vol in $srGroup.Replicas) {
+                    $status = $vol.ReplicationStatus
+                    $color = switch ($status) {
+                        'ContinuouslyReplicating' { "Success" }
+                        'InitialBlockCopy'        { "Warning" }
+                        default                   { "Error" }
+                    }
+                    Write-OutputColor "    Volume: $($vol.DataVolume) -> Status: $status" -color $color
+
+                    if ($null -ne $vol.NumOfBytesRemaining -and $vol.NumOfBytesRemaining -gt 0) {
+                        $remainGB = [math]::Round($vol.NumOfBytesRemaining / 1GB, 1)
+                        Write-OutputColor "    Bytes remaining: ${remainGB} GB" -color "Warning"
+                    }
+                }
+            } catch {
+                Write-OutputColor "    Could not get replication details: $($_.Exception.Message)" -color "Warning"
+            }
+        }
+    } catch {
+        Write-OutputColor "  Storage Replica not available: $($_.Exception.Message)" -color "Warning"
+    }
+}
+
 # Function to manage Storage Replica
 function Show-StorageReplicaManagement {
     Clear-Host
@@ -44,6 +89,7 @@ function Show-StorageReplicaManagement {
                     if ($installResult.TimedOut) {
                         Write-OutputColor "  Installation timed out." -color "Error"
                         Add-SessionChange -Category "System" -Description "Storage Replica installation timed out"
+                        Clear-MenuCache
                     }
                     elseif ($installResult.Success) {
                         Write-OutputColor "  Storage Replica installed. Reboot required." -color "Success"
@@ -55,6 +101,7 @@ function Show-StorageReplicaManagement {
                         Write-OutputColor "  Storage Replica installation may not have completed successfully." -color "Error"
                         if ($installResult.Error) { Write-OutputColor "  Details: $($installResult.Error.Trim())" -color "Error" }
                         Add-SessionChange -Category "System" -Description "Storage Replica installation failed"
+                        Clear-MenuCache
                     }
                 }
                 catch {
@@ -103,6 +150,7 @@ function Show-StorageReplicaManagement {
         Write-MenuItem -Text "[2]  Test Replication Topology"
         Write-MenuItem -Text "[3]  Show Replication Status"
         Write-MenuItem -Text "[4]  Remove Partnership"
+        Write-MenuItem -Text "[5]  Partnership Health Check"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -266,10 +314,14 @@ function Show-StorageReplicaManagement {
                             }
                         }
                     }
+                    else { Write-OutputColor "  Invalid selection. Enter 1-$($partnerships.Count)." -color "Error" }
                 }
             }
+            "5" {
+                Show-ReplicaPartnershipHealth
+            }
             { $_ -eq "b" -or $_ -eq "B" } { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter

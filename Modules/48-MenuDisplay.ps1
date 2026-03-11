@@ -30,6 +30,12 @@ function Show-MainMenu {
 
     # Quick Health Dashboard
     $dashHost = $env:COMPUTERNAME
+    if ($dashHost.Length -gt 15) { $dashHost = $dashHost.Substring(0, 12) + "..." }
+
+    # Configurable dashboard thresholds (defaults: 70% warning, 90% critical)
+    $warningThreshold = if ($null -ne $script:DashboardWarningPercent) { $script:DashboardWarningPercent } else { 70 }
+    $criticalThreshold = if ($null -ne $script:DashboardCriticalPercent) { $script:DashboardCriticalPercent } else { 90 }
+
     $dashOS = Get-CachedValue -Key "DashOS" -FetchScript {
         $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
         if ($os) {
@@ -63,13 +69,13 @@ function Show-MainMenu {
         } else { @{ FreeGB = 0; TotalGB = 0; UsedPct = 0 } }
     } -CacheSeconds 60
 
-    # Build dashboard lines
-    $cpuColor = if ($dashCPU -lt 70) { "Success" } elseif ($dashCPU -lt 90) { "Warning" } else { "Error" }
-    $memColor = if ($dashOS.MemPct -lt 70) { "Success" } elseif ($dashOS.MemPct -lt 90) { "Warning" } else { "Error" }
-    $diskColor = if ($dashDisk.UsedPct -lt 75) { "Success" } elseif ($dashDisk.UsedPct -lt 90) { "Warning" } else { "Error" }
+    # Build dashboard lines (using configurable thresholds)
+    $cpuColor = if ($dashCPU -lt $warningThreshold) { "Success" } elseif ($dashCPU -lt $criticalThreshold) { "Warning" } else { "Error" }
+    $memColor = if ($dashOS.MemPct -lt $warningThreshold) { "Success" } elseif ($dashOS.MemPct -lt $criticalThreshold) { "Warning" } else { "Error" }
+    $diskColor = if ($dashDisk.UsedPct -lt ($warningThreshold + 5)) { "Success" } elseif ($dashDisk.UsedPct -lt $criticalThreshold) { "Warning" } else { "Error" }
 
-    $worstColor = if ($dashCPU -ge 90 -or $dashOS.MemPct -ge 90 -or $dashDisk.UsedPct -ge 90) { "Error" }
-                  elseif ($dashCPU -ge 70 -or $dashOS.MemPct -ge 70 -or $dashDisk.UsedPct -ge 75) { "Warning" }
+    $worstColor = if ($dashCPU -ge $criticalThreshold -or $dashOS.MemPct -ge $criticalThreshold -or $dashDisk.UsedPct -ge $criticalThreshold) { "Error" }
+                  elseif ($dashCPU -ge $warningThreshold -or $dashOS.MemPct -ge $warningThreshold -or $dashDisk.UsedPct -ge ($warningThreshold + 5)) { "Warning" }
                   else { "Success" }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -130,6 +136,7 @@ function Show-MainMenu {
     $statusParts += "Theme: $($script:ColorTheme)"
 
     Write-OutputColor "  $($statusParts -join '  |  ')" -color "Info"
+    Write-OutputColor "  [R]efresh dashboard" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"
@@ -274,7 +281,7 @@ function Show-SystemConfigMenu {
     $powerPlan = Get-CachedValue -Key "PowerPlan" -FetchScript { (Get-CurrentPowerPlan).Name }
     $powerColor = if ($powerPlan -match "High") { "Success" } else { "Warning" }
 
-    if ($hostdisplay.Length -gt 30) { $hostdisplay = $hostdisplay.Substring(0,27) + "..." }
+    if ($hostdisplay.Length -gt 15) { $hostdisplay = $hostdisplay.Substring(0, 12) + "..." }
     if ($domaindisplay.Length -gt 30) { $domaindisplay = $domaindisplay.Substring(0,27) + "..." }
     if ($timezonedisplay.Length -gt 30) { $timezonedisplay = $timezonedisplay.Substring(0,27) + "..." }
     if ($powerPlan.Length -gt 30) { $powerPlan = $powerPlan.Substring(0,27) + "..." }
@@ -290,7 +297,7 @@ function Show-SystemConfigMenu {
     Write-MenuItem "[2]  Join a Domain" -Status $domaindisplay -StatusColor $domainColor
     Write-MenuItem "[3]  Promote to Domain Controller ►"
     Write-MenuItem "[4]  Set Timezone" -Status $timezonedisplay -StatusColor "Info"
-    Write-MenuItem "[5]  Install Windows Updates"
+    Write-MenuItem "[5]  Windows Updates ►"
     $licStatus = Get-CachedValue -Key "LicenseActivated" -FetchScript {
         if (Test-WindowsActivated) { "Activated" } else { "Not Activated" }
     }

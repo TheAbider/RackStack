@@ -70,6 +70,7 @@ function Set-DefenderExclusions {
         Write-MenuItem -Text "[3]  Add Custom Process Exclusion"
         Write-MenuItem -Text "[4]  View All Current Exclusions"
         Write-MenuItem -Text "[5]  Remove an Exclusion"
+        Write-MenuItem -Text "[6]  Exclusion Status Report"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -139,9 +140,13 @@ function Set-DefenderExclusions {
                 Remove-DefenderExclusion
                 Write-PressEnter
             }
+            "6" {
+                Show-DefenderExclusionStatus
+                Write-PressEnter
+            }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -213,7 +218,7 @@ function Add-HyperVDefenderExclusions {
         }
         catch {
             if ($_.Exception.Message -notlike "*already exists*") {
-                Write-OutputColor "  Failed to add path $path : $_" -color "Warning"
+                Write-OutputColor "  Failed to add path $path : $_" -color "Error"
                 $errors++
             } else {
                 Write-OutputColor "  Already excluded: $path" -color "Info"
@@ -238,7 +243,7 @@ function Add-HyperVDefenderExclusions {
         }
         catch {
             if ($_.Exception.Message -notlike "*already exists*") {
-                Write-OutputColor "  Failed to add process $proc : $_" -color "Warning"
+                Write-OutputColor "  Failed to add process $proc : $_" -color "Error"
                 $errors++
             } else {
                 Write-OutputColor "  Already excluded: $proc" -color "Info"
@@ -258,7 +263,7 @@ function Add-HyperVDefenderExclusions {
         }
         catch {
             if ($_.Exception.Message -notlike "*already exists*") {
-                Write-OutputColor "  Failed to add extension $ext : $_" -color "Warning"
+                Write-OutputColor "  Failed to add extension $ext : $_" -color "Error"
                 $errors++
             } else {
                 Write-OutputColor "  Already excluded: $ext" -color "Info"
@@ -386,7 +391,7 @@ function Remove-DefenderExclusion {
     Write-OutputColor "  Select exclusion to remove:" -color "Info"
     $idx = 1
     foreach ($excl in $allExclusions) {
-        $display = if ($excl.Value.Length -gt 55) { $excl.Value.Substring(0,52) + "..." } else { $excl.Value }
+        $display = if ($excl.Value -and $excl.Value.Length -gt 55) { $excl.Value.Substring(0,52) + "..." } elseif ($excl.Value) { $excl.Value } else { "(empty)" }
         Write-OutputColor "  [$idx] ($($excl.Type)) $display" -color "Info"
         $idx++
     }
@@ -523,5 +528,51 @@ function Show-DefenderStatus {
     }
 
     Add-SessionChange -Category "Security" -Description "Viewed Defender status: RT=$rtText, Sig age=$sigAge days, Threats=$(@($threats).Count)"
+}
+
+# Function to show all current Defender exclusions with validation
+function Show-DefenderExclusionStatus {
+    Write-OutputColor "`n  Windows Defender Exclusion Status:" -color "Info"
+
+    try {
+        $prefs = Get-MpPreference -ErrorAction Stop
+
+        $pathExclusions = @($prefs.ExclusionPath | Where-Object { $null -ne $_ })
+        $extExclusions = @($prefs.ExclusionExtension | Where-Object { $null -ne $_ })
+        $procExclusions = @($prefs.ExclusionProcess | Where-Object { $null -ne $_ })
+
+        if ($pathExclusions.Count -gt 0) {
+            Write-OutputColor "`n  Path Exclusions ($($pathExclusions.Count)):" -color "Info"
+            foreach ($path in $pathExclusions) {
+                $exists = Test-Path -LiteralPath $path -ErrorAction SilentlyContinue
+                $color = if ($exists) { "Success" } else { "Warning" }
+                $tag = if (-not $exists) { " [PATH NOT FOUND]" } else { "" }
+                Write-OutputColor "    $path$tag" -color $color
+            }
+        }
+
+        if ($extExclusions.Count -gt 0) {
+            Write-OutputColor "`n  Extension Exclusions ($($extExclusions.Count)):" -color "Info"
+            foreach ($ext in $extExclusions) {
+                Write-OutputColor "    .$ext" -color "Info"
+            }
+        }
+
+        if ($procExclusions.Count -gt 0) {
+            Write-OutputColor "`n  Process Exclusions ($($procExclusions.Count)):" -color "Info"
+            foreach ($proc in $procExclusions) {
+                Write-OutputColor "    $proc" -color "Info"
+            }
+        }
+
+        $total = $pathExclusions.Count + $extExclusions.Count + $procExclusions.Count
+        if ($total -eq 0) {
+            Write-OutputColor "  No exclusions configured" -color "Info"
+        } else {
+            Write-OutputColor "`n  Total exclusions: $total" -color "Info"
+        }
+    } catch {
+        Write-OutputColor "  Cannot read Defender preferences: $($_.Exception.Message)" -color "Warning"
+    }
 }
 #endregion

@@ -26,7 +26,7 @@ function Set-HostName {
         -ErrorMessage "Invalid hostname format."
 
     if ($null -eq $newHostname) {
-        Write-OutputColor "  Hostname change cancelled." -color "Warning"
+        Write-OutputColor "  Hostname change cancelled." -color "Info"
         return
     }
 
@@ -62,6 +62,14 @@ function Set-HostName {
     }
     catch {
         # DNS check failed (non-fatal) — proceed normally
+    }
+
+    Write-OutputColor "`n  Hostname Change Summary:" -color "Info"
+    Write-OutputColor "  Current: $env:COMPUTERNAME" -color "Info"
+    Write-OutputColor "  New:     $newHostname" -color "Success"
+
+    if ($env:COMPUTERNAME -ne $newHostname) {
+        Write-OutputColor "  NOTE: A reboot will be required to apply this change" -color "Warning"
     }
 
     Write-OutputColor "" -color "Info"

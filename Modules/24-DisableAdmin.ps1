@@ -1,20 +1,75 @@
 ﻿#region ===== DISABLE BUILT-IN ADMIN =====
+# Show the current status of the built-in Administrator account
+function Show-AdminAccountStatus {
+    try {
+        $adminAccount = Get-LocalUser -Name "Administrator" -ErrorAction Stop
+
+        $statusLabel = if ($adminAccount.Enabled) { "ENABLED" } else { "DISABLED" }
+        $statusColor = if ($adminAccount.Enabled) { "Warning" } else { "Success" }
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  BUILT-IN ADMINISTRATOR ACCOUNT STATUS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Account Name:     $($adminAccount.Name)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Status:           $statusLabel".PadRight(72))│" -color $statusColor
+
+        # Last logon info
+        $lastLogon = $adminAccount.LastLogon
+        $logonStr = if ($null -ne $lastLogon -and $lastLogon -ne [DateTime]::MinValue) {
+            $lastLogon.ToString("yyyy-MM-dd HH:mm:ss")
+        } else { "Never" }
+        Write-OutputColor "  │$("  Last Logon:       $logonStr".PadRight(72))│" -color "Info"
+
+        # Password last set
+        $pwdLastSet = $adminAccount.PasswordLastSet
+        $pwdStr = if ($null -ne $pwdLastSet -and $pwdLastSet -ne [DateTime]::MinValue) {
+            $pwdLastSet.ToString("yyyy-MM-dd HH:mm:ss")
+        } else { "Never" }
+        Write-OutputColor "  │$("  Password Set:     $pwdStr".PadRight(72))│" -color "Info"
+
+        # Password expires?
+        $pwdExpires = if ($adminAccount.PasswordExpires) { "Yes" } else { "No" }
+        Write-OutputColor "  │$("  Password Expires: $pwdExpires".PadRight(72))│" -color "Info"
+
+        # SID (to confirm it's the real built-in, SID ends in -500)
+        $sid = $adminAccount.SID.Value
+        $isBuiltIn = $sid.EndsWith("-500")
+        $builtInLabel = if ($isBuiltIn) { "Yes (SID ends in -500)" } else { "No" }
+        Write-OutputColor "  │$("  Built-in Account: $builtInLabel".PadRight(72))│" -color "Info"
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        return $adminAccount
+    }
+    catch {
+        Write-OutputColor "  Could not retrieve Administrator account status: $_" -color "Error"
+        return $null
+    }
+}
+
 # Function to disable the built-in administrator account
 function Disable-BuiltInAdminAccount {
     Clear-Host
     Write-CenteredOutput "Disable Built-in Administrator" -color "Info"
 
     try {
-        $adminAccount = Get-LocalUser -Name "Administrator" -ErrorAction Stop
+        # Show current account status
+        $adminAccount = Show-AdminAccountStatus
+
+        if ($null -eq $adminAccount) {
+            $global:DisabledAdminReboot = $false
+            Write-PressEnter
+            return
+        }
 
         if (-not $adminAccount.Enabled) {
             Write-OutputColor "  Built-in Administrator account is already disabled." -color "Info"
             $global:DisabledAdminReboot = $false
+            Write-PressEnter
             return
         }
-
-        Write-OutputColor "  The built-in Administrator account is currently ENABLED." -color "Warning"
-        Write-OutputColor "" -color "Info"
 
         # Verify alternate admin access exists before allowing disable
         $adminMembers = @(Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue)
@@ -41,21 +96,37 @@ function Disable-BuiltInAdminAccount {
             Write-OutputColor "  ║$("  Create another local admin account first, or join a domain.".PadRight(72))║" -color "Error"
             Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Error"
             Write-OutputColor "" -color "Info"
+            Write-PressEnter
             return
         }
 
-        Write-OutputColor "  Alternate admin access verified:" -color "Success"
+        # Show who will retain admin access
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  ALTERNATE ADMIN ACCESS (verified)".PadRight(72))│" -color "Success"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         foreach ($admin in $enabledLocalAdmins) {
-            Write-OutputColor "    Local: $($admin.Name)" -color "Success"
+            Write-OutputColor "  │$("  Local User:  $($admin.Name)".PadRight(72))│" -color "Success"
         }
         if ($isDomainJoined -and $hasDomainAdmins) {
-            Write-OutputColor "    Domain admin group membership detected" -color "Success"
+            Write-OutputColor "  │$("  Domain:      Admin group membership detected".PadRight(72))│" -color "Success"
         }
+        $totalAlternate = $enabledLocalAdmins.Count + $(if ($isDomainJoined -and $hasDomainAdmins) { 1 } else { 0 })
+        Write-OutputColor "  │$("  Total:       $totalAlternate alternate admin path(s)".PadRight(72))│" -color "Success"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
+
+        # Check if current session is running as the built-in Administrator
+        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name -replace '^.*\\', ''
+        if ($currentUser -eq 'Administrator') {
+            Write-OutputColor "  NOTE: You are currently logged in as Administrator." -color "Warning"
+            Write-OutputColor "  You will need to log in with an alternate account after disabling." -color "Warning"
+            Write-OutputColor "" -color "Info"
+        }
 
         if (-not (Confirm-UserAction -Message "Disable built-in Administrator account?")) {
             Write-OutputColor "  Operation cancelled." -color "Info"
             $global:DisabledAdminReboot = $false
+            Write-PressEnter
             return
         }
 

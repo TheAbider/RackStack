@@ -14,18 +14,20 @@ function Show-NetworkDiagnostics {
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-MenuItem "[1]  Ping Host"
         Write-MenuItem "[2]  Port Test (TCP)"
-        Write-MenuItem "[3]  Trace Route"
-        Write-MenuItem "[4]  Subnet Ping Sweep"
+        Write-MenuItem "[3]  Port Test (UDP)"
+        Write-MenuItem "[4]  Trace Route"
+        Write-MenuItem "[5]  Subnet Ping Sweep"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  DNS & ROUTING".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-MenuItem "[5]  DNS Lookup"
-        Write-MenuItem "[6]  Active Connections"
-        Write-MenuItem "[7]  ARP Table"
-        Write-MenuItem "[8]  Quick Port Scan (common services)"
+        Write-MenuItem "[6]  DNS Lookup"
+        Write-MenuItem "[7]  Active Connections"
+        Write-MenuItem "[8]  ARP Table"
+        Write-MenuItem "[9]  Quick Port Scan (common services)"
+        Write-MenuItem "[10] Path MTU Discovery"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -39,18 +41,20 @@ function Show-NetworkDiagnostics {
         switch ($choice) {
             "1" { Invoke-PingHost }
             "2" { Invoke-PortTest }
-            "3" { Invoke-TraceRoute }
-            "4" { Invoke-SubnetSweep }
-            "5" { Invoke-DnsLookup }
-            "6" { Show-ActiveConnections }
-            "7" { Show-ArpTable }
-            "8" { Invoke-QuickPortScan }
+            "3" { Invoke-UdpPortTest }
+            "4" { Invoke-TraceRoute }
+            "5" { Invoke-SubnetSweep }
+            "6" { Invoke-DnsLookup }
+            "7" { Show-ActiveConnections }
+            "8" { Show-ArpTable }
+            "9" { Invoke-QuickPortScan }
+            "10" { Invoke-PathMtuDiscovery }
             "b" { return }
             "B" { return }
             "m" { $global:ReturnToMainMenu = $true; return }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -296,13 +300,26 @@ function Invoke-SubnetSweep {
     $start = $startVal
     $end = $endVal
 
+    # Configurable batch size
+    $batchInput = Read-Host "  Batch size (default 50, max 100) [50]"
+    $navResult = Test-NavigationCommand -UserInput $batchInput
+    if ($navResult.ShouldReturn) { return }
+    $batchSize = 50
+    if (-not [string]::IsNullOrWhiteSpace($batchInput)) {
+        $parsedBatch = 0
+        if ([int]::TryParse($batchInput, [ref]$parsedBatch) -and $parsedBatch -ge 1 -and $parsedBatch -le 100) {
+            $batchSize = $parsedBatch
+        } else {
+            Write-OutputColor "  Invalid batch size (must be 1-100). Using default 50." -color "Warning"
+        }
+    }
+
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Sweeping $subnet.$start - $subnet.$end ..." -color "Info"
+    Write-OutputColor "  Sweeping $subnet.$start - $subnet.$end (batch size: $batchSize)..." -color "Info"
     Write-OutputColor "" -color "Info"
 
     $alive = @()
     $total = $end - $start + 1
-    $batchSize = 50
 
     # Use parallel jobs in batches to avoid spawning too many processes
     $allResults = [System.Collections.Generic.List[object]]::new()
@@ -331,6 +348,12 @@ function Invoke-SubnetSweep {
         }
         $jobs | Stop-Job -ErrorAction SilentlyContinue
         $jobs | Remove-Job -Force
+
+        # Progressive display: show discovered hosts after each batch
+        $batchAlive = @($allResults | Where-Object { $_.Alive })
+        $lastFound = if ($batchAlive.Count -gt 0) { $batchAlive[-1].IP } else { "none yet" }
+        $scannedSoFar = [math]::Min($batchEnd - $start + 1, $total)
+        Write-Host "`r  Scanned $scannedSoFar/$total | Found: $($batchAlive.Count) hosts (last: $lastFound)     "
     }
     Write-Host ""
     if ($timedOutCount -gt 0) {
@@ -345,7 +368,7 @@ function Invoke-SubnetSweep {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     if ($alive.Count -eq 0) {
-        Write-OutputColor "  │$("  No hosts responded".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  │$("  No hosts responded".PadRight(72))│" -color "Error"
     } else {
         foreach ($host_ in $alive) {
             $hostLine = "  $($host_.IP)"
@@ -485,6 +508,18 @@ function Invoke-QuickPortScan {
     $navResult = Test-NavigationCommand -UserInput $setChoice
     if ($navResult.ShouldReturn) { return }
 
+    # Configurable timeout
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Timeout: [1] 500ms (LAN)  [2] 2000ms (Default)  [3] 5000ms (WAN)" -color "Info"
+    $timeoutChoice = Read-Host "  Select timeout [2]"
+    $navResult = Test-NavigationCommand -UserInput $timeoutChoice
+    if ($navResult.ShouldReturn) { return }
+    $TimeoutMs = switch ($timeoutChoice) {
+        "1" { 500 }
+        "3" { 5000 }
+        default { 2000 }
+    }
+
     $ports = switch ($setChoice) {
         "1" { @(
             @{Port=22;   Name="SSH"},
@@ -533,23 +568,26 @@ function Invoke-QuickPortScan {
             @{Port=5985; Name="WinRM"},
             @{Port=6600; Name="LiveMig"}
         )}
-        default { return }
+        default {
+            Write-OutputColor "  Invalid selection. Enter 1-4." -color "Error"
+            return
+        }
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Scanning $($ports.Count) ports on $target ..." -color "Info"
+    Write-OutputColor "  Scanning $($ports.Count) ports on $target (timeout: ${TimeoutMs}ms)..." -color "Info"
     Write-OutputColor "" -color "Info"
 
     # Parallel port scan using jobs
     $jobs = [System.Collections.Generic.List[object]]::new()
     foreach ($p in $ports) {
         $jobs.Add((Start-Job -ScriptBlock {
-            param($IP, $Port)
+            param($IP, $Port, $Timeout)
             $tcp = $null
             try {
                 $tcp = New-Object System.Net.Sockets.TcpClient
                 $connect = $tcp.BeginConnect($IP, $Port, $null, $null)
-                $wait = $connect.AsyncWaitHandle.WaitOne(2000, $false)
+                $wait = $connect.AsyncWaitHandle.WaitOne($Timeout, $false)
                 if ($wait -and $tcp.Connected) {
                     $tcp.EndConnect($connect)
                     return "OPEN"
@@ -558,7 +596,7 @@ function Invoke-QuickPortScan {
             }
             catch { return "CLOSED" }
             finally { if ($tcp) { $tcp.Close() } }
-        } -ArgumentList $target, $p.Port))
+        } -ArgumentList $target, $p.Port, $TimeoutMs))
     }
 
     $null = $jobs | Wait-Job -Timeout 15
@@ -602,6 +640,171 @@ function Invoke-QuickPortScan {
     Write-PressEnter
 }
 
+function Test-PathMTU {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetHost
+    )
+    # Binary search for maximum MTU that doesn't fragment
+    # Start at 1500, work down by halving
+    $low = 68    # Minimum IPv4 MTU
+    $high = 1500 # Standard ethernet MTU
+    $bestMTU = $low
+
+    Write-OutputColor "  Testing path MTU to $TargetHost..." -color "Info"
+
+    while ($low -le $high) {
+        $mid = [math]::Floor(($low + $high) / 2)
+        # ping with don't-fragment flag and specific size
+        # Subtract 28 bytes for IP+ICMP headers
+        $pingSize = $mid - 28
+        if ($pingSize -lt 0) { $pingSize = 0 }
+
+        $result = ping.exe -n 1 -f -l $pingSize -w 1000 $TargetHost 2>&1
+        if ($result -match 'Reply from') {
+            $bestMTU = $mid
+            $low = $mid + 1
+        } else {
+            $high = $mid - 1
+        }
+    }
+
+    Write-OutputColor "  Path MTU to ${TargetHost}: $bestMTU bytes" -color "Success"
+    if ($bestMTU -lt 1500) {
+        Write-OutputColor "  NOTE: MTU is below standard 1500 - may indicate tunnel/VPN overhead" -color "Warning"
+    }
+}
+
+function Invoke-PathMtuDiscovery {
+    Clear-Host
+    Write-CenteredOutput "Path MTU Discovery" -color "Info"
+    Write-OutputColor "" -color "Info"
+    $target = Read-Host "  Enter hostname or IP"
+    $navResult = Test-NavigationCommand -UserInput $target
+    if ($navResult.ShouldReturn) { return }
+    if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"')
+    if ($target -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$') {
+        Write-OutputColor "  Invalid hostname or IP format." -color "Error"
+        return
+    }
+
+    Write-OutputColor "" -color "Info"
+
+    try {
+        # Verify host is reachable first
+        $pingCheck = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
+        if (-not $pingCheck) {
+            Write-OutputColor "  Host $target is not responding to ping." -color "Error"
+            Write-OutputColor "  Path MTU discovery requires ICMP connectivity." -color "Warning"
+            Write-PressEnter
+            return
+        }
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  PATH MTU DISCOVERY".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        Test-PathMTU -TargetHost $target
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    }
+    catch {
+        Write-OutputColor "  Path MTU discovery failed: $($_.Exception.Message)" -color "Error"
+    }
+    Write-PressEnter
+}
+
+function Test-UDPPort {
+    param(
+        [Parameter(Mandatory)][string]$TargetHost,
+        [Parameter(Mandatory)][int]$Port,
+        [int]$TimeoutMs = 2000
+    )
+    try {
+        $udpClient = New-Object System.Net.Sockets.UdpClient
+        $udpClient.Client.ReceiveTimeout = $TimeoutMs
+        $udpClient.Connect($TargetHost, $Port)
+        $bytes = [System.Text.Encoding]::ASCII.GetBytes("test")
+        [void]$udpClient.Send($bytes, $bytes.Length)
+
+        # UDP is connectionless - we can only detect if ICMP unreachable comes back
+        try {
+            $remoteEP = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
+            [void]$udpClient.Receive([ref]$remoteEP)
+            Write-OutputColor "  UDP ${TargetHost}:${Port} - Response received" -color "Success"
+        } catch [System.Net.Sockets.SocketException] {
+            if ($_.Exception.SocketErrorCode -eq 'ConnectionReset') {
+                Write-OutputColor "  UDP ${TargetHost}:${Port} - Closed (ICMP unreachable)" -color "Error"
+            } else {
+                Write-OutputColor "  UDP ${TargetHost}:${Port} - Open|Filtered (no response)" -color "Warning"
+            }
+        }
+    } catch {
+        Write-OutputColor "  UDP ${TargetHost}:${Port} - Error: $($_.Exception.Message)" -color "Error"
+    } finally {
+        if ($null -ne $udpClient) { $udpClient.Close() }
+    }
+}
+
+function Invoke-UdpPortTest {
+    Clear-Host
+    Write-CenteredOutput "UDP Port Test" -color "Info"
+    Write-OutputColor "" -color "Info"
+    $target = Read-Host "  Enter hostname or IP"
+    $navResult = Test-NavigationCommand -UserInput $target
+    if ($navResult.ShouldReturn) { return }
+    if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"')
+    if ($target -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$') {
+        Write-OutputColor "  Invalid hostname or IP format." -color "Error"
+        return
+    }
+
+    $portInput = Read-Host "  Enter UDP port number (e.g., 53, 123, 161)"
+    $navResult = Test-NavigationCommand -UserInput $portInput
+    if ($navResult.ShouldReturn) { return }
+    if ([string]::IsNullOrWhiteSpace($portInput)) { return }
+    $port = 0
+    if (-not [int]::TryParse($portInput, [ref]$port)) {
+        Write-OutputColor "  Invalid port number." -color "Error"
+        return
+    }
+    if ($port -lt 1 -or $port -gt 65535) {
+        Write-OutputColor "  Port must be between 1 and 65535." -color "Error"
+        return
+    }
+
+    # Configurable timeout
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Timeout: [1] 500ms (LAN)  [2] 2000ms (Default)  [3] 5000ms (WAN)" -color "Info"
+    $timeoutChoice = Read-Host "  Select timeout [2]"
+    $navResult = Test-NavigationCommand -UserInput $timeoutChoice
+    if ($navResult.ShouldReturn) { return }
+    $TimeoutMs = switch ($timeoutChoice) {
+        "1" { 500 }
+        "3" { 5000 }
+        default { 2000 }
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Testing UDP $target`:$port (timeout: ${TimeoutMs}ms)..." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    $lineStr = "  UDP PORT TEST: ${target}:${port}"
+    if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    Test-UDPPort -TargetHost $target -Port $port -TimeoutMs $TimeoutMs
+
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    Write-OutputColor "  │$("  NOTE: UDP is connectionless. Open|Filtered means no ICMP reject.".PadRight(72))│" -color "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-PressEnter
+}
+
 function Show-ArpTable {
     Clear-Host
     Write-CenteredOutput "ARP Table" -color "Info"
@@ -617,7 +820,7 @@ function Show-ArpTable {
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         if ($arpEntries.Count -eq 0) {
-            Write-OutputColor "  │$("  No ARP entries found.".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$("  No ARP entries found.".PadRight(72))│" -color "Error"
         } else {
             $header = "  IP Address".PadRight(22) + "MAC Address".PadRight(22) + "State".PadRight(14) + "IF"
             Write-MenuItem -Text $header -Color "Warning"
@@ -627,7 +830,7 @@ function Show-ArpTable {
         foreach ($entry in $arpEntries) {
             $mac = if ($entry.LinkLayerAddress) { $entry.LinkLayerAddress } else { "N/A" }
             $ifAlias = try { (Get-NetAdapter -InterfaceIndex $entry.InterfaceIndex -ErrorAction Stop).Name } catch { "$($entry.InterfaceIndex)" }
-            if ($ifAlias.Length -gt 10) { $ifAlias = $ifAlias.Substring(0, 10) }
+            if ($ifAlias -and $ifAlias.Length -gt 10) { $ifAlias = $ifAlias.Substring(0, 10) }
             $stateStr = if ($entry.State) { $entry.State.ToString() } else { "Unknown" }
             $line = "  $($entry.IPAddress.PadRight(20))$($mac.PadRight(20))$($stateStr.PadRight(14))$ifAlias"
             Write-MenuItem -Text $line

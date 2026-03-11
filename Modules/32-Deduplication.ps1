@@ -1,4 +1,31 @@
 ﻿#region ===== DATA DEDUPLICATION =====
+# Function to show deduplication savings report across all volumes
+function Show-DedupSavings {
+    try {
+        $dedupVolumes = Get-DedupStatus -ErrorAction Stop
+        if ($null -eq $dedupVolumes -or @($dedupVolumes).Count -eq 0) {
+            Write-OutputColor "  No deduplication-enabled volumes found" -color "Info"
+            return
+        }
+
+        Write-OutputColor "`n  Deduplication Savings Report:" -color "Info"
+
+        foreach ($vol in $dedupVolumes) {
+            $savings = if ($null -ne $vol.SavedSpace) { [math]::Round($vol.SavedSpace / 1GB, 1) } else { 0 }
+            $ratio = if ($null -ne $vol.OptimizedFilesCount) { $vol.OptimizedFilesCount } else { 0 }
+            $rate = if ($null -ne $vol.SavingsRate) { $vol.SavingsRate } else { 0 }
+
+            $color = if ($rate -gt 30) { "Success" } elseif ($rate -gt 10) { "Info" } else { "Warning" }
+            Write-OutputColor "`n  Volume: $($vol.Volume)" -color "Info"
+            Write-OutputColor "    Space Saved: ${savings} GB ($rate% savings rate)" -color $color
+            Write-OutputColor "    Optimized Files: $ratio" -color "Info"
+            Write-OutputColor "    Last Optimization: $($vol.LastOptimizationTime)" -color "Info"
+        }
+    } catch {
+        Write-OutputColor "  Deduplication not available: $($_.Exception.Message)" -color "Error"
+    }
+}
+
 # Function to manage Data Deduplication
 function Show-DeduplicationManagement {
     Clear-Host
@@ -32,7 +59,7 @@ function Show-DeduplicationManagement {
                 }
                 Write-PressEnter
             }
-            default { }
+            default { Write-OutputColor "  Invalid selection. Enter I or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
         return
     }
@@ -87,6 +114,7 @@ function Show-DeduplicationManagement {
         Write-MenuItem -Text "[2]  Disable Deduplication on Volume"
         Write-MenuItem -Text "[3]  Start Deduplication Job Now"
         Write-MenuItem -Text "[4]  Show Deduplication Statistics"
+        Write-MenuItem -Text "[5]  Show Savings Report"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -129,6 +157,7 @@ function Show-DeduplicationManagement {
                         Write-OutputColor "  Failed: $_" -color "Error"
                     }
                 }
+                else { Write-OutputColor "  Invalid selection. Enter 1-$($volList.Count)." -color "Error" }
             }
             "2" {
                 $volNum = Read-Host "  Enter volume number to disable dedup"
@@ -148,6 +177,7 @@ function Show-DeduplicationManagement {
                         }
                     }
                 }
+                else { Write-OutputColor "  Invalid selection. Enter 1-$($volList.Count)." -color "Error" }
             }
             "3" {
                 $volNum = Read-Host "  Enter volume number to optimize"
@@ -164,6 +194,7 @@ function Show-DeduplicationManagement {
                         Write-OutputColor "  Failed: $_" -color "Error"
                     }
                 }
+                else { Write-OutputColor "  Invalid selection. Enter 1-$($volList.Count)." -color "Error" }
             }
             "4" {
                 $volNum = Read-Host "  Enter volume number"
@@ -186,9 +217,13 @@ function Show-DeduplicationManagement {
                         Write-OutputColor "  No statistics available." -color "Warning"
                     }
                 }
+                else { Write-OutputColor "  Invalid selection. Enter 1-$($volList.Count)." -color "Error" }
+            }
+            "5" {
+                Show-DedupSavings
             }
             { $_ -eq "b" -or $_ -eq "B" } { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter

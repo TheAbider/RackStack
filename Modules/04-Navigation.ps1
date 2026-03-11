@@ -115,6 +115,11 @@ function Add-SessionChange {
             Write-LogMessage -message "Failed to rotate audit log: $_" -logFilePath $logFilePath
         }
     }
+
+    # Auto-save session state after each change
+    if (Get-Command Save-SessionState -ErrorAction SilentlyContinue) {
+        Save-SessionState -Description $Description
+    }
 }
 
 # Display recent audit log entries
@@ -257,6 +262,7 @@ function Undo-LastChange {
 
         # Add to session changes
         Add-SessionChange -Category "Undo" -Description "Undid: $($lastAction.Description)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to undo change: $_" -color "Error"
@@ -292,6 +298,7 @@ function Invoke-BatchUndo {
             Write-OutputColor "         Reverted." -color "Success"
             $undone++
             Add-SessionChange -Category "Undo" -Description "Batch undo: $($action.Description)"
+            Clear-MenuCache
         }
         catch {
             Write-OutputColor "         Failed to undo: $_" -color "Error"

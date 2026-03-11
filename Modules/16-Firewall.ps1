@@ -136,6 +136,7 @@ function Show-FirewallRuleSearch {
         Write-MenuItem "[3]  Show All Enabled Inbound Allow Rules"
         Write-MenuItem "[4]  Show All Block Rules"
         Write-MenuItem "[5]  Show Recently Created Rules"
+        Write-MenuItem "[6]  Export All Rules to CSV"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -232,6 +233,11 @@ function Show-FirewallRuleSearch {
                     continue
                 }
             }
+            "6" {
+                Export-FirewallRuleAudit
+                Write-PressEnter
+                continue
+            }
             default { continue }
         }
 
@@ -268,7 +274,54 @@ function Show-FirewallRuleSearch {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
         Add-SessionChange -Category "Security" -Description "Searched firewall rules: $title"
+        Clear-MenuCache
         Write-PressEnter
+    }
+}
+
+# Firewall Rule Audit Export
+function Export-FirewallRuleAudit {
+    param(
+        [string]$OutputPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+        $OutputPath = Join-Path $script:TempPath "firewall-audit-$(Get-Date -Format 'yyyyMMdd-HHmm').csv"
+    }
+
+    Write-OutputColor "`n  Exporting firewall rules..." -color "Info"
+
+    try {
+        $rules = Get-NetFirewallRule -ErrorAction Stop
+
+        $export = @()
+        foreach ($rule in $rules) {
+            $portFilter = $rule | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
+            $addrFilter = $rule | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue
+
+            $export += [PSCustomObject]@{
+                Name          = $rule.Name
+                DisplayName   = $rule.DisplayName
+                Direction     = $rule.Direction.ToString()
+                Action        = $rule.Action.ToString()
+                Enabled       = $rule.Enabled.ToString()
+                Profile       = $rule.Profile.ToString()
+                Protocol      = if ($null -ne $portFilter) { $portFilter.Protocol } else { 'Any' }
+                LocalPort     = if ($null -ne $portFilter) { $portFilter.LocalPort -join ',' } else { 'Any' }
+                RemoteAddress = if ($null -ne $addrFilter) { $addrFilter.RemoteAddress -join ',' } else { 'Any' }
+            }
+        }
+
+        $export | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Encoding UTF8
+
+        $enabledCount = @($rules | Where-Object { $_.Enabled -eq 'True' }).Count
+        $totalCount = @($rules).Count
+        Write-OutputColor "  Exported $totalCount rules ($enabledCount enabled) to:" -color "Success"
+        Write-OutputColor "  $OutputPath" -color "Info"
+        Add-SessionChange -Category "Security" -Description "Exported firewall rules to CSV"
+        Clear-MenuCache
+    } catch {
+        Write-OutputColor "  Failed to export: $($_.Exception.Message)" -color "Error"
     }
 }
 #endregion

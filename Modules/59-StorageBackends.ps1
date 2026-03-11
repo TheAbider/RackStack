@@ -45,14 +45,84 @@ function Set-StorageBackendType {
 
     if ($map.ContainsKey($choice)) {
         $newBackend = $map[$choice]
+        # Check compatibility before committing to the new backend
+        if (-not (Test-StorageBackendCompatibility -BackendType $newBackend)) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Override and use $newBackend anyway? [Y/N]" -color "Warning"
+            $override = Read-Host "  Choice"
+            if ($override -ne 'Y') {
+                Write-OutputColor "  Backend change cancelled." -color "Info"
+                return
+            }
+        }
         $old = $script:StorageBackendType
         $script:StorageBackendType = $newBackend
         Write-OutputColor "  Storage backend changed: $old -> $newBackend" -color "Success"
         Add-SessionChange -Category "Storage" -Description "Changed storage backend from $old to $newBackend"
+        Clear-MenuCache
     }
     else {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-6 or B." -color "Error"
     }
+}
+
+# Function to check storage backend compatibility before selection
+function Test-StorageBackendCompatibility {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BackendType
+    )
+
+    # Define incompatible combinations
+    $incompatible = @{
+        'S2D'     = @('iSCSI', 'FC')          # S2D uses local/direct storage only
+        'NVMeoF' = @('FC')                     # Different fabric types
+    }
+
+    # Check if any other backend is already configured
+    $currentBackend = $script:StorageBackendType
+    if ($null -ne $currentBackend -and $currentBackend -ne $BackendType) {
+        if ($incompatible.ContainsKey($BackendType) -and $incompatible[$BackendType] -contains $currentBackend) {
+            Write-OutputColor "  WARNING: $BackendType is incompatible with existing $currentBackend configuration" -color "Warning"
+            Write-OutputColor "  These storage backends cannot coexist on the same cluster" -color "Warning"
+            return $false
+        }
+        if ($incompatible.ContainsKey($currentBackend) -and $incompatible[$currentBackend] -contains $BackendType) {
+            Write-OutputColor "  WARNING: $currentBackend (current) is incompatible with $BackendType" -color "Warning"
+            return $false
+        }
+    }
+
+    # Check prerequisites for each backend
+    switch ($BackendType) {
+        'S2D' {
+            $cluster = Get-Cluster -ErrorAction SilentlyContinue
+            if ($null -eq $cluster) {
+                Write-OutputColor "  S2D requires a failover cluster" -color "Warning"
+                return $false
+            }
+            $nodeCount = @(Get-ClusterNode -ErrorAction SilentlyContinue).Count
+            if ($nodeCount -lt 2) {
+                Write-OutputColor "  S2D requires at least 2 cluster nodes (found $nodeCount)" -color "Warning"
+                return $false
+            }
+        }
+        'iSCSI' {
+            $iscsiService = Get-Service -Name MSiSCSI -ErrorAction SilentlyContinue
+            if ($null -eq $iscsiService -or $iscsiService.Status -ne 'Running') {
+                Write-OutputColor "  iSCSI Initiator service is not running" -color "Warning"
+            }
+        }
+        'FC' {
+            $fcAdapters = @(Get-WmiObject -Class MSFC_FibrePortHBAAttributes -Namespace 'root\WMI' -ErrorAction SilentlyContinue)
+            if ($fcAdapters.Count -eq 0) {
+                Write-OutputColor "  No Fibre Channel HBAs detected" -color "Warning"
+                return $false
+            }
+        }
+    }
+
+    return $true
 }
 
 # Function to detect current storage backend from system state
@@ -172,6 +242,7 @@ function Initialize-MPIOForFC {
         Write-OutputColor "    Load balance policy set." -color "Success"
 
         Add-SessionChange -Category "System" -Description "Configured MPIO for Fibre Channel"
+        Clear-MenuCache
         return $true
     }
     catch {
@@ -424,6 +495,7 @@ function Enable-S2DOnCluster {
         Enable-ClusterS2D -Confirm:$false -ErrorAction Stop
         Write-OutputColor "  Storage Spaces Direct enabled successfully!" -color "Success"
         Add-SessionChange -Category "Storage" -Description "Enabled Storage Spaces Direct on $($cluster.Name)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to enable S2D: $_" -color "Error"
@@ -527,6 +599,7 @@ function New-S2DVirtualDisk {
         New-VirtualDisk @params
         Write-OutputColor "  Virtual disk '$diskName' created successfully!" -color "Success"
         Add-SessionChange -Category "Storage" -Description "Created S2D virtual disk: $diskName ($sizeGB GB, $resiliency)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to create virtual disk: $_" -color "Error"
@@ -1037,6 +1110,7 @@ function Start-StorageSANMenu {
                         $script:StorageBackendType = $detected
                         Write-OutputColor "  Changed: $old -> $detected" -color "Success"
                         Add-SessionChange -Category "Storage" -Description "Auto-detected storage backend: $detected"
+                        Clear-MenuCache
                     }
                 }
                 Write-PressEnter

@@ -77,6 +77,70 @@ $script:TimezoneRegions = [ordered]@{
     )
 }
 
+# Get a formatted UTC offset string for a timezone (e.g., "UTC-05:00" or "UTC+05:30")
+function Get-TimezoneOffsetString {
+    param(
+        [Parameter(Mandatory=$true)]
+        [System.TimeZoneInfo]$TimeZoneInfo
+    )
+
+    $offset = $TimeZoneInfo.BaseUtcOffset
+    $sign = if ($offset -lt [TimeSpan]::Zero) { "-" } else { "+" }
+    return "UTC${sign}$("{0:D2}:{1:D2}" -f [math]::Abs($offset.Hours), $offset.Minutes)"
+}
+
+# Show a comparison of current timezone vs expected/target timezone
+function Show-TimezoneComparison {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$TargetTimezoneId
+    )
+
+    try {
+        $currentTz = Get-TimeZone
+        $targetTz = Get-TimeZone -Id $TargetTimezoneId -ErrorAction Stop
+
+        $currentOffset = Get-TimezoneOffsetString -TimeZoneInfo $currentTz
+        $targetOffset = Get-TimezoneOffsetString -TimeZoneInfo $targetTz
+
+        $currentDst = if ($currentTz.SupportsDaylightSavingTime) { "Yes" } else { "No" }
+        $targetDst = if ($targetTz.SupportsDaylightSavingTime) { "Yes" } else { "No" }
+
+        $currentLocal = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $currentTz).ToString("HH:mm:ss")
+        $targetLocal = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $targetTz).ToString("HH:mm:ss")
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌─────────────────────┬──────────────────────────┬──────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  ".PadRight(21))│$("  CURRENT".PadRight(26))│$("  TARGET".PadRight(26))│" -color "Info"
+        Write-OutputColor "  ├─────────────────────┼──────────────────────────┼──────────────────────────┤" -color "Info"
+
+        $currentIdShort = if ($currentTz.Id.Length -gt 24) { $currentTz.Id.Substring(0, 21) + "..." } else { $currentTz.Id }
+        $targetIdShort = if ($targetTz.Id.Length -gt 24) { $targetTz.Id.Substring(0, 21) + "..." } else { $targetTz.Id }
+        Write-OutputColor "  │$("  Timezone".PadRight(21))│$("  $currentIdShort".PadRight(26))│$("  $targetIdShort".PadRight(26))│" -color "Info"
+
+        Write-OutputColor "  │$("  UTC Offset".PadRight(21))│$("  $currentOffset".PadRight(26))│$("  $targetOffset".PadRight(26))│" -color "Info"
+        Write-OutputColor "  │$("  DST Observed".PadRight(21))│$("  $currentDst".PadRight(26))│$("  $targetDst".PadRight(26))│" -color "Info"
+        Write-OutputColor "  │$("  Local Time Now".PadRight(21))│$("  $currentLocal".PadRight(26))│$("  $targetLocal".PadRight(26))│" -color "Info"
+
+        # Show time difference
+        $diffMinutes = ($targetTz.BaseUtcOffset - $currentTz.BaseUtcOffset).TotalMinutes
+        if ($diffMinutes -ne 0) {
+            $diffSign = if ($diffMinutes -gt 0) { "+" } else { "" }
+            $diffLabel = "${diffSign}$([math]::Round($diffMinutes)) min"
+            Write-OutputColor "  │$("  Difference".PadRight(21))│$(" ".PadRight(26))│$("  $diffLabel".PadRight(26))│" -color "Info"
+        }
+        else {
+            Write-OutputColor "  │$("  Difference".PadRight(21))│$(" ".PadRight(26))│$("  Same offset".PadRight(26))│" -color "Info"
+        }
+
+        Write-OutputColor "  └─────────────────────┴──────────────────────────┴──────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+    }
+    catch {
+        # If comparison fails, skip silently — not critical
+    }
+}
+
 # Entry point — same function name, no caller changes needed
 function Set-ServerTimeZone {
     # If TimeZoneRegion is set and valid, skip region picker
@@ -96,7 +160,11 @@ function Show-TimezoneRegionPicker {
         Write-CenteredOutput "Set Timezone" -color "Info"
 
         $currentTz = Get-TimeZone
+        $currentOffset = Get-TimezoneOffsetString -TimeZoneInfo $currentTz
+        $isDst = $currentTz.IsDaylightSavingTime([DateTime]::Now)
+        $dstLabel = if ($isDst) { " (DST active)" } else { "" }
         Write-OutputColor "  Current timezone: $($currentTz.DisplayName)" -color "Info"
+        Write-OutputColor "  UTC offset: $currentOffset$dstLabel" -color "Info"
         Write-OutputColor "" -color "Info"
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -134,12 +202,12 @@ function Show-TimezoneRegionPicker {
                     Show-RegionTimezones -RegionName $regionKeys[$num - 1]
                 }
                 else {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($regionKeys.Count), A, or B." -color "Error"
                     Start-Sleep -Seconds 1
                 }
             }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid selection. Enter 1-$($regionKeys.Count), A, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -159,7 +227,11 @@ function Show-RegionTimezones {
         Write-CenteredOutput "Set Timezone - $RegionName" -color "Info"
 
         $currentTz = Get-TimeZone
+        $currentOffset = Get-TimezoneOffsetString -TimeZoneInfo $currentTz
+        $isDst = $currentTz.IsDaylightSavingTime([DateTime]::Now)
+        $dstLabel = if ($isDst) { " (DST active)" } else { "" }
         Write-OutputColor "  Current timezone: $($currentTz.DisplayName)" -color "Info"
+        Write-OutputColor "  UTC offset: $currentOffset$dstLabel" -color "Info"
         Write-OutputColor "" -color "Info"
 
         $timezones = $script:TimezoneRegions[$RegionName]
@@ -199,12 +271,12 @@ function Show-RegionTimezones {
                     return
                 }
                 else {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($timezones.Count) or B." -color "Error"
                     Start-Sleep -Seconds 1
                 }
             }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid selection. Enter 1-$($timezones.Count) or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -277,12 +349,12 @@ function Show-AllSystemTimezones {
                     return
                 }
                 else {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter a valid timezone number, N, P, or B." -color "Error"
                     Start-Sleep -Seconds 1
                 }
             }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid selection. Enter a valid timezone number, N, P, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -304,12 +376,25 @@ function Set-SelectedTimezone {
         return
     }
 
+    # Show comparison of current vs target before applying
+    Show-TimezoneComparison -TargetTimezoneId $TimezoneId
+
     try {
         # Use the full cmdlet path to avoid recursion
         $prevTzId = $currentTz.Id
         Microsoft.PowerShell.Management\Set-TimeZone -Id $TimezoneId -ErrorAction Stop
         $newTz = Get-TimeZone
-        Write-OutputColor "  Timezone set to: $($newTz.DisplayName)" -color "Success"
+
+        # Verify the change actually took effect
+        if ($newTz.Id -ne $TimezoneId) {
+            Write-OutputColor "  Timezone change may not have applied correctly." -color "Warning"
+            Write-OutputColor "  Expected: $TimezoneId" -color "Warning"
+            Write-OutputColor "  Actual:   $($newTz.Id)" -color "Warning"
+        }
+        else {
+            $newOffset = Get-TimezoneOffsetString -TimeZoneInfo $newTz
+            Write-OutputColor "  Timezone set to: $($newTz.DisplayName) ($newOffset)" -color "Success"
+        }
         Add-SessionChange -Category "System" -Description "Set timezone to $($newTz.DisplayName)"
         Clear-MenuCache
         Add-UndoAction -Category "System" -Description "Set timezone to $($newTz.DisplayName)" -UndoScript {

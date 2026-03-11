@@ -11,6 +11,8 @@ function Set-AdapterVLAN {
     Write-CenteredOutput "VLAN Configuration" -color "Info"
     Write-OutputColor "  Adapter: $selectedAdapterName" -color "Info"
 
+    Show-VLANSummary
+
     # Check if this is a vEthernet adapter (Hyper-V)
     if ($selectedAdapterName -notlike "vEthernet*") {
         Write-OutputColor "`nNote: VLAN tagging on physical adapters varies by manufacturer." -color "Warning"
@@ -179,9 +181,48 @@ function Set-AdapterVLAN {
                 Write-OutputColor "  Failed to remove VLAN: $_" -color "Error"
             }
         }
-        default {
+        "3" {
             Write-OutputColor "  VLAN configuration cancelled." -color "Info"
         }
+        default {
+            Write-OutputColor "  Invalid selection. Enter 1-3." -color "Error"
+        }
+    }
+}
+
+# Function to display current VLAN assignments across all adapters
+function Show-VLANSummary {
+    Write-OutputColor "`n  VLAN Configuration Summary:" -color "Info"
+
+    try {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue
+        $vlanFound = $false
+
+        foreach ($adapter in $adapters) {
+            $vlanId = (Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword 'VlanID' -ErrorAction SilentlyContinue).RegistryValue
+
+            if ($null -ne $vlanId -and $vlanId -ne '0' -and $vlanId -ne 0) {
+                $vlanFound = $true
+                Write-OutputColor "  $($adapter.Name): VLAN $vlanId ($($adapter.Status))" -color "Info"
+            }
+        }
+
+        # Also check Hyper-V vNIC VLANs
+        try {
+            $vmNics = Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue
+            foreach ($nic in $vmNics) {
+                if ($null -ne $nic.VlanSetting -and $nic.VlanSetting.AccessVlanId -gt 0) {
+                    $vlanFound = $true
+                    Write-OutputColor "  $($nic.Name) (vNIC): VLAN $($nic.VlanSetting.AccessVlanId)" -color "Info"
+                }
+            }
+        } catch { }
+
+        if (-not $vlanFound) {
+            Write-OutputColor "  No VLAN assignments found" -color "Info"
+        }
+    } catch {
+        Write-OutputColor "  Could not enumerate VLANs: $($_.Exception.Message)" -color "Warning"
     }
 }
 #endregion

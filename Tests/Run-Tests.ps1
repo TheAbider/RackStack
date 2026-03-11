@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.21.15
+    Automated Test Runner for RackStack v1.21.16
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -30,6 +30,14 @@
     Exit code 0 = all tests passed, 1 = failures detected.
     Uses ASCII only (no Unicode checkmarks/crosses).
 #>
+
+# ============================================================================
+# PARAMETERS
+# ============================================================================
+
+param(
+    [switch]$Quick
+)
 
 # ============================================================================
 # TEST INFRASTRUCTURE
@@ -128,6 +136,7 @@ Write-Host ""
 Write-SectionHeader "SECTION 1: PARSE TESTS"
 
 # 1a. Monolithic script parsing
+if (-not $Quick) {
 try {
     $monolithicContent = Get-Content $monolithicPath -Raw -ErrorAction Stop
     $parseErrors = $null
@@ -137,6 +146,7 @@ try {
 } catch {
     Write-TestResult "Monolithic script parses without errors" $false $_.Exception.Message
 }
+} # end if (-not $Quick) — skip monolithic parse in Quick mode
 
 # 1b. All 59 module files parse
 $moduleFiles = Get-ChildItem -Path $modulesPath -Filter "*.ps1" | Sort-Object Name
@@ -280,6 +290,7 @@ Write-TestResult "All $expectedModuleCount modules loaded without errors" ($load
 # SECTION 4: PSSCRIPTANALYZER
 # ============================================================================
 
+if (-not $Quick) {
 Write-SectionHeader "SECTION 4: PSSCRIPTANALYZER"
 
 $pssaAvailable = $null -ne (Get-Module -ListAvailable -Name PSScriptAnalyzer)
@@ -336,6 +347,7 @@ if ($pssaAvailable) {
 } else {
     Write-TestResult "PSScriptAnalyzer available" -Skipped -Message "PSScriptAnalyzer module not installed. Run: Install-Module PSScriptAnalyzer"
 }
+} # end if (-not $Quick) — skip PSSA in Quick mode
 
 # ============================================================================
 # SECTION 5: FUNCTION EXISTENCE (50+ important functions)
@@ -552,6 +564,7 @@ try {
 # SECTION 8: MONOLITHIC/MODULAR SYNC CHECK
 # ============================================================================
 
+if (-not $Quick) {
 Write-SectionHeader "SECTION 8: MONOLITHIC/MODULAR SYNC CHECK"
 
 try {
@@ -585,6 +598,7 @@ try {
 } catch {
     Write-TestResult "Monolithic/modular sync check" $false $_.Exception.Message
 }
+} # end if (-not $Quick) — skip monolithic sync check in Quick mode
 
 # ============================================================================
 # SECTION 9: ConvertFrom-AgentFilename TESTS
@@ -3026,12 +3040,12 @@ try {
     Write-TestResult "48-MenuDisplay CIM dedup" $false $_.Exception.Message
 }
 
-# 37-HealthCheck should have at most 1 Win32_Processor call (cpuAll pattern)
+# 37-HealthCheck should have at most 2 Win32_Processor calls (cpuAll pattern + Test-NUMATopology)
 try {
     $hcContent = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
     $cpuCallCount = ([regex]::Matches($hcContent, 'Get-CimInstance\s+-ClassName\s+Win32_Processor')).Count
-    $pass = $cpuCallCount -le 1
-    Write-TestResult "37-HealthCheck: at most 1 Win32_Processor call" $pass "Found: $cpuCallCount"
+    $pass = $cpuCallCount -le 2
+    Write-TestResult "37-HealthCheck: at most 2 Win32_Processor calls" $pass "Found: $cpuCallCount"
 } catch {
     Write-TestResult "37-HealthCheck CIM dedup" $false $_.Exception.Message
 }
@@ -3459,7 +3473,7 @@ try {
 # Verify domain join has DNS pre-flight
 try {
     $djContent = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1") -Raw
-    $hasDnsCheck = $djContent -match 'Resolve-DnsName.*targetDomain'
+    $hasDnsCheck = $djContent -match 'Test-DomainJoinReadiness.*targetDomain'
     Write-TestResult "12-DomainJoin: has DNS pre-flight check" $hasDnsCheck
 } catch {
     Write-TestResult "12-DomainJoin: DNS check" $false $_.Exception.Message
@@ -7904,7 +7918,7 @@ Write-TestResult "34-Help: settings menu specific invalid msg" ($helpContent -ma
 
 # FirewallTemplates improved error
 $fwTplContent = Get-Content -LiteralPath "$modulesPath\18-FirewallTemplates.ps1" -Raw
-Write-TestResult "18-FirewallTemplates: specific invalid msg" ($fwTplContent -match 'Enter 1-7 or B')
+Write-TestResult "18-FirewallTemplates: specific invalid msg" ($fwTplContent -match 'Enter 1-8 or B')
 
 # Operations Edit Defaults improved error
 Write-TestResult "56-OperationsMenu: edit defaults specific invalid msg" ($omContent -match 'Enter 1-12, S, R, or B')
@@ -7927,11 +7941,11 @@ Write-TestResult "30-ServiceManager: dependencies nav check" ($smContent -match 
 
 # EventLogViewer improved error
 $elvContent = Get-Content -LiteralPath "$modulesPath\29-EventLogViewer.ps1" -Raw
-Write-TestResult "29-EventLogViewer: specific invalid msg" ($elvContent -match 'Enter 1-8 or B')
+Write-TestResult "29-EventLogViewer: specific invalid msg" ($elvContent -match 'Enter 1-9 or B')
 
 # ScheduledTasks improved error
 $stContent = Get-Content -LiteralPath "$modulesPath\63-ScheduledTasks.ps1" -Raw
-Write-TestResult "63-ScheduledTasks: specific invalid msg" ($stContent -match 'Enter 1-8 or B')
+Write-TestResult "63-ScheduledTasks: specific invalid msg" ($stContent -match 'Enter 1-9 or B')
 
 # Firewall sub-prompt nav checks
 $fwContent = Get-Content -LiteralPath "$modulesPath\16-Firewall.ps1" -Raw
@@ -7951,7 +7965,7 @@ Write-TestResult "31-BitLocker: decrypt volume nav check" ($blContent -match 'nu
 # All bare "Enter volume number" Read-Hosts (options 3,4) should have nav checks
 $blBareVolNum = ([regex]::Matches($blContent, 'Read-Host "  Enter volume number"\s+\$navResult')).Count
 Write-TestResult "31-BitLocker: bare volume number nav checks ($blBareVolNum/2)" ($blBareVolNum -ge 2)
-Write-TestResult "31-BitLocker: specific invalid msg" ($blContent -match 'Enter 1-5 or B')
+Write-TestResult "31-BitLocker: specific invalid msg" ($blContent -match 'Enter 1-6 or B')
 
 # Deduplication sub-prompt nav checks
 $ddContent = Get-Content -LiteralPath "$modulesPath\32-Deduplication.ps1" -Raw
@@ -7959,12 +7973,12 @@ Write-TestResult "32-Dedup: enable nav check" ($ddContent -match 'number to enab
 Write-TestResult "32-Dedup: disable nav check" ($ddContent -match 'number to disable[\s\S]{0,80}Test-NavigationCommand')
 Write-TestResult "32-Dedup: optimize nav check" ($ddContent -match 'number to optimize[\s\S]{0,80}Test-NavigationCommand')
 Write-TestResult "32-Dedup: stats nav check" ($ddContent -match 'Read-Host "  Enter volume number"\s+\$navResult[\s\S]{0,500}DedupStatus')
-Write-TestResult "32-Dedup: specific invalid msg" ($ddContent -match 'Enter 1-4 or B')
+Write-TestResult "32-Dedup: specific invalid msg" ($ddContent -match 'Enter 1-5 or B')
 
 # NTP nav check and error message
 $ntpContent = Get-Content -LiteralPath "$modulesPath\19-NTPConfiguration.ps1" -Raw
 Write-TestResult "19-NTP: custom server nav check" ($ntpContent -match 'NTP server address[\s\S]{0,80}Test-NavigationCommand')
-Write-TestResult "19-NTP: specific invalid msg" ($ntpContent -match 'Enter 1-6 or B')
+Write-TestResult "19-NTP: specific invalid msg" ($ntpContent -match 'Enter 1-7 or B')
 
 # StorageReplica nav checks
 $srContent = Get-Content -LiteralPath "$modulesPath\33-StorageReplica.ps1" -Raw
@@ -7972,7 +7986,7 @@ Write-TestResult "33-StorageReplica: src server nav check" ($srContent -match 'S
 Write-TestResult "33-StorageReplica: dest server nav check" ($srContent -match 'Destination server name[\s\S]{0,80}Test-NavigationCommand')
 Write-TestResult "33-StorageReplica: topology src nav check" ($srContent -match 'Source server"[\s\S]{0,80}Test-NavigationCommand')
 Write-TestResult "33-StorageReplica: topology dest nav check" ($srContent -match 'Destination server"[\s\S]{0,80}Test-NavigationCommand')
-Write-TestResult "33-StorageReplica: specific invalid msg" ($srContent -match 'Enter 1-4 or B')
+Write-TestResult "33-StorageReplica: specific invalid msg" ($srContent -match 'Enter 1-5 or B')
 
 # SET (09-SET) nav checks
 $setContent = Get-Content -LiteralPath "$modulesPath\09-SET.ps1" -Raw
@@ -7985,7 +7999,7 @@ Write-TestResult "27-Cluster: migration count nav check" ($fcContent -match 'sim
 Write-TestResult "27-Cluster: migration subnet nav check" ($fcContent -match 'Read-Host "  Subnet"[\s\S]{0,80}Test-NavigationCommand')
 Write-TestResult "27-Cluster: azure account nav check" ($fcContent -match 'Azure Storage Account[\s\S]{0,80}Test-NavigationCommand')
 Write-TestResult "27-Cluster: management menu while loop" ($fcContent -match 'function Show-ClusterManagementMenu[\s\S]*?while \(\$true\)[\s\S]*?ReturnToMainMenu')
-Write-TestResult "27-Cluster: management menu specific invalid msg" ($fcContent -match 'Enter 1-7 or B')
+Write-TestResult "27-Cluster: management menu specific invalid msg" ($fcContent -match 'Enter 1-10 or B')
 
 # VMDeployment default case in custom VM menu
 $vmContent = Get-Content -LiteralPath "$modulesPath\44-VMDeployment.ps1" -Raw
@@ -8010,9 +8024,9 @@ Write-TestResult "45-Config: baseline second number nav check" ($ceContent2 -mat
 
 # DiskCleanup and NetworkDiagnostics specific error messages
 $dcContent = Get-Content -LiteralPath "$modulesPath\20-DiskCleanup.ps1" -Raw
-Write-TestResult "20-DiskCleanup: specific invalid msg" ($dcContent -match 'Enter 1-5 or B')
+Write-TestResult "20-DiskCleanup: specific invalid msg" ($dcContent -match 'Enter 1-6 or B')
 $ndContent = Get-Content -LiteralPath "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
-Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-8 or B')
+Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-10 or B')
 
 # AD DS promotion menu — no double Write-PressEnter (sub-functions have their own)
 $adContent = Get-Content -LiteralPath "$modulesPath\61-ActiveDirectory.ps1" -Raw
@@ -8368,7 +8382,7 @@ Write-TestResult "58-NetDiag: Invoke-SubnetSweep validates subnet" ($ndContent3 
 Write-TestResult "58-NetDiag: Invoke-QuickPortScan validates target" ($ndContent3 -match 'function Invoke-QuickPortScan[\s\S]*?notmatch')
 Write-TestResult "58-NetDiag: Show-ActiveConnections function exists" ($ndContent3 -match 'function Show-ActiveConnections')
 Write-TestResult "58-NetDiag: Show-ArpTable function exists" ($ndContent3 -match 'function Show-ArpTable')
-Write-TestResult "58-NetDiag: menu has 8 options" ($ndContent3 -match 'Enter 1-8 or B')
+Write-TestResult "58-NetDiag: menu has 10 options" ($ndContent3 -match 'Enter 1-10 or B')
 
 # 48-MenuDisplay: Invoke-WithTimeout function existence (critical helper)
 Write-TestResult "04-Navigation: Invoke-WithTimeout defined" ((Get-Command -Name Invoke-WithTimeout -ErrorAction SilentlyContinue) -ne $null)
@@ -8774,6 +8788,649 @@ Write-TestResult "56-OperationsMenu: Tier 3 deep-merges nested objects" ($opsCon
 
 # v1.21.2: Import-Defaults prompts for company defaults even when defaults.json exists without _companyDefaults
 Write-TestResult "56-OperationsMenu: prompts for company defaults when missing from existing defaults.json" ($opsContent2 -match 'companyDefaultsResolved')
+
+# ============================================================================
+# SECTION 144: FUNCTION PARITY (modular vs monolithic)
+# ============================================================================
+
+Write-SectionHeader "SECTION 144: FUNCTION PARITY (modular vs monolithic)"
+
+if (Test-Path $monolithicPath) {
+    try {
+        $monoContentParity = Get-Content $monolithicPath -Raw -ErrorAction Stop
+        $modularFunctions = @{}
+        $monolithicFunctions = @{}
+
+        # Parse all functions from modular source
+        foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
+            $modContent = Get-Content -LiteralPath $modFile.FullName -Raw
+            $funcMatches = [regex]::Matches($modContent, '(?m)^\s*function\s+([\w-]+)')
+            foreach ($fm in $funcMatches) {
+                $modularFunctions[$fm.Groups[1].Value] = $modFile.Name
+            }
+        }
+
+        # Parse all functions from monolithic
+        $monoFuncMatches = [regex]::Matches($monoContentParity, '(?m)^\s*function\s+([\w-]+)')
+        foreach ($mfm in $monoFuncMatches) {
+            $monolithicFunctions[$mfm.Groups[1].Value] = $true
+        }
+
+        # Functions in modular but NOT in monolithic (sync failure)
+        $missingInMono = @()
+        foreach ($funcName in $modularFunctions.Keys) {
+            if (-not $monolithicFunctions.ContainsKey($funcName)) {
+                $missingInMono += "$funcName (from $($modularFunctions[$funcName]))"
+            }
+        }
+        foreach ($missing in $missingInMono) {
+            Write-TestResult "Function parity: $missing missing from monolithic" $false "Sync failure — function exists in modular but not in monolithic"
+        }
+        if ($missingInMono.Count -eq 0) {
+            Write-TestResult "All modular functions present in monolithic ($($modularFunctions.Count) functions)" $true
+        }
+
+        # Functions in monolithic but NOT in modular (orphaned)
+        $orphaned = @()
+        foreach ($funcName in $monolithicFunctions.Keys) {
+            if (-not $modularFunctions.ContainsKey($funcName)) {
+                $orphaned += $funcName
+            }
+        }
+        foreach ($orph in $orphaned) {
+            Write-TestResult "Function parity: $orph orphaned in monolithic" $false "Function exists in monolithic but not in any module"
+        }
+        if ($orphaned.Count -eq 0) {
+            Write-TestResult "No orphaned functions in monolithic ($($monolithicFunctions.Count) functions)" $true
+        }
+    } catch {
+        Write-TestResult "Function parity check" $false $_.Exception.Message
+    }
+} else {
+    Write-TestResult "Function parity check" -Skipped -Message "Monolithic not found at $monolithicPath — skipping"
+}
+
+# ============================================================================
+# SECTION 145: BOM VERIFICATION (UTF-8 BOM on all module files)
+# ============================================================================
+
+Write-SectionHeader "SECTION 145: BOM VERIFICATION (UTF-8 BOM on all module files)"
+
+foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
+    try {
+        $fileBytes = [System.IO.File]::ReadAllBytes($modFile.FullName) | Select-Object -First 3
+        $hasBOM = (@($fileBytes).Count -ge 3 -and $fileBytes[0] -eq 0xEF -and $fileBytes[1] -eq 0xBB -and $fileBytes[2] -eq 0xBF)
+        Write-TestResult "BOM: $($modFile.Name) has UTF-8 BOM" $hasBOM $(if (-not $hasBOM) { "Missing UTF-8 BOM — box-drawing chars will cause parse errors" } else { "" })
+    } catch {
+        Write-TestResult "BOM: $($modFile.Name) has UTF-8 BOM" $false $_.Exception.Message
+    }
+}
+
+# ============================================================================
+# SECTION 146: KNOWN GOTCHA DETECTION (reserved variables and parse errors)
+# ============================================================================
+
+Write-SectionHeader "SECTION 146: KNOWN GOTCHA DETECTION (reserved variables and parse errors)"
+
+$gotchaPatterns = @(
+    @{ Pattern = '\$input[^\w]';       Description = 'Reserved variable $input' }
+    @{ Pattern = '\$profile[^\w]';     Description = 'Reserved variable $profile'; Exclude = '\$savedProfile' }
+    @{ Pattern = '\$\("".PadRight';    Description = 'Parse error pattern $("".PadRight' }
+    @{ Pattern = '\$ver:';             Description = 'Parse error pattern $ver: (use ${ver}:)' }
+)
+
+foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
+    $lines = Get-Content -LiteralPath $modFile.FullName
+    for ($lineNum = 0; $lineNum -lt $lines.Count; $lineNum++) {
+        $line = $lines[$lineNum]
+        # Skip comment lines
+        if ($line -match '^\s*#') { continue }
+
+        foreach ($gotcha in $gotchaPatterns) {
+            if ($line -match $gotcha.Pattern) {
+                # Check exclusion pattern if defined
+                if ($gotcha.Exclude -and $line -match $gotcha.Exclude) { continue }
+                Write-TestResult "Gotcha: $($modFile.Name):$($lineNum + 1) — $($gotcha.Description)" $false "Line: $($line.Trim())"
+            }
+        }
+    }
+}
+
+# If no gotchas found, report a pass
+$gotchaFound = $false
+foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
+    $lines = Get-Content -LiteralPath $modFile.FullName
+    for ($lineNum = 0; $lineNum -lt $lines.Count; $lineNum++) {
+        $line = $lines[$lineNum]
+        if ($line -match '^\s*#') { continue }
+        foreach ($gotcha in $gotchaPatterns) {
+            if ($line -match $gotcha.Pattern) {
+                if ($gotcha.Exclude -and $line -match $gotcha.Exclude) { continue }
+                $gotchaFound = $true
+                break
+            }
+        }
+        if ($gotchaFound) { break }
+    }
+    if ($gotchaFound) { break }
+}
+if (-not $gotchaFound) {
+    Write-TestResult "No known gotcha patterns found in any module" $true
+}
+
+# ============================================================================
+# SECTION 147: NEW FUNCTION EXISTENCE TESTS
+# ============================================================================
+
+Write-SectionHeader "SECTION 147: NEW FUNCTION EXISTENCE TESTS"
+
+$newFunctions = @(
+    "Test-CertificateExpiration",
+    "Test-SecureBootStatus",
+    "Test-AdapterSpeedNegotiation",
+    "Test-SMBDialect",
+    "Test-NUMATopology",
+    "Test-SystemDisk",
+    "Test-CredentialExpired",
+    "Remove-BatchVMs",
+    "Test-VMMigrationReadiness",
+    "Test-PathMTU",
+    "Test-UDPPort",
+    "Test-StorageBackendCompatibility",
+    "Test-PrePromotionReadiness",
+    "Test-PostPromotionStatus",
+    "Test-ReplicationHealth",
+    "Test-FailoverPreFlight",
+    "Save-NetworkBaseline",
+    "Compare-NetworkBaseline",
+    "Compress-OldTranscripts",
+    # Save-BatchUndoState omitted: nested inside Start-BatchMode, not visible to Get-Command
+    # Wave 7: dashboard/summary functions
+    "Show-AdapterHealthSummary",
+    "Show-IPConfigSummary",
+    "Show-VLANSummary",
+    "Show-RDPSecurityStatus",
+    "Show-DefenderExclusionStatus",
+    "Compare-FirewallTemplate",
+    "Invoke-FirewallTemplateComparison",
+    "Show-CleanupAnalysis",
+    "Show-HostStorageAnalysis",
+    "Show-ISOInventory",
+    "Show-MountedVHDStatus",
+    # Wave 8: console, logging, timezone, admin, MPIO enhancements
+    "Get-ConsoleCapabilities",
+    "Optimize-ConsoleBuffer",
+    "Write-StructuredLog",
+    "Invoke-LogRotation",
+    "Get-TimezoneOffsetString",
+    "Show-TimezoneComparison",
+    "Show-AdminAccountStatus",
+    "Show-MPIOStatusSummary"
+)
+
+$newFuncPassed = 0
+$newFuncFailed = 0
+
+foreach ($funcName in $newFunctions) {
+    try {
+        $exists = Get-Command -Name $funcName -ErrorAction SilentlyContinue
+        $pass = $null -ne $exists
+        Write-TestResult "New function exists: $funcName" $pass $(if (-not $pass) { "Not found after loading modules (may be nested/scoped)" } else { "" })
+        if ($pass) { $newFuncPassed++ } else { $newFuncFailed++ }
+    } catch {
+        Write-TestResult "New function exists: $funcName" $false $_.Exception.Message
+        $newFuncFailed++
+    }
+}
+
+Write-Host ""
+Write-Host "  New function existence: $newFuncPassed/$($newFunctions.Count) found" -ForegroundColor $(if ($newFuncFailed -eq 0) { "Green" } else { "Yellow" })
+
+# ============================================================================
+# SECTION 148: INPUT VALIDATION FUNCTIONS (new in 03-InputValidation.ps1)
+# ============================================================================
+
+Write-SectionHeader "SECTION 148: INPUT VALIDATION FUNCTIONS (Test-ValidUNCPath, ConvertTo-SafeLDAPFilter, Test-ValidFilePath)"
+
+# --- Test-ValidUNCPath: valid paths ---
+$validUNCPaths = @(
+    @{ Path = '\\server\share';                   Desc = "basic server\share" }
+    @{ Path = '\\192.168.1.1\c$';                 Desc = "IP with admin share" }
+    @{ Path = '\\server.domain.com\share\subfolder'; Desc = "FQDN with subfolder" }
+)
+
+foreach ($tc in $validUNCPaths) {
+    try {
+        $result = Test-ValidUNCPath -Path $tc.Path
+        Write-TestResult "ValidUNCPath: '$($tc.Path)' ($($tc.Desc)) -> true" ($result -eq $true) "Got: $result"
+    } catch {
+        Write-TestResult "ValidUNCPath: '$($tc.Path)'" $false $_.Exception.Message
+    }
+}
+
+# --- Test-ValidUNCPath: invalid paths ---
+$invalidUNCPaths = @(
+    @{ Path = 'C:\local\path'; Desc = "local drive path" }
+    @{ Path = '\\';            Desc = "bare backslashes" }
+    @{ Path = '\\server';      Desc = "server only, no share" }
+    @{ Path = '';              Desc = "empty string" }
+)
+
+foreach ($tc in $invalidUNCPaths) {
+    try {
+        $result = Test-ValidUNCPath -Path $tc.Path
+        Write-TestResult "ValidUNCPath: '$($tc.Path)' ($($tc.Desc)) -> false" ($result -eq $false) "Got: $result"
+    } catch {
+        Write-TestResult "ValidUNCPath: '$($tc.Path)'" $false $_.Exception.Message
+    }
+}
+
+# --- ConvertTo-SafeLDAPFilter: special character escaping ---
+try {
+    $result = ConvertTo-SafeLDAPFilter -Value '*'
+    Write-TestResult "SafeLDAPFilter: '*' -> '\2a'" ($result -eq '\2a') "Got: '$result'"
+} catch {
+    Write-TestResult "SafeLDAPFilter: '*'" $false $_.Exception.Message
+}
+
+try {
+    $result = ConvertTo-SafeLDAPFilter -Value '('
+    Write-TestResult "SafeLDAPFilter: '(' -> '\28'" ($result -eq '\28') "Got: '$result'"
+} catch {
+    Write-TestResult "SafeLDAPFilter: '('" $false $_.Exception.Message
+}
+
+try {
+    $result = ConvertTo-SafeLDAPFilter -Value ')'
+    Write-TestResult "SafeLDAPFilter: ')' -> '\29'" ($result -eq '\29') "Got: '$result'"
+} catch {
+    Write-TestResult "SafeLDAPFilter: ')'" $false $_.Exception.Message
+}
+
+try {
+    $result = ConvertTo-SafeLDAPFilter -Value 'normal text'
+    Write-TestResult "SafeLDAPFilter: 'normal text' -> unchanged" ($result -eq 'normal text') "Got: '$result'"
+} catch {
+    Write-TestResult "SafeLDAPFilter: 'normal text'" $false $_.Exception.Message
+}
+
+try {
+    $result = ConvertTo-SafeLDAPFilter -Value '*(test)'
+    Write-TestResult "SafeLDAPFilter: '*(test)' -> '\2a\28test\29'" ($result -eq '\2a\28test\29') "Got: '$result'"
+} catch {
+    Write-TestResult "SafeLDAPFilter: '*(test)'" $false $_.Exception.Message
+}
+
+# --- Test-ValidFilePath: valid paths ---
+$validFilePaths = @(
+    @{ Path = 'C:\Windows\System32\cmd.exe'; Desc = "absolute path" }
+    @{ Path = 'D:\Data\report.csv';          Desc = "data file" }
+    @{ Path = 'file.txt';                    Desc = "filename only" }
+)
+
+foreach ($tc in $validFilePaths) {
+    try {
+        $result = Test-ValidFilePath -Path $tc.Path
+        Write-TestResult "ValidFilePath: '$($tc.Path)' ($($tc.Desc)) -> true" ($result -eq $true) "Got: $result"
+    } catch {
+        Write-TestResult "ValidFilePath: '$($tc.Path)'" $false $_.Exception.Message
+    }
+}
+
+# --- Test-ValidFilePath: invalid paths ---
+try {
+    $result = Test-ValidFilePath -Path '..\..\etc\passwd'
+    Write-TestResult "ValidFilePath: path traversal (..\..\ ) -> false" ($result -eq $false) "Got: $result"
+} catch {
+    Write-TestResult "ValidFilePath: path traversal" $false $_.Exception.Message
+}
+
+try {
+    $result = Test-ValidFilePath -Path ''
+    Write-TestResult "ValidFilePath: empty string -> false" ($result -eq $false) "Got: $result"
+} catch {
+    Write-TestResult "ValidFilePath: empty string" $false $_.Exception.Message
+}
+
+try {
+    $result = Test-ValidFilePath -Path 'C:\test<file>.txt'
+    Write-TestResult "ValidFilePath: invalid chars (<>) -> false" ($result -eq $false) "Got: $result"
+} catch {
+    Write-TestResult "ValidFilePath: invalid chars" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 149: SYSTEM CHECK FUNCTIONS (new in 05-SystemCheck.ps1)
+# ============================================================================
+
+Write-SectionHeader "SECTION 149: SYSTEM CHECK FUNCTIONS (Test-PowerShellVersion, Test-MinimumDiskSpace)"
+
+# Test-PowerShellVersion should return $true on PS 5.1+
+try {
+    $result = Test-PowerShellVersion
+    Write-TestResult "Test-PowerShellVersion returns true on current system" ($result -eq $true) "PS version: $($PSVersionTable.PSVersion), Result: $result"
+} catch {
+    Write-TestResult "Test-PowerShellVersion" $false $_.Exception.Message
+}
+
+# Test-MinimumDiskSpace should return $true for system drive with 1GB minimum
+try {
+    $sysDrive = $env:SystemDrive.TrimEnd(':')
+    $result = Test-MinimumDiskSpace -DriveLetter $sysDrive -MinimumGB 1
+    Write-TestResult "Test-MinimumDiskSpace: system drive ($sysDrive`:) with 1GB min -> true" ($result -eq $true) "Result: $result"
+} catch {
+    Write-TestResult "Test-MinimumDiskSpace: system drive" $false $_.Exception.Message
+}
+
+# Test-MinimumDiskSpace should return $true (gracefully) for non-existent drive
+# The function returns $true on error (don't block if can't check)
+try {
+    $result = Test-MinimumDiskSpace -DriveLetter "Z" -MinimumGB 1
+    Write-TestResult "Test-MinimumDiskSpace: non-existent drive Z -> true (graceful)" ($result -eq $true) "Result: $result"
+} catch {
+    Write-TestResult "Test-MinimumDiskSpace: non-existent drive" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 150: CENTRALIZED TIMEOUTS
+# ============================================================================
+
+Write-SectionHeader "SECTION 150: CENTRALIZED TIMEOUTS (script:Timeouts hashtable)"
+
+# Verify $script:Timeouts exists and is a hashtable
+try {
+    $pass = $null -ne $script:Timeouts -and $script:Timeouts -is [hashtable]
+    Write-TestResult "Timeouts hashtable exists and is [hashtable]" $pass $(if (-not $pass) { "Type: $($script:Timeouts.GetType().Name)" } else { "" })
+} catch {
+    Write-TestResult "Timeouts hashtable exists" $false $_.Exception.Message
+}
+
+# Verify expected keys exist
+$expectedTimeoutKeys = @("CIMQuery", "DomainJoin", "WindowsUpdate", "FeatureInstall", "CredentialExpiry")
+foreach ($key in $expectedTimeoutKeys) {
+    try {
+        $pass = $script:Timeouts.ContainsKey($key)
+        Write-TestResult "Timeouts has key: $key" $pass $(if (-not $pass) { "Key not found in Timeouts hashtable" } else { "Value: $($script:Timeouts[$key])" })
+    } catch {
+        Write-TestResult "Timeouts has key: $key" $false $_.Exception.Message
+    }
+}
+
+# Verify all values are positive integers
+try {
+    $allPositive = $true
+    $badKeys = @()
+    foreach ($key in $script:Timeouts.Keys) {
+        $val = $script:Timeouts[$key]
+        if ($val -isnot [int] -or $val -le 0) {
+            $allPositive = $false
+            $badKeys += "$key=$val"
+        }
+    }
+    Write-TestResult "All Timeout values are positive integers" $allPositive $(if (-not $allPositive) { "Bad keys: $($badKeys -join ', ')" } else { "$($script:Timeouts.Count) keys checked" })
+} catch {
+    Write-TestResult "All Timeout values are positive integers" $false $_.Exception.Message
+}
+
+# Verify specific default values
+try {
+    $pass = $script:Timeouts["CIMQuery"] -eq 10
+    Write-TestResult "Timeouts.CIMQuery default is 10" $pass "Got: $($script:Timeouts['CIMQuery'])"
+} catch {
+    Write-TestResult "Timeouts.CIMQuery default" $false $_.Exception.Message
+}
+
+try {
+    $pass = $script:Timeouts["CredentialExpiry"] -eq 1800
+    Write-TestResult "Timeouts.CredentialExpiry default is 1800" $pass "Got: $($script:Timeouts['CredentialExpiry'])"
+} catch {
+    Write-TestResult "Timeouts.CredentialExpiry default" $false $_.Exception.Message
+}
+
+try {
+    $pass = $script:Timeouts["DomainJoin"] -eq 120
+    Write-TestResult "Timeouts.DomainJoin default is 120" $pass "Got: $($script:Timeouts['DomainJoin'])"
+} catch {
+    Write-TestResult "Timeouts.DomainJoin default" $false $_.Exception.Message
+}
+
+try {
+    $pass = $script:Timeouts["FeatureInstall"] -eq 1800
+    Write-TestResult "Timeouts.FeatureInstall default is 1800" $pass "Got: $($script:Timeouts['FeatureInstall'])"
+} catch {
+    Write-TestResult "Timeouts.FeatureInstall default" $false $_.Exception.Message
+}
+
+try {
+    $pass = $script:Timeouts["WindowsUpdate"] -eq 300
+    Write-TestResult "Timeouts.WindowsUpdate default is 300" $pass "Got: $($script:Timeouts['WindowsUpdate'])"
+} catch {
+    Write-TestResult "Timeouts.WindowsUpdate default" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 151: BATCH DRY-RUN MODE
+# ============================================================================
+
+Write-SectionHeader "SECTION 151: BATCH DRY-RUN MODE"
+
+# Verify $script:DryRunMode exists and defaults to $false
+try {
+    $pass = $script:DryRunMode -eq $false
+    Write-TestResult "DryRunMode defaults to false" $pass "Got: $($script:DryRunMode)"
+} catch {
+    Write-TestResult "DryRunMode defaults to false" $false $_.Exception.Message
+}
+
+# Verify Invoke-BatchStep function exists
+try {
+    $exists = Get-Command -Name "Invoke-BatchStep" -ErrorAction SilentlyContinue
+    $pass = $null -ne $exists
+    Write-TestResult "Invoke-BatchStep function exists" $pass $(if (-not $pass) { "Not found after loading modules" } else { "" })
+} catch {
+    Write-TestResult "Invoke-BatchStep function exists" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 152: STORAGE MANAGER SYSTEM DISK PROTECTION
+# ============================================================================
+
+Write-SectionHeader "SECTION 152: STORAGE MANAGER SYSTEM DISK PROTECTION (Test-SystemDisk)"
+
+# Test-SystemDisk with disk 0 (usually the system disk) should return $true
+try {
+    $result = Test-SystemDisk -Disk 0
+    Write-TestResult "Test-SystemDisk: disk 0 (system disk) -> true" ($result -eq $true) "Result: $result"
+} catch {
+    Write-TestResult "Test-SystemDisk: disk 0" $false $_.Exception.Message
+}
+
+# Test-SystemDisk with disk 999 should return $false (non-existent)
+try {
+    $result = Test-SystemDisk -Disk 999
+    Write-TestResult "Test-SystemDisk: disk 999 (non-existent) -> false" ($result -eq $false) "Result: $result"
+} catch {
+    Write-TestResult "Test-SystemDisk: disk 999" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 153: CREDENTIAL EXPIRY (Test-CredentialExpired)
+# ============================================================================
+
+Write-SectionHeader "SECTION 153: CREDENTIAL EXPIRY (Test-CredentialExpired)"
+
+# Save original values to restore after tests
+$_origCredential = $script:VMDeploymentCredential
+$_origTimestamp = $script:VMCredentialTimestamp
+
+# Test 1: Current timestamp -> not expired
+try {
+    $script:VMDeploymentCredential = New-Object PSCredential("testuser", (ConvertTo-SecureString "testpass" -AsPlainText -Force))
+    $script:VMCredentialTimestamp = Get-Date
+    $result = Test-CredentialExpired
+    Write-TestResult "CredentialExpired: current timestamp -> false (not expired)" ($result -eq $false) "Result: $result"
+} catch {
+    Write-TestResult "CredentialExpired: current timestamp" $false $_.Exception.Message
+}
+
+# Test 2: Timestamp 31 minutes ago -> expired
+try {
+    $script:VMDeploymentCredential = New-Object PSCredential("testuser", (ConvertTo-SecureString "testpass" -AsPlainText -Force))
+    $script:VMCredentialTimestamp = (Get-Date).AddMinutes(-31)
+    $result = Test-CredentialExpired
+    Write-TestResult "CredentialExpired: 31 min ago -> true (expired)" ($result -eq $true) "Result: $result"
+} catch {
+    Write-TestResult "CredentialExpired: 31 min ago" $false $_.Exception.Message
+}
+
+# Test 3: Credential set but timestamp null -> expired
+try {
+    $script:VMDeploymentCredential = New-Object PSCredential("testuser", (ConvertTo-SecureString "testpass" -AsPlainText -Force))
+    $script:VMCredentialTimestamp = $null
+    $result = Test-CredentialExpired
+    Write-TestResult "CredentialExpired: null timestamp -> true (no timestamp = expired)" ($result -eq $true) "Result: $result"
+} catch {
+    Write-TestResult "CredentialExpired: null timestamp" $false $_.Exception.Message
+}
+
+# Test 4: No credential at all -> not expired (nothing to expire)
+try {
+    $script:VMDeploymentCredential = $null
+    $script:VMCredentialTimestamp = $null
+    $result = Test-CredentialExpired
+    Write-TestResult "CredentialExpired: no credential -> false (nothing to expire)" ($result -eq $false) "Result: $result"
+} catch {
+    Write-TestResult "CredentialExpired: no credential" $false $_.Exception.Message
+}
+
+# Restore original values
+$script:VMDeploymentCredential = $_origCredential
+$script:VMCredentialTimestamp = $_origTimestamp
+
+# ============================================================================
+# SECTION 154: WAVE 7 DASHBOARD/SUMMARY FUNCTIONS (content-based)
+# ============================================================================
+
+Write-SectionHeader "SECTION 154: WAVE 7 DASHBOARD/SUMMARY FUNCTIONS"
+
+try {
+    $mod06 = Get-Content (Join-Path $modulesPath "06-NetworkAdapters.ps1") -Raw
+    $mod07 = Get-Content (Join-Path $modulesPath "07-IPConfiguration.ps1") -Raw
+    $mod08 = Get-Content (Join-Path $modulesPath "08-VLAN.ps1") -Raw
+    $mod15 = Get-Content (Join-Path $modulesPath "15-RDP.ps1") -Raw
+    $mod17 = Get-Content (Join-Path $modulesPath "17-DefenderExclusions.ps1") -Raw
+    $mod18 = Get-Content (Join-Path $modulesPath "18-FirewallTemplates.ps1") -Raw
+    $mod20 = Get-Content (Join-Path $modulesPath "20-DiskCleanup.ps1") -Raw
+    $mod40 = Get-Content (Join-Path $modulesPath "40-HostStorage.ps1") -Raw
+    $mod42 = Get-Content (Join-Path $modulesPath "42-ISODownload.ps1") -Raw
+    $mod43 = Get-Content (Join-Path $modulesPath "43-OfflineVHD.ps1") -Raw
+
+    # Function definitions exist in their respective modules
+    Write-TestResult "06-NetworkAdapters: Show-AdapterHealthSummary defined" ($mod06 -match 'function\s+Show-AdapterHealthSummary\b')
+    Write-TestResult "07-IPConfiguration: Show-IPConfigSummary defined" ($mod07 -match 'function\s+Show-IPConfigSummary\b')
+    Write-TestResult "08-VLAN: Show-VLANSummary defined" ($mod08 -match 'function\s+Show-VLANSummary\b')
+    Write-TestResult "15-RDP: Show-RDPSecurityStatus defined" ($mod15 -match 'function\s+Show-RDPSecurityStatus\b')
+    Write-TestResult "17-DefenderExclusions: Show-DefenderExclusionStatus defined" ($mod17 -match 'function\s+Show-DefenderExclusionStatus\b')
+    Write-TestResult "18-FirewallTemplates: Compare-FirewallTemplate defined" ($mod18 -match 'function\s+Compare-FirewallTemplate\b')
+    Write-TestResult "18-FirewallTemplates: Invoke-FirewallTemplateComparison defined" ($mod18 -match 'function\s+Invoke-FirewallTemplateComparison\b')
+    Write-TestResult "20-DiskCleanup: Show-CleanupAnalysis defined" ($mod20 -match 'function\s+Show-CleanupAnalysis\b')
+    Write-TestResult "40-HostStorage: Show-HostStorageAnalysis defined" ($mod40 -match 'function\s+Show-HostStorageAnalysis\b')
+    Write-TestResult "42-ISODownload: Show-ISOInventory defined" ($mod42 -match 'function\s+Show-ISOInventory\b')
+    Write-TestResult "43-OfflineVHD: Show-MountedVHDStatus defined" ($mod43 -match 'function\s+Show-MountedVHDStatus\b')
+
+    # Verify functions use Write-OutputColor (consistent output pattern)
+    Write-TestResult "Show-AdapterHealthSummary uses Write-OutputColor" ($mod06 -match 'function Show-AdapterHealthSummary[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-IPConfigSummary uses Write-OutputColor" ($mod07 -match 'function Show-IPConfigSummary[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-VLANSummary uses Write-OutputColor" ($mod08 -match 'function Show-VLANSummary[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-RDPSecurityStatus uses Write-OutputColor" ($mod15 -match 'function Show-RDPSecurityStatus[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-DefenderExclusionStatus uses Write-OutputColor" ($mod17 -match 'function Show-DefenderExclusionStatus[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-CleanupAnalysis uses Write-OutputColor" ($mod20 -match 'function Show-CleanupAnalysis[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-HostStorageAnalysis uses Write-OutputColor" ($mod40 -match 'function Show-HostStorageAnalysis[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-ISOInventory uses Write-OutputColor" ($mod42 -match 'function Show-ISOInventory[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "Show-MountedVHDStatus uses Write-OutputColor" ($mod43 -match 'function Show-MountedVHDStatus[\s\S]{0,2000}Write-OutputColor')
+
+    # Compare-FirewallTemplate takes a TemplateName parameter
+    Write-TestResult "Compare-FirewallTemplate has TemplateName param" ($mod18 -match 'function Compare-FirewallTemplate[\s\S]{0,200}\$TemplateName')
+
+} catch {
+    Write-TestResult "Wave 7 dashboard functions content tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 155: WAVE 8 MODULE ENHANCEMENTS (console, logging, timezone, admin, MPIO)
+# ============================================================================
+
+Write-SectionHeader "SECTION 155: WAVE 8 MODULE ENHANCEMENTS"
+
+try {
+    $mod01 = Get-Content (Join-Path $modulesPath "01-Console.ps1") -Raw
+    $mod02 = Get-Content (Join-Path $modulesPath "02-Logging.ps1") -Raw
+    $mod13 = Get-Content (Join-Path $modulesPath "13-Timezone.ps1") -Raw
+    $mod24 = Get-Content (Join-Path $modulesPath "24-DisableAdmin.ps1") -Raw
+    $mod26 = Get-Content (Join-Path $modulesPath "26-MPIO.ps1") -Raw
+
+    # 01-Console: Get-ConsoleCapabilities
+    Write-TestResult "01-Console: Get-ConsoleCapabilities defined" ($mod01 -match 'function\s+Get-ConsoleCapabilities\b')
+    Write-TestResult "01-Console: Get-ConsoleCapabilities detects Unicode support" ($mod01 -match 'function Get-ConsoleCapabilities[\s\S]{0,2000}SupportsUnicode')
+    Write-TestResult "01-Console: Get-ConsoleCapabilities detects VT support" ($mod01 -match 'function Get-ConsoleCapabilities[\s\S]{0,2000}SupportsVT')
+    Write-TestResult "01-Console: Get-ConsoleCapabilities detects color depth" ($mod01 -match 'function Get-ConsoleCapabilities[\s\S]{0,2000}ColorDepth')
+    Write-TestResult "01-Console: Get-ConsoleCapabilities detects buffer dimensions" ($mod01 -match 'function Get-ConsoleCapabilities[\s\S]{0,2000}BufferWidth')
+    Write-TestResult "01-Console: Get-ConsoleCapabilities detects redirected output" ($mod01 -match 'function Get-ConsoleCapabilities[\s\S]{0,2000}IsRedirected')
+
+    # 01-Console: Optimize-ConsoleBuffer
+    Write-TestResult "01-Console: Optimize-ConsoleBuffer defined" ($mod01 -match 'function\s+Optimize-ConsoleBuffer\b')
+    Write-TestResult "01-Console: Optimize-ConsoleBuffer has MinWidth param" ($mod01 -match 'function Optimize-ConsoleBuffer[\s\S]{0,300}\$MinWidth')
+    Write-TestResult "01-Console: Optimize-ConsoleBuffer has MinBufferHeight param" ($mod01 -match 'function Optimize-ConsoleBuffer[\s\S]{0,300}\$MinBufferHeight')
+    Write-TestResult "01-Console: Initialize-ConsoleWindow calls Get-ConsoleCapabilities" ($mod01 -match 'ConsoleCapabilities\s*=\s*Get-ConsoleCapabilities')
+
+    # 02-Logging: Write-StructuredLog
+    Write-TestResult "02-Logging: Write-StructuredLog defined" ($mod02 -match 'function\s+Write-StructuredLog\b')
+    Write-TestResult "02-Logging: Write-StructuredLog has Level param with ValidateSet" ($mod02 -match 'function Write-StructuredLog[\s\S]{0,500}ValidateSet.*INFO.*WARN.*ERROR')
+    Write-TestResult "02-Logging: Write-StructuredLog has Category param" ($mod02 -match 'function Write-StructuredLog[\s\S]{0,500}\$Category')
+    Write-TestResult "02-Logging: Write-StructuredLog has Data hashtable param" ($mod02 -match 'function Write-StructuredLog[\s\S]{0,600}\[hashtable\]\$Data')
+    Write-TestResult "02-Logging: Write-StructuredLog builds structured entry" ($mod02 -match 'function Write-StructuredLog[\s\S]{0,1500}LEVEL.*CATEGORY.*HOSTNAME.*MESSAGE')
+
+    # 02-Logging: Invoke-LogRotation
+    Write-TestResult "02-Logging: Invoke-LogRotation defined" ($mod02 -match 'function\s+Invoke-LogRotation\b')
+    Write-TestResult "02-Logging: Invoke-LogRotation has DaysToArchive param" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,300}\$DaysToArchive')
+    Write-TestResult "02-Logging: Invoke-LogRotation has MaxArchivesMB param" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,300}\$MaxArchivesMB')
+    Write-TestResult "02-Logging: Invoke-LogRotation uses zip compression" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,3000}System\.IO\.Compression')
+    Write-TestResult "02-Logging: Invoke-LogRotation groups logs by month" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,3000}Group-Object.*yyyy-MM')
+    Write-TestResult "02-Logging: Invoke-LogRotation enforces archive size limit" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,5000}MaxArchivesMB.*1MB')
+
+    # 13-Timezone: Get-TimezoneOffsetString
+    Write-TestResult "13-Timezone: Get-TimezoneOffsetString defined" ($mod13 -match 'function\s+Get-TimezoneOffsetString\b')
+    Write-TestResult "13-Timezone: Get-TimezoneOffsetString takes TimeZoneInfo param" ($mod13 -match 'function Get-TimezoneOffsetString[\s\S]{0,300}\[System\.TimeZoneInfo\]\$TimeZoneInfo')
+    Write-TestResult "13-Timezone: Get-TimezoneOffsetString returns UTC offset" ($mod13 -match 'function Get-TimezoneOffsetString[\s\S]{0,500}UTC')
+
+    # 13-Timezone: Show-TimezoneComparison
+    Write-TestResult "13-Timezone: Show-TimezoneComparison defined" ($mod13 -match 'function\s+Show-TimezoneComparison\b')
+    Write-TestResult "13-Timezone: Show-TimezoneComparison takes TargetTimezoneId param" ($mod13 -match 'function Show-TimezoneComparison[\s\S]{0,300}\$TargetTimezoneId')
+    Write-TestResult "13-Timezone: Show-TimezoneComparison shows current vs target" ($mod13 -match 'function Show-TimezoneComparison[\s\S]{0,2000}CURRENT[\s\S]{0,200}TARGET')
+    Write-TestResult "13-Timezone: Show-TimezoneComparison shows DST info" ($mod13 -match 'function Show-TimezoneComparison[\s\S]{0,2000}SupportsDaylightSavingTime')
+    Write-TestResult "13-Timezone: Show-TimezoneComparison calculates time difference" ($mod13 -match 'function Show-TimezoneComparison[\s\S]{0,3000}TotalMinutes')
+    Write-TestResult "13-Timezone: Set-SelectedTimezone calls Show-TimezoneComparison" ($mod13 -match 'Set-SelectedTimezone[\s\S]{0,1000}Show-TimezoneComparison')
+
+    # 24-DisableAdmin: Show-AdminAccountStatus
+    Write-TestResult "24-DisableAdmin: Show-AdminAccountStatus defined" ($mod24 -match 'function\s+Show-AdminAccountStatus\b')
+    Write-TestResult "24-DisableAdmin: Show-AdminAccountStatus retrieves admin account" ($mod24 -match 'function Show-AdminAccountStatus[\s\S]{0,500}Get-LocalUser.*Administrator')
+    Write-TestResult "24-DisableAdmin: Show-AdminAccountStatus shows enabled/disabled" ($mod24 -match 'function Show-AdminAccountStatus[\s\S]{0,1500}ENABLED[\s\S]{0,200}DISABLED')
+    Write-TestResult "24-DisableAdmin: Show-AdminAccountStatus shows last logon" ($mod24 -match 'function Show-AdminAccountStatus[\s\S]{0,2000}Last Logon')
+    Write-TestResult "24-DisableAdmin: Show-AdminAccountStatus shows password set date" ($mod24 -match 'function Show-AdminAccountStatus[\s\S]{0,2000}Password Set')
+    Write-TestResult "24-DisableAdmin: Show-AdminAccountStatus checks SID -500" ($mod24 -match 'function Show-AdminAccountStatus[\s\S]{0,3000}EndsWith.*-500')
+    Write-TestResult "24-DisableAdmin: Disable-BuiltInAdminAccount calls Show-AdminAccountStatus" ($mod24 -match 'Disable-BuiltInAdminAccount[\s\S]{0,500}Show-AdminAccountStatus')
+
+    # 26-MPIO: Show-MPIOStatusSummary
+    Write-TestResult "26-MPIO: Show-MPIOStatusSummary defined" ($mod26 -match 'function\s+Show-MPIOStatusSummary\b')
+    Write-TestResult "26-MPIO: Show-MPIOStatusSummary checks feature state" ($mod26 -match 'function Show-MPIOStatusSummary[\s\S]{0,1000}Get-WindowsFeature.*MultipathIO')
+    Write-TestResult "26-MPIO: Show-MPIOStatusSummary shows claimed devices" ($mod26 -match 'function Show-MPIOStatusSummary[\s\S]{0,3000}Get-MSDSMSupportedHW')
+    Write-TestResult "26-MPIO: Show-MPIOStatusSummary shows load balance policy" ($mod26 -match 'function Show-MPIOStatusSummary[\s\S]{0,4000}Get-MSDSMGlobalDefaultLoadBalancePolicy')
+    Write-TestResult "26-MPIO: Show-MPIOStatusSummary queries MPIO disk info" ($mod26 -match 'function Show-MPIOStatusSummary[\s\S]{0,5000}MPIO_DISK_INFO')
+    Write-TestResult "26-MPIO: Install-MPIOFeature calls Show-MPIOStatusSummary" ($mod26 -match 'Install-MPIOFeature[\s\S]{0,3000}Show-MPIOStatusSummary')
+
+} catch {
+    Write-TestResult "Wave 8 module enhancement tests" $false $_.Exception.Message
+}
 
 $elapsed = (Get-Date) - $script:StartTime
 

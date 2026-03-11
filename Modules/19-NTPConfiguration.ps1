@@ -52,6 +52,7 @@ function Set-NTPConfiguration {
         Write-MenuItem "[4]  Use Custom NTP Server"
         Write-MenuItem "[5]  Force Time Sync Now"
         Write-MenuItem "[6]  Show Detailed Time Status"
+        Write-MenuItem "[7]  View NTP Status"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -99,9 +100,12 @@ function Set-NTPConfiguration {
             "6" {
                 Show-DetailedTimeStatus
             }
+            "7" {
+                Show-NTPStatus
+            }
             "b" { return }
             "B" { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -211,6 +215,86 @@ function Show-DetailedTimeStatus {
         } else {
             Write-OutputColor "  Clock offset: ${offsetMs}ms — excellent synchronization" -color "Success"
         }
+    }
+}
+
+function Show-NTPStatus {
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  NTP CONFIGURATION STATUS".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    # Get current time source
+    try {
+        $source = (w32tm /query /source 2>&1).Trim()
+        $color = if ($source -match 'error|Local CMOS') { "Warning" } else { "Success" }
+        $lineStr = "  Time Source: $source"
+        if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $color
+    } catch {
+        Write-OutputColor "  │$("  Time Source: Cannot determine".PadRight(72))│" -color "Warning"
+    }
+
+    # Get sync status
+    try {
+        $status = w32tm /query /status 2>&1
+        foreach ($line in $status) {
+            $lineStr = "$line".Trim()
+            if ($lineStr -match '^(Source|Last Sync|Stratum|Poll Interval):(.*)') {
+                $regexMatches = $matches
+                $label = $regexMatches[1].Trim()
+                $value = $regexMatches[2].Trim()
+                $displayLine = "  ${label}: $value"
+                if ($displayLine.Length -gt 69) { $displayLine = $displayLine.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($displayLine.PadRight(72))│" -color "Info"
+            }
+        }
+    } catch {
+        Write-OutputColor "  │$("  Cannot query time status".PadRight(72))│" -color "Warning"
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    # Show configured NTP peers
+    try {
+        $peers = w32tm /query /peers 2>&1
+        $peerCount = @($peers | Where-Object { $_ -match '^Peer:' }).Count
+        if ($peerCount -gt 0) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  CONFIGURED PEERS ($peerCount)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($peerLine in $peers) {
+                if ("$peerLine" -match '^Peer:\s*(.+)') {
+                    $regexMatches = $matches
+                    $peerName = $regexMatches[1].Trim()
+                    $displayLine = "  - $peerName"
+                    if ($displayLine.Length -gt 69) { $displayLine = $displayLine.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($displayLine.PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        }
+    } catch {
+        # Ignore peer query failures
+    }
+
+    # Test time accuracy
+    try {
+        $ntpTest = w32tm /stripchart /computer:time.windows.com /dataonly /samples:1 2>&1
+        $lastLine = $ntpTest | Select-Object -Last 1
+        if ("$lastLine" -match '([+-]?\d+\.\d+)s') {
+            $regexMatches = $matches
+            $offset = [double]$regexMatches[1]
+            $offsetMs = [math]::Abs([math]::Round($offset * 1000, 0))
+            $color = if ($offsetMs -lt 1000) { "Success" } elseif ($offsetMs -lt 5000) { "Warning" } else { "Error" }
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Time offset from time.windows.com: ${offsetMs}ms" -color $color
+        }
+    } catch {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Could not test time accuracy" -color "Warning"
     }
 }
 #endregion

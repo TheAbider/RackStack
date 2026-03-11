@@ -14,6 +14,107 @@ function Test-MPIOInstalled {
     }
 }
 
+# Show MPIO status summary including claimed devices and active paths
+function Show-MPIOStatusSummary {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  MPIO STATUS SUMMARY".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    # Check feature install state
+    try {
+        $mpioFeature = Get-WindowsFeature -Name MultipathIO -ErrorAction Stop
+        $featureState = $mpioFeature.InstallState
+        $stateColor = if ($featureState -eq "Installed") { "Success" } else { "Warning" }
+        Write-OutputColor "  │$("  Feature State:    $featureState".PadRight(72))│" -color $stateColor
+    }
+    catch {
+        Write-OutputColor "  │$("  Feature State:    Unable to query".PadRight(72))│" -color "Error"
+    }
+
+    # Check if MPIO module is available
+    $mpioModule = Get-Module -ListAvailable -Name MPIO -ErrorAction SilentlyContinue
+    if ($null -ne $mpioModule) {
+        Write-OutputColor "  │$("  MPIO Module:      Available (v$($mpioModule.Version))".PadRight(72))│" -color "Success"
+
+        # Try to get MPIO configuration details
+        try {
+            Import-Module MPIO -ErrorAction SilentlyContinue
+
+            # Get claimed hardware IDs (devices MPIO manages)
+            $claimedDevices = @(Get-MSDSMSupportedHW -ErrorAction SilentlyContinue)
+            Write-OutputColor "  │$("  Claimed Devices:  $($claimedDevices.Count) hardware ID(s)".PadRight(72))│" -color "Info"
+
+            foreach ($device in $claimedDevices) {
+                $vendorProduct = "$($device.VendorId.Trim()) / $($device.ProductId.Trim())"
+                if ($vendorProduct.Length -gt 52) { $vendorProduct = $vendorProduct.Substring(0, 49) + "..." }
+                Write-OutputColor "  │$("    $vendorProduct".PadRight(72))│" -color "Info"
+            }
+
+            # Get MPIO-managed disks
+            $mpioDrives = @(Get-MSDSMAutomaticClaimSettings -ErrorAction SilentlyContinue)
+            if ($mpioDrives.Count -gt 0) {
+                $autoKeys = @($mpioDrives | ForEach-Object { $_.Keys }) | Select-Object -Unique
+                foreach ($key in $autoKeys) {
+                    Write-OutputColor "  │$("  Auto-Claim:       $key".PadRight(72))│" -color "Info"
+                }
+            }
+
+            # Get load balance policy
+            try {
+                $lbPolicy = Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue
+                if ($null -ne $lbPolicy) {
+                    Write-OutputColor "  │$("  Load Balance:     $lbPolicy".PadRight(72))│" -color "Info"
+                }
+            }
+            catch { }
+
+            # Show active MPIO paths via WMI if available
+            try {
+                $mpioDisks = @(Get-CimInstance -Namespace "root\wmi" -ClassName "MPIO_DISK_INFO" -ErrorAction SilentlyContinue)
+                if ($mpioDisks.Count -gt 0) {
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  ACTIVE MULTIPATH DISKS".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+                    foreach ($disk in $mpioDisks) {
+                        $diskName = $disk.DeviceName
+                        if ($null -ne $diskName -and $diskName.Length -gt 50) {
+                            $diskName = $diskName.Substring(0, 47) + "..."
+                        }
+                        $pathCount = 0
+                        if ($null -ne $disk.NumberDrives) {
+                            $pathCount = $disk.NumberDrives
+                        }
+                        $pathColor = if ($pathCount -ge 2) { "Success" } else { "Warning" }
+                        $diskLine = "  $diskName"
+                        $pathLine = "$pathCount path(s)"
+                        $combined = "$diskLine"
+                        if ($combined.Length -gt 55) { $combined = $combined.Substring(0, 55) }
+                        $combined = $combined.PadRight(56) + $pathLine
+                        Write-OutputColor "  │$($combined.PadRight(72))│" -color $pathColor
+                    }
+                }
+                else {
+                    Write-OutputColor "  │$("  Active Paths:     No multipath disks detected".PadRight(72))│" -color "Info"
+                }
+            }
+            catch {
+                Write-OutputColor "  │$("  Active Paths:     Could not query (may need reboot)".PadRight(72))│" -color "Info"
+            }
+        }
+        catch {
+            Write-OutputColor "  │$("  Details:          Could not load MPIO module".PadRight(72))│" -color "Warning"
+        }
+    }
+    else {
+        Write-OutputColor "  │$("  MPIO Module:      Not available (reboot may be required)".PadRight(72))│" -color "Warning"
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+}
+
 # Function to install MPIO feature
 function Install-MPIOFeature {
     Clear-Host
@@ -21,6 +122,7 @@ function Install-MPIOFeature {
 
     if (Test-MPIOInstalled) {
         Write-OutputColor "  MPIO (Multipath I/O) is already installed." -color "Success"
+        Show-MPIOStatusSummary
         return
     }
 
@@ -51,6 +153,7 @@ function Install-MPIOFeature {
 
         if ($installResult.TimedOut) {
             Add-SessionChange -Category "System" -Description "MPIO installation timed out"
+            Clear-MenuCache
             return $false
         }
         elseif ($installResult.Success) {
@@ -65,7 +168,9 @@ function Install-MPIOFeature {
                 Write-OutputColor "  MPIO management cmdlets will be available after reboot." -color "Info"
             }
 
-            Write-OutputColor "" -color "Info"
+            # Show post-install status summary
+            Show-MPIOStatusSummary
+
             Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
             Write-OutputColor "  After rebooting, configure MPIO for your storage via:" -color "Info"
             Write-OutputColor "  - iSCSI Setup > Initialize MPIO for iSCSI" -color "Info"
@@ -79,6 +184,7 @@ function Install-MPIOFeature {
                 Write-OutputColor "  Details: $($installResult.Error.Trim())" -color "Error"
             }
             Add-SessionChange -Category "System" -Description "MPIO installation failed"
+            Clear-MenuCache
         }
     }
     catch {

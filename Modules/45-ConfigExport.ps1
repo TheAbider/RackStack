@@ -112,6 +112,42 @@ function Export-ServerConfiguration {
             $config += "  Link Speed:   $($adapter.LinkSpeed)"
             $config += "  MAC Address:  $($adapter.MacAddress)"
 
+            # Adapter speed negotiation state
+            try {
+                $physAdapter = Get-NetAdapterHardwareInfo -Name $adapter.Name -ErrorAction SilentlyContinue
+                if ($null -ne $physAdapter) {
+                    $adapterAdv = Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword "*SpeedDuplex" -ErrorAction SilentlyContinue
+                    $mediaType = $adapter.MediaType
+                    if ($mediaType) {
+                        $config += "  Media Type:   $mediaType"
+                    }
+                    if ($null -ne $adapterAdv -and $adapterAdv.DisplayValue) {
+                        $config += "  Speed/Duplex: $($adapterAdv.DisplayValue)"
+                    }
+                    # Flag if running below max capability
+                    $linkSpeedStr = $adapter.LinkSpeed
+                    if ($linkSpeedStr -match '(\d+(\.\d+)?)\s*(Gbps|Mbps)') {
+                        $regexMatches = $matches
+                        $linkVal = [double]$regexMatches[1]
+                        $linkUnit = $regexMatches[3]
+                        $linkMbps = if ($linkUnit -eq "Gbps") { $linkVal * 1000 } else { $linkVal }
+                        $maxSpeed = Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword "*SpeedDuplex" -ErrorAction SilentlyContinue
+                        if ($null -ne $maxSpeed -and $maxSpeed.ValidRegistryValues) {
+                            $maxOptions = @($maxSpeed.ValidDisplayValues | Where-Object { $_ -match '\d' })
+                            if ($maxOptions.Count -gt 0) {
+                                $lastOption = $maxOptions[-1]
+                                if ($lastOption -match '10\s*Gbps|10000' -and $linkMbps -lt 10000) {
+                                    $config += "  ** WARNING:   Running below max speed (capable of 10 Gbps)"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch {
+                # Adapter speed details unavailable — skip silently
+            }
+
             $ipConfig = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.Name }
             if ($ipConfig) {
                 $config += "  IPv4 Address: $($ipConfig.IPAddress)/$($ipConfig.PrefixLength)"
@@ -169,6 +205,15 @@ function Export-ServerConfiguration {
         $config += "Domain Profile:  $($fwState.Domain)"
         $config += "Private Profile: $($fwState.Private)"
         $config += "Public Profile:  $($fwState.Public)"
+        try {
+            $fwRules = @(Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue)
+            $fwInbound = @($fwRules | Where-Object { $_.Direction -eq "Inbound" }).Count
+            $fwOutbound = @($fwRules | Where-Object { $_.Direction -eq "Outbound" }).Count
+            $config += "Enabled Rules:   $($fwRules.Count) total ($fwInbound inbound, $fwOutbound outbound)"
+        }
+        catch {
+            $config += "Enabled Rules:   Unable to enumerate"
+        }
         $config += ""
 
         # MPIO
@@ -249,6 +294,70 @@ function Export-ServerConfiguration {
         }
         $config += ""
 
+        # BitLocker
+        $config += "### BITLOCKER STATUS ###"
+        try {
+            $blVolumes = Get-BitLockerVolume -ErrorAction SilentlyContinue
+            if ($null -ne $blVolumes) {
+                foreach ($blVol in $blVolumes) {
+                    $protectors = @($blVol.KeyProtector | ForEach-Object { $_.KeyProtectorType }) -join ", "
+                    if (-not $protectors) { $protectors = "None" }
+                    $config += "  $($blVol.MountPoint) | Encryption: $($blVol.VolumeStatus) | Protection: $($blVol.ProtectionStatus) | Protectors: $protectors"
+                }
+            } else {
+                $config += "BitLocker: Not available (cmdlet not found or no volumes)"
+            }
+        }
+        catch {
+            $config += "BitLocker: Unable to query (may require elevated privileges or Server edition)"
+        }
+        $config += ""
+
+        # Event Log Configuration
+        $config += "### EVENT LOG CONFIGURATION ###"
+        try {
+            $logNames = @("Application", "System", "Security")
+            foreach ($logName in $logNames) {
+                $logConfig = Get-WinEvent -ListLog $logName -ErrorAction SilentlyContinue
+                if ($null -ne $logConfig) {
+                    $maxSizeMB = [math]::Round($logConfig.MaximumSizeInBytes / 1MB, 1)
+                    $config += "  $logName | Max Size: ${maxSizeMB} MB | Mode: $($logConfig.LogMode)"
+                }
+            }
+        }
+        catch {
+            $config += "  (Unable to query event log configuration: $_)"
+        }
+        $config += ""
+
+        # Time Sync
+        $config += "### TIME SYNCHRONIZATION ###"
+        $config += "System Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        try {
+            $timeSource = & w32tm /query /source 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $config += "NTP Source:  $timeSource"
+            } else {
+                $config += "NTP Source:  Unable to determine"
+            }
+        }
+        catch {
+            $config += "NTP Source:  w32tm not available"
+        }
+        try {
+            $syncStatus = & w32tm /query /status 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $lastSync = $syncStatus | Select-String "Last Successful Sync Time"
+                if ($lastSync) {
+                    $config += "Last Sync:   $($lastSync.ToString().Split(':',2)[1].Trim())"
+                }
+            }
+        }
+        catch {
+            # Time sync status unavailable — skip silently
+        }
+        $config += ""
+
         # Storage
         $config += "### STORAGE ###"
         try {
@@ -288,11 +397,22 @@ function Export-ServerConfiguration {
                 $config += "  Virtual Switches:"
                 foreach ($sw in $vmSwitches) {
                     $teamMembers = ""
+                    $teamDetails = ""
                     if ($sw.EmbeddedTeamingEnabled) {
-                        $teamNics = (Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue).NetAdapterInterfaceDescription -join ", "
-                        if ($teamNics) { $teamMembers = " | Team: $teamNics" }
+                        try {
+                            $setTeam = Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue
+                            if ($null -ne $setTeam) {
+                                $teamNics = $setTeam.NetAdapterInterfaceDescription -join ", "
+                                if ($teamNics) { $teamMembers = " | Team: $teamNics" }
+                                $lbAlgo = $setTeam.LoadBalancingAlgorithm
+                                if ($lbAlgo) { $teamDetails = " | LB: $lbAlgo" }
+                            }
+                        }
+                        catch {
+                            # SET team query failed — skip details
+                        }
                     }
-                    $config += "    $($sw.Name) (Type: $($sw.SwitchType))$teamMembers"
+                    $config += "    $($sw.Name) (Type: $($sw.SwitchType))$teamMembers$teamDetails"
                 }
             }
 
@@ -386,8 +506,8 @@ function Save-ConfigurationProfile {
             "DNS2" = if ($primaryDNS -and $primaryDNS.ServerAddresses.Count -ge 2) { $primaryDNS.ServerAddresses[1] } else { $script:DNSPresets["Google DNS"][1] }
         }
         "Domain" = [ordered]@{
-            "JoinDomain" = $computerSystem.PartOfDomain
-            "DomainName" = if ($computerSystem.PartOfDomain) { $computerSystem.Domain } else { $script:Domain }
+            "JoinDomain" = if ($null -ne $computerSystem) { $computerSystem.PartOfDomain } else { $false }
+            "DomainName" = if ($null -ne $computerSystem -and $computerSystem.PartOfDomain) { $computerSystem.Domain } else { $script:Domain }
             "_Note" = "Domain join will prompt for credentials when applied"
         }
         "Timezone" = $timezone.Id
@@ -611,6 +731,7 @@ function Import-ConfigurationProfile {
                     $changesApplied++
                     Write-OutputColor "        Hostname set. Reboot required." -color "Success"
                     Add-SessionChange -Category "System" -Description "Set hostname to $($configProfile.Hostname)"
+                    Clear-MenuCache
                 } else {
                     Write-OutputColor "        Invalid hostname format: $($configProfile.Hostname)" -color "Error"
                     $errors++
@@ -642,6 +763,7 @@ function Import-ConfigurationProfile {
                 $changesApplied++
                 Write-OutputColor "        Network configured." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set IP $($configProfile.Network.IPAddress)/$($configProfile.Network.SubnetCIDR) on $adapterName"
+                Clear-MenuCache
             }
             catch {
                 Write-OutputColor "        Failed: $_" -color "Error"
@@ -659,6 +781,7 @@ function Import-ConfigurationProfile {
                 $changesApplied++
                 Write-OutputColor "        Timezone set." -color "Success"
                 Add-SessionChange -Category "System" -Description "Set timezone to $($configProfile.Timezone)"
+                Clear-MenuCache
             }
             catch {
                 Write-OutputColor "        Failed: $_" -color "Error"
@@ -732,7 +855,7 @@ function Import-ConfigurationProfile {
             if ($script:PowerPlanGUID.ContainsKey($configProfile.PowerPlan)) {
                 powercfg /setactive $script:PowerPlanGUID[$configProfile.PowerPlan] 2>&1 | Out-Null
                 if ($LASTEXITCODE -ne 0) {
-                    Write-OutputColor "        Failed to set power plan (exit code $LASTEXITCODE)." -color "Warning"
+                    Write-OutputColor "        Failed to set power plan (exit code $LASTEXITCODE)." -color "Error"
                 } else {
                     $changesApplied++
                     Write-OutputColor "        Power plan set." -color "Success"
@@ -740,7 +863,7 @@ function Import-ConfigurationProfile {
                 }
                 Clear-MenuCache
             } else {
-                Write-OutputColor "        Unknown power plan: $($configProfile.PowerPlan)" -color "Warning"
+                Write-OutputColor "        Unknown power plan: $($configProfile.PowerPlan)" -color "Error"
             }
         } else {
             Write-OutputColor "  [7/13] Power plan: skipped" -color "Debug"
@@ -823,6 +946,7 @@ function Import-ConfigurationProfile {
                     Write-OutputColor "        Local admin '$adminName' created." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "Security" -Description "Created local admin account '$adminName'"
+                    Clear-MenuCache
                 }
             }
             catch {
@@ -843,6 +967,7 @@ function Import-ConfigurationProfile {
                     Write-OutputColor "        Built-in Administrator disabled." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "Security" -Description "Disabled built-in Administrator account"
+                    Clear-MenuCache
                 } else {
                     Write-OutputColor "        Already disabled." -color "Debug"
                 }
@@ -871,6 +996,7 @@ function Import-ConfigurationProfile {
                     $changesApplied++
                     Write-OutputColor "        Joined domain. Reboot required." -color "Success"
                     Add-SessionChange -Category "System" -Description "Joined domain $($configProfile.Domain.DomainName)"
+                    Clear-MenuCache
                 }
             }
             catch {
@@ -904,6 +1030,7 @@ function Import-ConfigurationProfile {
         }
 
         Add-SessionChange -Category "Import" -Description "Applied configuration profile from $profilePath ($changesApplied changes)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to load profile: $_" -color "Error"
@@ -1212,6 +1339,8 @@ function Save-DriftBaseline {
                 IP = if ($ip) { $ip.IPAddress } else { $null }
                 Prefix = if ($ip) { $ip.PrefixLength } else { $null }
                 DNS = $dns
+                LinkSpeed = $adapter.LinkSpeed
+                MediaType = $adapter.MediaType
             }
         }
 
@@ -1226,8 +1355,85 @@ function Save-DriftBaseline {
         $vmSwitches = Get-VMSwitch -ErrorAction SilentlyContinue
         if ($vmSwitches) {
             foreach ($sw in $vmSwitches) {
-                $switches += @{ Name = $sw.Name; Type = $sw.SwitchType.ToString() }
+                $swInfo = @{ Name = $sw.Name; Type = $sw.SwitchType.ToString(); EmbeddedTeaming = $sw.EmbeddedTeamingEnabled }
+                if ($sw.EmbeddedTeamingEnabled) {
+                    try {
+                        $setTeam = Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue
+                        if ($null -ne $setTeam) {
+                            $swInfo["TeamNicNames"] = @($setTeam.NetAdapterInterfaceDescription)
+                            $swInfo["LoadBalancingAlgorithm"] = $setTeam.LoadBalancingAlgorithm.ToString()
+                        }
+                    }
+                    catch {
+                        # SET team query failed — skip details
+                    }
+                }
+                $switches += $swInfo
             }
+        }
+
+        # Firewall rule counts
+        $fwRuleCounts = [ordered]@{}
+        try {
+            $fwRulesAll = @(Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue)
+            $fwRuleCounts["Total"] = $fwRulesAll.Count
+            $fwRuleCounts["Inbound"] = @($fwRulesAll | Where-Object { $_.Direction -eq "Inbound" }).Count
+            $fwRuleCounts["Outbound"] = @($fwRulesAll | Where-Object { $_.Direction -eq "Outbound" }).Count
+        }
+        catch {
+            $fwRuleCounts["Total"] = -1
+        }
+
+        # BitLocker volumes
+        $bitlockerVolumes = @()
+        try {
+            $blVolumes = Get-BitLockerVolume -ErrorAction SilentlyContinue
+            if ($null -ne $blVolumes) {
+                foreach ($blVol in $blVolumes) {
+                    $protectors = @($blVol.KeyProtector | ForEach-Object { $_.KeyProtectorType.ToString() })
+                    $bitlockerVolumes += @{
+                        MountPoint = $blVol.MountPoint
+                        VolumeStatus = $blVol.VolumeStatus.ToString()
+                        ProtectionStatus = $blVol.ProtectionStatus.ToString()
+                        KeyProtectorTypes = $protectors
+                    }
+                }
+            }
+        }
+        catch {
+            # BitLocker unavailable — skip
+        }
+
+        # Event log configuration
+        $eventLogs = @()
+        try {
+            foreach ($logName in @("Application", "System", "Security")) {
+                $logConfig = Get-WinEvent -ListLog $logName -ErrorAction SilentlyContinue
+                if ($null -ne $logConfig) {
+                    $eventLogs += @{
+                        Name = $logName
+                        MaxSizeBytes = $logConfig.MaximumSizeInBytes
+                        LogMode = $logConfig.LogMode.ToString()
+                    }
+                }
+            }
+        }
+        catch {
+            # Event log query failed — skip
+        }
+
+        # Time synchronization
+        $timeSync = [ordered]@{
+            SystemTime = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        }
+        try {
+            $timeSource = & w32tm /query /source 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $timeSync["NTPSource"] = "$timeSource"
+            }
+        }
+        catch {
+            # w32tm not available
         }
 
         $baseline = [ordered]@{
@@ -1250,6 +1456,10 @@ function Save-DriftBaseline {
             NetworkAdapters = $adapters
             InstalledFeatures = $features
             VMSwitches = $switches
+            FirewallRuleCounts = $fwRuleCounts
+            BitLockerVolumes = $bitlockerVolumes
+            EventLogs = $eventLogs
+            TimeSync = $timeSync
         }
 
         $baseline | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $baselinePath -Encoding UTF8 -Force
@@ -1308,7 +1518,7 @@ function Compare-DriftHistory {
         $b2 = Get-Content -LiteralPath $Baseline2Path -Raw | ConvertFrom-Json
 
         $changes = @()
-        $skipKeys = @("_BaselineInfo", "NetworkAdapters", "VMSwitches", "InstalledFeatures")
+        $skipKeys = @("_BaselineInfo", "NetworkAdapters", "VMSwitches", "InstalledFeatures", "FirewallRuleCounts", "BitLockerVolumes", "EventLogs", "TimeSync")
         $allProps = @()
         $b1.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys } | ForEach-Object { $allProps += $_.Name }
         $b2.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys -and $_.Name -notin $allProps } | ForEach-Object { $allProps += $_.Name }
@@ -1328,6 +1538,93 @@ function Compare-DriftHistory {
         $removedFeats = @($feat1 | Where-Object { $_ -notin $feat2 })
         if ($addedFeats.Count -gt 0) { $changes += @{ Setting = "Features Added"; Before = ""; After = $addedFeats -join ", " } }
         if ($removedFeats.Count -gt 0) { $changes += @{ Setting = "Features Removed"; Before = $removedFeats -join ", "; After = "" } }
+
+        # Compare firewall rule counts
+        if ($b1.FirewallRuleCounts -and $b2.FirewallRuleCounts) {
+            foreach ($countProp in @("Total", "Inbound", "Outbound")) {
+                $fc1 = "$($b1.FirewallRuleCounts.$countProp)"
+                $fc2 = "$($b2.FirewallRuleCounts.$countProp)"
+                if ($fc1 -ne $fc2) {
+                    $changes += @{ Setting = "FW Rules ($countProp)"; Before = $fc1; After = $fc2 }
+                }
+            }
+        }
+
+        # Compare BitLocker volumes
+        if ($b1.BitLockerVolumes -or $b2.BitLockerVolumes) {
+            $blVols1 = @($b1.BitLockerVolumes)
+            $blVols2 = @($b2.BitLockerVolumes)
+            foreach ($blv in $blVols2) {
+                $matching = $blVols1 | Where-Object { $_.MountPoint -eq $blv.MountPoint }
+                if ($null -ne $matching) {
+                    if ("$($matching.ProtectionStatus)" -ne "$($blv.ProtectionStatus)") {
+                        $changes += @{ Setting = "BitLocker $($blv.MountPoint) Protection"; Before = "$($matching.ProtectionStatus)"; After = "$($blv.ProtectionStatus)" }
+                    }
+                    if ("$($matching.VolumeStatus)" -ne "$($blv.VolumeStatus)") {
+                        $changes += @{ Setting = "BitLocker $($blv.MountPoint) Encryption"; Before = "$($matching.VolumeStatus)"; After = "$($blv.VolumeStatus)" }
+                    }
+                } else {
+                    $changes += @{ Setting = "BitLocker $($blv.MountPoint)"; Before = "(not present)"; After = "$($blv.ProtectionStatus)" }
+                }
+            }
+        }
+
+        # Compare event log configuration
+        if ($b1.EventLogs -or $b2.EventLogs) {
+            $logs1 = @($b1.EventLogs)
+            $logs2 = @($b2.EventLogs)
+            foreach ($log2 in $logs2) {
+                $log1 = $logs1 | Where-Object { $_.Name -eq $log2.Name }
+                if ($null -ne $log1) {
+                    if ("$($log1.MaxSizeBytes)" -ne "$($log2.MaxSizeBytes)") {
+                        $changes += @{ Setting = "$($log2.Name) Log MaxSize"; Before = "$($log1.MaxSizeBytes)"; After = "$($log2.MaxSizeBytes)" }
+                    }
+                    if ("$($log1.LogMode)" -ne "$($log2.LogMode)") {
+                        $changes += @{ Setting = "$($log2.Name) Log Mode"; Before = "$($log1.LogMode)"; After = "$($log2.LogMode)" }
+                    }
+                }
+            }
+        }
+
+        # Compare time sync source
+        if ($b1.TimeSync -and $b2.TimeSync) {
+            $ntp1 = "$($b1.TimeSync.NTPSource)"
+            $ntp2 = "$($b2.TimeSync.NTPSource)"
+            if ($ntp1 -ne $ntp2) {
+                $changes += @{ Setting = "NTP Source"; Before = $ntp1; After = $ntp2 }
+            }
+        }
+
+        # Compare adapter link speeds
+        if ($b1.NetworkAdapters -and $b2.NetworkAdapters) {
+            foreach ($a2 in @($b2.NetworkAdapters)) {
+                $a1 = @($b1.NetworkAdapters) | Where-Object { $_.Name -eq $a2.Name }
+                if ($null -ne $a1) {
+                    if ("$($a1.LinkSpeed)" -ne "$($a2.LinkSpeed)") {
+                        $changes += @{ Setting = "$($a2.Name) LinkSpeed"; Before = "$($a1.LinkSpeed)"; After = "$($a2.LinkSpeed)" }
+                    }
+                }
+            }
+        }
+
+        # Compare VM switch teaming
+        if ($b1.VMSwitches -and $b2.VMSwitches) {
+            foreach ($sw2 in @($b2.VMSwitches)) {
+                $sw1 = @($b1.VMSwitches) | Where-Object { $_.Name -eq $sw2.Name }
+                if ($null -ne $sw1) {
+                    $team1 = if ($sw1.TeamNicNames) { ($sw1.TeamNicNames -join ", ") } else { "" }
+                    $team2 = if ($sw2.TeamNicNames) { ($sw2.TeamNicNames -join ", ") } else { "" }
+                    if ($team1 -ne $team2) {
+                        $changes += @{ Setting = "vSwitch $($sw2.Name) Team"; Before = $team1; After = $team2 }
+                    }
+                    if ("$($sw1.LoadBalancingAlgorithm)" -ne "$($sw2.LoadBalancingAlgorithm)") {
+                        $changes += @{ Setting = "vSwitch $($sw2.Name) LB"; Before = "$($sw1.LoadBalancingAlgorithm)"; After = "$($sw2.LoadBalancingAlgorithm)" }
+                    }
+                } else {
+                    $changes += @{ Setting = "vSwitch $($sw2.Name)"; Before = "(not present)"; After = "Added ($($sw2.Type))" }
+                }
+            }
+        }
 
         return @{
             Baseline1 = $b1._BaselineInfo
@@ -1482,7 +1779,7 @@ function Show-DriftDetectionMenu {
                     }
                 }
                 else {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($baselines.Count)." -color "Error"
                 }
                 Write-PressEnter
             }
@@ -1493,7 +1790,7 @@ function Show-DriftDetectionMenu {
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

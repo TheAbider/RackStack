@@ -1,6 +1,47 @@
 ﻿#region ===== SCHEDULED TASK MANAGER =====
 # Functions for viewing, managing, and exporting Windows Scheduled Tasks
 
+function Show-TaskHealthStatus {
+    try {
+        $tasks = Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.State -ne 'Disabled' -and $_.TaskPath -notlike '\Microsoft\*' }
+
+        if ($null -eq $tasks -or @($tasks).Count -eq 0) {
+            Write-OutputColor "  No custom scheduled tasks found" -color "Info"
+            return
+        }
+
+        Write-OutputColor "`n  Scheduled Task Health:" -color "Info"
+
+        $failedCount = 0
+        foreach ($task in $tasks) {
+            $info = $task | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
+            $lastResult = if ($null -ne $info) { $info.LastTaskResult } else { -1 }
+            $lastRun = if ($null -ne $info -and $null -ne $info.LastRunTime -and $info.LastRunTime -ne [datetime]::MinValue) {
+                $info.LastRunTime.ToString('yyyy-MM-dd HH:mm')
+            } else { "Never" }
+
+            $taskName = if ($task.TaskName.Length -gt 35) { $task.TaskName.Substring(0, 32) + "..." } else { $task.TaskName }
+
+            $color = "Success"
+            $status = "OK"
+            if ($lastResult -ne 0 -and $lastResult -ne 267009) {  # 267009 = task is running
+                $color = "Error"
+                $status = "FAILED (0x$($lastResult.ToString('X')))"
+                $failedCount++
+            } elseif ($lastResult -eq 267009) {
+                $color = "Warning"
+                $status = "Running"
+            }
+
+            Write-OutputColor "  $taskName  Last: $lastRun  $status" -color $color
+        }
+
+        Write-OutputColor "`n  Total: $(@($tasks).Count) active tasks, $failedCount failed" -color "Info"
+    } catch {
+        Write-OutputColor "  Could not check scheduled tasks: $($_.Exception.Message)" -color "Error"
+    }
+}
+
 function Show-ScheduledTaskManager {
     while ($true) {
         if ($global:ReturnToMainMenu) { return }
@@ -20,6 +61,7 @@ function Show-ScheduledTaskManager {
         Write-MenuItem "[6]  Run Task Now"
         Write-MenuItem "[7]  Export Task to XML"
         Write-MenuItem "[8]  Import Task from XML"
+        Write-MenuItem "[9]  Task Health Status"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -41,9 +83,19 @@ function Show-ScheduledTaskManager {
             "6" { Invoke-ScheduledTaskNow; Write-PressEnter }
             "7" { Export-ScheduledTaskXML; Write-PressEnter }
             "8" { Import-ScheduledTaskXML; Write-PressEnter }
+            "9" {
+                Clear-Host
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+                Write-OutputColor "  ║$(("                      TASK HEALTH STATUS").PadRight(72))║" -color "Info"
+                Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+                Write-OutputColor "" -color "Info"
+                Show-TaskHealthStatus
+                Write-PressEnter
+            }
             { $_ -eq "B" -or $_ -eq "b" } { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-9 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -268,7 +320,7 @@ function Show-FailedTasks {
     }
 
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  $($failed.Count) task(s) with non-zero results".PadRight(72))│" -color "Warning"
+    Write-OutputColor "  │$("  $($failed.Count) task(s) with non-zero results".PadRight(72))│" -color "Error"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 }
 
@@ -370,7 +422,7 @@ function Set-ScheduledTaskState {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $taskMap.ContainsKey($taskChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($idx - 1)." -color "Error"
         return
     }
 
@@ -394,6 +446,7 @@ function Set-ScheduledTaskState {
         }
         Write-OutputColor "  Task ${action}d successfully." -color "Success"
         Add-SessionChange -Category "System" -Description "${action}d scheduled task '$($selected.TaskName)'"
+        Clear-MenuCache
         $reverseAction = if ($action -eq "Enable") { "Disable" } else { "Enable" }
         Add-UndoAction -Category "System" -Description "${action}d scheduled task '$($selected.TaskName)'" -UndoScript {
             param($TaskPath, $TaskName, $Reverse)
@@ -447,7 +500,7 @@ function Invoke-ScheduledTaskNow {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $taskMap.ContainsKey($taskChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($idx - 1)." -color "Error"
         return
     }
 
@@ -463,6 +516,7 @@ function Invoke-ScheduledTaskNow {
         $selected | Start-ScheduledTask -ErrorAction Stop
         Write-OutputColor "  Task started successfully." -color "Success"
         Add-SessionChange -Category "System" -Description "Ran scheduled task '$($selected.TaskName)'"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error starting task: $_" -color "Error"
@@ -505,7 +559,7 @@ function Export-ScheduledTaskXML {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $taskMap.ContainsKey($taskChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($idx - 1)." -color "Error"
         return
     }
 
@@ -614,6 +668,7 @@ function Import-ScheduledTaskXML {
         Write-OutputColor "  Name: $taskName" -color "Info"
         Write-OutputColor "  Path: $taskPath" -color "Info"
         Add-SessionChange -Category "System" -Description "Imported scheduled task '$taskName' from $importPath"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error importing task: $_" -color "Error"

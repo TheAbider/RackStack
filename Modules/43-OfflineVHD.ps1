@@ -100,7 +100,7 @@ function Set-OfflineVHDConfiguration {
                 $systemHiveLoaded = $true
             }
             else {
-                Write-OutputColor "  Warning: Could not load SYSTEM hive." -color "Warning"
+                Write-OutputColor "  Warning: Could not load SYSTEM hive." -color "Error"
             }
         }
 
@@ -112,7 +112,7 @@ function Set-OfflineVHDConfiguration {
                 $softwareHiveLoaded = $true
             }
             else {
-                Write-OutputColor "  Warning: Could not load SOFTWARE hive." -color "Warning"
+                Write-OutputColor "  Warning: Could not load SOFTWARE hive." -color "Error"
             }
         }
 
@@ -136,7 +136,7 @@ function Set-OfflineVHDConfiguration {
                 $offlineStepsApplied++
             }
             catch {
-                Write-OutputColor "  WARNING: Could not set computer name: $_" -color "Warning"
+                Write-OutputColor "  WARNING: Could not set computer name: $_" -color "Error"
                 $offlineStepsFailed++
             }
         }
@@ -158,7 +158,7 @@ function Set-OfflineVHDConfiguration {
                 $offlineStepsApplied++
             }
             catch {
-                Write-OutputColor "  WARNING: Could not enable RDP: $_" -color "Warning"
+                Write-OutputColor "  WARNING: Could not enable RDP: $_" -color "Error"
                 $offlineStepsFailed++
             }
         }
@@ -177,7 +177,7 @@ function Set-OfflineVHDConfiguration {
                 }
             }
             catch {
-                Write-OutputColor "  WARNING: Could not set timezone: $_" -color "Warning"
+                Write-OutputColor "  WARNING: Could not set timezone: $_" -color "Error"
                 $offlineStepsFailed++
             }
         }
@@ -196,7 +196,7 @@ function Set-OfflineVHDConfiguration {
                 $offlineStepsApplied++
             }
             catch {
-                Write-OutputColor "  WARNING: Power plan will need to be set after first boot." -color "Warning"
+                Write-OutputColor "  WARNING: Power plan will need to be set after first boot." -color "Error"
                 $offlineStepsFailed++
             }
         }
@@ -254,7 +254,7 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
             Write-OutputColor "  First-boot script created at: $scriptFolder" -color "Success"
         }
         catch {
-            Write-OutputColor "  Note: First-boot script creation failed. Some settings may need manual config." -color "Warning"
+            Write-OutputColor "  Note: First-boot script creation failed. Some settings may need manual config." -color "Error"
         }
 
         Write-OutputColor "" -color "Info"
@@ -316,6 +316,9 @@ function Show-OfflineCustomizationPrompt {
         [string]$VMName = $null
     )
 
+    # Show any currently mounted VHDs as a warning
+    Show-MountedVHDStatus
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  PRE-BOOT CUSTOMIZATION".PadRight(72))│" -color "Info"
@@ -359,7 +362,11 @@ function Show-OfflineCustomizationPrompt {
         "3" { "Mountain Standard Time" }
         "4" { "Pacific Standard Time" }
         "5" { (Get-TimeZone).Id }
-        default { $null }
+        "6" { $null }
+        default {
+            Write-OutputColor "  Invalid selection. Enter 1-6." -color "Error"
+            return $false
+        }
     }
 
     # Apply customization
@@ -369,5 +376,29 @@ function Show-OfflineCustomizationPrompt {
         -EnableRDP $true
 
     return $result
+}
+
+# Function to show VHD mount status
+function Show-MountedVHDStatus {
+    try {
+        $mounted = Get-VHD -Path * -ErrorAction SilentlyContinue | Where-Object { $_.Attached -eq $true }
+
+        if ($null -eq $mounted -or @($mounted).Count -eq 0) {
+            Write-OutputColor "  No VHDs currently mounted" -color "Info"
+            return
+        }
+
+        Write-OutputColor "`n  Currently Mounted VHDs:" -color "Info"
+
+        foreach ($vhd in $mounted) {
+            $fileName = Split-Path -Leaf $vhd.Path
+            $sizeGB = [math]::Round($vhd.FileSize / 1GB, 1)
+            Write-OutputColor "  $fileName (${sizeGB} GB) - Mounted" -color "Warning"
+        }
+
+        Write-OutputColor "`n  $(@($mounted).Count) VHD(s) mounted. Remember to dismount when done." -color "Warning"
+    } catch {
+        Write-OutputColor "  Could not check VHD mount status: $($_.Exception.Message)" -color "Warning"
+    }
 }
 #endregion

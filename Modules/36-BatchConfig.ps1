@@ -232,9 +232,175 @@ function New-BatchConfigTemplate {
         Write-OutputColor "  Tip: The '_Help' fields explain each setting and are ignored." -color "Info"
 
         Add-SessionChange -Category "Export" -Description "Created batch config template at $savePath"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to create file: $_" -color "Error"
+    }
+}
+
+# Generate a batch config from a pre-defined scenario template
+function New-ScenarioBatchConfig {
+    Clear-Host
+    Write-CenteredOutput "Generate Batch Config from Scenario" -color "Info"
+
+    Write-OutputColor "`n  Select a configuration scenario:" -color "Info"
+    Write-OutputColor "  [1] Hyper-V Host (standalone)" -color "Info"
+    Write-OutputColor "  [2] Hyper-V Cluster Node" -color "Info"
+    Write-OutputColor "  [3] Domain Controller" -color "Info"
+    Write-OutputColor "  [4] File Server" -color "Info"
+    Write-OutputColor "  [5] Blank Template" -color "Info"
+
+    $choice = Read-Host "`n  Scenario"
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return }
+
+    $config = @{}
+    $scenarioName = ""
+
+    switch ($choice) {
+        "1" {
+            $config = [ordered]@{
+                Hostname        = "HV-HOST01"
+                IPAddress       = "192.168.1.10"
+                SubnetCIDR      = 24
+                Gateway         = "192.168.1.1"
+                DNS1            = "192.168.1.2"
+                DNS2            = "8.8.8.8"
+                Timezone        = "Eastern Standard Time"
+                EnableRDP       = $true
+                EnableWinRM     = $true
+                FirewallDomain  = $false
+                FirewallPrivate = $false
+                FirewallPublic  = $true
+                PowerPlan       = "High Performance"
+                InstallHyperV   = $true
+                InstallMPIO     = $true
+                DryRun          = $false
+            }
+            $scenarioName = "Hyper-V Host"
+            Write-OutputColor "  Loaded: Hyper-V Host template" -color "Success"
+        }
+        "2" {
+            $config = [ordered]@{
+                Hostname                  = "HV-NODE01"
+                IPAddress                 = "192.168.1.10"
+                SubnetCIDR                = 24
+                Gateway                   = "192.168.1.1"
+                DNS1                      = "192.168.1.2"
+                DNS2                      = "192.168.1.3"
+                Timezone                  = "Eastern Standard Time"
+                EnableRDP                 = $true
+                EnableWinRM               = $true
+                FirewallDomain            = $false
+                FirewallPrivate           = $false
+                FirewallPublic            = $true
+                PowerPlan                 = "High Performance"
+                InstallHyperV             = $true
+                InstallMPIO               = $true
+                InstallFailoverClustering = $true
+                DomainName                = "domain.local"
+                DryRun                    = $false
+            }
+            $scenarioName = "Cluster Node"
+            Write-OutputColor "  Loaded: Cluster Node template" -color "Success"
+        }
+        "3" {
+            $config = [ordered]@{
+                Hostname        = "DC01"
+                IPAddress       = "192.168.1.2"
+                SubnetCIDR      = 24
+                Gateway         = "192.168.1.1"
+                DNS1            = "127.0.0.1"
+                DNS2            = "192.168.1.3"
+                Timezone        = "Eastern Standard Time"
+                EnableRDP       = $true
+                FirewallDomain  = $false
+                FirewallPrivate = $false
+                FirewallPublic  = $true
+                PromoteDC       = $true
+                DomainName      = "domain.local"
+                NewForest       = $true
+                DryRun          = $false
+            }
+            $scenarioName = "Domain Controller"
+            Write-OutputColor "  Loaded: Domain Controller template" -color "Success"
+        }
+        "4" {
+            $config = [ordered]@{
+                Hostname        = "FS01"
+                IPAddress       = "192.168.1.20"
+                SubnetCIDR      = 24
+                Gateway         = "192.168.1.1"
+                DNS1            = "192.168.1.2"
+                DNS2            = "192.168.1.3"
+                Timezone        = "Eastern Standard Time"
+                EnableRDP       = $true
+                FirewallDomain  = $false
+                FirewallPrivate = $false
+                FirewallPublic  = $true
+                DomainName      = "domain.local"
+                DryRun          = $false
+            }
+            $scenarioName = "File Server"
+            Write-OutputColor "  Loaded: File Server template" -color "Success"
+        }
+        "5" {
+            $config = [ordered]@{ DryRun = $false }
+            $scenarioName = "Blank"
+            Write-OutputColor "  Loaded: Blank template" -color "Success"
+        }
+        default {
+            Write-OutputColor "  Invalid selection. Enter 1-5." -color "Error"
+            return
+        }
+    }
+
+    # Let user customize before saving
+    Write-OutputColor "`n  Customize values before saving? [Y/N]" -color "Info"
+    $customize = Read-Host "  Choice"
+
+    if ($customize -eq 'Y' -or $customize -eq 'y') {
+        # Allow editing key fields
+        Write-OutputColor "  Press Enter to keep default value shown in brackets" -color "Info"
+
+        $hostnameInput = Read-Host "  Hostname [$($config.Hostname)]"
+        if (-not [string]::IsNullOrWhiteSpace($hostnameInput)) { $config.Hostname = $hostnameInput }
+
+        $ipInput = Read-Host "  IP Address [$($config.IPAddress)]"
+        if (-not [string]::IsNullOrWhiteSpace($ipInput)) { $config.IPAddress = $ipInput }
+
+        $gwInput = Read-Host "  Gateway [$($config.Gateway)]"
+        if (-not [string]::IsNullOrWhiteSpace($gwInput)) { $config.Gateway = $gwInput }
+    }
+
+    # Save
+    $outputPath = Join-Path $script:TempPath "batch_config.json"
+    Write-OutputColor "`n  Save path [$outputPath]:" -color "Info"
+    $pathInput = Read-Host "  Path"
+    if (-not [string]::IsNullOrWhiteSpace($pathInput)) { $outputPath = $pathInput.Trim('"', "'") }
+
+    # Validate save directory exists
+    $parentDir = Split-Path $outputPath -Parent
+    if ($parentDir -and -not (Test-Path -LiteralPath $parentDir)) {
+        Write-OutputColor "  Directory does not exist: $parentDir" -color "Error"
+        return
+    }
+    if (Test-Path -LiteralPath $outputPath) {
+        if (-not (Confirm-UserAction -Message "File already exists. Overwrite?")) { return }
+    }
+
+    try {
+        $config | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $outputPath -Encoding UTF8
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Template saved to: $outputPath" -color "Success"
+        Write-OutputColor "  Edit the JSON file to customize remaining values, then use batch mode to apply." -color "Info"
+
+        Add-SessionChange -Category "Export" -Description "Generated scenario batch config ($scenarioName) at $outputPath"
+        Clear-MenuCache
+    }
+    catch {
+        Write-OutputColor "  Failed to save: $($_.Exception.Message)" -color "Error"
     }
 }
 
@@ -249,6 +415,7 @@ function Show-BatchConfigMenu {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-MenuItem "[1]  Generate Blank Template"
     Write-MenuItem "[2]  Generate from Current Server State"
+    Write-MenuItem "[3]  Generate from Scenario Template"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] Back" -color "Info"
@@ -305,8 +472,8 @@ function Export-BatchConfigFromState {
         $ipAddress = if ($null -ne $primaryIP) { $primaryIP.IPAddress } else { $null }
         $subnetCIDR = if ($null -ne $primaryIP) { $primaryIP.PrefixLength } else { 24 }
         $gateway = if ($null -ne $primaryGateway) { $primaryGateway.NextHop } else { $null }
-        $dns1 = if ($null -ne $primaryDNS -and $primaryDNS.ServerAddresses.Count -ge 1) { $primaryDNS.ServerAddresses[0] } else { $null }
-        $dns2 = if ($null -ne $primaryDNS -and $primaryDNS.ServerAddresses.Count -ge 2) { $primaryDNS.ServerAddresses[1] } else { $null }
+        $dns1 = if ($null -ne $primaryDNS -and $null -ne $primaryDNS.ServerAddresses -and @($primaryDNS.ServerAddresses).Count -ge 1) { $primaryDNS.ServerAddresses[0] } else { $null }
+        $dns2 = if ($null -ne $primaryDNS -and $null -ne $primaryDNS.ServerAddresses -and @($primaryDNS.ServerAddresses).Count -ge 2) { $primaryDNS.ServerAddresses[1] } else { $null }
 
         # ----- Domain -----
         $isDomainJoined = $false
@@ -572,6 +739,7 @@ function Export-BatchConfigFromState {
         Write-OutputColor "  Tip: This config mirrors your current server. Great for cloning to similar servers." -color "Info"
 
         Add-SessionChange -Category "Export" -Description "Generated batch config from current state at $savePath"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to generate batch config: $_" -color "Error"

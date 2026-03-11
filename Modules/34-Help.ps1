@@ -20,7 +20,7 @@ function Show-Help {
     Write-OutputColor "  │$("  home / main / m   Jump to main menu from anywhere".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  exit / quit / q   Exit the script (shows session summary)".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  r / refresh       Refresh adapter lists in network menus".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  help              Show this screen (from Settings menu)".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  help              Show this screen | help <keyword> to search".PadRight(72))│" -color "Success"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -214,6 +214,60 @@ function Show-Help {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 }
 
+# Function to search help topics by keyword
+function Search-HelpTopics {
+    param([string]$Keyword)
+
+    if ([string]::IsNullOrWhiteSpace($Keyword)) {
+        Write-OutputColor "  Usage: Type 'help <keyword>' to search help topics" -color "Info"
+        return
+    }
+
+    $Keyword = $Keyword.ToLower()
+
+    # Define searchable help topics
+    $topics = @(
+        @{ Title = "Network Configuration"; Keywords = @("network", "ip", "dns", "vlan", "set", "teaming", "nic", "adapter"); Description = "Configure IP addresses, DNS servers, VLANs, and NIC teaming via SET (Switch Embedded Teaming)" }
+        @{ Title = "iSCSI Storage"; Keywords = @("iscsi", "san", "multipath", "mpio", "target", "initiator", "storage"); Description = "Connect to iSCSI targets, configure multipath I/O, and manage SAN connections" }
+        @{ Title = "Hyper-V"; Keywords = @("hyperv", "hyper-v", "vm", "virtual", "machine", "vhd", "switch"); Description = "Install Hyper-V, create VMs, manage virtual switches, and deploy from templates" }
+        @{ Title = "Clustering"; Keywords = @("cluster", "failover", "csv", "quorum", "node", "drain"); Description = "Create failover clusters, manage CSV, configure quorum, and perform node maintenance" }
+        @{ Title = "Active Directory"; Keywords = @("ad", "domain", "dc", "forest", "promotion", "dns", "ldap"); Description = "Promote domain controllers, join domains, and manage AD infrastructure" }
+        @{ Title = "Batch Mode"; Keywords = @("batch", "automation", "unattended", "json", "config", "template", "dry-run", "dryrun"); Description = "Run unattended configuration from JSON templates. Supports DryRun mode for simulation." }
+        @{ Title = "Health Checks"; Keywords = @("health", "check", "certificate", "cert", "secure", "boot", "tpm", "smb", "numa", "speed"); Description = "System health checks including certificates, Secure Boot, adapter speed, SMB dialect, and NUMA topology" }
+        @{ Title = "Network Diagnostics"; Keywords = @("ping", "port", "scan", "trace", "mtu", "udp", "sweep", "diagnostic"); Description = "Ping, port scan (TCP/UDP), traceroute, MTU discovery, and subnet sweep" }
+        @{ Title = "Reports"; Keywords = @("report", "html", "export", "dark", "mode", "section"); Description = "Generate HTML reports with dark mode support and selective section export" }
+        @{ Title = "Configuration Export"; Keywords = @("export", "drift", "baseline", "compare", "config", "bitlocker", "firewall"); Description = "Export server configuration, save baselines, and detect drift" }
+        @{ Title = "Replication"; Keywords = @("replica", "replication", "failover", "rpo", "hyper-v", "health"); Description = "Hyper-V Replica setup, health monitoring, RPO validation, and failover operations" }
+        @{ Title = "Session Management"; Keywords = @("session", "favorite", "history", "resume", "undo", "theme", "color"); Description = "Favorites, command history, session resume, color themes, and undo operations" }
+        @{ Title = "Navigation"; Keywords = @("back", "exit", "home", "cancel", "menu", "refresh", "navigate"); Description = "Use 'back/b', 'exit/quit/q', 'home/main/m', or 'r' to refresh the dashboard" }
+        @{ Title = "Storage"; Keywords = @("disk", "partition", "format", "volume", "storage", "backend", "s2d", "fc", "smb3"); Description = "Disk management, storage backends (iSCSI/FC/S2D/SMB3/NVMe-oF), and system disk protection" }
+        @{ Title = "Security"; Keywords = @("bitlocker", "defender", "firewall", "rdp", "nla", "audit", "password", "admin"); Description = "BitLocker management, Defender exclusions, firewall templates/audit, RDP security, and local accounts" }
+        @{ Title = "Services & Tasks"; Keywords = @("service", "dependency", "scheduled", "task", "agent", "install"); Description = "Service manager with dependency view, scheduled task health monitoring, and agent installation" }
+        @{ Title = "Event Logs"; Keywords = @("event", "log", "critical", "error", "viewer", "search", "export"); Description = "View system/application/security/Hyper-V events, custom search, critical event summary" }
+        @{ Title = "Performance"; Keywords = @("performance", "cpu", "memory", "disk", "io", "bandwidth", "dashboard", "process"); Description = "Live performance dashboard with CPU, memory, disk I/O, and network bandwidth monitoring" }
+        @{ Title = "Licensing & NTP"; Keywords = @("license", "activation", "kms", "avma", "ntp", "time", "timezone", "clock"); Description = "Windows licensing status (KMS/AVMA/Retail), NTP configuration, time sync, and timezone setup" }
+        @{ Title = "VM Management"; Keywords = @("checkpoint", "snapshot", "export", "import", "migration", "vhd", "iso"); Description = "VM checkpoints, export/import, migration readiness, VHD health, and ISO inventory" }
+    )
+
+    $found = @()
+    foreach ($topic in $topics) {
+        if ($topic.Title.ToLower().Contains($Keyword) -or ($topic.Keywords | Where-Object { $_ -eq $Keyword -or $_ -like "*$Keyword*" })) {
+            $found += $topic
+        }
+    }
+
+    if ($found.Count -eq 0) {
+        Write-OutputColor "  No help topics found for '$Keyword'" -color "Warning"
+        Write-OutputColor "  Try: network, iscsi, hyperv, cluster, batch, health, storage, security, event, service" -color "Info"
+    } else {
+        Write-OutputColor "`n  Help topics matching '$Keyword':" -color "Info"
+        foreach ($topic in $found) {
+            Write-OutputColor "`n  $($topic.Title)" -color "Success"
+            Write-OutputColor "  $($topic.Description)" -color "Info"
+        }
+    }
+}
+
 # Function to change color theme
 function Set-ColorTheme {
     Clear-Host
@@ -244,6 +298,7 @@ function Set-ColorTheme {
         $script:ColorTheme = $themeMap[$choice]
         Write-OutputColor "  Theme changed to: $($script:ColorTheme)" -color "Success"
         Add-SessionChange -Category "System" -Description "Changed color theme to $($script:ColorTheme)"
+        Clear-MenuCache
         Add-UndoAction -Category "System" -Description "Changed color theme to $($script:ColorTheme)" -UndoScript {
             param($OldTheme)
             $script:ColorTheme = $OldTheme

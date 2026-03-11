@@ -1,4 +1,84 @@
 ﻿#region ===== WINDOWS UPDATES =====
+# Function to display recent Windows Update history
+function Show-UpdateHistory {
+    param([int]$Count = 20)
+
+    Write-OutputColor "`n  Recent Windows Update History:" -color "Info"
+
+    try {
+        $session = New-Object -ComObject Microsoft.Update.Session
+        $searcher = $session.CreateUpdateSearcher()
+        $historyCount = $searcher.GetTotalHistoryCount()
+
+        if ($historyCount -eq 0) {
+            Write-OutputColor "  No update history found" -color "Warning"
+            return
+        }
+
+        $history = $searcher.QueryHistory(0, [math]::Min($Count, $historyCount))
+
+        foreach ($update in $history) {
+            $status = switch ($update.ResultCode) {
+                2 { "Succeeded" }
+                3 { "Succeeded with errors" }
+                4 { "Failed" }
+                5 { "Aborted" }
+                default { "Unknown" }
+            }
+            $color = switch ($update.ResultCode) {
+                2 { "Success" }
+                3 { "Warning" }
+                4 { "Error" }
+                default { "Info" }
+            }
+
+            $date = $update.Date.ToString('yyyy-MM-dd HH:mm')
+            $title = if ($update.Title -and $update.Title.Length -gt 60) { $update.Title.Substring(0, 57) + "..." } elseif ($update.Title) { $update.Title } else { "(unknown)" }
+            Write-OutputColor "  $date  $status  $title" -color $color
+        }
+
+        Write-OutputColor "`n  Showing $([math]::Min($Count, $historyCount)) of $historyCount total updates" -color "Info"
+    } catch {
+        Write-OutputColor "  Could not retrieve update history: $($_.Exception.Message)" -color "Warning"
+    }
+}
+
+# Function to display Windows Updates menu
+function Show-WindowsUpdatesMenu {
+    while ($true) {
+        if ($global:ReturnToMainMenu) { return }
+        Clear-Host
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+        Write-OutputColor "  ║$(("                          WINDOWS UPDATES").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-MenuItem "[1]  Install Windows Updates"
+        Write-MenuItem "[2]  View Update History"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $choice = Read-Host "  Select"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+
+        switch ($choice) {
+            "1" { Install-WindowsUpdates }
+            "2" {
+                Show-UpdateHistory
+                Write-PressEnter
+            }
+            "b" { return }
+            "B" { return }
+            default { Write-OutputColor "  Invalid choice. Enter 1-2 or B." -color "Error"; Start-Sleep -Seconds 1 }
+        }
+    }
+}
+
 # Function to install Windows updates with timeout protection
 function Install-WindowsUpdates {
     Clear-Host

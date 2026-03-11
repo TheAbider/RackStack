@@ -145,6 +145,26 @@ function Assert-Elevation {
     }
 }
 
+# Dry-run mode flag (set per batch session)
+$script:DryRunMode = $false
+
+# Wrapper for batch steps that respects dry-run mode
+function Invoke-BatchStep {
+    param(
+        [string]$StepName,
+        [string]$Description,
+        [scriptblock]$Action
+    )
+
+    if ($script:DryRunMode) {
+        Write-OutputColor "  [DRY RUN] Step: $StepName" -color "Info"
+        Write-OutputColor "  [DRY RUN] Would: $Description" -color "Info"
+        return $true
+    }
+
+    return (& $Action)
+}
+
 # Validate batch config before execution
 function Test-BatchConfig {
     param(
@@ -204,7 +224,7 @@ function Test-BatchConfig {
                     "DisableBuiltInAdmin", "InstallUpdates", "AutoReboot",
                     "CreateVirtualSwitch", "CreateSETSwitch", "ConfigureSharedStorage",
                     "ConfigureMPIO", "InitializeHostStorage", "ConfigureDefenderExclusions",
-                    "PromoteToDC", "InstallAgent", "ValidateCluster")
+                    "PromoteToDC", "InstallAgent", "ValidateCluster", "DryRun")
     foreach ($field in $boolFields) {
         if ($null -ne $Config[$field] -and $Config[$field] -isnot [bool]) {
             $null = $errors.Add("$field must be true or false (got '$($Config[$field])').")
@@ -363,6 +383,13 @@ function Start-BatchMode {
 
     $configType = if ($Config.ConfigType) { $Config.ConfigType.ToUpper() } else { "VM" }
 
+    # Dry-run mode detection
+    if ($Config.DryRun -eq $true) {
+        $script:DryRunMode = $true
+        Write-OutputColor "`n  *** DRY RUN MODE ***" -color "Warning"
+        Write-OutputColor "  No changes will be made. Actions will be logged only.`n" -color "Warning"
+    }
+
     # Pre-execution summary
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  PLANNED ACTIONS".PadRight(72))│" -color "Info"
@@ -416,10 +443,12 @@ function Start-BatchMode {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    if (-not (Confirm-UserAction -Message "Proceed with batch configuration?")) {
-        Write-OutputColor "  Batch mode cancelled by user." -color "Info"
-        Stop-ScriptTranscript
-        return
+    if (-not $script:DryRunMode) {
+        if (-not (Confirm-UserAction -Message "Proceed with batch configuration?")) {
+            Write-OutputColor "  Batch mode cancelled by user." -color "Info"
+            Stop-ScriptTranscript
+            return
+        }
     }
 
     Write-OutputColor "" -color "Info"
@@ -433,6 +462,58 @@ function Start-BatchMode {
     $skipped = 0
     $errors = 0
     $script:BatchUndoStack = [System.Collections.Generic.List[object]]::new()
+    $batchUndoPath = Join-Path $script:TempPath "batch-undo.json"
+
+    # Check for previous batch session recovery data (skip in dry-run mode)
+    if (-not $script:DryRunMode -and (Test-Path -LiteralPath $batchUndoPath)) {
+        Write-OutputColor "  Previous batch session recovery data found." -color "Warning"
+        Write-OutputColor "  Attempt rollback of previous session? [y/N]: " -color "Warning"
+        $recoveryChoice = Read-Host
+        if ($recoveryChoice -eq 'y' -or $recoveryChoice -eq 'Y') {
+            try {
+                $recoveredData = Get-Content -LiteralPath $batchUndoPath -Raw | ConvertFrom-Json
+                $recoveredStack = [System.Collections.Generic.List[object]]::new()
+                foreach ($item in $recoveredData) {
+                    $recoveredStack.Add(@{
+                        Step        = $item.Step
+                        Description = $item.Description
+                        Reversible  = $item.Reversible
+                        UndoScript  = [scriptblock]::Create($item.UndoScript)
+                    })
+                }
+                $script:BatchUndoStack = $recoveredStack
+                Invoke-BatchUndo
+                $script:BatchUndoStack = [System.Collections.Generic.List[object]]::new()
+            }
+            catch {
+                Write-OutputColor "  Failed to recover previous session: $_" -color "Error"
+            }
+        }
+        try {
+            Remove-Item -LiteralPath $batchUndoPath -Force -ErrorAction Stop
+        }
+        catch {
+            Write-OutputColor "  Could not remove recovery file: $_" -color "Warning"
+        }
+    }
+
+    # Helper: persist undo stack to disk for crash recovery
+    function Save-BatchUndoState {
+        try {
+            $serializableStack = @($script:BatchUndoStack | ForEach-Object {
+                @{
+                    Step        = $_.Step
+                    Description = $_.Description
+                    Reversible  = $_.Reversible
+                    UndoScript  = $_.UndoScript.ToString()
+                }
+            })
+            $serializableStack | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $batchUndoPath -Force -ErrorAction Stop
+        }
+        catch {
+            # Don't break batch execution if persistence fails
+        }
+    }
 
     # Step 1: Set hostname
     $stepNum++
@@ -443,6 +524,11 @@ function Start-BatchMode {
         }
         elseif (Test-ValidHostname -Hostname $Config.Hostname) {
             Write-OutputColor "  [$stepNum/$totalSteps] Setting hostname to '$($Config.Hostname)'..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would rename computer to '$($Config.Hostname)'" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 $oldHostname = $env:COMPUTERNAME
                 Rename-Computer -NewName $Config.Hostname -Force -ErrorAction Stop
@@ -450,12 +536,15 @@ function Start-BatchMode {
                 $global:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Set hostname to $($Config.Hostname)"
+                Clear-MenuCache
                 $oldHostnameEsc = $oldHostname -replace "'", "''"
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert hostname to $oldHostname"; Reversible = $true; UndoScript = [scriptblock]::Create("Rename-Computer -NewName '$oldHostnameEsc' -Force") })
+                Save-BatchUndoState
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
         else {
@@ -474,11 +563,45 @@ function Start-BatchMode {
         $adapterName = if ($Config.AdapterName) { $Config.AdapterName } else { "Ethernet" }
         $cidr = if ($Config.SubnetCIDR) { [int]$Config.SubnetCIDR } else { 24 }
 
+        if ($script:DryRunMode) {
+            $dnsInfo = @()
+            if ($Config.DNS1) { $dnsInfo += $Config.DNS1 }
+            if ($Config.DNS2) { $dnsInfo += $Config.DNS2 }
+            Write-OutputColor "  [$stepNum/$totalSteps] Configuring network on '$adapterName'..." -color "Info"
+            Write-OutputColor "           [DRY RUN] Would set IP $($Config.IPAddress)/$cidr  GW: $($Config.Gateway)" -color "Info"
+            if ($dnsInfo.Count -gt 0) {
+                Write-OutputColor "           [DRY RUN] Would set DNS: $($dnsInfo -join ', ')" -color "Info"
+            }
+            $changesApplied++
+        }
+        else {
         # Idempotency: check if adapter already has the target IP
         $existingIP = Get-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -eq $Config.IPAddress -and $_.PrefixLength -eq $cidr }
         if ($existingIP) {
-            Write-OutputColor "  [$stepNum/$totalSteps] Network: already configured ($($Config.IPAddress)/$cidr)" -color "Debug"
-            $skipped++
+            # IP matches — check if DNS also matches
+            $desiredDNS = @()
+            if ($Config.DNS1) { $desiredDNS += $Config.DNS1 }
+            if ($Config.DNS2) { $desiredDNS += $Config.DNS2 }
+            $currentDNS = @((Get-DnsClientServerAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses)
+            $dnsMatch = ($desiredDNS.Count -eq 0) -or (($null -ne $currentDNS) -and ($desiredDNS.Count -eq $currentDNS.Count) -and (-not (Compare-Object $desiredDNS $currentDNS -SyncWindow 0)))
+            if ($dnsMatch) {
+                Write-OutputColor "  [$stepNum/$totalSteps] Network: already configured ($($Config.IPAddress)/$cidr)" -color "Debug"
+                $skipped++
+            }
+            else {
+                Write-OutputColor "  [$stepNum/$totalSteps] Network: IP matches, updating DNS on '$adapterName'..." -color "Info"
+                try {
+                    Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $desiredDNS -ErrorAction Stop
+                    Write-OutputColor "           DNS servers updated on $adapterName" -color "Success"
+                    $changesApplied++
+                    Add-SessionChange -Category "Network" -Description "DNS servers updated on $adapterName"
+                    Clear-MenuCache
+                }
+                catch {
+                    Write-OutputColor "           Failed to update DNS: $_" -color "Error"
+                    $errors++
+                }
+            }
         }
         else {
             Write-OutputColor "  [$stepNum/$totalSteps] Configuring network on '$adapterName'..." -color "Info"
@@ -518,6 +641,7 @@ function Start-BatchMode {
                 }
                 $changesApplied++
                 Add-SessionChange -Category "Network" -Description "Set IP $($Config.IPAddress)/$cidr on $adapterName"
+                Clear-MenuCache
 
                 # Register undo (restore previous IP config)
                 $undoAdapter = $adapterName
@@ -527,11 +651,13 @@ function Start-BatchMode {
                 $undoOldGW = $oldGW
                 $undoOldDNS = $oldDNS
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore network config on $undoAdapter"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; if ('$undoOldIP') { New-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -IPAddress '$undoOldIP' -PrefixLength $undoOldPrefix $(if($undoOldGW){"-DefaultGateway '$undoOldGW'"}) -ErrorAction SilentlyContinue }") })
+                Save-BatchUndoState
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
             }
+        }
         }
     }
     else {
@@ -548,18 +674,26 @@ function Start-BatchMode {
         }
         else {
             Write-OutputColor "  [$stepNum/$totalSteps] Setting timezone to '$($Config.Timezone)'..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would set timezone to '$($Config.Timezone)'" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 $oldTimezone = (Get-TimeZone).Id
                 Microsoft.PowerShell.Management\Set-TimeZone -Id $Config.Timezone -ErrorAction Stop
                 Write-OutputColor "           Timezone set." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Set timezone to $($Config.Timezone)"
+                Clear-MenuCache
                 $oldTimezoneEsc = $oldTimezone -replace "'", "''"
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert timezone to $oldTimezone"; Reversible = $true; UndoScript = [scriptblock]::Create("Microsoft.PowerShell.Management\Set-TimeZone -Id '$oldTimezoneEsc'") })
+                Save-BatchUndoState
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -577,17 +711,25 @@ function Start-BatchMode {
         }
         else {
             Write-OutputColor "  [$stepNum/$totalSteps] Enabling Remote Desktop..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would enable RDP and firewall rule" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
                 Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
                 Write-OutputColor "           RDP enabled." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Enabled RDP"
+                Clear-MenuCache
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Disable RDP"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 1; Disable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue") })
+                Save-BatchUndoState
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -605,17 +747,25 @@ function Start-BatchMode {
         }
         else {
             Write-OutputColor "  [$stepNum/$totalSteps] Enabling PowerShell Remoting..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would enable WinRM with Kerberos auth" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 Enable-PSRemoting -Force -SkipNetworkProfileCheck -ErrorAction Stop
                 Set-Item WSMan:\localhost\Service\Auth\Kerberos -Value $true -ErrorAction SilentlyContinue
                 Write-OutputColor "           WinRM enabled with Kerberos auth." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Enabled PowerShell Remoting"
+                Clear-MenuCache
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Disable WinRM"; Reversible = $true; UndoScript = [scriptblock]::Create("Disable-PSRemoting -Force -ErrorAction SilentlyContinue; Stop-Service WinRM -Force -ErrorAction SilentlyContinue") })
+                Save-BatchUndoState
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -633,6 +783,11 @@ function Start-BatchMode {
         }
         else {
             Write-OutputColor "  [$stepNum/$totalSteps] Configuring firewall..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would set firewall: Domain=Off Private=Off Public=On" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 $oldDomain = $fwState.Domain
                 $oldPrivate = $fwState.Private
@@ -643,14 +798,17 @@ function Start-BatchMode {
                 Write-OutputColor "           Firewall: Domain=Off Private=Off Public=On" -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Configured firewall profiles"
+                Clear-MenuCache
                 $undoDomain = if ($oldDomain -eq "Enabled") { "True" } else { "False" }
                 $undoPrivate = if ($oldPrivate -eq "Enabled") { "True" } else { "False" }
                 $undoPublic = if ($oldPublic -eq "Enabled") { "True" } else { "False" }
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore firewall profiles"; Reversible = $true; UndoScript = [scriptblock]::Create("Set-NetFirewallProfile -Profile Domain -Enabled $undoDomain; Set-NetFirewallProfile -Profile Private -Enabled $undoPrivate; Set-NetFirewallProfile -Profile Public -Enabled $undoPublic") })
+                Save-BatchUndoState
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -669,6 +827,11 @@ function Start-BatchMode {
             }
             else {
                 Write-OutputColor "  [$stepNum/$totalSteps] Setting power plan to '$($Config.SetPowerPlan)'..." -color "Info"
+                if ($script:DryRunMode) {
+                    Write-OutputColor "           [DRY RUN] Would set power plan to '$($Config.SetPowerPlan)'" -color "Info"
+                    $changesApplied++
+                }
+                else {
                 $oldPlanGuid = $currentPlan.Guid
                 powercfg /setactive $script:PowerPlanGUID[$Config.SetPowerPlan] 2>&1 | Out-Null
                 if ($LASTEXITCODE -ne 0) {
@@ -678,8 +841,11 @@ function Start-BatchMode {
                     Write-OutputColor "           Power plan set." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "System" -Description "Set power plan to $($Config.SetPowerPlan)"
+                    Clear-MenuCache
                     $oldPlanGuidEsc = $oldPlanGuid -replace "'", "''"
                     $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Revert power plan to $($currentPlan.Name)"; Reversible = $true; UndoScript = [scriptblock]::Create("powercfg /setactive '$oldPlanGuidEsc' 2>&1 | Out-Null") })
+                    Save-BatchUndoState
+                }
                 }
             }
         }
@@ -695,20 +861,27 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.InstallHyperV -and -not (Test-HyperVInstalled)) {
         if (-not (Test-WindowsServer)) {
-            Write-OutputColor "  [$stepNum/$totalSteps] Hyper-V: skipped (requires Windows Server)" -color "Warning"
+            Write-OutputColor "  [$stepNum/$totalSteps] Hyper-V: skipped (requires Windows Server)" -color "Error"
             $errors++
         } else {
             Write-OutputColor "  [$stepNum/$totalSteps] Installing Hyper-V..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would install Hyper-V role with management tools" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 Install-WindowsFeature -Name Hyper-V -IncludeManagementTools -ErrorAction Stop
                 Write-OutputColor "           Hyper-V installed. Reboot required." -color "Success"
                 $global:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V"
+                Clear-MenuCache
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -721,20 +894,27 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.InstallMPIO -and -not (Test-MPIOInstalled)) {
         if (-not (Test-WindowsServer)) {
-            Write-OutputColor "  [$stepNum/$totalSteps] MPIO: skipped (requires Windows Server)" -color "Warning"
+            Write-OutputColor "  [$stepNum/$totalSteps] MPIO: skipped (requires Windows Server)" -color "Error"
             $errors++
         } else {
             Write-OutputColor "  [$stepNum/$totalSteps] Installing MPIO..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would install Multipath I/O feature" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 Install-WindowsFeature -Name Multipath-IO -ErrorAction Stop
                 Write-OutputColor "           MPIO installed. Reboot required." -color "Success"
                 $global:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Installed MPIO"
+                Clear-MenuCache
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -747,20 +927,27 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.InstallFailoverClustering -and -not (Test-FailoverClusteringInstalled)) {
         if (-not (Test-WindowsServer)) {
-            Write-OutputColor "  [$stepNum/$totalSteps] Failover Clustering: skipped (requires Windows Server)" -color "Warning"
+            Write-OutputColor "  [$stepNum/$totalSteps] Failover Clustering: skipped (requires Windows Server)" -color "Error"
             $errors++
         } else {
             Write-OutputColor "  [$stepNum/$totalSteps] Installing Failover Clustering..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would install Failover Clustering with management tools" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools -ErrorAction Stop
                 Write-OutputColor "           Failover Clustering installed. Reboot required." -color "Success"
                 $global:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Installed Failover Clustering"
+                Clear-MenuCache
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -774,6 +961,11 @@ function Start-BatchMode {
     if ($Config.CreateLocalAdmin) {
         $adminName = if ($Config.LocalAdminName) { $Config.LocalAdminName } else { $script:localadminaccountname }
         Write-OutputColor "  [$stepNum/$totalSteps] Creating local admin '$adminName'..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would create local admin '$adminName' and add to Administrators" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             $existingUser = Get-LocalUser -Name $adminName -ErrorAction SilentlyContinue
             if ($existingUser) {
@@ -785,13 +977,16 @@ function Start-BatchMode {
                 Write-OutputColor "           Local admin '$adminName' created and added to Administrators." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Created local admin account '$adminName'"
+                Clear-MenuCache
                 $undoAdminNameEsc = $adminName -replace "'", "''"
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove local admin '$adminName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-LocalUser -Name '$undoAdminNameEsc' -ErrorAction SilentlyContinue") })
+                Save-BatchUndoState
             }
         }
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
     }
     else {
@@ -802,6 +997,11 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.DisableBuiltInAdmin) {
         Write-OutputColor "  [$stepNum/$totalSteps] Disabling built-in Administrator..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would disable built-in Administrator account" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             $builtInAdmin = Get-LocalUser -Name "Administrator" -ErrorAction Stop
             if ($builtInAdmin.Enabled) {
@@ -809,6 +1009,7 @@ function Start-BatchMode {
                 Write-OutputColor "           Built-in Administrator disabled." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Disabled built-in Administrator account"
+                Clear-MenuCache
             } else {
                 Write-OutputColor "           Already disabled." -color "Debug"
             }
@@ -816,6 +1017,7 @@ function Start-BatchMode {
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
     }
     else {
@@ -831,6 +1033,11 @@ function Start-BatchMode {
     $isDomainJoined = if ($null -ne $csInfo) { $csInfo.PartOfDomain } else { $false }
     if ($Config.DomainName -and -not $isDomainJoined) {
         Write-OutputColor "  [$stepNum/$totalSteps] Joining domain '$($Config.DomainName)'..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would join domain '$($Config.DomainName)'" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             $domainCred = Get-Credential -Message "Enter credentials to join $($Config.DomainName)"
             if ($domainCred) {
@@ -839,11 +1046,13 @@ function Start-BatchMode {
                 $global:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Joined domain $($Config.DomainName)"
+                Clear-MenuCache
             }
         }
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
     }
     else {
@@ -862,6 +1071,11 @@ function Start-BatchMode {
         if ($allTemplates.ContainsKey($templateKey)) {
             $template = $allTemplates[$templateKey]
             Write-OutputColor "  [$stepNum/$totalSteps] Installing role template: $($template.FullName)..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would install role template '$($template.FullName)' ($($template.Features.Count) feature(s))" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 $installCount = 0
                 # Pre-fetch all feature states once (avoids N+1 Get-WindowsFeature calls per feature)
@@ -879,10 +1093,12 @@ function Start-BatchMode {
                 }
                 $changesApplied++
                 Add-SessionChange -Category "Roles" -Description "Installed role template: $($template.FullName)"
+                Clear-MenuCache
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         } else {
             Write-OutputColor "  [$stepNum/$totalSteps] Role template '$templateKey' not found. Available: $($allTemplates.Keys -join ', ')" -color "Warning"
@@ -907,6 +1123,12 @@ function Start-BatchMode {
         else {
         $promoType = if ($Config.DCPromoType) { $Config.DCPromoType } else { "NewForest" }
         Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion ($promoType)..." -color "Info"
+        if ($script:DryRunMode) {
+            $dcDetail = if ($Config.ForestName) { $Config.ForestName } elseif ($Config.DomainName) { $Config.DomainName } else { "unspecified" }
+            Write-OutputColor "           [DRY RUN] Would promote to DC ($promoType) for '$dcDetail'" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             # Ensure AD DS role is installed
             $addsFeature = Get-WindowsFeature -Name AD-Domain-Services -ErrorAction SilentlyContinue
@@ -931,6 +1153,7 @@ function Start-BatchMode {
                         $global:RebootNeeded = $true
                         $changesApplied++
                         Add-SessionChange -Category "AD DS" -Description "Promoted to DC: New forest $($Config.ForestName)"
+                        Clear-MenuCache
                     }
                 }
                 "AdditionalDC" {
@@ -945,6 +1168,7 @@ function Start-BatchMode {
                         $global:RebootNeeded = $true
                         $changesApplied++
                         Add-SessionChange -Category "AD DS" -Description "Promoted to additional DC: $domainName"
+                        Clear-MenuCache
                     }
                 }
                 "RODC" {
@@ -959,6 +1183,7 @@ function Start-BatchMode {
                         $global:RebootNeeded = $true
                         $changesApplied++
                         Add-SessionChange -Category "AD DS" -Description "Promoted to RODC: $domainName"
+                        Clear-MenuCache
                     }
                 }
                 default {
@@ -972,6 +1197,7 @@ function Start-BatchMode {
             $errors++
         }
         }
+        }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] DC Promotion: skipped" -color "Debug"
@@ -981,6 +1207,11 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.InstallUpdates) {
         Write-OutputColor "  [$stepNum/$totalSteps] Installing Windows Updates (this may take a while)..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would install available Windows Updates" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             Install-WindowsUpdates
             $changesApplied++
@@ -988,6 +1219,7 @@ function Start-BatchMode {
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
     }
     else {
@@ -1016,6 +1248,12 @@ function Start-BatchMode {
         }
         else {
         Write-OutputColor "  [$stepNum/$totalSteps] Initializing host storage..." -color "Info"
+        if ($script:DryRunMode) {
+            $driveInfo = if ($Config.HostStorageDrive) { "$($Config.HostStorageDrive):" } else { "auto-detect" }
+            Write-OutputColor "           [DRY RUN] Would initialize host storage on $driveInfo" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             $driveLetter = $Config.HostStorageDrive
             if (-not $driveLetter) {
@@ -1046,6 +1284,7 @@ function Start-BatchMode {
                 Write-OutputColor "           Storage initialized on $($driveLetter):" -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Host Storage" -Description "Initialized $($driveLetter): for VM storage"
+                Clear-MenuCache
             } else {
                 Write-OutputColor "           No suitable data drive found." -color "Warning"
             }
@@ -1053,6 +1292,7 @@ function Start-BatchMode {
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
         }
     }
@@ -1077,6 +1317,11 @@ function Start-BatchMode {
         }
         else {
         Write-OutputColor "  [$stepNum/$totalSteps] Creating $vSwitchType switch '$vSwitchName'..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would create $vSwitchType virtual switch '$vSwitchName'" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             switch ($vSwitchType) {
                 "SET" {
@@ -1096,6 +1341,7 @@ function Start-BatchMode {
                         Write-OutputColor "           SET '$vSwitchName' created with $($adapterNames.Count) adapter(s)." -color "Success"
                         $changesApplied++
                         Add-SessionChange -Category "Network" -Description "Created SET '$vSwitchName'"
+                        Clear-MenuCache
                     } else {
                         Write-OutputColor "           No adapters with internet found for SET." -color "Warning"
                     }
@@ -1117,6 +1363,7 @@ function Start-BatchMode {
                         Write-OutputColor "           External switch '$vSwitchName' created on '$adapterName'." -color "Success"
                         $changesApplied++
                         Add-SessionChange -Category "Network" -Description "Created External switch '$vSwitchName'"
+                        Clear-MenuCache
                     } else {
                         Write-OutputColor "           No physical adapter found for External switch." -color "Warning"
                     }
@@ -1126,12 +1373,14 @@ function Start-BatchMode {
                     Write-OutputColor "           Internal switch '$vSwitchName' created." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "Network" -Description "Created Internal switch '$vSwitchName'"
+                    Clear-MenuCache
                 }
                 "Private" {
                     New-VMSwitch -Name $vSwitchName -SwitchType Private -ErrorAction Stop
                     Write-OutputColor "           Private switch '$vSwitchName' created." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "Network" -Description "Created Private switch '$vSwitchName'"
+                    Clear-MenuCache
                 }
                 default {
                     Write-OutputColor "           Unknown switch type '$vSwitchType'." -color "Warning"
@@ -1140,11 +1389,13 @@ function Start-BatchMode {
             if ($vSwitchType -in "External","Internal","Private") {
                 $undoSwitchNameEsc = $vSwitchName -replace "'", "''"
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove virtual switch '$vSwitchName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMSwitch -Name '$undoSwitchNameEsc' -Force -ErrorAction SilentlyContinue") })
+                Save-BatchUndoState
             }
         }
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
         }
     }
@@ -1156,6 +1407,16 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.CustomVNICs -and $Config.CustomVNICs.Count -gt 0 -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Creating custom vNICs..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would create $($Config.CustomVNICs.Count) custom vNIC(s)" -color "Info"
+            foreach ($vnicDef in $Config.CustomVNICs) {
+                $vnicDetail = $vnicDef.Name
+                if ($null -ne $vnicDef.VLAN) { $vnicDetail += " (VLAN $($vnicDef.VLAN))" }
+                Write-OutputColor "           [DRY RUN]   - $vnicDetail" -color "Info"
+            }
+            $changesApplied++
+        }
+        else {
         try {
             $targetSwitch = Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" } | Select-Object -First 1
             if ($targetSwitch) {
@@ -1186,10 +1447,12 @@ function Start-BatchMode {
                     Write-OutputColor "           Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'$(if ($vnicSkipped -gt 0) { ", $vnicSkipped already existed" })." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "Network" -Description "Created $vnicCount custom vNIC(s) on '$($targetSwitch.Name)'"
+                    Clear-MenuCache
                     foreach ($createdName in $createdVnicNames) {
                         $createdNameEsc = $createdName -replace "'", "''"
                         $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove vNIC '$createdName'"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-VMNetworkAdapter -ManagementOS -Name '$createdNameEsc' -ErrorAction SilentlyContinue") })
                     }
+                    Save-BatchUndoState
                 }
                 else {
                     Write-OutputColor "           All $vnicSkipped vNIC(s) already exist." -color "Debug"
@@ -1203,6 +1466,7 @@ function Start-BatchMode {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
         }
+        }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Custom vNICs: skipped" -color "Debug"
@@ -1215,6 +1479,11 @@ function Start-BatchMode {
     $configureStorage = $Config.ConfigureSharedStorage -or $Config.ConfigureiSCSI
     if ($configureStorage -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Configuring shared storage ($storageBackend)..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would configure $storageBackend shared storage" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             if ($storageBackend -eq "iSCSI") {
                 # iSCSI-specific configuration (preserved from v1.2.0)
@@ -1257,6 +1526,7 @@ function Start-BatchMode {
                         Write-OutputColor "           iSCSI configured: A=$ip1, B=$ip2" -color "Success"
                         $changesApplied++
                         Add-SessionChange -Category "Network" -Description "Configured iSCSI: A-side $ip1, B-side $ip2"
+                        Clear-MenuCache
                     } else {
                         Write-OutputColor "           Not enough iSCSI adapters found (need 2, found $($iscsiAdapters.Count))." -color "Warning"
                     }
@@ -1270,11 +1540,13 @@ function Start-BatchMode {
                 $null = Initialize-StorageBackendBatch -Config $configHash -BackendType $storageBackend
                 $changesApplied++
                 Add-SessionChange -Category "Storage" -Description "Configured $storageBackend storage backend"
+                Clear-MenuCache
             }
         }
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
     }
     else {
@@ -1285,6 +1557,11 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.ConfigureMPIO -and $configType -eq "HOST") {
         Write-OutputColor "  [$stepNum/$totalSteps] Configuring MPIO for $storageBackend..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would configure MPIO for $storageBackend" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             if ($storageBackend -in @("S2D", "SMB3", "NVMeoF", "Local")) {
                 Write-OutputColor "           MPIO not required for $storageBackend (handled natively)." -color "Info"
@@ -1292,6 +1569,7 @@ function Start-BatchMode {
                 Initialize-MPIOForBackend -BackendType $storageBackend
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Configured MPIO for $storageBackend"
+                Clear-MenuCache
             } else {
                 Write-OutputColor "           MPIO not installed. Install it first (step 9)." -color "Warning"
             }
@@ -1299,6 +1577,7 @@ function Start-BatchMode {
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
             $errors++
+        }
         }
     }
     else {
@@ -1320,6 +1599,11 @@ function Start-BatchMode {
         }
         else {
             Write-OutputColor "  [$stepNum/$totalSteps] Configuring Defender exclusions..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would add $($missingPaths.Count) Defender path exclusion(s)" -color "Info"
+                $changesApplied++
+            }
+            else {
             try {
                 $addedCount = 0
                 $addedPaths = @()
@@ -1336,12 +1620,15 @@ function Start-BatchMode {
                 Write-OutputColor "           Added $addedCount path exclusions and $($defenderProcesses.Count) process exclusions." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Configured Defender exclusions for Hyper-V"
+                Clear-MenuCache
                 $pathsList = ($addedPaths | ForEach-Object { "'$_'" }) -join ','
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove Defender exclusions"; Reversible = $true; UndoScript = [scriptblock]::Create("foreach (`$p in @($pathsList)) { Remove-MpPreference -ExclusionPath `$p -ErrorAction SilentlyContinue }") })
+                Save-BatchUndoState
             }
             catch {
                 Write-OutputColor "           Failed: $_" -color "Error"
                 $errors++
+            }
             }
         }
     }
@@ -1374,14 +1661,21 @@ function Start-BatchMode {
             }
             else {
                 Write-OutputColor "  [$stepNum/$totalSteps] Installing $($agentCfg.ToolName) agent..." -color "Info"
+                if ($script:DryRunMode) {
+                    Write-OutputColor "           [DRY RUN] Would install $($agentCfg.ToolName) agent" -color "Info"
+                    $changesApplied++
+                }
+                else {
                 try {
                     Install-Agent -Unattended
                     $changesApplied++
                     Add-SessionChange -Category "Software" -Description "Installed $($agentCfg.ToolName) agent via batch mode"
+                    Clear-MenuCache
                 }
                 catch {
                     Write-OutputColor "           Failed: $_" -color "Error"
                     $errors++
+                }
                 }
             }
         }
@@ -1394,6 +1688,11 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.ValidateCluster) {
         Write-OutputColor "  [$stepNum/$totalSteps] Running cluster readiness check..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would run cluster readiness validation" -color "Info"
+            $changesApplied++
+        }
+        else {
         try {
             $readiness = Test-ClusterReadiness
             if ($readiness.AllPassed) {
@@ -1411,9 +1710,30 @@ function Start-BatchMode {
             Write-OutputColor "           Cluster check failed: $_" -color "Error"
             $errors++
         }
+        }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Cluster validation: skipped" -color "Debug"
+    }
+
+    # Dry-run summary (replaces normal summary when in dry-run mode)
+    if ($script:DryRunMode) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor ("=" * 65) -color "Warning"
+        Write-OutputColor "  DRY RUN COMPLETE - No changes were made" -color "Warning"
+        Write-OutputColor ("=" * 65) -color "Warning"
+        Write-OutputColor "  $changesApplied step(s) would execute" -color "Info"
+        Write-OutputColor "  $skipped step(s) would be skipped (already configured)" -color "Info"
+        Write-OutputColor "  Finished: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -color "Info"
+        Write-OutputColor ("=" * 65) -color "Warning"
+        Write-OutputColor "" -color "Info"
+
+        # Reset dry-run mode
+        $script:DryRunMode = $false
+
+        # Stop transcript
+        Stop-ScriptTranscript
+        return
     }
 
     # Undo prompt on errors
@@ -1427,6 +1747,16 @@ function Start-BatchMode {
             if ($undoChoice -eq 'y' -or $undoChoice -eq 'Y') {
                 Invoke-BatchUndo
             }
+        }
+    }
+
+    # Clean up batch undo persistence file (clean exit)
+    if (Test-Path -LiteralPath $batchUndoPath) {
+        try {
+            Remove-Item -LiteralPath $batchUndoPath -Force -ErrorAction Stop
+        }
+        catch {
+            # Non-critical — don't fail batch completion for cleanup
         }
     }
 

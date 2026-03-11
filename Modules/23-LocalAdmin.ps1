@@ -1,4 +1,33 @@
 ﻿#region ===== LOCAL ADMIN ACCOUNT =====
+# Function to verify local admin account creation
+function Test-LocalAdminCreation {
+    param([string]$Username)
+
+    $account = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
+    if ($null -eq $account) {
+        Write-OutputColor "  WARNING: Account '$Username' was not created successfully" -color "Error"
+        return $false
+    }
+
+    Write-OutputColor "  Account '$Username' created successfully" -color "Success"
+    Write-OutputColor "    Enabled: $($account.Enabled)" -color "Info"
+    Write-OutputColor "    Password Required: $($account.PasswordRequired)" -color "Info"
+
+    # Check if added to Administrators group
+    try {
+        $adminGroup = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "\\$Username$" }
+        if ($null -ne $adminGroup) {
+            Write-OutputColor "    Administrator: Yes" -color "Success"
+        } else {
+            Write-OutputColor "    Administrator: Not in Administrators group" -color "Warning"
+        }
+    } catch {
+        Write-OutputColor "    Could not verify group membership" -color "Warning"
+    }
+
+    return $true
+}
+
 # Function to create a new local admin account
 function Add-LocalAdminAccount {
     Clear-Host
@@ -58,13 +87,8 @@ function Add-LocalAdminAccount {
         # Add to Administrators group
         Add-LocalGroupMember -Group "Administrators" -Member $accountName -ErrorAction Stop
 
-        # Verify group membership
-        $isMember = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$accountName" }
-        if ($null -ne $isMember) {
-            Write-OutputColor "  Account '$accountName' created and verified in Administrators group." -color "Success"
-        } else {
-            Write-OutputColor "  Account '$accountName' created, but group membership could not be verified." -color "Warning"
-        }
+        # Verify account creation and group membership
+        Test-LocalAdminCreation -Username $accountName | Out-Null
         Add-SessionChange -Category "Security" -Description "Created local admin account '$accountName'"
         Clear-MenuCache
     }

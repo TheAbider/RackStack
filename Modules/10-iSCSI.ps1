@@ -32,6 +32,34 @@ function Test-iSCSIAdapterSide {
     $result.ATotal = $aSideTargets.Count
     $result.BTotal = $bSideTargets.Count
 
+    # Save original adapter configuration before any IP manipulation
+    $originalIPs = Get-NetIPAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    $originalGateway = Get-NetIPConfiguration -InterfaceAlias $AdapterName -ErrorAction SilentlyContinue
+
+    # Restore original IP configuration if side detection fails
+    $restoreOriginalConfig = {
+        if ($null -ne $originalIPs) {
+            foreach ($origIP in @($originalIPs)) {
+                try {
+                    New-NetIPAddress -InterfaceAlias $AdapterName -IPAddress $origIP.IPAddress -PrefixLength $origIP.PrefixLength -ErrorAction SilentlyContinue | Out-Null
+                }
+                catch {
+                    # Best-effort restore - log but continue
+                }
+            }
+        }
+        if ($null -ne $originalGateway -and $null -ne $originalGateway.IPv4DefaultGateway) {
+            foreach ($gw in @($originalGateway.IPv4DefaultGateway)) {
+                try {
+                    New-NetRoute -InterfaceAlias $AdapterName -DestinationPrefix "0.0.0.0/0" -NextHop $gw.NextHop -ErrorAction SilentlyContinue | Out-Null
+                }
+                catch {
+                    # Best-effort restore - log but continue
+                }
+            }
+        }
+    }
+
     # Temporarily assign IP on the adapter
     $tempIPAssigned = $false
     try {
@@ -54,7 +82,9 @@ function Test-iSCSIAdapterSide {
         }
     }
     catch {
-        Write-OutputColor "    Failed to assign temp IP $TempIP to $AdapterName`: $_" -color "Warning"
+        Write-OutputColor "    Failed to assign temp IP $TempIP to $AdapterName`: $_" -color "Error"
+        Write-OutputColor "    Attempting to restore original adapter configuration..." -color "Warning"
+        & $restoreOriginalConfig
         return $result
     }
     finally {
@@ -421,7 +451,7 @@ function Set-iSCSIAutoConfiguration {
         if ($navResult.ShouldReturn) { return }
 
         if (-not ($aSideInput -match '^\d+$') -or [int]$aSideInput -lt 1 -or [int]$aSideInput -gt $adapterList.Count) {
-            Write-OutputColor "  Invalid selection." -color "Error"
+            Write-OutputColor "  Invalid selection. Enter 1-$($adapterList.Count)." -color "Error"
             return
         }
         $aSideAdapter = ($adapterList | Where-Object { $_.Index -eq [int]$aSideInput }).Adapter
@@ -438,7 +468,7 @@ function Set-iSCSIAutoConfiguration {
         if ($navResult.ShouldReturn) { return }
 
         if (-not ($bSideInput -match '^\d+$') -or [int]$bSideInput -lt 1 -or [int]$bSideInput -gt $adapterList.Count) {
-            Write-OutputColor "  Invalid selection." -color "Error"
+            Write-OutputColor "  Invalid selection. Enter 1-$($adapterList.Count)." -color "Error"
             return
         }
         if ($bSideInput -eq $aSideInput) {
@@ -519,6 +549,7 @@ function Set-iSCSIAutoConfiguration {
     } else {
         Write-OutputColor "  Both iSCSI adapters failed to configure." -color "Error"
         Add-SessionChange -Category "Network" -Description "iSCSI configuration failed (both sides)"
+        Clear-MenuCache
     }
 
     # Step 8: Test SAN connectivity
@@ -648,7 +679,7 @@ function Set-iSCSIConfiguration {
             return
         }
         default {
-            Write-OutputColor "  Invalid selection." -color "Error"
+            Write-OutputColor "  Invalid selection. Enter A, M, or B." -color "Error"
         }
     }
 }
@@ -950,7 +981,7 @@ function Connect-iSCSITargets {
                             Write-OutputColor "    Already connected through this portal." -color "Info"
                         }
                         else {
-                            Write-OutputColor "    Failed to connect: $_" -color "Warning"
+                            Write-OutputColor "    Failed to connect: $_" -color "Error"
                         }
                     }
                 }
@@ -1217,7 +1248,7 @@ function Disconnect-iSCSITargets {
             }
         }
         else {
-            Write-OutputColor "  Invalid selection." -color "Error"
+            Write-OutputColor "  Invalid selection. Enter 1-$($sessions.Count), A, or B." -color "Error"
         }
     }
 }
@@ -1420,6 +1451,9 @@ function Start-Show-iSCSISANMenu {
                                 Connect-iSCSITargets -TargetPortalAddresses @($result.Pair.A, $result.Pair.B)
                             }
                         }
+                    }
+                    elseif ($manualInput -match '^\d+$') {
+                        Write-OutputColor "  Invalid host number. Enter 1-24." -color "Error"
                     }
                     elseif (-not [string]::IsNullOrWhiteSpace($manualInput)) {
                         # User entered IPs

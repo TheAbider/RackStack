@@ -147,9 +147,35 @@ function Select-PhysicalAdaptersSmart {
         return Select-PhysicalAdapters
     }
     else {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter A, M, or B." -color "Error"
         return $null
     }
+}
+
+# Function to verify SET team health after creation
+function Test-SetTeamHealth {
+    param([string]$SwitchName)
+
+    $team = Get-VMSwitchTeam -Name $SwitchName -ErrorAction SilentlyContinue
+    if ($null -eq $team) {
+        Write-OutputColor "  WARNING: Could not verify SET team health" -color "Warning"
+        return $false
+    }
+
+    $members = @($team.NetAdapterInterfaceDescription)
+    $allHealthy = $true
+    foreach ($member in $members) {
+        $adapter = Get-NetAdapter | Where-Object { $_.InterfaceDescription -eq $member }
+        if ($null -eq $adapter -or $adapter.Status -ne 'Up') {
+            Write-OutputColor "  WARNING: Team member '$member' is not Up" -color "Warning"
+            $allHealthy = $false
+        }
+    }
+
+    if ($allHealthy) {
+        Write-OutputColor "  SET team '$SwitchName': All $($members.Count) members healthy" -color "Success"
+    }
+    return $allHealthy
 }
 
 # Function to configure Switch Embedded Teaming (SET)
@@ -292,10 +318,13 @@ function New-SwitchEmbeddedTeam {
 
         Write-OutputColor "  Waiting for management adapter to appear..." -color "Info"
         $vnicReady = $false
-        for ($wait = 0; $wait -lt 15; $wait++) {
-            $vnic = Get-VMNetworkAdapter -ManagementOS -Name $SwitchName -ErrorAction SilentlyContinue
-            if ($vnic) { $vnicReady = $true; break }
-            Start-Sleep -Seconds 1
+        $maxAttempts = 6
+        $waitSeconds = 1
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $vnic = Get-VMNetworkAdapter -ManagementOS -SwitchName $SwitchName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $vnic) { $vnicReady = $true; break }
+            Start-Sleep -Seconds $waitSeconds
+            $waitSeconds = [math]::Min($waitSeconds * 2, 10)
         }
 
         if ($vnicReady) {
@@ -304,6 +333,9 @@ function New-SwitchEmbeddedTeam {
         } else {
             Write-OutputColor "  Management adapter not yet available. You may need to rename it manually." -color "Warning"
         }
+
+        # Verify SET team health
+        Test-SetTeamHealth -SwitchName $SwitchName
 
         Write-OutputColor "`nSwitch Embedded Team created successfully!" -color "Success"
         Write-OutputColor "  Switch Name: $SwitchName" -color "Info"
@@ -334,6 +366,9 @@ function New-SwitchEmbeddedTeam {
     }
     catch {
         Write-OutputColor "  Failed to create Switch Embedded Team: $_" -color "Error"
+        Write-OutputColor "  Attempting to clean up partially created switch..." -color "Warning"
+        Remove-VMSwitch -Name $SwitchName -Force -ErrorAction SilentlyContinue
+        Write-OutputColor "  SET creation failed. Partially created switch has been cleaned up." -color "Error"
         Write-OutputColor "  Tip: Make sure Hyper-V is installed and adapters are not in use." -color "Warning"
     }
 }
@@ -375,7 +410,7 @@ function Add-CustomVNIC {
         if ($swChoice -match '^\d+$' -and [int]$swChoice -ge 1 -and [int]$swChoice -le $externalSwitches.Count) {
             $existingSwitch = $externalSwitches[[int]$swChoice - 1]
         } else {
-            Write-OutputColor "  Invalid selection." -color "Error"
+            Write-OutputColor "  Invalid selection. Enter 1-$($externalSwitches.Count)." -color "Error"
             return
         }
     }
@@ -432,7 +467,7 @@ function Add-CustomVNIC {
                 }
             }
             default {
-                Write-OutputColor "  Invalid selection." -color "Error"
+                Write-OutputColor "  Invalid selection. Enter 1-5 or B." -color "Error"
                 return
             }
         }
@@ -482,7 +517,7 @@ function Add-CustomVNIC {
                 Write-OutputColor "  VLAN $vlanId set on '$vnicName'." -color "Success"
             }
             catch {
-                Write-OutputColor "  Failed to set VLAN: $_" -color "Warning"
+                Write-OutputColor "  Failed to set VLAN: $_" -color "Error"
             }
         }
         else {
@@ -509,7 +544,7 @@ function Add-CustomVNIC {
                 Write-OutputColor "  IP $ipAddress/$cidr set on '$vnicName'." -color "Success"
             }
             catch {
-                Write-OutputColor "  Failed to set IP: $_" -color "Warning"
+                Write-OutputColor "  Failed to set IP: $_" -color "Error"
             }
         }
     }
@@ -659,7 +694,7 @@ function New-StandardVSwitch {
                     if ($adChoice -match '^\d+$' -and [int]$adChoice -ge 1 -and [int]$adChoice -le $adapters.Count) {
                         $AdapterName = $adapters[[int]$adChoice - 1].Name
                     } else {
-                        Write-OutputColor "  Invalid selection." -color "Error"
+                        Write-OutputColor "  Invalid selection. Enter 1-$($adapters.Count)." -color "Error"
                         return
                     }
                 }
@@ -804,7 +839,7 @@ function Remove-VirtualSwitch {
     if ($navResult.ShouldReturn) { return }
 
     if (-not ($choice -match '^\d+$') -or [int]$choice -lt 1 -or [int]$choice -gt $switches.Count) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($switches.Count) or B." -color "Error"
         return
     }
 

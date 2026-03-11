@@ -178,6 +178,59 @@ function Enable-ServerActivation {
     }
 }
 
+# Function to display detailed license status
+function Show-LicenseStatus {
+    Write-OutputColor "`n  Windows License Status:" -color "Info"
+
+    try {
+        $licenseInfo = Get-CimInstance -ClassName SoftwareLicensingProduct -ErrorAction Stop |
+            Where-Object { $_.PartialProductKey -and $_.ApplicationId -eq '55c92734-d682-4d71-983e-d6ec3f16059f' } |
+            Select-Object -First 1
+
+        if ($null -eq $licenseInfo) {
+            Write-OutputColor "  No Windows license information found" -color "Warning"
+            return
+        }
+
+        $status = switch ($licenseInfo.LicenseStatus) {
+            0 { "Unlicensed" }
+            1 { "Licensed" }
+            2 { "Out-of-Box Grace" }
+            3 { "Out-of-Tolerance Grace" }
+            4 { "Non-Genuine Grace" }
+            5 { "Notification" }
+            6 { "Extended Grace" }
+            default { "Unknown ($($licenseInfo.LicenseStatus))" }
+        }
+
+        $statusColor = if ($licenseInfo.LicenseStatus -eq 1) { "Success" } else { "Warning" }
+
+        Write-OutputColor "  Product: $($licenseInfo.Name)" -color "Info"
+        Write-OutputColor "  Status: $status" -color $statusColor
+        Write-OutputColor "  Partial Key: *****-$($licenseInfo.PartialProductKey)" -color "Info"
+
+        if ($licenseInfo.LicenseStatus -eq 1) {
+            # Check if KMS or AVMA
+            if ($licenseInfo.KeyManagementServiceMachine) {
+                Write-OutputColor "  Activation: KMS ($($licenseInfo.KeyManagementServiceMachine))" -color "Info"
+            } elseif ($licenseInfo.Description -match 'AVMA') {
+                Write-OutputColor "  Activation: AVMA (Automatic VM Activation)" -color "Info"
+            } else {
+                Write-OutputColor "  Activation: Retail/MAK" -color "Info"
+            }
+        }
+
+        # Grace period remaining
+        if ($licenseInfo.GracePeriodRemaining -gt 0) {
+            $daysLeft = [math]::Round($licenseInfo.GracePeriodRemaining / 1440, 0)
+            $graceColor = if ($daysLeft -gt 30) { "Info" } elseif ($daysLeft -gt 7) { "Warning" } else { "Error" }
+            Write-OutputColor "  Grace Period: $daysLeft days remaining" -color $graceColor
+        }
+    } catch {
+        Write-OutputColor "  License check failed: $($_.Exception.Message)" -color "Warning"
+    }
+}
+
 # Function to license the server
 function Register-ServerLicense {
     # --- Section: Initialization & Status Display ---
@@ -367,7 +420,8 @@ function Register-ServerLicense {
     Write-OutputColor "1. Host (physical server or Hyper-V host)" -color "Info"
     Write-OutputColor "2. Virtual Machine" -color "Info"
     Write-OutputColor "3. Enter product key manually" -color "Info"
-    Write-OutputColor "4. Cancel" -color "Info"
+    Write-OutputColor "4. View License Status" -color "Info"
+    Write-OutputColor "5. Cancel" -color "Info"
 
     $licensingType = Read-Host "  Select"
 
@@ -549,6 +603,10 @@ function Register-ServerLicense {
             if ($null -ne $productKey) {
                 Enable-ServerActivation -productKey $productKey
             }
+        }
+        "4" {
+            # View detailed license status
+            Show-LicenseStatus
         }
         default {
             Write-OutputColor "  Licensing cancelled." -color "Info"

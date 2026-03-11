@@ -56,6 +56,7 @@ function Start-DiskCleanup {
         Write-MenuItem -Text "[3]  Deep Clean (All + Component Store)"
         Write-MenuItem -Text "[4]  Clear Windows Update Cache Only"
         Write-MenuItem -Text "[5]  Run Windows Disk Cleanup Tool"
+        Write-MenuItem -Text "[6]  Detailed Cleanup Analysis"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -92,9 +93,12 @@ function Start-DiskCleanup {
                     Write-OutputColor "  Failed to launch Disk Cleanup: $_" -color "Error"
                 }
             }
+            "6" {
+                Show-CleanupAnalysis
+            }
             "b" { return }
             "B" { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -134,6 +138,7 @@ function Invoke-QuickClean {
     Write-Host "`r" -NoNewline
     Write-OutputColor "  Quick Clean complete. Freed $([math]::Round($cleaned/1MB, 1)) MB ($fileCount files)" -color "Success"
     Add-SessionChange -Category "System" -Description "Disk cleanup freed $([math]::Round($cleaned/1MB, 1)) MB ($fileCount files)"
+    Clear-MenuCache
     Write-PressEnter
 }
 
@@ -159,7 +164,7 @@ function Invoke-DeepClean {
     if ($dismResult.TimedOut) {
         Write-OutputColor "  DISM timed out after 30 minutes." -color "Warning"
     } elseif ($dismResult.Result.ExitCode -ne 0) {
-        Write-OutputColor "  Component store cleanup failed (exit code $($dismResult.Result.ExitCode))." -color "Warning"
+        Write-OutputColor "  Component store cleanup failed (exit code $($dismResult.Result.ExitCode))." -color "Error"
     } else {
         Write-OutputColor "  Component store cleanup complete." -color "Success"
     }
@@ -202,5 +207,47 @@ function Clear-WindowsUpdateCache {
         Start-Service bits -ErrorAction SilentlyContinue
         Start-Service wuauserv -ErrorAction SilentlyContinue
     }
+}
+
+# Function to show detailed disk cleanup analysis
+function Show-CleanupAnalysis {
+    Write-OutputColor "`n  Disk Cleanup Analysis:" -color "Info"
+
+    $totalSavings = 0
+
+    # Windows Update cache
+    $wuPath = "$env:SystemRoot\SoftwareDistribution\Download"
+    if (Test-Path -LiteralPath $wuPath) {
+        $wuSize = (Get-ChildItem -LiteralPath $wuPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+        $wuMB = [math]::Round($wuSize / 1MB, 0)
+        $totalSavings += $wuSize
+        Write-OutputColor "  Windows Update Cache: ${wuMB} MB" -color $(if ($wuMB -gt 100) { "Warning" } else { "Info" })
+    }
+
+    # Temp files
+    $tempPaths = @($env:TEMP, "$env:SystemRoot\Temp")
+    $tempTotal = 0
+    foreach ($tempPath in $tempPaths) {
+        if (Test-Path -LiteralPath $tempPath) {
+            $tempSize = (Get-ChildItem -LiteralPath $tempPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+            $tempTotal += $tempSize
+        }
+    }
+    $tempMB = [math]::Round($tempTotal / 1MB, 0)
+    $totalSavings += $tempTotal
+    Write-OutputColor "  Temp Files: ${tempMB} MB" -color $(if ($tempMB -gt 500) { "Warning" } else { "Info" })
+
+    # CBS logs
+    $cbsPath = "$env:SystemRoot\Logs\CBS"
+    if (Test-Path -LiteralPath $cbsPath) {
+        $cbsSize = (Get-ChildItem -LiteralPath $cbsPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+        $cbsMB = [math]::Round($cbsSize / 1MB, 0)
+        $totalSavings += $cbsSize
+        Write-OutputColor "  CBS Logs: ${cbsMB} MB" -color $(if ($cbsMB -gt 200) { "Warning" } else { "Info" })
+    }
+
+    $totalMB = [math]::Round($totalSavings / 1MB, 0)
+    $totalGB = [math]::Round($totalSavings / 1GB, 1)
+    Write-OutputColor "`n  Potential savings: ${totalMB} MB (${totalGB} GB)" -color $(if ($totalGB -gt 1) { "Warning" } else { "Success" })
 }
 #endregion

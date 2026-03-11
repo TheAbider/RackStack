@@ -44,6 +44,10 @@ function Start-Show-Mainmenu {
                         Export-BatchConfigFromState
                         Write-PressEnter
                     }
+                    "3" {
+                        New-ScenarioBatchConfig
+                        Write-PressEnter
+                    }
                     { $_ -eq "B" -or $_ -eq "b" -or $_ -eq "back" } {
                         # Back to main menu
                     }
@@ -52,7 +56,7 @@ function Start-Show-Mainmenu {
                         if ($navResult.Action -eq "exit") { Exit-Script; return }
                         if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
                         if ($batchChoice) {
-                            Write-OutputColor "  Invalid choice. Enter 1, 2, or B." -color "Error"
+                            Write-OutputColor "  Invalid choice. Enter 1, 2, 3, or B." -color "Error"
                             Start-Sleep -Seconds 1
                         }
                     }
@@ -80,12 +84,22 @@ function Start-Show-Mainmenu {
                 Show-QuickSessionChanges
                 Write-PressEnter
             }
-            "help" {
-                Show-Help
+            { $_ -eq "R" -or $_ -eq "r" -or $_ -eq "refresh" } {
+                Write-OutputColor "  Refreshing..." -color "Info"
+                Clear-MenuCache
+                # continue will redisplay the menu with fresh data
+            }
+            { $_ -eq "help" -or $_ -like "help *" } {
+                if ($choice -like "help *") {
+                    $helpKeyword = $choice.Substring(5).Trim()
+                    Search-HelpTopics -Keyword $helpKeyword
+                } else {
+                    Show-Help
+                }
                 Write-PressEnter
             }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-8, [U]pdate, or [V]iew changes." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8, [U]pdate, [V]iew, or [R]efresh." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -186,7 +200,7 @@ function Start-Show-SystemConfigMenu {
             "2" { Join-Domain; Write-PressEnter }
             "3" { Show-ADDSPromotionMenu }
             "4" { Set-ServerTimeZone; Write-PressEnter }
-            "5" { Install-WindowsUpdates }
+            "5" { Show-WindowsUpdatesMenu }
             "6" { Register-ServerLicense }
             "7" { Set-ServerPowerPlan; Write-PressEnter }
             "back" { return }
@@ -387,6 +401,7 @@ function Start-Show-HostNetworkMenu {
                 if ($installResult.Success) {
                     $global:RebootNeeded = $true
                     Add-SessionChange -Category "Roles" -Description "Installed Hyper-V (reboot required)"
+                    Clear-MenuCache
                     Write-OutputColor "  A reboot is required." -color "Warning"
                 }
                 Write-PressEnter

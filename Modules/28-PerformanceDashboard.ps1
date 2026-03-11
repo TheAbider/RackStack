@@ -82,6 +82,30 @@ function Show-PerformanceDashboard {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
+        # Disk I/O Latency
+        $diskIOData = Show-DiskIOMetrics
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  DISK I/O LATENCY".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        if (@($diskIOData).Count -eq 0) {
+            Write-OutputColor "  │$("  No physical disk performance data available".PadRight(72))│" -color "Warning"
+        } else {
+            $headerLine = "  {0,-17} {1,-14} {2,-8} {3,-12}" -f "Disk", "Latency(R/W)", "Queue", "Throughput"
+            Write-OutputColor "  │$($headerLine.PadRight(72))│" -color "Info"
+            $separatorLine = "  {0,-17} {1,-14} {2,-8} {3,-12}" -f "─────────────", "────────────", "─────", "──────────"
+            Write-OutputColor "  │$($separatorLine.PadRight(72))│" -color "Info"
+            foreach ($diskIO in $diskIOData) {
+                $latencyColor = if ($diskIO.MaxLatency -gt 20) { "Error" } elseif ($diskIO.MaxLatency -ge 5) { "Warning" } else { "Success" }
+                $queueColor = if ($diskIO.QueueLength -gt 4) { "Error" } elseif ($diskIO.QueueLength -ge 2) { "Warning" } else { "Success" }
+                $worstColor = if ($latencyColor -eq "Error" -or $queueColor -eq "Error") { "Error" } elseif ($latencyColor -eq "Warning" -or $queueColor -eq "Warning") { "Warning" } else { "Success" }
+                $dataLine = "  {0,-17} {1,-14} {2,-8} {3,-12}" -f $diskIO.Name, $diskIO.LatencyDisplay, $diskIO.QueueDisplay, $diskIO.ThroughputDisplay
+                Write-OutputColor "  │$($dataLine.PadRight(72))│" -color $worstColor
+            }
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
         # Network
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  NETWORK ADAPTERS".PadRight(72))│" -color "Info"
@@ -95,6 +119,28 @@ function Show-PerformanceDashboard {
             $speed = if ($adapter.LinkSpeed) { $adapter.LinkSpeed } else { "Unknown" }
             $name = if ($adapter.Name.Length -gt 30) { $adapter.Name.Substring(0,27) + "..." } else { $adapter.Name }
             Write-OutputColor "  │$("  $name - $speed".PadRight(72))│" -color "Success"
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        # Network Bandwidth
+        $bandwidthData = Show-NetworkBandwidth
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  NETWORK BANDWIDTH".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        if (@($bandwidthData).Count -eq 0) {
+            Write-OutputColor "  │$("  No active adapters with bandwidth data".PadRight(72))│" -color "Warning"
+        } else {
+            $bwHeader = "  {0,-17} {1,-10} {2,-10} {3,-10} {4,-8}" -f "Adapter", "Speed", "TX/s", "RX/s", "Errors"
+            Write-OutputColor "  │$($bwHeader.PadRight(72))│" -color "Info"
+            $bwSep = "  {0,-17} {1,-10} {2,-10} {3,-10} {4,-8}" -f "─────────────", "──────", "──────", "──────", "──────"
+            Write-OutputColor "  │$($bwSep.PadRight(72))│" -color "Info"
+            foreach ($bw in $bandwidthData) {
+                $bwColor = if ($bw.HasErrors) { "Warning" } else { "Success" }
+                $bwLine = "  {0,-17} {1,-10} {2,-10} {3,-10} {4,-8}" -f $bw.Name, $bw.Speed, $bw.TxDisplay, $bw.RxDisplay, $bw.ErrorCount
+                Write-OutputColor "  │$($bwLine.PadRight(72))│" -color $bwColor
+            }
         }
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
@@ -153,9 +199,19 @@ function Show-PerformanceDashboard {
                 $clipLines += "  $($vol.DriveLetter): $dUsed% used ($dFree GB free / $dTotal GB)"
             }
             $clipLines += ""
+            $clipLines += "Disk I/O:"
+            foreach ($diskIO in $diskIOData) {
+                $clipLines += "  $($diskIO.Name) - Latency: $($diskIO.LatencyDisplay) - Queue: $($diskIO.QueueDisplay) - $($diskIO.ThroughputDisplay)"
+            }
+            $clipLines += ""
             $clipLines += "Network:"
             foreach ($adapter in $adapters) {
                 $clipLines += "  $($adapter.Name) - $($adapter.LinkSpeed)"
+            }
+            $clipLines += ""
+            $clipLines += "Network Bandwidth:"
+            foreach ($bw in $bandwidthData) {
+                $clipLines += "  $($bw.Name) - TX: $($bw.TxDisplay)/s - RX: $($bw.RxDisplay)/s - Errors: $($bw.ErrorCount)"
             }
             $clipLines += ""
             $clipLines += "Top Processes (by CPU):"
@@ -172,6 +228,102 @@ function Show-PerformanceDashboard {
         }
         return
     }
+}
+
+# Collect disk I/O latency metrics from performance counters
+function Show-DiskIOMetrics {
+    $diskPerf = Get-CimInstance Win32_PerfFormattedData_PerfDisk_PhysicalDisk -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne "_Total" }
+
+    if (-not $diskPerf) { return @() }
+
+    $results = @()
+    foreach ($disk in $diskPerf) {
+        $diskName = $disk.Name
+        if ($diskName.Length -gt 15) { $diskName = $diskName.Substring(0, 12) + "..." }
+
+        $readLatency = [math]::Round($disk.AvgDiskSecPerRead * 1000, 1)
+        $writeLatency = [math]::Round($disk.AvgDiskSecPerWrite * 1000, 1)
+        $maxLatency = [math]::Max($readLatency, $writeLatency)
+        $queueLength = [math]::Round($disk.AvgDiskQueueLength, 1)
+
+        $totalBytes = $disk.DiskReadBytesPerSec + $disk.DiskWriteBytesPerSec
+        if ($totalBytes -ge 1MB) {
+            $throughputDisplay = "$([math]::Round($totalBytes / 1MB, 1)) MB/s"
+        } elseif ($totalBytes -ge 1KB) {
+            $throughputDisplay = "$([math]::Round($totalBytes / 1KB, 1)) KB/s"
+        } else {
+            $throughputDisplay = "$totalBytes B/s"
+        }
+
+        $results += [PSCustomObject]@{
+            Name              = $diskName
+            ReadLatency       = $readLatency
+            WriteLatency      = $writeLatency
+            MaxLatency        = $maxLatency
+            LatencyDisplay    = "${readLatency}ms / ${writeLatency}ms"
+            QueueLength       = $queueLength
+            QueueDisplay      = "$queueLength"
+            ThroughputDisplay = $throughputDisplay
+        }
+    }
+    return $results
+}
+
+# Collect network bandwidth utilization by sampling two intervals
+function Show-NetworkBandwidth {
+    $upAdapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 5
+    if (-not $upAdapters) { return @() }
+
+    # First sample
+    $sample1 = @{}
+    foreach ($adp in $upAdapters) {
+        $stats = Get-NetAdapterStatistics -Name $adp.Name -ErrorAction SilentlyContinue
+        if ($null -ne $stats) {
+            $sample1[$adp.Name] = @{
+                SentBytes     = $stats.SentBytes
+                ReceivedBytes = $stats.ReceivedBytes
+            }
+        }
+    }
+
+    Start-Sleep -Seconds 1
+
+    # Second sample and calculate rates
+    $results = @()
+    foreach ($adp in $upAdapters) {
+        if (-not $sample1.ContainsKey($adp.Name)) { continue }
+
+        $stats2 = Get-NetAdapterStatistics -Name $adp.Name -ErrorAction SilentlyContinue
+        if ($null -eq $stats2) { continue }
+
+        $txRate = $stats2.SentBytes - $sample1[$adp.Name].SentBytes
+        $rxRate = $stats2.ReceivedBytes - $sample1[$adp.Name].ReceivedBytes
+        if ($txRate -lt 0) { $txRate = 0 }
+        if ($rxRate -lt 0) { $rxRate = 0 }
+
+        $txDisplay = if ($txRate -ge 1MB) { "$([math]::Round($txRate / 1MB, 1)) MB" } elseif ($txRate -ge 1KB) { "$([math]::Round($txRate / 1KB, 1)) KB" } else { "$txRate B" }
+        $rxDisplay = if ($rxRate -ge 1MB) { "$([math]::Round($rxRate / 1MB, 1)) MB" } elseif ($rxRate -ge 1KB) { "$([math]::Round($rxRate / 1KB, 1)) KB" } else { "$rxRate B" }
+
+        $adapterName = $adp.Name
+        if ($adapterName.Length -gt 15) { $adapterName = $adapterName.Substring(0, 12) + "..." }
+
+        $adpSpeed = if ($adp.LinkSpeed) { $adp.LinkSpeed } else { "Unknown" }
+        if ($adpSpeed.Length -gt 8) { $adpSpeed = $adpSpeed.Substring(0, 8) }
+
+        $errorTotal = $stats2.OutboundDiscardedPackets + $stats2.InboundDiscardedPackets + $stats2.OutboundPacketErrors + $stats2.InboundPacketErrors
+        $hasErrors = $errorTotal -gt 0
+
+        $results += [PSCustomObject]@{
+            Name       = $adapterName
+            Speed      = $adpSpeed
+            TxDisplay  = $txDisplay
+            RxDisplay  = $rxDisplay
+            ErrorCount = $errorTotal
+            HasErrors  = $hasErrors
+        }
+    }
+    return $results
 }
 
 # Helper function for progress bar

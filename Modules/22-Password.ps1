@@ -79,6 +79,56 @@ function Test-PasswordComplexity {
     return $true
 }
 
+# Function to display visual password strength feedback
+function Show-PasswordStrength {
+    param([SecureString]$SecurePassword)
+
+    # Convert SecureString to check strength (clear from memory after)
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
+    try {
+        $plainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+
+        $score = 0
+        $feedback = @()
+
+        # Length scoring
+        if ($plainText.Length -ge 14) { $score += 3; $feedback += "Length: Excellent ($($plainText.Length) chars)" }
+        elseif ($plainText.Length -ge 10) { $score += 2; $feedback += "Length: Good ($($plainText.Length) chars)" }
+        elseif ($plainText.Length -ge 8) { $score += 1; $feedback += "Length: Fair ($($plainText.Length) chars)" }
+        else { $feedback += "Length: Too short ($($plainText.Length) chars)" }
+
+        # Complexity scoring
+        if ($plainText -cmatch '[A-Z]') { $score++; $feedback += "Uppercase: Yes" }
+        else { $feedback += "Uppercase: Missing" }
+
+        if ($plainText -cmatch '[a-z]') { $score++; $feedback += "Lowercase: Yes" }
+        else { $feedback += "Lowercase: Missing" }
+
+        if ($plainText -match '[0-9]') { $score++; $feedback += "Numbers: Yes" }
+        else { $feedback += "Numbers: Missing" }
+
+        if ($plainText -match '[^a-zA-Z0-9]') { $score++; $feedback += "Special chars: Yes" }
+        else { $feedback += "Special chars: Missing" }
+
+        # Display strength bar
+        $maxScore = 7
+        $barLength = 20
+        $filled = [math]::Round(($score / $maxScore) * $barLength)
+        $bar = ([char]0x2588).ToString() * $filled + ([char]0x2591).ToString() * ($barLength - $filled)
+
+        $strengthLabel = if ($score -ge 6) { "Strong" } elseif ($score -ge 4) { "Moderate" } elseif ($score -ge 2) { "Weak" } else { "Very Weak" }
+        $color = if ($score -ge 6) { "Success" } elseif ($score -ge 4) { "Warning" } else { "Error" }
+
+        Write-OutputColor "  Strength: [$bar] $strengthLabel ($score/$maxScore)" -color $color
+        foreach ($item in $feedback) {
+            $itemColor = if ($item -match 'Missing|Too short') { "Warning" } else { "Info" }
+            Write-OutputColor "    $item" -color $itemColor
+        }
+    } finally {
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+
 # Function to securely get password input with proper memory cleanup
 function Get-SecurePassword {
     param (
@@ -145,6 +195,11 @@ function Get-SecurePassword {
                 continue
             }
 
+            # Show password strength feedback
+            Write-OutputColor "" -color "Info"
+            Show-PasswordStrength -SecurePassword $Password1
+
+            Write-OutputColor "" -color "Info"
             Write-OutputColor "  Password meets all requirements." -color "Success"
             return $Password1
         }
@@ -255,6 +310,7 @@ function Show-LocalAccountAudit {
     }
 
     Add-SessionChange -Category "Security" -Description "Ran local account audit ($($users.Count) accounts, $issues issues)"
+    Clear-MenuCache
     Write-PressEnter
 }
 #endregion

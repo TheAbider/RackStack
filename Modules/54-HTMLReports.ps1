@@ -5,7 +5,8 @@ function ConvertTo-HtmlSafe([string]$s) { if ($s) { [System.Net.WebUtility]::Htm
 # Function to generate HTML health report
 function Export-HTMLHealthReport {
     param(
-        [string]$OutputPath = "$env:USERPROFILE\Desktop\HealthReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
+        [string]$OutputPath = "$env:USERPROFILE\Desktop\HealthReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').html",
+        [string[]]$Sections = @()
     )
 
     Clear-Host
@@ -36,6 +37,38 @@ function Export-HTMLHealthReport {
         return
     }
 
+    # Section selection (System Info is always included)
+    if ($Sections.Count -eq 0) {
+        Write-OutputColor "  Select report sections (System Info is always included):" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [1] Performance Metrics  (CPU, Memory, Top Processes)" -color "Info"
+        Write-OutputColor "  [2] Storage Health       (Disks, I/O Latency)" -color "Info"
+        Write-OutputColor "  [3] Network              (Adapters, NIC Errors)" -color "Info"
+        Write-OutputColor "  [4] Security Status      (Firewall, Defender, Certs, Events)" -color "Info"
+        Write-OutputColor "  [A] All sections" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Enter choices (e.g. 1,2,3 or A for all):" -color "Info"
+        $sectionChoice = Read-Host "  "
+        $navResult = Test-NavigationCommand -UserInput $sectionChoice
+        if ($navResult.ShouldReturn) { return }
+
+        if ($sectionChoice -match '[Aa]' -or [string]::IsNullOrWhiteSpace($sectionChoice)) {
+            $Sections = @("Performance", "Storage", "Network", "Security")
+        } else {
+            $Sections = @()
+            if ($sectionChoice -match '1') { $Sections += "Performance" }
+            if ($sectionChoice -match '2') { $Sections += "Storage" }
+            if ($sectionChoice -match '3') { $Sections += "Network" }
+            if ($sectionChoice -match '4') { $Sections += "Security" }
+            if ($Sections.Count -eq 0) { $Sections = @("Performance", "Storage", "Network", "Security") }
+        }
+    }
+
+    $includePerformance = $Sections -contains "Performance"
+    $includeStorage = $Sections -contains "Storage"
+    $includeNetwork = $Sections -contains "Network"
+    $includeSecurity = $Sections -contains "Security"
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Gathering system information..." -color "Info"
 
@@ -60,12 +93,12 @@ function Export-HTMLHealthReport {
     $uptime = if ($os -and $os.LastBootUpTime) { (Get-Date) - $os.LastBootUpTime } else { $null }
     $uptimeStr = if ($uptime) { "{0} days, {1} hours, {2} minutes" -f $uptime.Days, $uptime.Hours, $uptime.Minutes } else { "Unknown" }
 
-    # CPU load
+    # CPU load (always gathered for issues summary)
     $cpuLoadMeasure = if ($cpuAll) { ($cpuAll | Measure-Object -Property LoadPercentage -Average).Average } else { $null }
     $cpuLoad = if ($null -ne $cpuLoadMeasure) { $cpuLoadMeasure } else { 0 }
     $cpuStatus = if ($cpuLoad -gt 80) { "bad" } elseif ($cpuLoad -gt 50) { "warn" } else { "good" }
 
-    # Memory
+    # Memory (always gathered for issues summary)
     $totalMemGB = if ($os) { [math]::Round($os.TotalVisibleMemorySize / 1MB, 2) } else { 0 }
     $freeMemGB = if ($os) { [math]::Round($os.FreePhysicalMemory / 1MB, 2) } else { 0 }
     $usedMemGB = $totalMemGB - $freeMemGB
@@ -73,20 +106,22 @@ function Export-HTMLHealthReport {
     $memStatus = if ($memPercent -gt 90) { "bad" } elseif ($memPercent -gt 75) { "warn" } else { "good" }
 
     # Disks
-    $diskResult = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
-    } -TimeoutSeconds 10 -Activity "Querying disk info"
-    $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
+    $disks = $null
     $diskHtml = ""
-    if (-not $disks) {
-        $diskHtml = "<tr><td colspan='5'>Disk information unavailable</td></tr>"
-    }
-    foreach ($disk in $disks) {
-        $totalGB = [math]::Round($disk.Size / 1GB, 1)
-        $freeGB = [math]::Round($disk.FreeSpace / 1GB, 1)
-        $usedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
-        $diskStatus = if ($usedPercent -gt 90) { "bad" } elseif ($usedPercent -gt 75) { "warn" } else { "good" }
-        $diskHtml += @"
+    if ($includeStorage) {
+        $diskResult = Invoke-WithTimeout -ScriptBlock {
+            Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+        } -TimeoutSeconds 10 -Activity "Querying disk info"
+        $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
+        if (-not $disks) {
+            $diskHtml = "<tr><td colspan='5'>Disk information unavailable</td></tr>"
+        }
+        foreach ($disk in $disks) {
+            $totalGB = [math]::Round($disk.Size / 1GB, 1)
+            $freeGB = [math]::Round($disk.FreeSpace / 1GB, 1)
+            $usedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
+            $diskStatus = if ($usedPercent -gt 90) { "bad" } elseif ($usedPercent -gt 75) { "warn" } else { "good" }
+            $diskHtml += @"
         <tr>
             <td>$(ConvertTo-HtmlSafe $disk.DeviceID)</td>
             <td>$totalGB GB</td>
@@ -95,105 +130,121 @@ function Export-HTMLHealthReport {
             <td><div class="progress-bar"><div class="progress-fill status-bg-$diskStatus" style="width: $usedPercent%"></div></div></td>
         </tr>
 "@
+        }
     }
 
     # Network adapters (batch query to avoid N+1)
-    $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" }
-    $allIPv4Html = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
     $networkHtml = ""
-    if (-not $adapters) {
-        $networkHtml = "<tr><td colspan='4'>No active network adapters found</td></tr>"
-    }
-    foreach ($adapter in $adapters) {
-        $ip = $allIPv4Html | Where-Object { $_.InterfaceAlias -eq $adapter.Name }
-        $ipStr = if ($ip) { $ip.IPAddress } else { "No IP" }
-        $networkHtml += "<tr><td>$(ConvertTo-HtmlSafe $adapter.Name)</td><td>$(ConvertTo-HtmlSafe $ipStr)</td><td class='status-good'>Up</td><td>$(ConvertTo-HtmlSafe $adapter.LinkSpeed)</td></tr>"
+    if ($includeNetwork) {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" }
+        $allIPv4Html = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        if (-not $adapters) {
+            $networkHtml = "<tr><td colspan='4'>No active network adapters found</td></tr>"
+        }
+        foreach ($adapter in $adapters) {
+            $ip = $allIPv4Html | Where-Object { $_.InterfaceAlias -eq $adapter.Name }
+            $ipStr = if ($ip) { $ip.IPAddress } else { "No IP" }
+            $networkHtml += "<tr><td>$(ConvertTo-HtmlSafe $adapter.Name)</td><td>$(ConvertTo-HtmlSafe $ipStr)</td><td class='status-good'>Up</td><td>$(ConvertTo-HtmlSafe $adapter.LinkSpeed)</td></tr>"
+        }
     }
 
     # Services
-    $keyServices = @(
-        @{ Name = "wuauserv"; Display = "Windows Update" },
-        @{ Name = "WinRM"; Display = "WinRM" },
-        @{ Name = "vmms"; Display = "Hyper-V Management" },
-        @{ Name = "TermService"; Display = "Remote Desktop" }
-    )
     $servicesHtml = ""
-    foreach ($svc in $keyServices) {
-        $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
-        if ($service) {
-            $svcStatus = if ($service.Status -eq "Running") { "good" } else { "warn" }
-            $servicesHtml += "<tr><td>$(ConvertTo-HtmlSafe $svc.Display)</td><td class='status-$svcStatus'>$(ConvertTo-HtmlSafe $service.Status)</td></tr>"
+    if ($includePerformance) {
+        $keyServices = @(
+            @{ Name = "wuauserv"; Display = "Windows Update" },
+            @{ Name = "WinRM"; Display = "WinRM" },
+            @{ Name = "vmms"; Display = "Hyper-V Management" },
+            @{ Name = "TermService"; Display = "Remote Desktop" }
+        )
+        foreach ($svc in $keyServices) {
+            $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
+            if ($service) {
+                $svcStatus = if ($service.Status -eq "Running") { "good" } else { "warn" }
+                $servicesHtml += "<tr><td>$(ConvertTo-HtmlSafe $svc.Display)</td><td class='status-$svcStatus'>$(ConvertTo-HtmlSafe $service.Status)</td></tr>"
+            }
         }
     }
 
-    # Certificates
+    # Certificates (Security section)
     $certHtml = ""
-    try {
-        $now = Get-Date
-        $allCerts = @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue)
-        if ($allCerts.Count -gt 0) {
-            foreach ($cert in ($allCerts | Sort-Object NotAfter)) {
-                $subject = if ($cert.Subject) { $cert.Subject } else { "(no subject)" }
-                $daysLeft = [math]::Floor(($cert.NotAfter - $now).TotalDays)
-                $certStatus = if ($daysLeft -lt 0) { "bad" } elseif ($daysLeft -lt 30) { "warn" } else { "good" }
-                $statusTag = if ($daysLeft -lt 0) { "EXPIRED" } elseif ($daysLeft -lt 30) { "EXPIRING" } else { "OK" }
-                $certHtml += "<tr><td>$(ConvertTo-HtmlSafe $subject)</td><td>$($cert.NotAfter.ToString('yyyy-MM-dd'))</td><td>${daysLeft}d</td><td class='status-$certStatus'>$statusTag</td></tr>"
+    if ($includeSecurity) {
+        try {
+            $now = Get-Date
+            $allCerts = @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue)
+            if ($allCerts.Count -gt 0) {
+                foreach ($cert in ($allCerts | Sort-Object NotAfter)) {
+                    $subject = if ($cert.Subject) { $cert.Subject } else { "(no subject)" }
+                    $daysLeft = [math]::Floor(($cert.NotAfter - $now).TotalDays)
+                    $certStatus = if ($daysLeft -lt 0) { "bad" } elseif ($daysLeft -lt 30) { "warn" } else { "good" }
+                    $statusTag = if ($daysLeft -lt 0) { "EXPIRED" } elseif ($daysLeft -lt 30) { "EXPIRING" } else { "OK" }
+                    $certHtml += "<tr><td>$(ConvertTo-HtmlSafe $subject)</td><td>$($cert.NotAfter.ToString('yyyy-MM-dd'))</td><td>${daysLeft}d</td><td class='status-$certStatus'>$statusTag</td></tr>"
+                }
+            } else {
+                $certHtml = "<tr><td colspan='4'>No certificates in LocalMachine\My store</td></tr>"
             }
-        } else {
-            $certHtml = "<tr><td colspan='4'>No certificates in LocalMachine\My store</td></tr>"
+        } catch {
+            $certHtml = "<tr><td colspan='4'>Certificate check unavailable</td></tr>"
         }
-    } catch {
-        $certHtml = "<tr><td colspan='4'>Certificate check unavailable</td></tr>"
     }
 
-    # Disk I/O Latency (v1.7.0)
-    $diskIOHtml = "<table><tr><th>Disk</th><th>Metric</th><th>Latency</th><th>Status</th></tr>"
-    try {
-        $diskCounters = Get-Counter '\PhysicalDisk(*)\Avg. Disk sec/Read', '\PhysicalDisk(*)\Avg. Disk sec/Write' -ErrorAction SilentlyContinue
-        if ($diskCounters) {
-            foreach ($sample in $diskCounters.CounterSamples) {
-                if ($sample.InstanceName -eq '_total') { continue }
-                $latMs = [math]::Round($sample.CookedValue * 1000, 2)
-                $metricName = if ($sample.Path -match 'Read') { "Read" } else { "Write" }
-                $latStat = if ($latMs -gt 20) { "bad" } elseif ($latMs -gt 10) { "warn" } else { "good" }
-                $diskIOHtml += "<tr><td>$(ConvertTo-HtmlSafe $sample.InstanceName)</td><td>$metricName</td><td>${latMs}ms</td><td class='status-$latStat'>$($latStat.ToUpper())</td></tr>"
+    # Disk I/O Latency (Storage section)
+    $diskIOHtml = ""
+    if ($includeStorage) {
+        $diskIOHtml = "<table><tr><th>Disk</th><th>Metric</th><th>Latency</th><th>Status</th></tr>"
+        try {
+            $diskCounters = Get-Counter '\PhysicalDisk(*)\Avg. Disk sec/Read', '\PhysicalDisk(*)\Avg. Disk sec/Write' -ErrorAction SilentlyContinue
+            if ($diskCounters) {
+                foreach ($sample in $diskCounters.CounterSamples) {
+                    if ($sample.InstanceName -eq '_total') { continue }
+                    $latMs = [math]::Round($sample.CookedValue * 1000, 2)
+                    $metricName = if ($sample.Path -match 'Read') { "Read" } else { "Write" }
+                    $latStat = if ($latMs -gt 20) { "bad" } elseif ($latMs -gt 10) { "warn" } else { "good" }
+                    $diskIOHtml += "<tr><td>$(ConvertTo-HtmlSafe $sample.InstanceName)</td><td>$metricName</td><td>${latMs}ms</td><td class='status-$latStat'>$($latStat.ToUpper())</td></tr>"
+                }
+            } else { $diskIOHtml += "<tr><td colspan='4'>Performance counters unavailable</td></tr>" }
+        } catch { $diskIOHtml += "<tr><td colspan='4'>Unable to read disk I/O counters</td></tr>" }
+        $diskIOHtml += "</table>"
+    }
+
+    # NIC Error Counters (Network section)
+    $nicErrorHtml = ""
+    if ($includeNetwork) {
+        $nicErrorHtml = "<table><tr><th>Adapter</th><th>InErrors</th><th>OutErrors</th><th>InDiscards</th><th>Status</th></tr>"
+        try {
+            $nicStats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
+            foreach ($nic in $nicStats) {
+                $totalErr = $nic.InErrors + $nic.OutErrors + $nic.InDiscards
+                $nicStat = if ($totalErr -gt 0) { "warn" } else { "good" }
+                $nicErrorHtml += "<tr><td>$(ConvertTo-HtmlSafe $nic.Name)</td><td>$($nic.InErrors)</td><td>$($nic.OutErrors)</td><td>$($nic.InDiscards)</td><td class='status-$nicStat'>$($nicStat.ToUpper())</td></tr>"
             }
-        } else { $diskIOHtml += "<tr><td colspan='4'>Performance counters unavailable</td></tr>" }
-    } catch { $diskIOHtml += "<tr><td colspan='4'>Unable to read disk I/O counters</td></tr>" }
-    $diskIOHtml += "</table>"
+        } catch { $nicErrorHtml += "<tr><td colspan='5'>NIC statistics unavailable</td></tr>" }
+        $nicErrorHtml += "</table>"
+    }
 
-    # NIC Error Counters (v1.7.0)
-    $nicErrorHtml = "<table><tr><th>Adapter</th><th>InErrors</th><th>OutErrors</th><th>InDiscards</th><th>Status</th></tr>"
-    try {
-        $nicStats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
-        foreach ($nic in $nicStats) {
-            $totalErr = $nic.InErrors + $nic.OutErrors + $nic.InDiscards
-            $nicStat = if ($totalErr -gt 0) { "warn" } else { "good" }
-            $nicErrorHtml += "<tr><td>$(ConvertTo-HtmlSafe $nic.Name)</td><td>$($nic.InErrors)</td><td>$($nic.OutErrors)</td><td>$($nic.InDiscards)</td><td class='status-$nicStat'>$($nicStat.ToUpper())</td></tr>"
-        }
-    } catch { $nicErrorHtml += "<tr><td colspan='5'>NIC statistics unavailable</td></tr>" }
-    $nicErrorHtml += "</table>"
-
-    # Memory Pressure (v1.7.0)
-    $memPressureHtml = "<table><tr><th>Metric</th><th>Value</th><th>Status</th></tr>"
-    try {
-        $memCounters = Get-Counter '\Memory\Pages/sec', '\Memory\Available MBytes' -ErrorAction SilentlyContinue
-        if ($memCounters) {
-            foreach ($sample in $memCounters.CounterSamples) {
-                $cName = if ($sample.Path -match 'Pages') { "Pages/sec" } else { "Available MB" }
-                $cVal = [math]::Round($sample.CookedValue, 1)
-                $mStat = "good"
-                if ($cName -eq "Pages/sec" -and $cVal -gt 1000) { $mStat = "warn" }
-                if ($cName -eq "Available MB" -and $cVal -lt 500) { $mStat = "bad" } elseif ($cName -eq "Available MB" -and $cVal -lt 2000) { $mStat = "warn" }
-                $memPressureHtml += "<tr><td>$cName</td><td>$cVal</td><td class='status-$mStat'>$($mStat.ToUpper())</td></tr>"
+    # Memory Pressure (Performance section)
+    $memPressureHtml = ""
+    if ($includePerformance) {
+        $memPressureHtml = "<table><tr><th>Metric</th><th>Value</th><th>Status</th></tr>"
+        try {
+            $memCounters = Get-Counter '\Memory\Pages/sec', '\Memory\Available MBytes' -ErrorAction SilentlyContinue
+            if ($memCounters) {
+                foreach ($sample in $memCounters.CounterSamples) {
+                    $cName = if ($sample.Path -match 'Pages') { "Pages/sec" } else { "Available MB" }
+                    $cVal = [math]::Round($sample.CookedValue, 1)
+                    $mStat = "good"
+                    if ($cName -eq "Pages/sec" -and $cVal -gt 1000) { $mStat = "warn" }
+                    if ($cName -eq "Available MB" -and $cVal -lt 500) { $mStat = "bad" } elseif ($cName -eq "Available MB" -and $cVal -lt 2000) { $mStat = "warn" }
+                    $memPressureHtml += "<tr><td>$cName</td><td>$cVal</td><td class='status-$mStat'>$($mStat.ToUpper())</td></tr>"
+                }
             }
-        }
-    } catch { $memPressureHtml += "<tr><td colspan='3'>Memory pressure counters unavailable</td></tr>" }
-    $memPressureHtml += "</table>"
+        } catch { $memPressureHtml += "<tr><td colspan='3'>Memory pressure counters unavailable</td></tr>" }
+        $memPressureHtml += "</table>"
+    }
 
-    # Hyper-V Guest Health (v1.7.0)
+    # Hyper-V Guest Health (Performance section)
     $hvGuestHtml = ""
-    if (Test-HyperVInstalled) {
+    if ($includePerformance -and (Test-HyperVInstalled)) {
         $hvGuestHtml = "<h2>Hyper-V Guest Health</h2><table><tr><th>VM</th><th>Heartbeat</th><th>vCPU</th><th>RAM (GB)</th></tr>"
         try {
             $hvVMs = Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Running" }
@@ -203,89 +254,103 @@ function Export-HTMLHealthReport {
                     $hvHbSt = if ($hvHb -and $hvHb.PrimaryStatusDescription -eq "OK") { "good" } else { "warn" }
                     $hvHbTxt = if ($hvHb) { $hvHb.PrimaryStatusDescription } else { "N/A" }
                     $hvRAM = [math]::Round($hvm.MemoryAssigned / 1GB, 1)
-                    $hvGuestHtml += "<tr><td>$(ConvertTo-HtmlSafe $hvm.Name)</td><td class='status-$hvHbSt'>$hvHbTxt</td><td>$($hvm.ProcessorCount)</td><td>$hvRAM</td></tr>"
+                    $hvGuestHtml += "<tr><td>$(ConvertTo-HtmlSafe $hvm.Name)</td><td class='status-$hvHbSt'>$(ConvertTo-HtmlSafe $hvHbTxt)</td><td>$($hvm.ProcessorCount)</td><td>$hvRAM</td></tr>"
                 }
             } else { $hvGuestHtml += "<tr><td colspan='4'>No running VMs</td></tr>" }
         } catch { $hvGuestHtml += "<tr><td colspan='4'>Guest health unavailable</td></tr>" }
         $hvGuestHtml += "</table>"
     }
 
-    # Top 5 CPU Processes (v1.7.0)
-    $topProcsHtml = "<table><tr><th>Process</th><th>CPU (sec)</th><th>RAM (MB)</th></tr>"
-    try {
-        $topP = Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 5
-        foreach ($p in $topP) {
-            $pCPU = if ($null -ne $p.CPU) { [math]::Round($p.CPU, 1) } else { 0 }
-            $pMem = [math]::Round($p.WorkingSet64 / 1MB, 0)
-            $topProcsHtml += "<tr><td>$(ConvertTo-HtmlSafe $p.ProcessName)</td><td>$pCPU</td><td>$pMem</td></tr>"
-        }
-    } catch { $topProcsHtml += "<tr><td colspan='3'>Process information unavailable</td></tr>" }
-    $topProcsHtml += "</table>"
-
-    # Time Sync Status
-    $timeSyncHtml = "<table><tr><th>Property</th><th>Value</th><th>Status</th></tr>"
-    try {
-        $w32tmOut = w32tm /query /status 2>&1
-        $timeSyncSource = "Unknown"
-        $timeSyncOffset = $null
-        $timeSyncStat = "good"
-        foreach ($tsLine in $w32tmOut) {
-            $tsText = $tsLine.ToString()
-            if ($tsText -match 'Source:\s*(.+)') {
-                $regexMatches = $matches
-                $timeSyncSource = $regexMatches[1].Trim()
+    # Top 5 CPU Processes (Performance section)
+    $topProcsHtml = ""
+    if ($includePerformance) {
+        $topProcsHtml = "<table><tr><th>Process</th><th>CPU (sec)</th><th>RAM (MB)</th></tr>"
+        try {
+            $topP = Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 5
+            foreach ($p in $topP) {
+                $pCPU = if ($null -ne $p.CPU) { [math]::Round($p.CPU, 1) } else { 0 }
+                $pMem = [math]::Round($p.WorkingSet64 / 1MB, 0)
+                $topProcsHtml += "<tr><td>$(ConvertTo-HtmlSafe $p.ProcessName)</td><td>$pCPU</td><td>$pMem</td></tr>"
             }
-            if ($tsText -match 'Phase Offset:\s*([\-\d\.]+)s') {
-                $regexMatches = $matches
-                $timeSyncOffset = [double]$regexMatches[1]
-            }
-        }
-        if ($timeSyncSource -match 'Free-Running|Local CMOS') { $timeSyncStat = "warn" }
-        $offsetStr = if ($null -ne $timeSyncOffset) { "$([math]::Round($timeSyncOffset, 3))s" } else { "N/A" }
-        $offsetStat = "good"
-        if ($null -ne $timeSyncOffset) {
-            $absOffset = [math]::Abs($timeSyncOffset)
-            if ($absOffset -gt 30) { $offsetStat = "bad" } elseif ($absOffset -gt 5) { $offsetStat = "warn" }
-        }
-        $timeSyncHtml += "<tr><td>Source</td><td>$(ConvertTo-HtmlSafe $timeSyncSource)</td><td class='status-$timeSyncStat'>$(if ($timeSyncStat -eq 'good') { 'OK' } else { 'CHECK' })</td></tr>"
-        $timeSyncHtml += "<tr><td>Phase Offset</td><td>$(ConvertTo-HtmlSafe $offsetStr)</td><td class='status-$offsetStat'>$(if ($offsetStat -eq 'good') { 'OK' } elseif ($offsetStat -eq 'warn') { 'DRIFT' } else { 'HIGH DRIFT' })</td></tr>"
-    } catch {
-        $timeSyncHtml += "<tr><td colspan='3'>Time sync status unavailable</td></tr>"
+        } catch { $topProcsHtml += "<tr><td colspan='3'>Process information unavailable</td></tr>" }
+        $topProcsHtml += "</table>"
     }
-    $timeSyncHtml += "</table>"
 
-    # Firewall Status
-    $firewallHtml = "<table><tr><th>Profile</th><th>Enabled</th><th>Status</th></tr>"
-    try {
-        $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
-        foreach ($fwProf in $fwProfiles) {
-            $fwOn = $fwProf.Enabled -eq $true
-            $fwStat = if ($fwOn) { "good" } else { "bad" }
-            $fwText = if ($fwOn) { "Enabled" } else { "DISABLED" }
-            $firewallHtml += "<tr><td>$(ConvertTo-HtmlSafe $fwProf.Name)</td><td class='status-$fwStat'>$fwText</td><td class='status-$fwStat'>$(if ($fwOn) { 'OK' } else { 'WARNING' })</td></tr>"
-        }
-    } catch {
-        $firewallHtml += "<tr><td colspan='3'>Firewall status unavailable</td></tr>"
-    }
-    $firewallHtml += "</table>"
-
-    # Recent Critical Events (24h)
-    $critEventsHtml = "<table><tr><th>Time</th><th>Source</th><th>ID</th><th>Message</th></tr>"
-    try {
-        $critEvents = @(Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction SilentlyContinue)
-        if ($critEvents.Count -gt 0) {
-            foreach ($evt in ($critEvents | Select-Object -First 5)) {
-                $evtMsg = if ($evt.Message) { $evt.Message.Split("`n")[0] } else { "N/A" }
-                if ($evtMsg.Length -gt 80) { $evtMsg = $evtMsg.Substring(0, 77) + "..." }
-                $critEventsHtml += "<tr><td>$($evt.TimeCreated.ToString('MM/dd HH:mm'))</td><td>$(ConvertTo-HtmlSafe $evt.ProviderName)</td><td>$($evt.Id)</td><td>$(ConvertTo-HtmlSafe $evtMsg)</td></tr>"
+    # Time Sync Status (Security section)
+    $timeSyncHtml = ""
+    $timeSyncSource = "Unknown"
+    $timeSyncOffset = $null
+    if ($includeSecurity) {
+        $timeSyncHtml = "<table><tr><th>Property</th><th>Value</th><th>Status</th></tr>"
+        try {
+            $w32tmOut = w32tm /query /status 2>&1
+            $timeSyncStat = "good"
+            foreach ($tsLine in $w32tmOut) {
+                $tsText = $tsLine.ToString()
+                if ($tsText -match 'Source:\s*(.+)') {
+                    $regexMatches = $matches
+                    $timeSyncSource = $regexMatches[1].Trim()
+                }
+                if ($tsText -match 'Phase Offset:\s*([\-\d\.]+)s') {
+                    $regexMatches = $matches
+                    $timeSyncOffset = [double]$regexMatches[1]
+                }
             }
-        } else {
-            $critEventsHtml += "<tr><td colspan='4' class='status-good'>No critical/error events in last 24 hours</td></tr>"
+            if ($timeSyncSource -match 'Free-Running|Local CMOS') { $timeSyncStat = "warn" }
+            $offsetStr = if ($null -ne $timeSyncOffset) { "$([math]::Round($timeSyncOffset, 3))s" } else { "N/A" }
+            $offsetStat = "good"
+            if ($null -ne $timeSyncOffset) {
+                $absOffset = [math]::Abs($timeSyncOffset)
+                if ($absOffset -gt 30) { $offsetStat = "bad" } elseif ($absOffset -gt 5) { $offsetStat = "warn" }
+            }
+            $timeSyncHtml += "<tr><td>Source</td><td>$(ConvertTo-HtmlSafe $timeSyncSource)</td><td class='status-$timeSyncStat'>$(if ($timeSyncStat -eq 'good') { 'OK' } else { 'CHECK' })</td></tr>"
+            $timeSyncHtml += "<tr><td>Phase Offset</td><td>$(ConvertTo-HtmlSafe $offsetStr)</td><td class='status-$offsetStat'>$(if ($offsetStat -eq 'good') { 'OK' } elseif ($offsetStat -eq 'warn') { 'DRIFT' } else { 'HIGH DRIFT' })</td></tr>"
+        } catch {
+            $timeSyncHtml += "<tr><td colspan='3'>Time sync status unavailable</td></tr>"
         }
-    } catch {
-        $critEventsHtml += "<tr><td colspan='4'>Event log query unavailable</td></tr>"
+        $timeSyncHtml += "</table>"
     }
-    $critEventsHtml += "</table>"
+
+    # Firewall Status (Security section)
+    $firewallHtml = ""
+    $fwProfiles = $null
+    if ($includeSecurity) {
+        $firewallHtml = "<table><tr><th>Profile</th><th>Enabled</th><th>Status</th></tr>"
+        try {
+            $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+            foreach ($fwProf in $fwProfiles) {
+                $fwOn = $fwProf.Enabled -eq $true
+                $fwStat = if ($fwOn) { "good" } else { "bad" }
+                $fwText = if ($fwOn) { "Enabled" } else { "DISABLED" }
+                $firewallHtml += "<tr><td>$(ConvertTo-HtmlSafe $fwProf.Name)</td><td class='status-$fwStat'>$fwText</td><td class='status-$fwStat'>$(if ($fwOn) { 'OK' } else { 'WARNING' })</td></tr>"
+            }
+        } catch {
+            $firewallHtml += "<tr><td colspan='3'>Firewall status unavailable</td></tr>"
+        }
+        $firewallHtml += "</table>"
+    }
+
+    # Recent Critical Events (Security section)
+    $critEventsHtml = ""
+    $critEvents = @()
+    if ($includeSecurity) {
+        $critEventsHtml = "<table><tr><th>Time</th><th>Source</th><th>ID</th><th>Message</th></tr>"
+        try {
+            $critEvents = @(Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction SilentlyContinue)
+            if ($critEvents.Count -gt 0) {
+                foreach ($evt in ($critEvents | Select-Object -First 5)) {
+                    $evtMsg = if ($evt.Message) { $evt.Message.Split("`n")[0] } else { "N/A" }
+                    if ($evtMsg.Length -gt 80) { $evtMsg = $evtMsg.Substring(0, 77) + "..." }
+                    $critEventsHtml += "<tr><td>$($evt.TimeCreated.ToString('MM/dd HH:mm'))</td><td>$(ConvertTo-HtmlSafe $evt.ProviderName)</td><td>$($evt.Id)</td><td>$(ConvertTo-HtmlSafe $evtMsg)</td></tr>"
+                }
+            } else {
+                $critEventsHtml += "<tr><td colspan='4' class='status-good'>No critical/error events in last 24 hours</td></tr>"
+            }
+        } catch {
+            $critEventsHtml += "<tr><td colspan='4'>Event log query unavailable</td></tr>"
+        }
+        $critEventsHtml += "</table>"
+    }
 
     # Issues summary
     $issues = @()
@@ -308,6 +373,88 @@ function Export-HTMLHealthReport {
     $overallStatus = if ($issues.Count -eq 0) { "good" } elseif ($issues.Count -le 2) { "warn" } else { "bad" }
     $overallText = if ($issues.Count -eq 0) { "HEALTHY" } else { "ATTENTION NEEDED" }
     $issuesHtml = if ($issues.Count -eq 0) { "<li class='status-good'>No issues detected</li>" } else { ($issues | ForEach-Object { "<li class='status-warn'>$(ConvertTo-HtmlSafe $_)</li>" }) -join "`n" }
+
+    # Build conditional HTML sections
+    $performanceSectionHtml = ""
+    if ($includePerformance) {
+        $performanceSectionHtml = @"
+        <h2>CPU</h2>
+        <div class="info-grid">
+            <div class="info-box"><div class="info-label">Processor</div><div class="info-value">$(if ($cpu) { ConvertTo-HtmlSafe $cpu.Name } else { 'Unknown' })</div></div>
+            <div class="info-box"><div class="info-label">Cores / Logical</div><div class="info-value">$(if ($cpu) { "$($cpu.NumberOfCores) / $($cpu.NumberOfLogicalProcessors)" } else { 'N/A' })</div></div>
+            <div class="info-box"><div class="info-label">Current Load</div><div class="info-value status-$cpuStatus">$([math]::Round($cpuLoad, 1))%</div></div>
+        </div>
+
+        <h2>Memory</h2>
+        <div class="info-grid">
+            <div class="info-box"><div class="info-label">Total</div><div class="info-value">$totalMemGB GB</div></div>
+            <div class="info-box"><div class="info-label">Used</div><div class="info-value status-$memStatus">$usedMemGB GB ($memPercent%)</div></div>
+            <div class="info-box"><div class="info-label">Free</div><div class="info-value">$freeMemGB GB</div></div>
+        </div>
+
+        <h2>Memory Pressure</h2>
+        $memPressureHtml
+
+        $hvGuestHtml
+
+        <h2>Top 5 CPU Processes</h2>
+        $topProcsHtml
+
+        <h2>Key Services</h2>
+        <table>
+            <tr><th>Service</th><th>Status</th></tr>
+            $servicesHtml
+        </table>
+"@
+    }
+
+    $storageSectionHtml = ""
+    if ($includeStorage) {
+        $storageSectionHtml = @"
+        <h2>Disk Space</h2>
+        <table>
+            <tr><th>Drive</th><th>Total</th><th>Free</th><th>Used %</th><th>Usage</th></tr>
+            $diskHtml
+        </table>
+
+        <h2>Disk I/O Latency</h2>
+        $diskIOHtml
+"@
+    }
+
+    $networkSectionHtml = ""
+    if ($includeNetwork) {
+        $networkSectionHtml = @"
+        <h2>Network Adapters</h2>
+        <table>
+            <tr><th>Adapter</th><th>IP Address</th><th>Status</th><th>Speed</th></tr>
+            $networkHtml
+        </table>
+
+        <h2>NIC Error Counters</h2>
+        $nicErrorHtml
+"@
+    }
+
+    $securitySectionHtml = ""
+    if ($includeSecurity) {
+        $securitySectionHtml = @"
+        <h2>Certificates</h2>
+        <table>
+            <tr><th>Subject</th><th>Expires</th><th>Days Left</th><th>Status</th></tr>
+            $certHtml
+        </table>
+
+        <h2>Time Sync</h2>
+        $timeSyncHtml
+
+        <h2>Firewall Status</h2>
+        $firewallHtml
+
+        <h2>Recent Critical Events (24h)</h2>
+        $critEventsHtml
+"@
+    }
 
     # Build HTML
     $html = @"
@@ -342,9 +489,48 @@ function Export-HTMLHealthReport {
         .info-label { color: #666; font-size: 12px; text-transform: uppercase; }
         .info-value { font-size: 18px; font-weight: bold; color: #333; }
         .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #666; font-size: 12px; }
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #1a1a2e; color: #e0e0e0; }
+            .container { background: #16213e; }
+            h1 { color: #e0e0e0; }
+            h2 { color: #5dade2; }
+            table { border-color: #444; }
+            th { background-color: #16213e; color: #e0e0e0; }
+            td { border-color: #333; }
+            tr:nth-child(even) { background: #1a2744; }
+            .info-box { background: #1a2744; border-color: #333; }
+            .info-label { color: #aaa; }
+            .info-value { color: #e0e0e0; }
+            .summary-good { background: #1b4332; border-color: #28a745; }
+            .summary-warn { background: #3d2e00; border-color: #ffc107; }
+            .summary-bad { background: #3d1014; border-color: #dc3545; }
+            .status-warn { color: #ffa726; }
+            .status-bad { color: #ef5350; }
+            .status-good { color: #66bb6a; }
+            .footer { border-color: #444; color: #999; }
+        }
+        .dark-mode { background-color: #1a1a2e !important; color: #e0e0e0 !important; }
+        .dark-mode .container { background: #16213e !important; }
+        .dark-mode h1 { color: #e0e0e0 !important; }
+        .dark-mode h2 { color: #5dade2 !important; }
+        .dark-mode table { border-color: #444 !important; }
+        .dark-mode th { background-color: #16213e !important; color: #e0e0e0 !important; }
+        .dark-mode td { border-color: #333 !important; }
+        .dark-mode tr:nth-child(even) { background: #1a2744 !important; }
+        .dark-mode .info-box { background: #1a2744 !important; border-color: #333 !important; }
+        .dark-mode .info-label { color: #aaa !important; }
+        .dark-mode .info-value { color: #e0e0e0 !important; }
+        .dark-mode .summary-good { background: #1b4332 !important; border-color: #28a745 !important; }
+        .dark-mode .summary-warn { background: #3d2e00 !important; border-color: #ffc107 !important; }
+        .dark-mode .summary-bad { background: #3d1014 !important; border-color: #dc3545 !important; }
+        .dark-mode .status-warn { color: #ffa726 !important; }
+        .dark-mode .status-bad { color: #ef5350 !important; }
+        .dark-mode .status-good { color: #66bb6a !important; }
+        .dark-mode .footer { border-color: #444 !important; color: #999 !important; }
     </style>
 </head>
 <body>
+    <button onclick="document.body.classList.toggle('dark-mode')" style="position:fixed;top:10px;right:10px;padding:5px 10px;cursor:pointer;z-index:1000;border-radius:4px;border:1px solid #ccc;">Toggle Dark Mode</button>
     <div class="container">
         <h1>Server Health Report</h1>
         <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
@@ -359,72 +545,19 @@ function Export-HTMLHealthReport {
             <div class="info-box"><div class="info-label">Computer Name</div><div class="info-value">$(ConvertTo-HtmlSafe $cs.Name)</div></div>
             <div class="info-box"><div class="info-label">Operating System</div><div class="info-value">$(ConvertTo-HtmlSafe $os.Caption)</div></div>
             <div class="info-box"><div class="info-label">OS Version</div><div class="info-value">$(ConvertTo-HtmlSafe $os.Version)</div></div>
-            <div class="info-box"><div class="info-label">Uptime</div><div class="info-value">$uptimeStr</div></div>
+            <div class="info-box"><div class="info-label">Uptime</div><div class="info-value">$(ConvertTo-HtmlSafe $uptimeStr)</div></div>
         </div>
 
-        <h2>CPU</h2>
-        <div class="info-grid">
-            <div class="info-box"><div class="info-label">Processor</div><div class="info-value">$(if ($cpu) { ConvertTo-HtmlSafe $cpu.Name } else { 'Unknown' })</div></div>
-            <div class="info-box"><div class="info-label">Cores / Logical</div><div class="info-value">$(if ($cpu) { "$($cpu.NumberOfCores) / $($cpu.NumberOfLogicalProcessors)" } else { 'N/A' })</div></div>
-            <div class="info-box"><div class="info-label">Current Load</div><div class="info-value status-$cpuStatus">$([math]::Round($cpuLoad, 1))%</div></div>
-        </div>
+        $performanceSectionHtml
 
-        <h2>Memory</h2>
-        <div class="info-grid">
-            <div class="info-box"><div class="info-label">Total</div><div class="info-value">$totalMemGB GB</div></div>
-            <div class="info-box"><div class="info-label">Used</div><div class="info-value status-$memStatus">$usedMemGB GB ($memPercent%)</div></div>
-            <div class="info-box"><div class="info-label">Free</div><div class="info-value">$freeMemGB GB</div></div>
-        </div>
+        $storageSectionHtml
 
-        <h2>Disk Space</h2>
-        <table>
-            <tr><th>Drive</th><th>Total</th><th>Free</th><th>Used %</th><th>Usage</th></tr>
-            $diskHtml
-        </table>
+        $networkSectionHtml
 
-        <h2>Network Adapters</h2>
-        <table>
-            <tr><th>Adapter</th><th>IP Address</th><th>Status</th><th>Speed</th></tr>
-            $networkHtml
-        </table>
-
-        <h2>Key Services</h2>
-        <table>
-            <tr><th>Service</th><th>Status</th></tr>
-            $servicesHtml
-        </table>
-
-        <h2>Certificates</h2>
-        <table>
-            <tr><th>Subject</th><th>Expires</th><th>Days Left</th><th>Status</th></tr>
-            $certHtml
-        </table>
-
-        <h2>Disk I/O Latency</h2>
-        $diskIOHtml
-
-        <h2>NIC Error Counters</h2>
-        $nicErrorHtml
-
-        <h2>Memory Pressure</h2>
-        $memPressureHtml
-
-        $hvGuestHtml
-
-        <h2>Top 5 CPU Processes</h2>
-        $topProcsHtml
-
-        <h2>Time Sync</h2>
-        $timeSyncHtml
-
-        <h2>Firewall Status</h2>
-        $firewallHtml
-
-        <h2>Recent Critical Events (24h)</h2>
-        $critEventsHtml
+        $securitySectionHtml
 
         <div class="footer">
-            Report generated by $($script:ToolFullName) v$($script:ScriptVersion)
+            Report generated by $(ConvertTo-HtmlSafe $script:ToolFullName) v$(ConvertTo-HtmlSafe $script:ScriptVersion)
         </div>
     </div>
 </body>
@@ -579,9 +712,36 @@ function Export-ProfileComparisonHTML {
         .changed { background: #fff3cd; }
         .file-name { font-family: monospace; background: #e9ecef; padding: 2px 6px; border-radius: 4px; }
         .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #666; font-size: 12px; }
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #1a1a2e; color: #e0e0e0; }
+            .container { background: #16213e; }
+            h1 { color: #e0e0e0; }
+            table { border-color: #444; }
+            th { background-color: #16213e; color: #e0e0e0; }
+            td { border-color: #333; }
+            .summary { background: #1a2744; }
+            .added { background: #1b4332; }
+            .removed { background: #3d1014; }
+            .changed { background: #3d2e00; }
+            .file-name { background: #2a3a5e; }
+            .footer { border-color: #444; color: #999; }
+        }
+        .dark-mode { background-color: #1a1a2e !important; color: #e0e0e0 !important; }
+        .dark-mode .container { background: #16213e !important; }
+        .dark-mode h1 { color: #e0e0e0 !important; }
+        .dark-mode table { border-color: #444 !important; }
+        .dark-mode th { background-color: #16213e !important; color: #e0e0e0 !important; }
+        .dark-mode td { border-color: #333 !important; }
+        .dark-mode .summary { background: #1a2744 !important; }
+        .dark-mode .added { background: #1b4332 !important; }
+        .dark-mode .removed { background: #3d1014 !important; }
+        .dark-mode .changed { background: #3d2e00 !important; }
+        .dark-mode .file-name { background: #2a3a5e !important; }
+        .dark-mode .footer { border-color: #444 !important; color: #999 !important; }
     </style>
 </head>
 <body>
+    <button onclick="document.body.classList.toggle('dark-mode')" style="position:fixed;top:10px;right:10px;padding:5px 10px;cursor:pointer;z-index:1000;border-radius:4px;border:1px solid #ccc;">Toggle Dark Mode</button>
     <div class="container">
         <h1>Configuration Profile Comparison</h1>
         <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
@@ -589,7 +749,7 @@ function Export-ProfileComparisonHTML {
         <div class="summary">
             <strong>Profile 1:</strong> <span class="file-name">$(ConvertTo-HtmlSafe (Split-Path $Profile1Path -Leaf))</span><br>
             <strong>Profile 2:</strong> <span class="file-name">$(ConvertTo-HtmlSafe (Split-Path $Profile2Path -Leaf))</span><br><br>
-            <strong>Result:</strong> $summaryText
+            <strong>Result:</strong> $(ConvertTo-HtmlSafe $summaryText)
         </div>
 
         <table>
@@ -598,7 +758,7 @@ function Export-ProfileComparisonHTML {
         </table>
 
         <div class="footer">
-            Report generated by $($script:ToolFullName) v$($script:ScriptVersion)
+            Report generated by $(ConvertTo-HtmlSafe $script:ToolFullName) v$(ConvertTo-HtmlSafe $script:ScriptVersion)
         </div>
     </div>
 </body>
@@ -870,15 +1030,58 @@ function Export-HTMLReadinessReport {
         .info-item { background: #f8f9fa; padding: 10px 15px; border-radius: 8px; flex: 1; }
         .info-label { font-size: 11px; color: #666; text-transform: uppercase; }
         .info-value { font-size: 16px; font-weight: bold; }
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #1a1a2e; color: #e0e0e0; }
+            .container { background: #16213e; }
+            h1 { color: #e0e0e0; }
+            table { border-color: #444; }
+            th { background-color: #16213e; color: #e0e0e0; }
+            td { border-color: #333; }
+            tr:nth-child(even) { background: #1a2744; }
+            .summary-good { background: #1b4332; border-color: #28a745; }
+            .summary-warn { background: #3d2e00; border-color: #ffc107; }
+            .summary-bad { background: #3d1014; border-color: #dc3545; }
+            .score-good { color: #66bb6a; }
+            .score-warn { color: #ffa726; }
+            .score-bad { color: #ef5350; }
+            .status-warn { color: #ffa726; }
+            .status-bad { color: #ef5350; }
+            .status-good { color: #66bb6a; }
+            .info-item { background: #1a2744; }
+            .info-label { color: #aaa; }
+            .info-value { color: #e0e0e0; }
+            .footer { border-color: #444; color: #999; }
+        }
+        .dark-mode { background-color: #1a1a2e !important; color: #e0e0e0 !important; }
+        .dark-mode .container { background: #16213e !important; }
+        .dark-mode h1 { color: #e0e0e0 !important; }
+        .dark-mode table { border-color: #444 !important; }
+        .dark-mode th { background-color: #16213e !important; color: #e0e0e0 !important; }
+        .dark-mode td { border-color: #333 !important; }
+        .dark-mode tr:nth-child(even) { background: #1a2744 !important; }
+        .dark-mode .summary-good { background: #1b4332 !important; border-color: #28a745 !important; }
+        .dark-mode .summary-warn { background: #3d2e00 !important; border-color: #ffc107 !important; }
+        .dark-mode .summary-bad { background: #3d1014 !important; border-color: #dc3545 !important; }
+        .dark-mode .score-good { color: #66bb6a !important; }
+        .dark-mode .score-warn { color: #ffa726 !important; }
+        .dark-mode .score-bad { color: #ef5350 !important; }
+        .dark-mode .status-warn { color: #ffa726 !important; }
+        .dark-mode .status-bad { color: #ef5350 !important; }
+        .dark-mode .status-good { color: #66bb6a !important; }
+        .dark-mode .info-item { background: #1a2744 !important; }
+        .dark-mode .info-label { color: #aaa !important; }
+        .dark-mode .info-value { color: #e0e0e0 !important; }
+        .dark-mode .footer { border-color: #444 !important; color: #999 !important; }
     </style>
 </head>
 <body>
+    <button onclick="document.body.classList.toggle('dark-mode')" style="position:fixed;top:10px;right:10px;padding:5px 10px;cursor:pointer;z-index:1000;border-radius:4px;border:1px solid #ccc;">Toggle Dark Mode</button>
     <div class="container">
         <h1>Server Readiness Report</h1>
         <div class="info">
             <div class="info-item"><div class="info-label">Server</div><div class="info-value">$(ConvertTo-HtmlSafe $cs.Name)</div></div>
             <div class="info-item"><div class="info-label">Generated</div><div class="info-value">$(Get-Date -Format 'yyyy-MM-dd HH:mm')</div></div>
-            <div class="info-item"><div class="info-label">Tool Version</div><div class="info-value">v$($script:ScriptVersion)</div></div>
+            <div class="info-item"><div class="info-label">Tool Version</div><div class="info-value">v$(ConvertTo-HtmlSafe $script:ScriptVersion)</div></div>
         </div>
 
         <div class="summary-box summary-$overallStatus">
@@ -894,7 +1097,7 @@ function Export-HTMLReadinessReport {
         </table>
 
         <div class="footer">
-            Report generated by $($script:ToolFullName) v$($script:ScriptVersion)
+            Report generated by $(ConvertTo-HtmlSafe $script:ToolFullName) v$(ConvertTo-HtmlSafe $script:ScriptVersion)
         </div>
     </div>
 </body>
@@ -1099,9 +1302,38 @@ function Export-HTMLTrendReport {
         tr:nth-child(even) { background: #f8f9fa; }
         .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #666; font-size: 12px; }
         .metric-info { color: #666; font-size: 13px; margin-bottom: 10px; }
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #1a1a2e; color: #e0e0e0; }
+            .container { background: #16213e; }
+            h1 { color: #e0e0e0; }
+            h2 { color: #5dade2; }
+            table { border-color: #444; }
+            th { background-color: #16213e; color: #e0e0e0; }
+            td { border-color: #333; }
+            tr:nth-child(even) { background: #1a2744; }
+            .status-warn { color: #ffa726; }
+            .status-bad { color: #ef5350; }
+            .status-good { color: #66bb6a; }
+            .metric-info { color: #aaa; }
+            .footer { border-color: #444; color: #999; }
+        }
+        .dark-mode { background-color: #1a1a2e !important; color: #e0e0e0 !important; }
+        .dark-mode .container { background: #16213e !important; }
+        .dark-mode h1 { color: #e0e0e0 !important; }
+        .dark-mode h2 { color: #5dade2 !important; }
+        .dark-mode table { border-color: #444 !important; }
+        .dark-mode th { background-color: #16213e !important; color: #e0e0e0 !important; }
+        .dark-mode td { border-color: #333 !important; }
+        .dark-mode tr:nth-child(even) { background: #1a2744 !important; }
+        .dark-mode .status-warn { color: #ffa726 !important; }
+        .dark-mode .status-bad { color: #ef5350 !important; }
+        .dark-mode .status-good { color: #66bb6a !important; }
+        .dark-mode .metric-info { color: #aaa !important; }
+        .dark-mode .footer { border-color: #444 !important; color: #999 !important; }
     </style>
 </head>
 <body>
+    <button onclick="document.body.classList.toggle('dark-mode')" style="position:fixed;top:10px;right:10px;padding:5px 10px;cursor:pointer;z-index:1000;border-radius:4px;border:1px solid #ccc;">Toggle Dark Mode</button>
     <div class="container">
         <h1>Performance Trend Report</h1>
         <p>Server: $(ConvertTo-HtmlSafe $latestSnap.Hostname) | Snapshots: $($snapshots.Count) | Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
@@ -1123,7 +1355,7 @@ function Export-HTMLTrendReport {
         $diskSection
 
         <div class="footer">
-            Report generated by $($script:ToolFullName) v$($script:ScriptVersion)
+            Report generated by $(ConvertTo-HtmlSafe $script:ToolFullName) v$(ConvertTo-HtmlSafe $script:ScriptVersion)
         </div>
     </div>
 </body>
@@ -1168,6 +1400,7 @@ function Start-MetricCollection {
     $endTime = (Get-Date).AddMinutes($DurationMinutes)
 
     while ((Get-Date) -lt $endTime) {
+        if ($global:ReturnToMainMenu) { break }
         $collected++
         $path = Save-PerformanceSnapshot
         if ($path) {

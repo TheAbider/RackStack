@@ -1,4 +1,55 @@
 ﻿#region ===== DOMAIN JOIN =====
+# Pre-flight validation for domain join readiness
+function Test-DomainJoinReadiness {
+    param (
+        [Parameter(Mandatory)]
+        [string]$DomainName
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Running pre-join validation checks..." -color "Info"
+
+    # 1. DNS Resolution Check
+    $domainResolve = $null
+    try {
+        $domainResolve = [System.Net.Dns]::GetHostEntry($DomainName)
+        Write-OutputColor "  Domain '$DomainName' resolves to $($domainResolve.AddressList[0])" -color "Success"
+    } catch {
+        Write-OutputColor "  WARNING: Cannot resolve domain '$DomainName' via DNS" -color "Warning"
+        Write-OutputColor "  Verify DNS server settings point to a domain controller" -color "Warning"
+        return $false
+    }
+
+    # 2. DC Port Connectivity (LDAP 389, Kerberos 88)
+    $dcIP = $domainResolve.AddressList[0].ToString()
+    foreach ($port in @(389, 88)) {
+        $portName = if ($port -eq 389) { "LDAP" } else { "Kerberos" }
+        $tcp = $null
+        try {
+            $tcp = New-Object System.Net.Sockets.TcpClient
+            $connectResult = $tcp.BeginConnect($dcIP, $port, $null, $null)
+            $success = $connectResult.AsyncWaitHandle.WaitOne(3000, $false)
+            if ($success) {
+                Write-OutputColor "  $portName port $port on ${dcIP}: OK" -color "Success"
+            } else {
+                Write-OutputColor "  WARNING: $portName port $port on $dcIP not reachable" -color "Warning"
+            }
+        } catch {
+            Write-OutputColor "  WARNING: $portName port $port test failed" -color "Warning"
+        } finally {
+            if ($null -ne $tcp) { $tcp.Close() }
+        }
+    }
+
+    # 3. Time Sync Warning
+    $w32status = try { w32tm /query /status 2>&1 } catch { $null }
+    if ($null -ne $w32status -and $w32status -match 'error') {
+        Write-OutputColor "  WARNING: Time service not synchronized - domain join may fail" -color "Warning"
+    }
+
+    return $true
+}
+
 # Function to join a domain
 function Join-Domain {
     Clear-Host
@@ -104,21 +155,9 @@ function Join-Domain {
         }
     }
 
-    # Test DNS resolution of target domain
-    Write-OutputColor "  Resolving domain '$targetDomain'..." -color "Info"
-    try {
-        $dcRecords = Resolve-DnsName -Name $targetDomain -Type A -ErrorAction Stop
-        if ($dcRecords) {
-            $aRecord = $dcRecords | Where-Object { $_.Type -eq 'A' } | Select-Object -First 1
-            if ($aRecord) {
-                Write-OutputColor "  Domain resolved to $($aRecord.IPAddress)" -color "Success"
-            }
-        }
-    }
-    catch {
-        Write-OutputColor "  Cannot resolve domain '$targetDomain' via DNS." -color "Error"
-        Write-OutputColor "  Ensure DNS is configured to reach a domain controller." -color "Warning"
-        if (-not (Confirm-UserAction -Message "Continue anyway?")) {
+    # Pre-join validation (DNS, DC ports, time sync)
+    if (-not (Test-DomainJoinReadiness -DomainName $targetDomain)) {
+        if (-not (Confirm-UserAction -Message "Pre-join checks failed. Continue anyway?")) {
             return
         }
     }
@@ -184,6 +223,7 @@ function Join-Domain {
                 Write-OutputColor "  A reboot may be required to complete the join." -color "Warning"
                 $global:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Joined domain '$($postCheck.Domain)' (completed after error)"
+                Clear-MenuCache
                 return
             }
 

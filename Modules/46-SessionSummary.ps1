@@ -23,10 +23,76 @@ function Show-QuickSessionChanges {
     }
 
     $runtime = (Get-Date) - $script:ScriptStartTime
-    $totalLine = "  Total: $($script:SessionChanges.Count) change(s)  |  Session: $($runtime.Hours)h $($runtime.Minutes)m"
+    $durationStr = Format-SessionDuration -Duration $runtime
+    $totalLine = "  Total: $($script:SessionChanges.Count) change(s)  |  Session: $durationStr"
+    if ($totalLine.Length -gt 72) { $totalLine = $totalLine.Substring(0, 69) + "..." }
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$($totalLine.PadRight(72))│" -color "Info"
+
+    # Show reboot status in quick view
+    $windowsRebootPending = Test-RebootPending
+    if ($global:RebootNeeded -or $windowsRebootPending) {
+        $rebootLine = "  Reboot Required: Yes"
+        Write-OutputColor "  │$($rebootLine.PadRight(72))│" -color "Warning"
+    }
+
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+}
+
+# Function to format session duration in human-readable format
+function Format-SessionDuration {
+    param([TimeSpan]$Duration)
+
+    if ($Duration.TotalHours -ge 1) {
+        $hours = [int][math]::Floor($Duration.TotalHours)
+        $minutes = $Duration.Minutes
+        if ($minutes -gt 0) {
+            return "$hours hour$(if ($hours -ne 1) { 's' }) $minutes minute$(if ($minutes -ne 1) { 's' })"
+        }
+        return "$hours hour$(if ($hours -ne 1) { 's' })"
+    }
+    $minutes = [int][math]::Floor($Duration.TotalMinutes)
+    if ($minutes -lt 1) { return "< 1 minute" }
+    return "$minutes minute$(if ($minutes -ne 1) { 's' })"
+}
+
+# Function to identify reboot reasons from session changes
+function Get-RebootReasons {
+    $reasons = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($change in $script:SessionChanges) {
+        $desc = $change.Description
+        if ($desc -match 'hostname.*changed|Changed hostname') {
+            $reasons.Add("Hostname change")
+        }
+        elseif ($desc -match 'Joined domain|domain join') {
+            $reasons.Add("Domain join")
+        }
+        elseif ($desc -match 'Hyper-V install') {
+            $reasons.Add("Hyper-V installation")
+        }
+        elseif ($desc -match 'MPIO install') {
+            $reasons.Add("MPIO installation")
+        }
+        elseif ($desc -match 'Failover Clustering install') {
+            $reasons.Add("Failover Clustering installation")
+        }
+        elseif ($desc -match 'Windows update') {
+            $reasons.Add("Windows Updates")
+        }
+        elseif ($desc -match 'BitLocker') {
+            $reasons.Add("BitLocker configuration")
+        }
+        elseif ($desc -match 'Storage Replica') {
+            $reasons.Add("Storage Replica installation")
+        }
+        elseif ($desc -match 'Disabled built-in Administrator') {
+            $reasons.Add("Administrator account disabled")
+        }
+    }
+
+    # Deduplicate
+    return @($reasons | Select-Object -Unique)
 }
 
 # Function to show session summary
@@ -37,18 +103,72 @@ function Show-SessionSummary {
     # Calculate runtime
     $runtime = (Get-Date) - $script:ScriptStartTime
     $runtimeStr = "{0:D2}:{1:D2}:{2:D2}" -f [int][math]::Floor($runtime.TotalHours), $runtime.Minutes, $runtime.Seconds
+    $durationStr = Format-SessionDuration -Duration $runtime
 
-    Write-OutputColor "  Session Runtime: $runtimeStr" -color "Info"
+    # Check reboot status
+    $windowsRebootPending = Test-RebootPending
+    $rebootNeeded = $global:RebootNeeded -or $windowsRebootPending
+    $rebootReasons = @()
+    if ($global:RebootNeeded) {
+        $rebootReasons = Get-RebootReasons
+    }
+
+    # Display box-drawing summary
     Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌───────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("                          SESSION SUMMARY".PadRight(75))│" -color "Info"
+    Write-OutputColor "  ├───────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    $changeLine = "  Changes Made: $($script:SessionChanges.Count)"
+    Write-OutputColor "  │$($changeLine.PadRight(75))│" -color "Info"
+
+    $durationLine = "  Duration: $durationStr"
+    Write-OutputColor "  │$($durationLine.PadRight(75))│" -color "Info"
+
+    Write-OutputColor "  │$(' '.PadRight(75))│" -color "Info"
 
     if ($script:SessionChanges.Count -eq 0) {
-        Write-OutputColor "  No changes were made during this session." -color "Info"
+        Write-OutputColor "  │$("  No changes were made during this session.".PadRight(75))│" -color "Info"
     }
     else {
-        Write-OutputColor "  Changes made during this session:" -color "Info"
+        Write-OutputColor "  │$("  Operations:".PadRight(75))│" -color "Info"
+
+        foreach ($change in $script:SessionChanges) {
+            $opLine = "    [+] $($change.Description)"
+            if ($opLine.Length -gt 75) { $opLine = $opLine.Substring(0, 72) + "..." }
+            Write-OutputColor "  │$($opLine.PadRight(75))│" -color "Success"
+        }
+    }
+
+    Write-OutputColor "  │$(' '.PadRight(75))│" -color "Info"
+
+    if ($rebootNeeded) {
+        Write-OutputColor "  │$("  Reboot Required: Yes".PadRight(75))│" -color "Warning"
+        if ($rebootReasons.Count -gt 0) {
+            foreach ($reason in $rebootReasons) {
+                $reasonLine = "    - $reason"
+                Write-OutputColor "  │$($reasonLine.PadRight(75))│" -color "Warning"
+            }
+        }
+        if ($windowsRebootPending -and -not $global:RebootNeeded) {
+            Write-OutputColor "  │$("    - Windows pending reboot (from previous changes)".PadRight(75))│" -color "Warning"
+        }
+        elseif ($windowsRebootPending -and $global:RebootNeeded) {
+            Write-OutputColor "  │$("    - Windows also has a pending reboot".PadRight(75))│" -color "Warning"
+        }
+    }
+    else {
+        Write-OutputColor "  │$("  Reboot Required: No".PadRight(75))│" -color "Success"
+    }
+
+    Write-OutputColor "  └───────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Detailed breakdown by category
+    if ($script:SessionChanges.Count -gt 0) {
+        Write-OutputColor "  Detailed Breakdown:" -color "Info"
         Write-OutputColor ("-" * 60) -color "Info"
 
-        # Group by category for easier scanning
         $categories = @($script:SessionChanges | Group-Object -Property Category)
         foreach ($cat in $categories) {
             Write-OutputColor "" -color "Info"
@@ -76,9 +196,16 @@ function Show-SessionSummary {
         if (Confirm-UserAction -Message "Export session summary to Desktop?") {
             $summaryPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
             try {
-                $summaryLines = @("Session Summary - $(Get-Date)", "Runtime: $runtimeStr", "")
+                $summaryLines = @("Session Summary - $(Get-Date)", "Runtime: $runtimeStr ($durationStr)", "")
                 foreach ($change in $script:SessionChanges) {
                     $summaryLines += "[$($change.Timestamp)] [$($change.Category)] $($change.Description)"
+                }
+                if ($rebootNeeded) {
+                    $summaryLines += ""
+                    $summaryLines += "Reboot Required: Yes"
+                    foreach ($reason in $rebootReasons) {
+                        $summaryLines += "  - $reason"
+                    }
                 }
                 $summaryLines | Out-File -LiteralPath $summaryPath -Encoding UTF8 -Force
                 Write-OutputColor "  Summary exported to: $summaryPath" -color "Success"
@@ -95,7 +222,10 @@ function Show-SessionSummary {
                         Hostname = $env:COMPUTERNAME
                         SessionStart = $script:ScriptStartTime.ToString("yyyy-MM-ddTHH:mm:ss")
                         Runtime = $runtimeStr
+                        Duration = $durationStr
                         ChangeCount = $script:SessionChanges.Count
+                        RebootRequired = $rebootNeeded
+                        RebootReasons = $rebootReasons
                         Changes = @($script:SessionChanges | ForEach-Object {
                             @{ Timestamp = $_.Timestamp; Category = $_.Category; Description = $_.Description }
                         })
@@ -111,9 +241,8 @@ function Show-SessionSummary {
 
     Write-OutputColor "" -color "Info"
 
-    # Check both our flag AND Windows pending reboot
-    $windowsRebootPending = Test-RebootPending
-    if ($global:RebootNeeded -or $windowsRebootPending) {
+    # Final reboot warning
+    if ($rebootNeeded) {
         if ($global:RebootNeeded -and $windowsRebootPending) {
             Write-OutputColor "[!] Reboot required (this session + Windows pending reboot)." -color "Warning"
         } elseif ($windowsRebootPending) {

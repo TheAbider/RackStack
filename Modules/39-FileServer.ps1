@@ -243,6 +243,8 @@ function Find-FileServerFile {
 # Uses WebClient.DownloadFile() to avoid Invoke-WebRequest keep-alive hang.
 # Shows rich progress bar with speed/ETA, retries once on failure, and
 # verifies integrity via size check + SHA256 hash.
+# Supports HTTP Range-based resume for partial downloads and optional
+# caller-provided SHA256 hash verification via -ExpectedHash.
 function Get-FileServerFile {
     param (
         [Parameter(Mandatory=$true)]
@@ -255,7 +257,9 @@ function Get-FileServerFile {
 
         [string]$FileName = "download",
 
-        [int]$TimeoutSeconds = 0  # 0 = use $script:DefaultDownloadTimeoutSeconds
+        [int]$TimeoutSeconds = 0,  # 0 = use $script:DefaultDownloadTimeoutSeconds
+
+        [string]$ExpectedHash = ""  # Optional SHA256 hash to verify after download
     )
 
     # Apply default timeout if not specified
@@ -331,94 +335,142 @@ function Get-FileServerFile {
                 Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
             }
 
-            # Background job using WebClient (closes connection immediately, no hang)
-            $downloadJob = Start-Job -ScriptBlock {
-                param($url, $headersJson, $destPath)
-                $webClient = New-Object System.Net.WebClient
+            # Attempt resume if partial file exists from a previous download
+            $resumed = $false
+            $existingSize = 0
+            if (Test-Path -LiteralPath $destFile) {
+                $existingSize = (Get-Item -LiteralPath $destFile -ErrorAction SilentlyContinue).Length
+            }
+            if ($null -ne $existingSize -and $existingSize -gt 0 -and ($expectedSize -le 0 -or $existingSize -lt $expectedSize)) {
+                Write-OutputColor "  Partial download found ($(Format-TransferSize $existingSize)). Attempting resume..." -color "Info"
                 try {
-                    if ($headersJson) {
-                        $hdrs = $headersJson | ConvertFrom-Json
-                        foreach ($prop in $hdrs.PSObject.Properties) {
-                            $webClient.Headers.Add($prop.Name, $prop.Value)
-                        }
+                    $resumeRequest = [System.Net.HttpWebRequest]::Create($downloadUrl)
+                    $resumeRequest.AddRange($existingSize)
+                    $resumeRequest.Timeout = 30000
+                    foreach ($key in $downloadHeaders.Keys) {
+                        $resumeRequest.Headers.Add($key, $downloadHeaders[$key])
                     }
-                    $webClient.DownloadFile($url, $destPath)
-                    return @{ Success = $true; Error = $null }
+                    $resumeResponse = $resumeRequest.GetResponse()
+                    if ($resumeResponse.StatusCode -eq [System.Net.HttpStatusCode]::PartialContent) {
+                        $responseStream = $resumeResponse.GetResponseStream()
+                        $fileStream = [System.IO.File]::Open($destFile, [System.IO.FileMode]::Append)
+                        try {
+                            $responseStream.CopyTo($fileStream)
+                        }
+                        finally {
+                            $fileStream.Close()
+                            $responseStream.Close()
+                            $resumeResponse.Close()
+                        }
+                        Write-OutputColor "  Resume successful" -color "Success"
+                        $resumed = $true
+                    } else {
+                        $resumeResponse.Close()
+                        Write-OutputColor "  Server doesn't support resume. Restarting download..." -color "Warning"
+                        Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
+                    }
                 }
                 catch {
-                    return @{ Success = $false; Error = $_.Exception.Message }
-                }
-                finally {
-                    $webClient.Dispose()
-                }
-            } -ArgumentList $downloadUrl, ($downloadHeaders | ConvertTo-Json -Compress), $destFile
-
-            # Monitor with progress bar and speed tracking
-            $elapsed = 0
-            $lastSize = 0
-            $lastSpeedCheck = 0
-            $speedBps = 0
-            $staleSeconds = 0
-            $spinChars = @('|', '/', '-', '\')
-            $spinIndex = 0
-
-            while ($downloadJob.State -eq "Running") {
-                $currentSize = 0
-                if (Test-Path -LiteralPath $destFile) {
-                    try { $currentSize = (Get-Item -LiteralPath $destFile -ErrorAction SilentlyContinue).Length } catch { $currentSize = 0 }
-                }
-
-                # Update speed every 3 seconds
-                if ($elapsed -gt 0 -and ($elapsed - $lastSpeedCheck) -ge 3) {
-                    $bytesInInterval = $currentSize - $lastSize
-                    $intervalSecs = $elapsed - $lastSpeedCheck
-                    if ($intervalSecs -gt 0 -and $bytesInInterval -ge 0) {
-                        $speedBps = $bytesInInterval / $intervalSecs
-                    }
-                    $lastSize = $currentSize
-                    $lastSpeedCheck = $elapsed
-                }
-
-                # Hang detection: if file size >= expected for 5+ consecutive seconds, force-stop
-                if ($expectedSize -gt 0 -and $currentSize -ge $expectedSize) {
-                    $staleSeconds++
-                    if ($staleSeconds -ge 5) {
-                        Stop-Job $downloadJob -ErrorAction SilentlyContinue
-                        Remove-Job $downloadJob -Force -ErrorAction SilentlyContinue
-                        break
-                    }
-                } else {
-                    $staleSeconds = 0
-                }
-
-                # Render progress bar
-                if ($expectedSize -gt 0) {
-                    Write-ProgressBar -CurrentBytes $currentSize -TotalBytes $expectedSize -SpeedBytesPerSec $speedBps -ElapsedSeconds $elapsed
-                } else {
-                    $spin = $spinChars[$spinIndex % 4]
-                    $spinIndex++
-                    Write-ProgressBar -CurrentBytes $currentSize -Activity "Downloading" -SpeedBytesPerSec $speedBps -ElapsedSeconds $elapsed -SpinChar $spin
-                }
-
-                Start-Sleep -Seconds 1
-                $elapsed++
-
-                if ($elapsed -gt $TimeoutSeconds) {
-                    Stop-Job $downloadJob -ErrorAction SilentlyContinue
-                    Remove-Job $downloadJob -Force -ErrorAction SilentlyContinue
-                    Write-Host ""
-                    return @{
-                        Success = $false
-                        Error = "Download timed out after $([math]::Floor($TimeoutSeconds / 60)) minutes."
-                        FilePath = $null
-                    }
+                    if ($null -ne $resumeResponse) { try { $resumeResponse.Close() } catch {} }
+                    if ($null -ne $resumeRequest) { try { $resumeRequest.Abort() } catch {} }
+                    Write-OutputColor "  Resume failed, restarting download..." -color "Warning"
+                    Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
                 }
             }
-            Write-Host ""
-            $totalElapsed = $elapsed
+
+            if (-not $resumed) {
+                # Background job using WebClient (closes connection immediately, no hang)
+                $downloadJob = Start-Job -ScriptBlock {
+                    param($url, $headersJson, $destPath)
+                    $webClient = New-Object System.Net.WebClient
+                    try {
+                        if ($headersJson) {
+                            $hdrs = $headersJson | ConvertFrom-Json
+                            foreach ($prop in $hdrs.PSObject.Properties) {
+                                $webClient.Headers.Add($prop.Name, $prop.Value)
+                            }
+                        }
+                        $webClient.DownloadFile($url, $destPath)
+                        return @{ Success = $true; Error = $null }
+                    }
+                    catch {
+                        return @{ Success = $false; Error = $_.Exception.Message }
+                    }
+                    finally {
+                        $webClient.Dispose()
+                    }
+                } -ArgumentList $downloadUrl, ($downloadHeaders | ConvertTo-Json -Compress), $destFile
+
+                # Monitor with progress bar and speed tracking (elapsed time from wall clock)
+                $downloadStartTime = Get-Date
+                $lastSize = 0
+                $lastSpeedCheckTime = $downloadStartTime
+                $speedBps = 0
+                $staleSeconds = 0
+                $spinChars = @('|', '/', '-', '\')
+                $spinIndex = 0
+
+                while ($downloadJob.State -eq "Running") {
+                    $currentSize = 0
+                    if (Test-Path -LiteralPath $destFile) {
+                        try { $currentSize = (Get-Item -LiteralPath $destFile -ErrorAction SilentlyContinue).Length } catch { $currentSize = 0 }
+                    }
+
+                    $elapsed = (Get-Date) - $downloadStartTime
+                    $elapsedSec = [int][math]::Floor($elapsed.TotalSeconds)
+
+                    # Update speed every 3 seconds
+                    $sinceLastCheck = ((Get-Date) - $lastSpeedCheckTime).TotalSeconds
+                    if ($elapsedSec -gt 0 -and $sinceLastCheck -ge 3) {
+                        $bytesInInterval = $currentSize - $lastSize
+                        if ($sinceLastCheck -gt 0 -and $bytesInInterval -ge 0) {
+                            $speedBps = $bytesInInterval / $sinceLastCheck
+                        }
+                        $lastSize = $currentSize
+                        $lastSpeedCheckTime = Get-Date
+                    }
+
+                    # Hang detection: if file size >= expected for 5+ consecutive seconds, force-stop
+                    if ($expectedSize -gt 0 -and $currentSize -ge $expectedSize) {
+                        $staleSeconds++
+                        if ($staleSeconds -ge 5) {
+                            Stop-Job $downloadJob -ErrorAction SilentlyContinue
+                            Remove-Job $downloadJob -Force -ErrorAction SilentlyContinue
+                            break
+                        }
+                    } else {
+                        $staleSeconds = 0
+                    }
+
+                    # Render progress bar
+                    if ($expectedSize -gt 0) {
+                        Write-ProgressBar -CurrentBytes $currentSize -TotalBytes $expectedSize -SpeedBytesPerSec $speedBps -ElapsedSeconds $elapsedSec
+                    } else {
+                        $spin = $spinChars[$spinIndex % 4]
+                        $spinIndex++
+                        Write-ProgressBar -CurrentBytes $currentSize -Activity "Downloading" -SpeedBytesPerSec $speedBps -ElapsedSeconds $elapsedSec -SpinChar $spin
+                    }
+
+                    Start-Sleep -Seconds 1
+
+                    if ($elapsed.TotalSeconds -gt $TimeoutSeconds) {
+                        Stop-Job $downloadJob -ErrorAction SilentlyContinue
+                        Remove-Job $downloadJob -Force -ErrorAction SilentlyContinue
+                        Write-Host ""
+                        Write-OutputColor "  Download timed out after $([math]::Round($elapsed.TotalSeconds)) seconds" -color "Error"
+                        return @{
+                            Success = $false
+                            Error = "Download timed out after $([math]::Floor($TimeoutSeconds / 60)) minutes."
+                            FilePath = $null
+                        }
+                    }
+                }
+                Write-Host ""
+                $totalElapsed = [int][math]::Floor(((Get-Date) - $downloadStartTime).TotalSeconds)
+            }
 
             # Check job result (if not force-stopped due to hang detection)
-            if ($downloadJob.Id) {
+            if (-not $resumed -and $downloadJob.Id) {
                 $jobResult = Receive-Job $downloadJob -ErrorAction SilentlyContinue
                 Remove-Job $downloadJob -Force -ErrorAction SilentlyContinue
 
@@ -477,6 +529,18 @@ function Get-FileServerFile {
             Write-OutputColor "  Integrity check failed: $($integrity.Error)" -color "Error"
             Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
             return @{ Success = $false; Error = "Integrity check failed: $($integrity.Error)"; FilePath = $null }
+        }
+
+        # Verify against caller-provided expected hash (if supplied)
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedHash) -and $null -ne $integrity.Hash) {
+            if ($integrity.Hash -ne $ExpectedHash.ToUpper()) {
+                Write-OutputColor "  Hash verification FAILED" -color "Error"
+                Write-OutputColor "  Expected: $($ExpectedHash.ToUpper())" -color "Error"
+                Write-OutputColor "  Actual:   $($integrity.Hash)" -color "Error"
+                Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
+                return @{ Success = $false; Error = "SHA256 hash mismatch against expected hash"; FilePath = $null }
+            }
+            Write-OutputColor "  Hash verified: SHA256 match" -color "Success"
         }
 
         # Display completion summary
@@ -646,12 +710,14 @@ function Test-FileIntegrity {
     }
 
     # Save local .sha256 file for future re-verification
-    $hashFilePath = "$FilePath.sha256"
-    try {
-        "$($result.Hash)  $(Split-Path $FilePath -Leaf)" | Set-Content -LiteralPath $hashFilePath -Encoding UTF8 -Force -ErrorAction SilentlyContinue
-    }
-    catch {
-        # Non-fatal: just skip saving hash file
+    if ($result.Hash) {
+        $hashFilePath = "$FilePath.sha256"
+        try {
+            "$($result.Hash)  $(Split-Path $FilePath -Leaf)" | Set-Content -LiteralPath $hashFilePath -Encoding UTF8 -Force -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Non-fatal: just skip saving hash file
+        }
     }
 
     return $result

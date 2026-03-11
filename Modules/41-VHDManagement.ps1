@@ -36,7 +36,7 @@ function Show-OSVersionMenu {
         default {
             $navResult = Test-NavigationCommand -UserInput $choice
             if ($navResult.ShouldReturn) { return $null }
-            Write-OutputColor "  Invalid choice." -color "Error"
+            Write-OutputColor "  Invalid choice. Enter 1-4." -color "Error"
             return $null
         }
     }
@@ -108,8 +108,10 @@ function Get-SyspreppedVHD {
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  [UP] UPDATE AVAILABLE".PadRight(72))│" -color "Warning"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │  Local:  $($cached.FileName.Substring(0, [Math]::Min(62, $cached.FileName.Length)).PadRight(62))│" -color "Info"
-            Write-OutputColor "  │  Remote: $($driveFile.FileName.Substring(0, [Math]::Min(62, $driveFile.FileName.Length)).PadRight(62))│" -color "Success"
+            $localName = if ($cached.FileName) { $cached.FileName.Substring(0, [Math]::Min(62, $cached.FileName.Length)) } else { "(unknown)" }
+            $remoteName = if ($driveFile.FileName) { $driveFile.FileName.Substring(0, [Math]::Min(62, $driveFile.FileName.Length)) } else { "(unknown)" }
+            Write-OutputColor "  │  Local:  $($localName.PadRight(62))│" -color "Info"
+            Write-OutputColor "  │  Remote: $($remoteName.PadRight(62))│" -color "Success"
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             Write-OutputColor "" -color "Info"
 
@@ -126,10 +128,12 @@ function Get-SyspreppedVHD {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  CACHED VHD FOUND".PadRight(72))│" -color "Success"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │  File: $($cached.FileName.Substring(0, [Math]::Min(63, $cached.FileName.Length)).PadRight(63))│" -color "Info"
+        $cachedFileName = if ($cached.FileName) { $cached.FileName.Substring(0, [Math]::Min(63, $cached.FileName.Length)) } else { "(unknown)" }
+        $cachedPath = if ($cached.Path) { $cached.Path.Substring(0, [Math]::Min(63, $cached.Path.Length)) } else { "(unknown)" }
+        Write-OutputColor "  │  File: $($cachedFileName.PadRight(63))│" -color "Info"
         Write-OutputColor "  │  Size: $("${sizeGB} GB".PadRight(63))│" -color "Info"
         Write-OutputColor "  │  Date: $($cached.LastModified.ToString('yyyy-MM-dd HH:mm').PadRight(63))│" -color "Info"
-        Write-OutputColor "  │  Path: $($cached.Path.Substring(0, [Math]::Min(63, $cached.Path.Length)).PadRight(63))│" -color "Info"
+        Write-OutputColor "  │  Path: $($cachedPath.PadRight(63))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -491,10 +495,12 @@ function Show-VHDManagementMenu {
     Write-OutputColor "  │$("   [3]  Download Server 2019 VHD".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("   [4]  Download All Missing VHDs".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("   [5]  Show Windows Sysprep VHD Guide".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("   [6]  Show Linux cloud-init VHD Guide".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("   [5]  VHD Health Check".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("   [7]  ◄ Back".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("   [6]  Show Windows Sysprep VHD Guide".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("   [7]  Show Linux cloud-init VHD Guide".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("   [8]  ◄ Back".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -776,6 +782,71 @@ function Show-LinuxVHDGuide {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 }
 
+function Show-VHDHealthStatus {
+    Write-OutputColor "`n  VHD Health Check:" -color "Info"
+
+    try {
+        # Get all VMs and their VHDs
+        $vms = @(Get-VM -ErrorAction SilentlyContinue)
+        if ($vms.Count -eq 0) {
+            Write-OutputColor "  No VMs found (Hyper-V may not be installed)" -color "Warning"
+            return
+        }
+
+        $issues = 0
+        foreach ($vm in $vms) {
+            $vhds = @(Get-VMHardDiskDrive -VMName $vm.Name -ErrorAction SilentlyContinue)
+            foreach ($vhd in $vhds) {
+                if ([string]::IsNullOrWhiteSpace($vhd.Path)) { continue }
+
+                try {
+                    $vhdInfo = Get-VHD -Path $vhd.Path -ErrorAction Stop
+                    $vmName = if ($vm.Name.Length -gt 20) { $vm.Name.Substring(0, 17) + "..." } else { $vm.Name }
+                    $fileName = Split-Path -Leaf $vhd.Path
+                    if ($fileName.Length -gt 30) { $fileName = $fileName.Substring(0, 27) + "..." }
+
+                    # Check for issues
+                    $sizeGB = [math]::Round($vhdInfo.FileSize / 1GB, 1)
+                    $maxGB = [math]::Round($vhdInfo.Size / 1GB, 1)
+                    $usagePercent = if ($vhdInfo.Size -gt 0) { [math]::Round(($vhdInfo.FileSize / $vhdInfo.Size) * 100, 0) } else { 0 }
+
+                    $color = "Success"
+                    $warning = ""
+
+                    if ($usagePercent -gt 90) {
+                        $color = "Error"
+                        $warning = " [NEARLY FULL]"
+                        $issues++
+                    } elseif ($usagePercent -gt 75) {
+                        $color = "Warning"
+                        $warning = " [${usagePercent}% used]"
+                    }
+
+                    # Check if VHD is fragmented (dynamic disks only)
+                    if ($vhdInfo.VhdType -eq 'Dynamic' -and $null -ne $vhdInfo.FragmentationPercentage -and $vhdInfo.FragmentationPercentage -gt 30) {
+                        $color = "Warning"
+                        $warning += " [Fragmented: $($vhdInfo.FragmentationPercentage)%]"
+                        $issues++
+                    }
+
+                    Write-OutputColor "  $vmName  $fileName  ${sizeGB}/${maxGB} GB ($($vhdInfo.VhdType))$warning" -color $color
+                } catch {
+                    Write-OutputColor "  $($vm.Name)  $($vhd.Path): Cannot read VHD info" -color "Error"
+                    $issues++
+                }
+            }
+        }
+
+        if ($issues -eq 0) {
+            Write-OutputColor "`n  All VHDs healthy" -color "Success"
+        } else {
+            Write-OutputColor "`n  $issues issue(s) found" -color "Warning"
+        }
+    } catch {
+        Write-OutputColor "  VHD health check failed: $($_.Exception.Message)" -color "Error"
+    }
+}
+
 function Start-VHDManagement {
     while ($true) {
         if ($global:ReturnToMainMenu) { return }
@@ -811,14 +882,18 @@ function Start-VHDManagement {
                 Write-PressEnter
             }
             "5" {
-                Show-SysprepGuide
+                Show-VHDHealthStatus
                 Write-PressEnter
             }
             "6" {
-                Show-LinuxVHDGuide
+                Show-SysprepGuide
                 Write-PressEnter
             }
             "7" {
+                Show-LinuxVHDGuide
+                Write-PressEnter
+            }
+            "8" {
                 return
             }
             default {

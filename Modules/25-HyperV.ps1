@@ -1,4 +1,54 @@
 ﻿#region ===== HYPER-V INSTALLATION =====
+# Function to verify Hyper-V installation status
+function Test-HyperVInstallation {
+    Write-OutputColor "`n  Verifying Hyper-V installation..." -color "Info"
+
+    $checks = @()
+
+    # Check feature installation
+    $feature = Get-WindowsFeature -Name Hyper-V -ErrorAction SilentlyContinue
+    if ($null -ne $feature -and $feature.Installed) {
+        Write-OutputColor "  Hyper-V Role: Installed" -color "Success"
+        $checks += $true
+    } else {
+        Write-OutputColor "  Hyper-V Role: Not installed" -color "Error"
+        $checks += $false
+    }
+
+    # Check management tools
+    $mgmt = Get-WindowsFeature -Name Hyper-V-Tools -ErrorAction SilentlyContinue
+    if ($null -ne $mgmt -and $mgmt.Installed) {
+        Write-OutputColor "  Management Tools: Installed" -color "Success"
+    } else {
+        Write-OutputColor "  Management Tools: Not installed" -color "Warning"
+    }
+
+    # Check vmms service
+    $vmms = Get-Service vmms -ErrorAction SilentlyContinue
+    if ($null -ne $vmms) {
+        $svcColor = if ($vmms.Status -eq 'Running') { "Success" } else { "Warning" }
+        Write-OutputColor "  VMMS Service: $($vmms.Status)" -color $svcColor
+    } else {
+        Write-OutputColor "  VMMS Service: Not found (reboot may be required)" -color "Warning"
+    }
+
+    # Check virtualization support
+    try {
+        $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $cpu) {
+            $virtEnabled = $cpu.VirtualizationFirmwareEnabled
+            $color = if ($virtEnabled) { "Success" } else { "Error" }
+            Write-OutputColor "  CPU Virtualization: $(if ($virtEnabled) { 'Enabled' } else { 'Disabled in BIOS' })" -color $color
+        }
+    } catch {
+        # Ignore on older systems
+    }
+
+    $passed = @($checks | Where-Object { $_ -eq $true }).Count
+    $total = @($checks).Count
+    Write-OutputColor "`n  Verification: $passed/$total checks passed" -color $(if ($passed -eq $total) { "Success" } else { "Warning" })
+}
+
 # Function to install Hyper-V role
 function Install-HyperVRole {
     Clear-Host
@@ -50,10 +100,12 @@ function Install-HyperVRole {
 
             if ($installResult.TimedOut) {
                 Add-SessionChange -Category "System" -Description "Hyper-V installation timed out"
+                Clear-MenuCache
                 return
             }
             elseif ($installResult.Success) {
                 Write-OutputColor "`nHyper-V installed successfully!" -color "Success"
+                Test-HyperVInstallation
                 $global:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V role"
                 Clear-MenuCache
@@ -61,6 +113,7 @@ function Install-HyperVRole {
             else {
                 Write-OutputColor "  Hyper-V installation may not have completed successfully." -color "Error"
                 Add-SessionChange -Category "System" -Description "Hyper-V installation failed"
+                Clear-MenuCache
             }
         }
         else {
@@ -81,6 +134,7 @@ function Install-HyperVRole {
                     Complete-ProgressMessage -Activity "Hyper-V installation" -Status "Timed out" -Failed
                     Write-OutputColor "  Installation timed out after 30 minutes." -color "Error"
                     Add-SessionChange -Category "System" -Description "Hyper-V installation timed out (Windows Client)"
+                    Clear-MenuCache
                     return
                 }
             }
@@ -106,6 +160,7 @@ function Install-HyperVRole {
                 Complete-ProgressMessage -Activity "Hyper-V installation" -Status "Failed" -Failed
                 Write-OutputColor "  Error: $jobError" -color "Error"
                 Add-SessionChange -Category "System" -Description "Hyper-V installation failed (Windows Client)"
+                Clear-MenuCache
 
                 # Check for common issues
                 if ($jobError -match "0x800F0906\|source files could not be found") {
@@ -118,6 +173,7 @@ function Install-HyperVRole {
             else {
                 Complete-ProgressMessage -Activity "Hyper-V installation" -Status "Complete" -Success
                 Write-OutputColor "`nHyper-V installed successfully!" -color "Success"
+                Test-HyperVInstallation
                 Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
                 $global:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V (Windows Client)"

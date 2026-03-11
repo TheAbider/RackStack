@@ -88,6 +88,60 @@ $script:ServerRoleTemplates = @{
 # Custom role templates (loaded from defaults.json or user-defined)
 $script:CustomRoleTemplates = @{}
 
+# Validate a user-provided custom role template from defaults.json
+function Test-CustomRoleTemplate {
+    param(
+        [Parameter(Mandatory=$true)]
+        [object]$Template,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TemplateName
+    )
+
+    $requiredFields = @('FullName', 'Description', 'Features', 'RequiresReboot', 'ServerOnly')
+    $issues = @()
+
+    foreach ($field in $requiredFields) {
+        $value = $Template.$field
+        if ($null -eq $value) {
+            $issues += "Missing required field: $field"
+        }
+    }
+
+    # Validate Features is an array
+    if ($null -ne $Template.Features -and $Template.Features -isnot [array]) {
+        $issues += "Features must be an array"
+    }
+    elseif ($null -ne $Template.Features -and @($Template.Features).Count -eq 0) {
+        $issues += "Features array is empty"
+    }
+
+    # Validate boolean fields
+    if ($null -ne $Template.RequiresReboot -and $Template.RequiresReboot -isnot [bool]) {
+        $issues += "RequiresReboot must be true or false (got: $($Template.RequiresReboot))"
+    }
+
+    if ($null -ne $Template.ServerOnly -and $Template.ServerOnly -isnot [bool]) {
+        $issues += "ServerOnly must be true or false (got: $($Template.ServerOnly))"
+    }
+
+    # Validate PostInstall if provided (must be a string or null)
+    if ($null -ne $Template.PostInstall -and $Template.PostInstall -isnot [string]) {
+        $issues += "PostInstall must be a function name string or null (got: $($Template.PostInstall.GetType().Name))"
+    }
+
+    if (@($issues).Count -gt 0) {
+        Write-OutputColor "  Custom template '$TemplateName' has $(@($issues).Count) issue(s):" -color "Error"
+        foreach ($issue in $issues) {
+            Write-OutputColor "    - $issue" -color "Error"
+        }
+        return $false
+    }
+
+    Write-OutputColor "  Custom template '$TemplateName' validated successfully" -color "Success"
+    return $true
+}
+
 # Interactive menu for selecting and installing server role templates
 function Show-RoleTemplateSelector {
     while ($true) {
@@ -170,12 +224,12 @@ function Show-RoleTemplateSelector {
                     Install-ServerRoleTemplate -TemplateKey $selected.Key
                 }
                 else {
-                    Write-OutputColor "  Invalid selection." -color "Error"
+                    Write-OutputColor "  Invalid selection. Enter 1-$($menuIndex - 1), R, or B." -color "Error"
                     Start-Sleep -Seconds 1
                 }
             }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-$($menuIndex - 1), R, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -222,7 +276,7 @@ function Install-ServerRoleTemplate {
     if ($template.ServerOnly -eq $true) {
         if (-not (Test-WindowsServer)) {
             Write-OutputColor "  This role template requires Windows Server." -color "Error"
-            Write-OutputColor "  Current OS is a client/workstation and cannot install server roles." -color "Warning"
+            Write-OutputColor "  Current OS is a client/workstation and cannot install server roles." -color "Error"
             Write-PressEnter
             return
         }

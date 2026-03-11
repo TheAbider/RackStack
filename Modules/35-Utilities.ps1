@@ -874,7 +874,7 @@ function Show-CredentialManager {
             }
         }
         "B" { return }
-        default { return }
+        default { Write-OutputColor "  Invalid selection. Enter 1-3 or B." -color "Error"; return }
     }
 }
 
@@ -1128,7 +1128,7 @@ function Show-InstalledSoftware {
     # Group by publisher for top publishers
     $byPublisher = $software | Group-Object Publisher | Sort-Object Count -Descending | Select-Object -First 5
     foreach ($pub in $byPublisher) {
-        $pubName = if ($pub.Name.Length -gt 40) { $pub.Name.Substring(0, 37) + "..." } else { $pub.Name }
+        $pubName = if ($pub.Name -and $pub.Name.Length -gt 40) { $pub.Name.Substring(0, 37) + "..." } elseif ($pub.Name) { $pub.Name } else { "(unknown)" }
         Write-OutputColor "  │$("  $($pubName.PadRight(50)) $($pub.Count) app(s)".PadRight(72))│" -color "Info"
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -1152,8 +1152,8 @@ function Show-InstalledSoftware {
             Write-OutputColor "  │$("  ALL INSTALLED SOFTWARE ($($software.Count))".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             foreach ($app in $software | Sort-Object Name) {
-                $name = if ($app.Name.Length -gt 40) { $app.Name.Substring(0, 37) + "..." } else { $app.Name }
-                $ver = if ($app.Version.Length -gt 14) { $app.Version.Substring(0, 11) + "..." } else { $app.Version }
+                $name = if ($app.Name -and $app.Name.Length -gt 40) { $app.Name.Substring(0, 37) + "..." } elseif ($app.Name) { $app.Name } else { "(unknown)" }
+                $ver = if ($app.Version -and $app.Version.Length -gt 14) { $app.Version.Substring(0, 11) + "..." } elseif ($app.Version) { $app.Version } else { "" }
                 $line = "  $($name.PadRight(42)) $($ver.PadRight(14)) $($app.InstallDate)"
                 Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
             }
@@ -1176,8 +1176,8 @@ function Show-InstalledSoftware {
                 Write-OutputColor "  │$("  No matching software found.".PadRight(72))│" -color "Info"
             } else {
                 foreach ($app in $matches_ | Sort-Object Name) {
-                    $name = if ($app.Name.Length -gt 40) { $app.Name.Substring(0, 37) + "..." } else { $app.Name }
-                    $ver = if ($app.Version.Length -gt 14) { $app.Version.Substring(0, 11) + "..." } else { $app.Version }
+                    $name = if ($app.Name -and $app.Name.Length -gt 40) { $app.Name.Substring(0, 37) + "..." } elseif ($app.Name) { $app.Name } else { "(unknown)" }
+                    $ver = if ($app.Version -and $app.Version.Length -gt 14) { $app.Version.Substring(0, 11) + "..." } elseif ($app.Version) { $app.Version } else { "" }
                     $line = "  $($name.PadRight(42)) $($ver.PadRight(14)) $($app.InstallDate)"
                     Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
                 }
@@ -1197,7 +1197,8 @@ function Show-InstalledSoftware {
                 Write-OutputColor "  Export failed: $_" -color "Error"
             }
         }
-        default { return }
+        "B" { return }
+        default { Write-OutputColor "  Invalid selection. Enter 1-3 or B." -color "Error"; return }
     }
 
     Add-SessionChange -Category "System" -Description "Viewed installed software inventory ($($software.Count) programs)"
@@ -2346,5 +2347,179 @@ function Show-MemoryDiagnostics {
 
     Add-SessionChange -Category "System" -Description "Memory diagnostics: ${usedGB}GB/$($totalGB)GB ($usedPct% used)"
     Write-PressEnter
+}
+
+# Function to capture current network configuration as a baseline
+function Save-NetworkBaseline {
+    param(
+        [string]$OutputPath = "$script:TempPath\network-baseline.json"
+    )
+
+    Write-OutputColor "`n  Capturing network baseline..." -color "Info"
+
+    $baseline = @{
+        Timestamp = (Get-Date).ToString('o')
+        Hostname = $env:COMPUTERNAME
+        Adapters = @()
+        Routes = @()
+        DNS = @()
+    }
+
+    # Capture adapter configuration
+    try {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue
+        foreach ($adapter in $adapters) {
+            $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue
+            $dnsServers = (Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue).ServerAddresses
+
+            $baseline.Adapters += @{
+                Name = $adapter.Name
+                Status = $adapter.Status.ToString()
+                LinkSpeed = $adapter.LinkSpeed
+                MacAddress = $adapter.MacAddress
+                IPAddresses = @($ipConfig | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" })
+                DNSServers = @($dnsServers)
+            }
+        }
+    } catch {
+        Write-OutputColor "  Warning: Could not capture all adapter info: $($_.Exception.Message)" -color "Warning"
+    }
+
+    # Capture routes
+    try {
+        $routes = Get-NetRoute -ErrorAction SilentlyContinue | Where-Object { $_.DestinationPrefix -ne '0.0.0.0/0' -and $_.DestinationPrefix -notmatch '^ff' }
+        foreach ($route in $routes) {
+            $baseline.Routes += @{
+                Destination = $route.DestinationPrefix
+                NextHop = $route.NextHop
+                Metric = $route.RouteMetric
+                Interface = $route.InterfaceAlias
+            }
+        }
+    } catch {
+        Write-OutputColor "  Warning: Could not capture routes: $($_.Exception.Message)" -color "Warning"
+    }
+
+    # Capture DNS configuration
+    try {
+        $dnsClient = Get-DnsClient -ErrorAction SilentlyContinue
+        foreach ($dns in $dnsClient) {
+            $baseline.DNS += @{
+                Interface = $dns.InterfaceAlias
+                Suffix = $dns.ConnectionSpecificSuffix
+                SuffixSearchList = $dns.ConnectionSpecificSuffixSearchList
+            }
+        }
+    } catch {
+        Write-OutputColor "  Warning: Could not capture DNS config: $($_.Exception.Message)" -color "Warning"
+    }
+
+    try {
+        $json = $baseline | ConvertTo-Json -Depth 5
+        Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
+        Write-OutputColor "  Network baseline saved to: $OutputPath" -color "Success"
+        Write-OutputColor "  Adapters: $(@($baseline.Adapters).Count), Routes: $(@($baseline.Routes).Count)" -color "Info"
+    } catch {
+        Write-OutputColor "  Failed to save baseline: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# Function to compare current network state against a saved baseline
+function Compare-NetworkBaseline {
+    param(
+        [string]$BaselinePath = "$script:TempPath\network-baseline.json"
+    )
+
+    if (-not (Test-Path -LiteralPath $BaselinePath)) {
+        Write-OutputColor "  No baseline found at $BaselinePath" -color "Warning"
+        Write-OutputColor "  Run Save-NetworkBaseline first" -color "Info"
+        return
+    }
+
+    Write-OutputColor "`n  Comparing current state against baseline..." -color "Info"
+
+    try {
+        $baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
+    } catch {
+        Write-OutputColor "  Failed to read baseline: $($_.Exception.Message)" -color "Error"
+        return
+    }
+
+    Write-OutputColor "  Baseline from: $($baseline.Timestamp)" -color "Info"
+    $driftFound = $false
+
+    # Compare adapters
+    foreach ($savedAdapter in $baseline.Adapters) {
+        $current = Get-NetAdapter -Name $savedAdapter.Name -ErrorAction SilentlyContinue
+        if ($null -eq $current) {
+            Write-OutputColor "  DRIFT: Adapter '$($savedAdapter.Name)' no longer exists" -color "Error"
+            $driftFound = $true
+            continue
+        }
+        if ($current.Status.ToString() -ne $savedAdapter.Status) {
+            Write-OutputColor "  DRIFT: '$($savedAdapter.Name)' status changed: $($savedAdapter.Status) -> $($current.Status)" -color "Warning"
+            $driftFound = $true
+        }
+
+        # Compare IPs
+        $currentIPs = @(Get-NetIPAddress -InterfaceIndex $current.ifIndex -ErrorAction SilentlyContinue | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" })
+        $savedIPs = @($savedAdapter.IPAddresses)
+        $ipDiff = Compare-Object -ReferenceObject $savedIPs -DifferenceObject $currentIPs -ErrorAction SilentlyContinue
+        if ($null -ne $ipDiff) {
+            foreach ($diff in $ipDiff) {
+                if ($diff.SideIndicator -eq '=>') {
+                    Write-OutputColor "  DRIFT: '$($savedAdapter.Name)' new IP: $($diff.InputObject)" -color "Warning"
+                } else {
+                    Write-OutputColor "  DRIFT: '$($savedAdapter.Name)' removed IP: $($diff.InputObject)" -color "Warning"
+                }
+            }
+            $driftFound = $true
+        }
+    }
+
+    # Check for new adapters not in baseline
+    $currentAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue)
+    foreach ($adapter in $currentAdapters) {
+        $inBaseline = $baseline.Adapters | Where-Object { $_.Name -eq $adapter.Name }
+        if ($null -eq $inBaseline) {
+            Write-OutputColor "  DRIFT: New adapter detected: '$($adapter.Name)'" -color "Warning"
+            $driftFound = $true
+        }
+    }
+
+    if (-not $driftFound) {
+        Write-OutputColor "  No network drift detected" -color "Success"
+    }
+}
+
+# Function to archive old transcript log files into a compressed zip
+function Compress-OldTranscripts {
+    param(
+        [string]$TranscriptPath = $script:TempPath,
+        [int]$DaysOld = 7
+    )
+
+    if (-not (Test-Path -LiteralPath $TranscriptPath)) { return }
+
+    $cutoff = (Get-Date).AddDays(-$DaysOld)
+    $oldLogs = Get-ChildItem -LiteralPath $TranscriptPath -Filter '*.log' -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt $cutoff }
+
+    if (@($oldLogs).Count -eq 0) {
+        Write-OutputColor "  No transcripts older than $DaysOld days" -color "Info"
+        return
+    }
+
+    $archiveName = "transcripts-archive-$(Get-Date -Format 'yyyyMMdd').zip"
+    $archivePath = Join-Path $TranscriptPath $archiveName
+
+    try {
+        $oldLogs | Compress-Archive -DestinationPath $archivePath -Update -ErrorAction Stop
+        $count = @($oldLogs).Count
+        $oldLogs | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-OutputColor "  Archived $count transcript(s) to $archiveName" -color "Success"
+    } catch {
+        Write-OutputColor "  Failed to archive transcripts: $($_.Exception.Message)" -color "Error"
+    }
 }
 #endregion

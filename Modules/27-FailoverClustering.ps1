@@ -51,6 +51,7 @@ function Install-FailoverClusteringFeature {
 
         if ($installResult.TimedOut) {
             Add-SessionChange -Category "System" -Description "Failover Clustering installation timed out"
+            Clear-MenuCache
             return $false
         }
         elseif ($installResult.Success) {
@@ -144,6 +145,9 @@ function Show-ClusterManagementMenu {
         Write-MenuItem -Text "[5]  Configure Live Migration"
         Write-MenuItem -Text "[6]  Configure Quorum/Witness"
         Write-MenuItem -Text "[7]  Show Cluster Status"
+        Write-MenuItem -Text "[8]  Node Maintenance (Pause/Drain)"
+        Write-MenuItem -Text "[9]  Resume Node"
+        Write-MenuItem -Text "[10] Quorum Health Check"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -161,8 +165,11 @@ function Show-ClusterManagementMenu {
             "5" { Set-LiveMigrationSettings }
             "6" { Set-ClusterQuorum }
             "7" { Show-ClusterStatus; continue }
+            "8" { Suspend-ClusterNodeForMaintenance }
+            "9" { Resume-ClusterNodeFromMaintenance }
+            "10" { Test-ClusterQuorumHealth; continue }
             { $_ -eq "b" -or $_ -eq "B" } { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -304,6 +311,7 @@ function New-ClusterWizard {
         New-Cluster -Name $clusterName -Node $nodes -StaticAddress $clusterIP -ErrorAction Stop
         Write-OutputColor "  Cluster '$clusterName' created successfully!" -color "Success"
         Add-SessionChange -Category "Cluster" -Description "Created cluster $clusterName with nodes: $($nodes -join ', ')"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to create cluster: $_" -color "Error"
@@ -346,6 +354,7 @@ function Add-NodeToCluster {
         Add-ClusterNode -Cluster $clusterName -Name $env:COMPUTERNAME -ErrorAction Stop
         Write-OutputColor "  Successfully joined cluster '$clusterName'!" -color "Success"
         Add-SessionChange -Category "Cluster" -Description "Joined cluster $clusterName"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to join cluster: $_" -color "Error"
@@ -476,6 +485,7 @@ function Edit-ClusterSharedVolume {
                         Add-ClusterSharedVolume -Name $selectedDisk.Name -ErrorAction Stop
                         Write-OutputColor "  Added $($selectedDisk.Name) to Cluster Shared Volumes." -color "Success"
                         Add-SessionChange -Category "Cluster" -Description "Added $($selectedDisk.Name) to CSV"
+                        Clear-MenuCache
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
@@ -509,6 +519,7 @@ function Edit-ClusterSharedVolume {
                             Remove-ClusterSharedVolume -Name $selectedCSV.Name -ErrorAction Stop
                             Write-OutputColor "  Removed $($selectedCSV.Name) from CSV." -color "Success"
                             Add-SessionChange -Category "Cluster" -Description "Removed $($selectedCSV.Name) from Cluster Shared Volumes"
+                            Clear-MenuCache
                         }
                         catch {
                             Write-OutputColor "  Failed: $_" -color "Error"
@@ -609,6 +620,7 @@ function Set-LiveMigrationSettings {
                     Enable-VMMigration -ErrorAction Stop
                     Write-OutputColor "  Live Migration enabled." -color "Success"
                     Add-SessionChange -Category "Hyper-V" -Description "Enabled Live Migration"
+                    Clear-MenuCache
                     if (-not $wasMigrationEnabled) {
                         Add-UndoAction -Category "Hyper-V" -Description "Enabled Live Migration" -UndoScript {
                             Disable-VMMigration -ErrorAction SilentlyContinue
@@ -631,6 +643,7 @@ function Set-LiveMigrationSettings {
                         Set-VMHost -MaximumVirtualMachineMigrations ([int]$newCount) -ErrorAction Stop
                         Write-OutputColor "  Set to $newCount simultaneous migrations." -color "Success"
                         Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration to $newCount simultaneous"
+                        Clear-MenuCache
                         Add-UndoAction -Category "Hyper-V" -Description "Set simultaneous migrations to $newCount" -UndoScript {
                             param($OldCount)
                             Set-VMHost -MaximumVirtualMachineMigrations $OldCount -ErrorAction SilentlyContinue
@@ -662,6 +675,7 @@ function Set-LiveMigrationSettings {
                         Set-VMHost -VirtualMachineMigrationAuthenticationType $authType -ErrorAction Stop
                         Write-OutputColor "  Authentication set to $authType." -color "Success"
                         Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration auth to $authType"
+                        Clear-MenuCache
                         Add-UndoAction -Category "Hyper-V" -Description "Set Live Migration auth to $authType" -UndoScript {
                             param($OldAuth)
                             Set-VMHost -VirtualMachineMigrationAuthenticationType $OldAuth -ErrorAction SilentlyContinue
@@ -695,6 +709,7 @@ function Set-LiveMigrationSettings {
                         Set-VMHost -VirtualMachineMigrationPerformanceOption $perfOption -ErrorAction Stop
                         Write-OutputColor "  Performance option set to $perfOption." -color "Success"
                         Add-SessionChange -Category "Hyper-V" -Description "Set Live Migration performance to $perfOption"
+                        Clear-MenuCache
                         Add-UndoAction -Category "Hyper-V" -Description "Set Live Migration performance to $perfOption" -UndoScript {
                             param($OldPerf)
                             Set-VMHost -VirtualMachineMigrationPerformanceOption $OldPerf -ErrorAction SilentlyContinue
@@ -733,6 +748,7 @@ function Set-LiveMigrationSettings {
                         Add-VMMigrationNetwork -Subnet $newNet -ErrorAction Stop
                         Write-OutputColor "  Added $newNet to allowed networks." -color "Success"
                         Add-SessionChange -Category "Cluster" -Description "Added Live Migration network: $newNet"
+                        Clear-MenuCache
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
@@ -806,6 +822,7 @@ function Set-ClusterQuorum {
                 Set-ClusterQuorum -NodeMajority -ErrorAction Stop
                 Write-OutputColor "  Quorum set to Node Majority." -color "Success"
                 Add-SessionChange -Category "Cluster" -Description "Set quorum to Node Majority"
+                Clear-MenuCache
             }
             catch {
                 Write-OutputColor "  Failed: $_" -color "Error"
@@ -837,6 +854,7 @@ function Set-ClusterQuorum {
                         Set-ClusterQuorum -NodeAndDiskMajority $disks[$selIdx].Name -ErrorAction Stop
                         Write-OutputColor "  Quorum set to Node and Disk Majority." -color "Success"
                         Add-SessionChange -Category "Cluster" -Description "Set quorum to Node and Disk Majority"
+                        Clear-MenuCache
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"
@@ -863,6 +881,7 @@ function Set-ClusterQuorum {
                     Set-ClusterQuorum -NodeAndFileShareMajority $sharePath -ErrorAction Stop
                     Write-OutputColor "  Quorum set to Node and File Share Majority." -color "Success"
                     Add-SessionChange -Category "Cluster" -Description "Set quorum to File Share Witness: $sharePath"
+                    Clear-MenuCache
                 }
                 catch {
                     Write-OutputColor "  Failed: $_" -color "Error"
@@ -888,6 +907,7 @@ function Set-ClusterQuorum {
                     Set-ClusterQuorum -CloudWitness -AccountName $accountName -AccessKey $accessKey -ErrorAction Stop
                     Write-OutputColor "  Quorum set to Cloud Witness." -color "Success"
                     Add-SessionChange -Category "Cluster" -Description "Set quorum to Cloud Witness"
+                    Clear-MenuCache
                 }
                 catch {
                     Write-OutputColor "  Failed: $_" -color "Error"
@@ -961,7 +981,7 @@ function Show-ClusterStatus {
         $resources = $resResult.Result | Select-Object -First 10
         foreach ($res in $resources) {
             $color = if ($res.State -eq "Online") { "Success" } elseif ($res.State -eq "Offline") { "Warning" } else { "Error" }
-            $resName = if ($res.Name.Length -gt 40) { $res.Name.Substring(0,37) + "..." } else { $res.Name }
+            $resName = if ($res.Name -and $res.Name.Length -gt 40) { $res.Name.Substring(0,37) + "..." } elseif ($res.Name) { $res.Name } else { "(unknown)" }
             Write-OutputColor "  │$("  $resName - $($res.State)".PadRight(72))│" -color $color
         }
         $totalResources = @($resResult.Result).Count
@@ -970,6 +990,194 @@ function Show-ClusterStatus {
         }
     }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    Write-PressEnter
+}
+
+# Function to pause a cluster node and drain roles for maintenance
+function Suspend-ClusterNodeForMaintenance {
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                   NODE MAINTENANCE (PAUSE/DRAIN)").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Get cluster nodes
+    $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue)
+    if ($nodes.Count -eq 0) {
+        Write-OutputColor "  No cluster nodes found" -color "Warning"
+        return
+    }
+
+    # Display nodes with status
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  CLUSTER NODES".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    for ($i = 0; $i -lt $nodes.Count; $i++) {
+        $node = $nodes[$i]
+        $stateColor = if ($node.State -eq 'Up') { "Success" } else { "Warning" }
+        $lineStr = "  [$($i+1)] $($node.Name) ($($node.State))"
+        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $stateColor
+    }
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $selection = Read-Host "  Select node to pause for maintenance"
+    $navResult = Test-NavigationCommand -UserInput $selection
+    if ($navResult.ShouldReturn) { return }
+
+    $idx = 0
+    if (-not [int]::TryParse($selection, [ref]$idx) -or $idx -lt 1 -or $idx -gt $nodes.Count) {
+        Write-OutputColor "  Invalid selection" -color "Warning"
+        return
+    }
+
+    $targetNode = $nodes[$idx - 1]
+
+    if ($targetNode.State -ne 'Up') {
+        Write-OutputColor "  Node '$($targetNode.Name)' is already $($targetNode.State)" -color "Warning"
+        return
+    }
+
+    # Check what roles would move
+    $resources = @(Get-ClusterGroup -ErrorAction SilentlyContinue | Where-Object { $_.OwnerNode -eq $targetNode.Name -and $_.State -eq 'Online' })
+    if ($resources.Count -gt 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  RESOURCES THAT WILL BE MIGRATED".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        foreach ($res in $resources) {
+            $lineStr = "  - $($res.Name) ($($res.GroupType))"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    }
+
+    Write-OutputColor "" -color "Info"
+    if (-not (Confirm-UserAction -Message "Pause node '$($targetNode.Name)' and drain all roles?")) {
+        Write-OutputColor "  Operation cancelled" -color "Info"
+        return
+    }
+
+    try {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Suspending node '$($targetNode.Name)'..." -color "Info"
+        Suspend-ClusterNode -Name $targetNode.Name -Drain -Wait -ErrorAction Stop
+        Write-OutputColor "  Node '$($targetNode.Name)' paused - all roles drained" -color "Success"
+        Add-SessionChange -Category "Cluster" -Description "Paused cluster node: $($targetNode.Name) for maintenance"
+        Clear-MenuCache
+    } catch {
+        Write-OutputColor "  Failed to suspend node: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# Function to resume a paused cluster node
+function Resume-ClusterNodeFromMaintenance {
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                       RESUME CLUSTER NODE").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Paused' })
+    if ($nodes.Count -eq 0) {
+        Write-OutputColor "  No paused cluster nodes found" -color "Info"
+        return
+    }
+
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  PAUSED NODES".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    for ($i = 0; $i -lt $nodes.Count; $i++) {
+        $lineStr = "  [$($i+1)] $($nodes[$i].Name)"
+        if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
+    }
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $selection = Read-Host "  Select node to resume"
+    $navResult = Test-NavigationCommand -UserInput $selection
+    if ($navResult.ShouldReturn) { return }
+
+    $idx = 0
+    if (-not [int]::TryParse($selection, [ref]$idx) -or $idx -lt 1 -or $idx -gt $nodes.Count) {
+        Write-OutputColor "  Invalid selection" -color "Warning"
+        return
+    }
+
+    $targetNode = $nodes[$idx - 1]
+
+    try {
+        Resume-ClusterNode -Name $targetNode.Name -ErrorAction Stop
+        Write-OutputColor "  Node '$($targetNode.Name)' resumed successfully" -color "Success"
+        Add-SessionChange -Category "Cluster" -Description "Resumed cluster node: $($targetNode.Name) from maintenance"
+        Clear-MenuCache
+    } catch {
+        Write-OutputColor "  Failed to resume node: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# Function to check cluster quorum health
+function Test-ClusterQuorumHealth {
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                      QUORUM HEALTH CHECK").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    try {
+        $quorum = Get-ClusterQuorum -ErrorAction Stop
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  CLUSTER QUORUM STATUS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Type: $($quorum.QuorumType)".PadRight(72))│" -color "Info"
+
+        if ($null -ne $quorum.QuorumResource) {
+            $resState = $quorum.QuorumResource.State
+            $color = if ($resState -eq 'Online') { "Success" } else { "Error" }
+            $lineStr = "  Witness: $($quorum.QuorumResource.Name) ($resState)"
+            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color $color
+        } else {
+            Write-OutputColor "  │$("  Witness: None configured".PadRight(72))│" -color "Warning"
+        }
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        # Check node votes
+        $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue)
+        $upNodes = @($nodes | Where-Object { $_.State -eq 'Up' })
+        $totalVotes = ($nodes | Measure-Object -Property NodeWeight -Sum).Sum
+        $activeVotes = ($upNodes | Measure-Object -Property NodeWeight -Sum).Sum
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  NODE VOTES".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Nodes: $($upNodes.Count)/$($nodes.Count) up".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Active votes: $activeVotes / $totalVotes total".PadRight(72))│" -color "Info"
+
+        $majority = [math]::Floor($totalVotes / 2) + 1
+        if ($activeVotes -ge $majority) {
+            Write-OutputColor "  │$("  Quorum: HEALTHY (have $activeVotes, need $majority)".PadRight(72))│" -color "Success"
+        } else {
+            Write-OutputColor "  │$("  Quorum: AT RISK (have $activeVotes, need $majority)".PadRight(72))│" -color "Error"
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    } catch {
+        Write-OutputColor "  Could not check quorum: $($_.Exception.Message)" -color "Error"
+    }
 
     Write-PressEnter
 }

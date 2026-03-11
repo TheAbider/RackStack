@@ -27,7 +27,7 @@ function Export-VMWizard {
     }
 
     if ($vms.Count -eq 0) {
-        Write-OutputColor "  No VMs available for export." -color "Warning"
+        Write-OutputColor "  No VMs available for export." -color "Error"
         return
     }
 
@@ -56,7 +56,7 @@ function Export-VMWizard {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $vmMap.ContainsKey($vmChoice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($vms.Count) or B." -color "Error"
         return
     }
 
@@ -119,6 +119,20 @@ function Export-VMWizard {
 
     if (-not (Confirm-UserAction -Message "Start export?")) { return }
 
+    # Estimate export size from VHD file sizes
+    $vmSize = 0
+    $vhdDrives = @(Get-VMHardDiskDrive -VMName $selectedVM.Name -ErrorAction SilentlyContinue)
+    foreach ($vhdDrive in $vhdDrives) {
+        if ($null -ne $vhdDrive.Path -and (Test-Path -LiteralPath $vhdDrive.Path)) {
+            $vmSize += (Get-Item -LiteralPath $vhdDrive.Path).Length
+        }
+    }
+    $estimateGB = [math]::Round($vmSize / 1GB, 1)
+    if ($estimateGB -gt 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Estimated export size: ${estimateGB} GB" -color "Info"
+    }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Starting export (this may take a while)..." -color "Info"
 
@@ -162,7 +176,15 @@ function Export-VMWizard {
 
             $spin = $spinChars[$spinIndex % 4]
             $spinIndex++
-            Write-ProgressBar -CurrentBytes $currentSize -Activity "Exporting" -SpeedBytesPerSec $exportSpeedBps -ElapsedSeconds $exportElapsed -SpinChar $spin
+            $progressParams = @{
+                CurrentBytes     = $currentSize
+                Activity         = "Exporting"
+                SpeedBytesPerSec = $exportSpeedBps
+                ElapsedSeconds   = $exportElapsed
+                SpinChar         = $spin
+            }
+            if ($vmSize -gt 0) { $progressParams['TotalBytes'] = $vmSize }
+            Write-ProgressBar @progressParams
             Start-Sleep -Seconds 1
             $exportElapsed++
         }
@@ -180,8 +202,12 @@ function Export-VMWizard {
             } catch { $finalExportSize = 0 }
         }
         Write-TransferComplete -TotalBytes $finalExportSize -ElapsedSeconds $exportElapsed -Activity "Export"
+        $totalMinutes = [math]::Round($exportElapsed / 60, 1)
+        $finalGB = [math]::Round($finalExportSize / 1GB, 1)
+        Write-OutputColor "  Completed in ${totalMinutes} min | Final size: ${finalGB} GB" -color "Success"
         Write-OutputColor "  Location: $exportPath\$($selectedVM.Name)" -color "Info"
-        Add-SessionChange -Category "VM" -Description "Exported VM '$($selectedVM.Name)' to $exportPath"
+        Add-SessionChange -Category "VM" -Description "Exported VM '$($selectedVM.Name)' to $exportPath (${finalGB} GB, ${totalMinutes} min)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error exporting VM: $_" -color "Error"
@@ -310,6 +336,7 @@ function Import-VMWizard {
         Write-OutputColor "  Name: $($importedVM.Name)" -color "Info"
         Write-OutputColor "  ID: $($importedVM.Id)" -color "Info"
         Add-SessionChange -Category "VM" -Description "Imported VM '$($importedVM.Name)'"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error importing VM: $_" -color "Error"
@@ -364,7 +391,7 @@ function Show-VMExportImportMenu {
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-2 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

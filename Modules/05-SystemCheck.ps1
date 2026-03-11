@@ -92,7 +92,85 @@ function Test-RebootPending {
         # Ignore errors
     }
 
+    # Check for pending RunOnce actions
+    try {
+        $runOnce = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" -ErrorAction SilentlyContinue
+        if ($null -ne $runOnce) {
+            # Filter out the default PS properties to check for actual values
+            $valueNames = @($runOnce.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' }).Count
+            if ($valueNames -gt 0) {
+                return $true
+            }
+        }
+    }
+    catch {
+        # Ignore errors
+    }
+
     return $false
+}
+
+# Function to check available disk space
+function Test-MinimumDiskSpace {
+    param(
+        [string]$DriveLetter = $env:SystemDrive.TrimEnd(':'),
+        [int]$MinimumGB = 5
+    )
+    try {
+        $drive = Get-PSDrive -Name $DriveLetter -ErrorAction Stop
+        $freeGB = [math]::Round($drive.Free / 1GB, 1)
+        if ($freeGB -lt $MinimumGB) {
+            Write-OutputColor "  WARNING: Drive ${DriveLetter}: has only ${freeGB} GB free (minimum: ${MinimumGB} GB)" -color "Warning"
+            return $false
+        }
+        return $true
+    } catch {
+        return $true  # Don't block if we can't check
+    }
+}
+
+# Function to verify minimum PowerShell version
+function Test-PowerShellVersion {
+    $minMajor = 5
+    $minMinor = 1
+    $current = $PSVersionTable.PSVersion
+    if ($current.Major -lt $minMajor -or ($current.Major -eq $minMajor -and $current.Minor -lt $minMinor)) {
+        Write-OutputColor "  WARNING: PowerShell $($current.Major).$($current.Minor) detected. Minimum required: $minMajor.$minMinor" -color "Warning"
+        return $false
+    }
+    return $true
+}
+
+# Function to check Hyper-V minimum hardware requirements
+function Test-HyperVMinimumSpecs {
+    try {
+        $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+        $mem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+
+        $issues = @()
+
+        if ($null -ne $cpu -and $cpu.NumberOfLogicalProcessors -lt 2) {
+            $issues += "CPU: $($cpu.NumberOfLogicalProcessors) logical processors (minimum: 2)"
+        }
+
+        if ($null -ne $mem) {
+            $totalGB = [math]::Round($mem.TotalPhysicalMemory / 1GB, 1)
+            if ($totalGB -lt 4) {
+                $issues += "RAM: ${totalGB} GB installed (minimum: 4 GB for Hyper-V)"
+            }
+        }
+
+        if ($issues.Count -gt 0) {
+            Write-OutputColor "  Hyper-V minimum spec warnings:" -color "Warning"
+            foreach ($issue in $issues) {
+                Write-OutputColor "    - $issue" -color "Warning"
+            }
+            return $false
+        }
+        return $true
+    } catch {
+        return $true  # Don't block if we can't check
+    }
 }
 
 # Function to test network connectivity
@@ -352,7 +430,7 @@ function Set-ServerPowerPlan {
     }
 
     if (-not $powerPlans.ContainsKey($choice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-4." -color "Error"
         return
     }
 
@@ -474,6 +552,22 @@ function Test-FeaturePrerequisites {
         Message = if ($rebootPending) { "Reboot required before installing features" } else { "No reboot pending" }
     }
 
+    # Common check: PowerShell version
+    $psVersionOK = Test-PowerShellVersion
+    $checks += @{
+        Name    = "PowerShell Version"
+        Status  = if ($psVersionOK) { "Pass" } else { "Fail" }
+        Message = if ($psVersionOK) { "PowerShell $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)" } else { "PowerShell $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor) (minimum 5.1 required)" }
+    }
+
+    # Common check: disk space
+    $diskOK = Test-MinimumDiskSpace
+    $checks += @{
+        Name    = "Disk Space"
+        Status  = if ($diskOK) { "Pass" } else { "Warn" }
+        Message = if ($diskOK) { "Sufficient free space on system drive" } else { "Low disk space on system drive" }
+    }
+
     switch ($Feature) {
         "Hyper-V" {
             # Batch CIM queries with timeout (immune to WMI hangs)
@@ -521,6 +615,14 @@ function Test-FeaturePrerequisites {
                 Name    = "Disk Space (C:)"
                 Status  = if ($freeGB -ge 20) { "Pass" } elseif ($freeGB -ge 10) { "Warn" } else { "Fail" }
                 Message = if ($freeGB -ge 20) { "${freeGB} GB free" } elseif ($freeGB -ge 10) { "${freeGB} GB free (20+ GB recommended)" } else { "${freeGB} GB free (minimum 10 GB required)" }
+            }
+
+            # Hyper-V minimum hardware specs
+            $hvSpecsOK = Test-HyperVMinimumSpecs
+            $checks += @{
+                Name    = "Hardware Specs"
+                Status  = if ($hvSpecsOK) { "Pass" } else { "Warn" }
+                Message = if ($hvSpecsOK) { "CPU and RAM meet Hyper-V minimums" } else { "Hardware below recommended Hyper-V minimums" }
             }
         }
 

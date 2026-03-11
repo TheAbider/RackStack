@@ -20,6 +20,8 @@ function Show-OperationsMenu {
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-MenuItem "[1]  VM Checkpoint Management"
         Write-MenuItem "[2]  VM Export / Import"
+        Write-MenuItem "[31] Batch VM Cleanup"
+        Write-MenuItem "[32] VM Migration Pre-Flight"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -97,6 +99,7 @@ function Show-OperationsMenu {
                 @{Num="25"; Name="Windows Update Status"};     @{Num="26"; Name="Listening Ports & Services"}
                 @{Num="27"; Name="Scheduled Task Overview"};   @{Num="28"; Name="Firewall Rule Summary"}
                 @{Num="29"; Name="Reboot Pending Details"};    @{Num="30"; Name="Memory Pressure Diagnostics"}
+                @{Num="31"; Name="Batch VM Cleanup"};          @{Num="32"; Name="VM Migration Pre-Flight"}
             )
             $matched = @($opsItems | Where-Object { $_.Name -match [regex]::Escape($searchTerm) })
             Write-OutputColor "" -color "Info"
@@ -250,10 +253,18 @@ function Show-OperationsMenu {
                 Show-MemoryDiagnostics
                 Write-PressEnter
             }
+            "31" {
+                Remove-BatchVMs
+                Write-PressEnter
+            }
+            "32" {
+                Test-VMMigrationReadiness
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-30, [/] to search, or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-32, [/] to search, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -325,14 +336,14 @@ function Invoke-RemoteHealthCheck {
 
     try {
         $health = Invoke-Command -ComputerName $target -ScriptBlock {
-            $os = Get-CimInstance Win32_OperatingSystem
-            $cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+            $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            $cpu = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
             $totalMem = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
             $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
             $usedMem = $totalMem - $freeMem
             $memPct = if ($totalMem -gt 0) { [math]::Round(($usedMem / $totalMem) * 100, 1) } else { 0 }
             $uptime = if ($os -and $os.LastBootUpTime) { (Get-Date) - $os.LastBootUpTime } else { [timespan]::Zero }
-            $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
+            $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object {
                 @{
                     Drive = $_.DeviceID
                     SizeGB = [math]::Round($_.Size / 1GB, 1)
@@ -425,7 +436,7 @@ function Invoke-RemoteServiceManager {
 
         foreach ($svc in $services) {
             $statusColor = if ($svc.Status -eq 'Running') { "Green" } else { "Red" }
-            $displayName = if ($svc.DisplayName.Length -gt 34) { $svc.DisplayName.Substring(0, 31) + "..." } else { $svc.DisplayName }
+            $displayName = if ($svc.DisplayName -and $svc.DisplayName.Length -gt 34) { $svc.DisplayName.Substring(0, 31) + "..." } elseif ($svc.DisplayName) { $svc.DisplayName } else { "(unknown)" }
             $line = "  $($svc.Status.ToString().PadRight(10))$($svc.ServiceName.PadRight(22))$displayName"
             Write-Host "  │  " -NoNewline -ForegroundColor Cyan; Write-Host $line.PadRight(70) -NoNewline -ForegroundColor $statusColor; Write-Host "│" -ForegroundColor Cyan
         }
@@ -591,7 +602,7 @@ function Show-CompanyDefaultsPicker {
         }
     }
 
-    Write-OutputColor "  Invalid selection." -color "Error"
+    Write-OutputColor "  Invalid selection. Enter 1-$($files.Count), S, or B." -color "Error"
     return $null
 }
 
@@ -1115,7 +1126,10 @@ function Import-Defaults {
                             $tplData[$fp.Name] = $fp.Value
                         }
                     }
-                    $script:CustomRoleTemplates[$tplProp.Name] = $tplData
+                    # Validate custom template before adding
+                    if (Test-CustomRoleTemplate -Template $tplData -TemplateName $tplProp.Name) {
+                        $script:CustomRoleTemplates[$tplProp.Name] = $tplData
+                    }
                 }
             }
 
@@ -1130,6 +1144,25 @@ function Import-Defaults {
         }
         catch {
             Write-OutputColor "  Warning: Could not load VM defaults from defaults.json: $($_.Exception.Message)" -color "Warning"
+        }
+    }
+
+    # Override centralized timeouts
+    if ($null -ne $merged.Timeouts) {
+        $timeoutSource = $merged.Timeouts
+        if ($timeoutSource -is [PSCustomObject]) {
+            foreach ($key in $timeoutSource.PSObject.Properties.Name) {
+                if ($script:Timeouts.ContainsKey($key)) {
+                    $script:Timeouts[$key] = [int]$timeoutSource.$key
+                }
+            }
+        }
+        elseif ($timeoutSource -is [hashtable]) {
+            foreach ($key in $timeoutSource.Keys) {
+                if ($script:Timeouts.ContainsKey($key)) {
+                    $script:Timeouts[$key] = [int]$timeoutSource[$key]
+                }
+            }
         }
     }
 
@@ -1489,6 +1522,9 @@ function Show-EditDefaults {
                 elseif ($val -match '^\d+$' -and [int]$val -ge 1 -and [int]$val -le $regionKeys.Count) {
                     $script:TimeZoneRegion = $regionKeys[[int]$val - 1]
                     Write-OutputColor "  Timezone region set to $($script:TimeZoneRegion)." -color "Success"
+                }
+                else {
+                    Write-OutputColor "  Invalid selection. Enter 0-$($regionKeys.Count)." -color "Error"
                 }
                 Start-Sleep -Seconds 1
             }
@@ -1902,5 +1938,140 @@ function Show-FirstRunWizard {
     }
     Write-OutputColor "  You can edit these anytime from: Settings > Edit Environment Defaults" -color "Info"
     Write-PressEnter
+}
+
+function Remove-BatchVMs {
+    # List all VMs with checkbox-style selection
+    $vms = Get-VM -ErrorAction SilentlyContinue
+    if ($null -eq $vms) {
+        Write-OutputColor "  No virtual machines found" -color "Info"
+        return
+    }
+
+    Write-OutputColor "`n  Select VMs to remove:" -color "Info"
+    $vmList = @($vms)
+    for ($i = 0; $i -lt $vmList.Count; $i++) {
+        $vm = $vmList[$i]
+        $state = $vm.State.ToString()
+        $stateColor = if ($state -eq 'Running') { "Success" } else { "Warning" }
+        Write-OutputColor "  [$($i+1)] $($vm.Name) ($state)" -color $stateColor
+    }
+
+    Write-OutputColor "`n  Enter VM numbers to remove (comma-separated), or 'cancel':" -color "Info"
+    $selection = Read-Host "  Selection"
+    $navResult = Test-NavigationCommand -UserInput $selection
+    if ($navResult.ShouldReturn) { return }
+
+    # Parse selection, confirm, then remove with option to delete VHDs
+    $indices = $selection -split ',' | ForEach-Object { $_.Trim() }
+    $selectedVMs = @()
+    foreach ($idx in $indices) {
+        $num = 0
+        if ([int]::TryParse($idx, [ref]$num) -and $num -ge 1 -and $num -le $vmList.Count) {
+            $selectedVMs += $vmList[$num - 1]
+        }
+    }
+
+    if (@($selectedVMs).Count -eq 0) {
+        Write-OutputColor "  No valid VMs selected" -color "Warning"
+        return
+    }
+
+    # Show confirmation
+    Write-OutputColor "`n  VMs to be removed:" -color "Warning"
+    foreach ($vm in $selectedVMs) {
+        Write-OutputColor "    - $($vm.Name)" -color "Warning"
+    }
+
+    Write-OutputColor "`n  Also delete associated VHD files? [Y/N]" -color "Warning"
+    $deleteVHDs = Read-Host "  Choice"
+
+    Write-OutputColor "`n  Are you SURE? This cannot be undone. [Y/N]" -color "Error"
+    $confirm = Read-Host "  Confirm"
+    if ($confirm -ne 'Y') {
+        Write-OutputColor "  Operation cancelled" -color "Info"
+        return
+    }
+
+    foreach ($vm in $selectedVMs) {
+        try {
+            if ($vm.State -eq 'Running') {
+                Stop-VM -Name $vm.Name -Force -ErrorAction Stop
+            }
+            if ($deleteVHDs -eq 'Y') {
+                $vhds = Get-VMHardDiskDrive -VMName $vm.Name -ErrorAction SilentlyContinue
+                Remove-VM -Name $vm.Name -Force -ErrorAction Stop
+                foreach ($vhd in $vhds) {
+                    if (Test-Path -LiteralPath $vhd.Path) {
+                        Remove-Item -LiteralPath $vhd.Path -Force
+                    }
+                }
+            } else {
+                Remove-VM -Name $vm.Name -Force -ErrorAction Stop
+            }
+            Write-OutputColor "  Removed: $($vm.Name)" -color "Success"
+            Add-SessionChange -Category "VM" -Description "Removed VM: $($vm.Name)"
+            Clear-MenuCache
+        } catch {
+            Write-OutputColor "  Failed to remove $($vm.Name): $($_.Exception.Message)" -color "Error"
+        }
+    }
+}
+
+function Test-VMMigrationReadiness {
+    $vms = Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Running' }
+    if ($null -eq $vms) {
+        Write-OutputColor "  No running VMs found" -color "Info"
+        return
+    }
+
+    Write-OutputColor "`n  Enter target host for migration:" -color "Info"
+    $targetHost = Read-Host "  Target host"
+    $navResult = Test-NavigationCommand -UserInput $targetHost
+    if ($navResult.ShouldReturn) { return }
+
+    # Test connectivity
+    Write-OutputColor "`n  Checking migration readiness..." -color "Info"
+
+    $pingResult = Test-Connection -ComputerName $targetHost -Count 1 -Quiet -ErrorAction SilentlyContinue
+    if (-not $pingResult) {
+        Write-OutputColor "  Cannot reach $targetHost" -color "Error"
+        return
+    }
+    Write-OutputColor "  Connectivity to ${targetHost}: OK" -color "Success"
+
+    # Check if target is Hyper-V host
+    try {
+        $null = Get-VMHost -ComputerName $targetHost -ErrorAction Stop
+        Write-OutputColor "  Hyper-V on ${targetHost}: OK" -color "Success"
+    } catch {
+        Write-OutputColor "  Cannot connect to Hyper-V on $targetHost" -color "Error"
+        return
+    }
+
+    # Check processor compatibility
+    try {
+        $localProc = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        $remoteProc = Get-CimInstance -ClassName Win32_Processor -ComputerName $targetHost -ErrorAction Stop | Select-Object -First 1
+        if ($localProc.Manufacturer -eq $remoteProc.Manufacturer) {
+            Write-OutputColor "  CPU Manufacturer match: OK ($($localProc.Manufacturer))" -color "Success"
+        } else {
+            Write-OutputColor "  CPU Manufacturer MISMATCH: $($localProc.Manufacturer) vs $($remoteProc.Manufacturer)" -color "Error"
+            Write-OutputColor "  Live migration may fail - use processor compatibility mode" -color "Warning"
+        }
+    } catch {
+        Write-OutputColor "  Could not compare processors: $($_.Exception.Message)" -color "Warning"
+    }
+
+    # Check available memory on target
+    try {
+        $targetMem = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $targetHost -ErrorAction Stop
+        $freeMB = [math]::Round($targetMem.FreePhysicalMemory / 1024)
+        Write-OutputColor "  Available memory on ${targetHost}: ${freeMB} MB" -color "Info"
+    } catch {
+        Write-OutputColor "  Could not check memory on $targetHost" -color "Warning"
+    }
+
+    Write-OutputColor "`n  Pre-flight check complete" -color "Success"
 }
 #endregion

@@ -132,6 +132,9 @@ function Set-VMIPAddress {
         [string]$selectedAdapterName
     )
 
+    # Show current IP configuration summary before prompting for changes
+    Show-IPConfigSummary
+
     # Get current IP configuration
     $currentIP = Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($currentIP) {
@@ -405,6 +408,7 @@ function Set-VMDNSAddress {
                 Set-DnsClientServerAddress -InterfaceAlias $selectedAdapterName -ResetServerAddresses -ErrorAction Stop
                 Write-OutputColor "  DNS set to use DHCP." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set DNS on $selectedAdapterName to DHCP"
+                Clear-MenuCache
                 if ($prevDHCPDns.Count -gt 0) {
                     Add-UndoAction -Category "Network" -Description "Set DNS on $selectedAdapterName to DHCP" -UndoScript {
                         param($Adapter, $OldDNS)
@@ -486,6 +490,43 @@ function Disable-AllIPv6 {
     Clear-MenuCache
 }
 
+# Function to display a clean summary of all IP configurations
+function Show-IPConfigSummary {
+    Write-OutputColor "`n  IP Configuration Summary:" -color "Info"
+
+    try {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' }
+
+        foreach ($adapter in $adapters) {
+            $ipv4 = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne 'WellKnown' }
+            $gateway = (Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue).IPv4DefaultGateway
+            $dns = (Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
+
+            Write-OutputColor "`n  $($adapter.Name) ($($adapter.LinkSpeed)):" -color "Info"
+
+            if ($null -ne $ipv4) {
+                foreach ($ip in $ipv4) {
+                    $origin = $ip.PrefixOrigin.ToString()
+                    $color = if ($origin -eq 'Manual') { "Success" } else { "Info" }
+                    Write-OutputColor "    IP: $($ip.IPAddress)/$($ip.PrefixLength) ($origin)" -color $color
+                }
+            } else {
+                Write-OutputColor "    IP: Not configured" -color "Warning"
+            }
+
+            if ($null -ne $gateway) {
+                Write-OutputColor "    Gateway: $($gateway.NextHop)" -color "Info"
+            }
+
+            if ($null -ne $dns -and @($dns).Count -gt 0) {
+                Write-OutputColor "    DNS: $($dns -join ', ')" -color "Info"
+            }
+        }
+    } catch {
+        Write-OutputColor "  Could not read IP configuration: $($_.Exception.Message)" -color "Warning"
+    }
+}
+
 # Function to rename a network adapter
 function Rename-NetworkAdapter {
     Clear-Host
@@ -523,7 +564,7 @@ function Rename-NetworkAdapter {
     }
 
     if (-not ($selection -match '^\d+$') -or -not $adapterMap.ContainsKey([int]$selection)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($adapterMap.Count)." -color "Error"
         return
     }
 

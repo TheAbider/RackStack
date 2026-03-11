@@ -40,6 +40,22 @@ if (-not (Test-Path $monoPath)) {
 
     # Modules in order
     $initModuleFiles = Get-ChildItem $modulesDir -Filter "*.ps1" | Sort-Object Name
+
+    # Verify expected module count
+    $expectedModuleCount = 64
+    $actualModuleCount = @($initModuleFiles).Count
+    if ($actualModuleCount -ne $expectedModuleCount) {
+        Write-Warning "Expected $expectedModuleCount modules but found $actualModuleCount"
+        $expectedNumbers = 0..63
+        foreach ($num in $expectedNumbers) {
+            $prefix = "{0:D2}-" -f $num
+            $found = $initModuleFiles | Where-Object { $_.Name -like "$prefix*" }
+            if ($null -eq $found) {
+                Write-Warning "  Missing module: $prefix*.ps1"
+            }
+        }
+    }
+
     foreach ($file in $initModuleFiles) {
         if ($file.Name -eq "55-QoLFeatures.ps1") {
             # Start of shared QoL region - omit #endregion (last line)
@@ -65,6 +81,22 @@ if (-not (Test-Path $monoPath)) {
     [System.IO.File]::WriteAllLines($monoPath, $lines.ToArray(), $utf8Bom)
     Write-Host "Built monolithic from scratch: $($lines.Count) lines" -ForegroundColor Green
 
+    # Verify written file integrity
+    if (Test-Path -LiteralPath $monoPath) {
+        $hash = (Get-FileHash -LiteralPath $monoPath -Algorithm SHA256).Hash
+        Write-Host "  Monolithic SHA256: $hash"
+        try {
+            $lineCount = @(Get-Content -LiteralPath $monoPath).Count
+            Write-Host "  Monolithic line count: $lineCount"
+        } catch {
+            Write-Error "  Written file is not readable: $_"
+            exit 1
+        }
+    } else {
+        Write-Error "  Monolithic file was not created!"
+        exit 1
+    }
+
     # Verify parse
     $errors = $null
     [System.Management.Automation.PSParser]::Tokenize(([System.IO.File]::ReadAllText($monoPath, $utf8Bom)), [ref]$errors) | Out-Null
@@ -86,6 +118,21 @@ Write-Host "Monolithic: $($monoLines.Count) lines"
 
 # Get all module files in order
 $moduleFiles = Get-ChildItem $modulesDir -Filter "*.ps1" | Sort-Object Name
+
+# Verify expected module count
+$expectedModuleCount = 64
+$actualModuleCount = @($moduleFiles).Count
+if ($actualModuleCount -ne $expectedModuleCount) {
+    Write-Warning "Expected $expectedModuleCount modules but found $actualModuleCount"
+    $expectedNumbers = 0..63
+    foreach ($num in $expectedNumbers) {
+        $prefix = "{0:D2}-" -f $num
+        $found = $moduleFiles | Where-Object { $_.Name -like "$prefix*" }
+        if ($null -eq $found) {
+            Write-Warning "  Missing module: $prefix*.ps1"
+        }
+    }
+}
 
 # Special cases: 55-QoLFeatures and 56-OperationsMenu share the QOL region
 # Module 55 = first half, Module 56 = second half (gets #region prepended)
@@ -248,11 +295,38 @@ if ($lastNonBlank -ne "Assert-Elevation") {
     Write-Host "  Appended missing Assert-Elevation entry point" -ForegroundColor Yellow
 }
 
+# Backup existing monolithic before overwrite
+$archiveDir = Join-Path $buildsDir "archive"
+if (-not (Test-Path -LiteralPath $archiveDir)) { $null = New-Item -Path $archiveDir -ItemType Directory -Force }
+$backupPath = Join-Path $archiveDir "$toolFullName v$scriptVersion.pre-sync.ps1"
+try {
+    Copy-Item -LiteralPath $monoPath -Destination $backupPath -Force
+    Write-Host "  Backed up existing monolithic to $backupPath"
+} catch {
+    Write-Warning "  Could not backup existing monolithic: $_"
+}
+
 # Write result
 [System.IO.File]::WriteAllLines($monoPath, $result.ToArray(), $utf8Bom)
 $finalCount = $result.Count
 Write-Host ""
 Write-Host "Monolithic updated: $($monoLines.Count) -> $finalCount lines" -ForegroundColor Green
+
+# Verify written file integrity
+if (Test-Path -LiteralPath $monoPath) {
+    $hash = (Get-FileHash -LiteralPath $monoPath -Algorithm SHA256).Hash
+    Write-Host "  Monolithic SHA256: $hash"
+    try {
+        $lineCount = @(Get-Content -LiteralPath $monoPath).Count
+        Write-Host "  Monolithic line count: $lineCount"
+    } catch {
+        Write-Error "  Written file is not readable: $_"
+        exit 1
+    }
+} else {
+    Write-Error "  Monolithic file was not created!"
+    exit 1
+}
 
 # Verify parse
 $errors = $null

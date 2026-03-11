@@ -3,6 +3,7 @@
 $script:VMDeploymentMode = $null        # "Standalone" or "Cluster"
 $script:VMDeploymentTarget = $null       # Computer name or cluster name
 $script:VMDeploymentCredential = $null   # Credentials if needed
+$script:VMCredentialTimestamp = $null     # When credentials were stored
 $script:VMDeploymentSiteNumber = $null   # Site number (e.g., "123456")
 $script:VMDeploymentConnected = $false   # Connection status
 
@@ -198,6 +199,18 @@ function Find-LocalCluster {
         Found = $false
         ClusterName = $null
     }
+}
+
+# Function to check if stored VM deployment credentials have expired (30 min timeout)
+function Test-CredentialExpired {
+    if ($null -eq $script:VMDeploymentCredential) {
+        return $false
+    }
+    if ($null -eq $script:VMCredentialTimestamp) {
+        return $true
+    }
+    $elapsed = (Get-Date) - $script:VMCredentialTimestamp
+    return ($elapsed.TotalMinutes -ge 30)
 }
 
 # Function to check if VM name exists
@@ -488,6 +501,7 @@ function Connect-StandaloneHost {
                 $script:VMDeploymentMode = "Standalone"
                 $script:VMDeploymentTarget = $env:COMPUTERNAME
                 $script:VMDeploymentCredential = $null
+                $script:VMCredentialTimestamp = $null
                 $script:VMDeploymentConnected = $true
 
                 Write-OutputColor "  Connected to local Hyper-V host: $env:COMPUTERNAME" -color "Success"
@@ -523,13 +537,14 @@ function Connect-StandaloneHost {
                 $script:VMDeploymentMode = "Standalone"
                 $script:VMDeploymentTarget = $result.HostName
                 $script:VMDeploymentCredential = $null
+                $script:VMCredentialTimestamp = $null
                 $script:VMDeploymentConnected = $true
 
                 Write-OutputColor "  Connected to: $($result.HostName)" -color "Success"
                 return $true
             }
             else {
-                Write-OutputColor "  Connection failed with current credentials." -color "Warning"
+                Write-OutputColor "  Connection failed with current credentials." -color "Error"
                 Write-OutputColor "  Error: $($result.Message)" -color "Info"
                 Write-OutputColor "" -color "Info"
 
@@ -547,6 +562,7 @@ function Connect-StandaloneHost {
                                 $script:VMDeploymentMode = "Standalone"
                                 $script:VMDeploymentTarget = $result.HostName
                                 $script:VMDeploymentCredential = $cred
+                                $script:VMCredentialTimestamp = Get-Date
                                 $script:VMDeploymentConnected = $true
 
                                 Write-OutputColor "  Connected to: $($result.HostName)" -color "Success"
@@ -661,12 +677,12 @@ function Connect-FailoverCluster {
                 $clusterName = $null
             }
             else {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 0-$manualIndex." -color "Error"
                 return $false
             }
         }
         else {
-            Write-OutputColor "  Invalid choice." -color "Error"
+            Write-OutputColor "  Invalid choice. Enter 0-$manualIndex." -color "Error"
             return $false
         }
     }
@@ -702,6 +718,7 @@ function Connect-FailoverCluster {
         $script:VMDeploymentMode = "Cluster"
         $script:VMDeploymentTarget = $result.ClusterName
         $script:VMDeploymentCredential = $null
+        $script:VMCredentialTimestamp = $null
         $script:VMDeploymentConnected = $true
 
         Write-OutputColor "" -color "Info"
@@ -719,7 +736,7 @@ function Connect-FailoverCluster {
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         $errorMsg = "  $($result.Message)"
         if ($errorMsg.Length -gt 72) { $errorMsg = $errorMsg.Substring(0, 69) + "..." }
-        Write-OutputColor "  │$($errorMsg.PadRight(72))│" -color "Warning"
+        Write-OutputColor "  │$($errorMsg.PadRight(72))│" -color "Error"
         Write-OutputColor "  │                                                                        │" -color "Info"
         Write-OutputColor "  │  Troubleshooting:                                                      │" -color "Info"
         Write-OutputColor "  │$("   - Verify the cluster name is correct".PadRight(72))│" -color "Info"
@@ -967,7 +984,7 @@ function Show-StandardVMTemplates {
         }
     }
 
-    Write-OutputColor "  Invalid selection." -color "Error"
+    Write-OutputColor "  Invalid selection. Enter 1-$index." -color "Error"
     return $null
 }
 
@@ -1174,7 +1191,7 @@ function Set-VMConfigCPU {
         }
 
         Write-OutputColor "  Invalid value. Must be between 1 and 64." -color "Error"
-        Start-Sleep -Seconds 1
+        Start-Sleep -Milliseconds 300
     }
 }
 
@@ -1287,7 +1304,7 @@ function Set-VMConfigDisks {
                 $diskSizeInt = 0
                 if ($diskSize -notmatch '^\d+$' -or -not [int]::TryParse($diskSize, [ref]$diskSizeInt) -or $diskSizeInt -lt 1 -or $diskSizeInt -gt 65536) {
                     Write-OutputColor "  Invalid size. Enter 1-65536 GB." -color "Error"
-                    Start-Sleep -Seconds 1
+                    Start-Sleep -Milliseconds 300
                     continue
                 }
 
@@ -1302,7 +1319,6 @@ function Set-VMConfigDisks {
                 }
 
                 Write-OutputColor "  Disk added: $diskName ($diskSize GB, $diskType)" -color "Success"
-                Start-Sleep -Seconds 1
             }
             "E" {
                 # Edit disk
@@ -1320,7 +1336,7 @@ function Set-VMConfigDisks {
                         }
                         elseif ($newSize -ne '') {
                             Write-OutputColor "  Invalid size. Enter 1-65536 GB." -color "Error"
-                            Start-Sleep -Seconds 1
+                            Start-Sleep -Milliseconds 300
                         }
 
                         Write-OutputColor "  Current type: $($disk.Type). [1] Fixed [2] Dynamic (Enter to keep):" -color "Info"
@@ -1329,7 +1345,6 @@ function Set-VMConfigDisks {
                         elseif ($newType -eq "2") { $disk.Type = "Dynamic" }
 
                         Write-OutputColor "  Disk updated." -color "Success"
-                        Start-Sleep -Seconds 1
                     }
                 }
             }
@@ -1337,7 +1352,7 @@ function Set-VMConfigDisks {
                 # Delete disk
                 if ($Config.Disks.Count -le 1) {
                     Write-OutputColor "  Cannot delete the last disk. VM must have at least one disk." -color "Warning"
-                    Start-Sleep -Seconds 1
+                    Start-Sleep -Milliseconds 300
                     continue
                 }
 
@@ -1349,7 +1364,6 @@ function Set-VMConfigDisks {
                         $diskName = $Config.Disks[$idx].Name
                         $Config.Disks = @(for ($j = 0; $j -lt $Config.Disks.Count; $j++) { if ($j -ne $idx) { $Config.Disks[$j] } })
                         Write-OutputColor "  Deleted disk: $diskName" -color "Success"
-                        Start-Sleep -Seconds 1
                     }
                 }
             }
@@ -1494,7 +1508,6 @@ function Set-VMConfigNICs {
                 }
 
                 Write-OutputColor "  NIC added." -color "Success"
-                Start-Sleep -Seconds 1
             }
             "E" {
                 # Edit NIC
@@ -1539,15 +1552,14 @@ function Set-VMConfigNICs {
                         }
 
                         Write-OutputColor "  NIC updated." -color "Success"
-                        Start-Sleep -Seconds 1
                     }
                 }
             }
             "D" {
                 # Delete NIC
                 if ($Config.NICs.Count -le 1) {
-                    Write-OutputColor "  Cannot delete the last NIC. VM must have at least one NIC." -color "Warning"
-                    Start-Sleep -Seconds 1
+                    Write-OutputColor "  Cannot remove last NIC - VM requires at least one network adapter." -color "Warning"
+                    Start-Sleep -Milliseconds 300
                     continue
                 }
 
@@ -1558,7 +1570,6 @@ function Set-VMConfigNICs {
                     if ($idx -ge 0 -and $idx -lt $Config.NICs.Count) {
                         $Config.NICs = @(for ($j = 0; $j -lt $Config.NICs.Count; $j++) { if ($j -ne $idx) { $Config.NICs[$j] } })
                         Write-OutputColor "  NIC deleted." -color "Success"
-                        Start-Sleep -Seconds 1
                     }
                 }
             }
@@ -1990,6 +2001,7 @@ function New-DeployedVM {
         }
 
         Add-SessionChange -Category "VM Deployment" -Description "Created VM: $($Config.VMName) $(if ($Config.UseVHD) { '(from sysprepped VHD)' })"
+        Clear-MenuCache
 
         return $true
     }
@@ -2100,12 +2112,10 @@ function Invoke-VMConfigEditAction {
         "5" {
             $Config.GuestServices = -not $Config.GuestServices
             Write-OutputColor "  Guest Services: $(if ($Config.GuestServices) { 'Enabled' } else { 'Disabled' })" -color "Info"
-            Start-Sleep -Seconds 1
         }
         "6" {
             $Config.TimeSyncWithHost = -not $Config.TimeSyncWithHost
             Write-OutputColor "  Time Sync with Host: $(if ($Config.TimeSyncWithHost) { 'Enabled' } else { 'Disabled' })" -color "Info"
-            Start-Sleep -Seconds 1
         }
         "7" {
             if ($Config.OSType -eq "Windows") {
@@ -2114,7 +2124,6 @@ function Invoke-VMConfigEditAction {
                     $Config.VHDOSVersion = $null
                     $Config.VHDSourcePath = $null
                     Write-OutputColor "  Switched to blank disk mode." -color "Info"
-                    Start-Sleep -Seconds 1
                 }
                 else {
                     $osVersion = Show-OSVersionMenu -Title "SELECT OS VERSION FOR VHD"
@@ -2332,7 +2341,7 @@ function Publish-CustomVM {
                 }
                 default {
                     Write-OutputColor "  Invalid choice. Enter 1-7, C, or X." -color "Error"
-                    Start-Sleep -Seconds 1
+                    Start-Sleep -Milliseconds 300
                 }
             }
         }
@@ -2553,8 +2562,52 @@ function Start-BatchDeployment {
         }
     }
 
+    # Review summary table before deployment
+    $vmCount = $script:VMDeploymentQueue.Count
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  DEPLOYMENT REVIEW".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    # Column headers: 21+6+9+7+6+22 = 71 chars (72 inner - 1 leading space)
+    Write-Host "  │ " -NoNewline -ForegroundColor Cyan
+    Write-Host "VM Name              " -NoNewline -ForegroundColor White
+    Write-Host "vCPUs " -NoNewline -ForegroundColor White
+    Write-Host "RAM      " -NoNewline -ForegroundColor White
+    Write-Host "Disks  " -NoNewline -ForegroundColor White
+    Write-Host "NICs  " -NoNewline -ForegroundColor White
+    Write-Host "OS Source             " -NoNewline -ForegroundColor White
+    Write-Host "│" -ForegroundColor Cyan
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    foreach ($vm in $script:VMDeploymentQueue) {
+        $nameCol = $vm.VMName
+        if ($nameCol.Length -gt 21) { $nameCol = $nameCol.Substring(0, 18) + "..." }
+        $nameCol = $nameCol.PadRight(21)
+        $cpuCol = "$($vm.vCPU)".PadRight(6)
+        $ramCol = "$($vm.MemoryGB) GB".PadRight(9)
+        $diskCount = @($vm.Disks).Count
+        $diskCol = "$diskCount".PadRight(7)
+        $nicCount = @($vm.NICs).Count
+        $nicCol = "$nicCount".PadRight(6)
+        $osSource = if ($vm.UseVHD) { "VHD $($vm.VHDOSVersion)" } else { "Blank" }
+        $osCol = $osSource.PadRight(22)
+
+        Write-Host "  │ " -NoNewline -ForegroundColor Cyan
+        Write-Host "$nameCol" -NoNewline -ForegroundColor Green
+        Write-Host "$cpuCol" -NoNewline -ForegroundColor White
+        Write-Host "$ramCol" -NoNewline -ForegroundColor White
+        Write-Host "$diskCol" -NoNewline -ForegroundColor White
+        Write-Host "$nicCol" -NoNewline -ForegroundColor White
+        Write-Host "$osCol" -NoNewline -ForegroundColor White
+        Write-Host "│" -ForegroundColor Cyan
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
     # Final confirmation
-    if (-not (Confirm-UserAction -Message "Deploy $($script:VMDeploymentQueue.Count) VM(s) now?")) {
+    if (-not (Confirm-UserAction -Message "Deploy $vmCount VM(s)?")) {
         Write-OutputColor "  Batch deployment cancelled. VMs are still in the queue." -color "Info"
         return
     }
@@ -2859,7 +2912,6 @@ function Show-VMQueueManagement {
                 if (Confirm-UserAction -Message "Clear all $queueCount VM(s) from the queue?") {
                     $script:VMDeploymentQueue = @()
                     Write-OutputColor "  Queue cleared." -color "Success"
-                    Start-Sleep -Seconds 1
                     return
                 }
             }
@@ -2875,7 +2927,7 @@ function Show-VMQueueManagement {
                     }
                     else {
                         Write-OutputColor "  Invalid choice. Enter 1-$queueCount to select a VM." -color "Error"
-                        Start-Sleep -Seconds 1
+                        Start-Sleep -Milliseconds 300
                     }
                 }
                 else {
@@ -2950,9 +3002,44 @@ function Start-VMDeployment {
                 $script:VMDeploymentConnected = $false
                 $script:VMDeploymentTarget = $null
                 $script:VMDeploymentCredential = $null
+                $script:VMCredentialTimestamp = $null
                 $script:VMDeploymentMode = $null
                 continue
             }
+        }
+
+        # Check for expired credentials before operations
+        if (Test-CredentialExpired) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Stored credentials expired (30 min timeout). Please re-enter." -color "Warning"
+            $script:VMDeploymentCredential = $null
+            $script:VMCredentialTimestamp = $null
+            Write-OutputColor "" -color "Info"
+
+            try {
+                $cred = Get-Credential -Message "Enter credentials for $($script:VMDeploymentTarget)"
+                if ($cred) {
+                    $script:VMDeploymentCredential = $cred
+                    $script:VMCredentialTimestamp = Get-Date
+                    Write-OutputColor "  Credentials updated." -color "Success"
+                }
+                else {
+                    Write-OutputColor "  No credentials provided. Disconnecting." -color "Warning"
+                    $script:VMDeploymentConnected = $false
+                    $script:VMDeploymentTarget = $null
+                    $script:VMDeploymentMode = $null
+                    continue
+                }
+            }
+            catch {
+                Write-OutputColor "  Credential error: $_" -color "Error"
+                $script:VMDeploymentConnected = $false
+                $script:VMDeploymentTarget = $null
+                $script:VMDeploymentMode = $null
+                continue
+            }
+
+            Write-PressEnter
         }
 
         # Show main deployment menu
@@ -3002,6 +3089,7 @@ function Start-VMDeployment {
                     $script:VMDeploymentConnected = $false
                     $script:VMDeploymentTarget = $null
                     $script:VMDeploymentCredential = $null
+                    $script:VMCredentialTimestamp = $null
                     $script:VMDeploymentMode = $null
                     $script:VMDeploymentQueue = @()
                     $script:SelectedHostDrive = $null
@@ -3009,7 +3097,6 @@ function Start-VMDeployment {
                     $script:HostISOPath = $null
                     $script:StorageInitialized = $false
                     Write-OutputColor "  Connection reset. Select a new deployment target." -color "Success"
-                    Start-Sleep -Seconds 1
                 }
             }
             "9" {
@@ -3152,11 +3239,11 @@ function Show-PreFlightTable {
 
     foreach ($r in $PreFlightResult.Results) {
         $color = switch ($r.Status) { "OK" { "Success" }; "WARN" { "Warning" }; "FAIL" { "Error" }; default { "Info" } }
-        $resCol = $r.Resource.PadRight(12).Substring(0, 12)
-        $reqCol = $r.Required
+        $resCol = if ($r.Resource) { $r.Resource.PadRight(12).Substring(0, 12) } else { "(unknown)   " }
+        $reqCol = if ($r.Required) { $r.Required } else { "" }
         if ($reqCol.Length -gt 25) { $reqCol = $reqCol.Substring(0, 22) + "..." }
         $reqCol = $reqCol.PadRight(25)
-        $availCol = $r.Available
+        $availCol = if ($r.Available) { $r.Available } else { "" }
         if ($availCol.Length -gt 21) { $availCol = $availCol.Substring(0, 18) + "..." }
         $availCol = $availCol.PadRight(21)
         $statCol = $r.Status.PadRight(4)
@@ -3272,7 +3359,7 @@ function Show-SmokeSummary {
     Write-OutputColor "  ├──────────────────────┼──────────┼──────────┼──────────┼────────────────┤" -color "Info"
 
     foreach ($sr in $SmokeResults) {
-        $vmCol = $sr.VMName
+        $vmCol = if ($sr.VMName) { $sr.VMName } else { "(unknown)" }
         if ($vmCol.Length -gt 20) { $vmCol = $vmCol.Substring(0, 17) + "..." }
         $vmCol = $vmCol.PadRight(20)
 

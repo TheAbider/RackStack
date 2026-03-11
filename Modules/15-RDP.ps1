@@ -68,6 +68,7 @@ function Enable-RDP {
         }
 
         Add-SessionChange -Category "System" -Description "Enabled Remote Desktop"
+        Clear-MenuCache
         if (-not $rdpAlreadyEnabled) {
             Add-UndoAction -Category "System" -Description "Enabled Remote Desktop" -UndoScript {
                 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 1 -ErrorAction SilentlyContinue
@@ -75,10 +76,64 @@ function Enable-RDP {
             }
         }
         Clear-MenuCache  # Invalidate cache after change
+
+        # Show current security posture
+        Show-RDPSecurityStatus
     }
     catch {
         Write-OutputColor "  Error configuring Remote Desktop: $_" -color "Error"
     }
+}
+
+# Function to display current RDP configuration and security settings
+function Show-RDPSecurityStatus {
+    Write-OutputColor "`n  Remote Desktop Security Status:" -color "Info"
+
+    # Check if RDP is enabled
+    try {
+        $rdpEnabled = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -ErrorAction SilentlyContinue).fDenyTSConnections
+        $status = if ($rdpEnabled -eq 0) { "Enabled" } else { "Disabled" }
+        $color = if ($rdpEnabled -eq 0) { "Success" } else { "Warning" }
+        Write-OutputColor "  RDP Status: $status" -color $color
+    } catch {
+        Write-OutputColor "  RDP Status: Unknown" -color "Warning"
+    }
+
+    # Check NLA requirement
+    try {
+        $nla = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ErrorAction SilentlyContinue).UserAuthentication
+        $nlaStatus = if ($nla -eq 1) { "Required (Secure)" } else { "Not Required" }
+        $nlaColor = if ($nla -eq 1) { "Success" } else { "Warning" }
+        Write-OutputColor "  Network Level Auth: $nlaStatus" -color $nlaColor
+    } catch {
+        Write-OutputColor "  Network Level Auth: Unknown" -color "Warning"
+    }
+
+    # Check security layer
+    try {
+        $secLayer = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'SecurityLayer' -ErrorAction SilentlyContinue).SecurityLayer
+        $layerName = switch ($secLayer) {
+            0 { "RDP Security (Legacy)" }
+            1 { "Negotiate" }
+            2 { "TLS (Secure)" }
+            default { "Unknown ($secLayer)" }
+        }
+        $layerColor = if ($secLayer -eq 2) { "Success" } elseif ($secLayer -eq 1) { "Info" } else { "Warning" }
+        Write-OutputColor "  Security Layer: $layerName" -color $layerColor
+    } catch {
+        Write-OutputColor "  Security Layer: Unknown" -color "Warning"
+    }
+
+    # Check firewall rule
+    $rdpRule = Get-NetFirewallRule -DisplayName "Remote Desktop*" -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq $true }
+    $ruleCount = @($rdpRule).Count
+    Write-OutputColor "  Firewall Rules: $ruleCount enabled" -color $(if ($ruleCount -gt 0) { "Success" } else { "Warning" })
+
+    # Check listening port
+    try {
+        $port = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'PortNumber' -ErrorAction SilentlyContinue).PortNumber
+        Write-OutputColor "  Listening Port: $port" -color "Info"
+    } catch { }
 }
 
 # Function to enable PowerShell Remoting (WinRM) securely
@@ -304,6 +359,7 @@ function Enable-PowerShellRemoting {
         Write-OutputColor "  Invoke-Command -ComputerName $env:COMPUTERNAME -ScriptBlock { ... }" -color "Success"
 
         Add-SessionChange -Category "System" -Description "Enabled PowerShell Remoting (WinRM)"
+        Clear-MenuCache
         if ($winrmStatus -ne "Running") {
             Add-UndoAction -Category "System" -Description "Enabled PowerShell Remoting (WinRM)" -UndoScript {
                 Disable-PSRemoting -Force -ErrorAction SilentlyContinue

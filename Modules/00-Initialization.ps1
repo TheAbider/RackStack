@@ -32,6 +32,27 @@ $script:FeatureInstallTimeoutSeconds = 1800  # 30 minutes max for Windows Featur
 $script:LargeFileDownloadTimeoutSeconds = 3600  # 1 hour for ISO/VHD downloads
 $script:DefaultDownloadTimeoutSeconds = 1800    # 30 minutes for standard downloads
 $script:MaxDownloadRetries = 3                      # Max retry attempts for large file downloads (>500MB)
+
+# Centralized timeout configuration (seconds)
+# These can be overridden via defaults.json "Timeouts" section
+$script:Timeouts = @{
+    CIMQuery            = 10      # Standard CIM/WMI queries
+    CIMQuerySlow        = 15      # CIM queries on older/slower systems
+    WMIQuery            = 15      # Legacy WMI queries
+    iSCSIConnection     = 25      # iSCSI target connection
+    SubnetSweep         = 30      # Per-batch network sweep
+    DomainJoin          = 120     # Domain join operation
+    WindowsUpdate       = 300     # Windows Update cycle
+    FeatureInstall      = 1800    # Windows feature installation
+    LargeFileDownload   = 3600    # Large file download
+    VMCreation          = 60      # VM creation
+    ClusterOperation    = 300     # Cluster formation/validation
+    DCPromotion         = 600     # Domain controller promotion
+    CredentialExpiry    = 1800    # Cached credential expiry (30 min)
+    MenuCache           = 60      # Menu dashboard cache TTL
+    HealthCheckCache    = 30      # Health check result cache TTL
+}
+
 # Configurable MSP agent installer (override via defaults.json AgentInstaller)
 $script:AgentInstaller = @{
     ToolName        = "MSP"
@@ -139,13 +160,13 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.21.15"
+$script:ScriptVersion = "1.21.16"
 $script:ScriptStartTime = Get-Date
 
 # OS version detection (for feature compatibility)
 # 2012/2012 R2 lack SET, Storage Replica, Defender PowerShell module
 # 2008 R2 SP1 supported with WMF 5.1 installed (run Install-Prerequisites.ps1)
-$script:OSBuildNumber = try { [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop).CurrentBuildNumber } catch { [int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber }
+$script:OSBuildNumber = try { [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop).CurrentBuildNumber } catch { try { [int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber } catch { 0 } }
 $script:IsServer2008R2 = $script:OSBuildNumber -eq 7601        # 6.1.7601 (SP1)
 $script:IsServer2012 = $script:OSBuildNumber -eq 9200           # 6.2.9200
 $script:IsServer2012R2 = $script:OSBuildNumber -eq 9600         # 6.3.9600

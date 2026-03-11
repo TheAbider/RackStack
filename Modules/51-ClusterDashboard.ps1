@@ -88,7 +88,7 @@ function Show-ClusterDashboard {
             $bar = "[" + ("█" * $filled) + ("░" * $empty) + "]"
 
             $pctColor = if ($usedPct -lt 70) { "Success" } elseif ($usedPct -lt 90) { "Warning" } else { "Error" }
-            $csvName = if ($csv.Name.Length -gt 20) { $csv.Name.Substring(0,17) + "..." } else { $csv.Name.PadRight(20) }
+            $csvName = if ($csv.Name -and $csv.Name.Length -gt 20) { $csv.Name.Substring(0,17) + "..." } elseif ($csv.Name) { $csv.Name.PadRight(20) } else { "(unknown)".PadRight(20) }
 
             $csvLine = "  $csvName ${usedGB}GB/${totalGB}GB (${usedPct}%) $bar"
             Write-OutputColor "  │$($csvLine.PadRight(72))│" -color $pctColor
@@ -107,7 +107,7 @@ function Show-ClusterDashboard {
     foreach ($res in $resources | Select-Object -First 5) {
         $resStatus = if ($res.State -eq "Online") { "[●]" } else { "[○]" }
         $resColor = if ($res.State -eq "Online") { "Success" } else { "Error" }
-        $resName = if ($res.Name.Length -gt 40) { $res.Name.Substring(0,37) + "..." } else { $res.Name.PadRight(40) }
+        $resName = if ($res.Name -and $res.Name.Length -gt 40) { $res.Name.Substring(0,37) + "..." } elseif ($res.Name) { $res.Name.PadRight(40) } else { "(unknown)".PadRight(40) }
         $resLine = "  $resStatus $resName $($res.State)"
         Write-OutputColor "  │$($resLine.PadRight(72))│" -color $resColor
     }
@@ -174,7 +174,7 @@ function Start-ClusterNodeDrain {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $nodeMap.ContainsKey($choice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($nodes.Count) or B." -color "Error"
         return
     }
 
@@ -196,6 +196,7 @@ function Start-ClusterNodeDrain {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Node '$selectedNode' has been drained and paused." -color "Success"
         Add-SessionChange -Category "Cluster" -Description "Drained node $selectedNode"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error draining node: $_" -color "Error"
@@ -244,7 +245,7 @@ function Resume-ClusterNodeFromDrain {
     if ($navResult.ShouldReturn) { return }
 
     if (-not $nodeMap.ContainsKey($choice)) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($pausedNodes.Count) or B." -color "Error"
         return
     }
 
@@ -266,6 +267,7 @@ function Resume-ClusterNodeFromDrain {
 
         Write-OutputColor "  Node '$selectedNode' has been resumed." -color "Success"
         Add-SessionChange -Category "Cluster" -Description "Resumed node $selectedNode (failback: $failback)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Error resuming node: $_" -color "Error"
@@ -364,6 +366,8 @@ function Show-ClusterOperationsMenu {
         Write-MenuItem -Text "[4]  CSV Health Status"
         Write-MenuItem -Text "[5]  Cluster Readiness Check"
         Write-MenuItem -Text "[6]  CSV Validation"
+        Write-MenuItem -Text "[7]  Cross-Node Latency Test"
+        Write-MenuItem -Text "[8]  Resource Group Status"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -398,13 +402,90 @@ function Show-ClusterOperationsMenu {
                 Initialize-ClusterCSV
                 Write-PressEnter
             }
+            "7" {
+                Test-ClusterNetworkLatency
+                Write-PressEnter
+            }
+            "8" {
+                Show-ClusterResourceStatus
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
+    }
+}
+
+# Function to measure network latency between cluster nodes
+function Test-ClusterNetworkLatency {
+    try {
+        $nodes = @(Get-ClusterNode -ErrorAction Stop)
+        if ($nodes.Count -lt 2) {
+            Write-OutputColor "  Need at least 2 cluster nodes for latency test" -color "Warning"
+            return
+        }
+
+        Write-OutputColor "`n  Cluster Node Network Latency:" -color "Info"
+
+        $localNode = $env:COMPUTERNAME
+        foreach ($node in $nodes) {
+            if ($node.Name -eq $localNode) { continue }
+            if ($node.State -ne 'Up') {
+                Write-OutputColor "  $localNode -> $($node.Name): Node is $($node.State)" -color "Warning"
+                continue
+            }
+
+            try {
+                $pingResults = Test-Connection -ComputerName $node.Name -Count 4 -ErrorAction Stop
+                $avg = [math]::Round(($pingResults | Measure-Object -Property ResponseTime -Average).Average, 1)
+                $max = ($pingResults | Measure-Object -Property ResponseTime -Maximum).Maximum
+
+                $color = "Success"
+                if ($avg -gt 5) { $color = "Warning" }
+                if ($avg -gt 20) { $color = "Error" }
+
+                Write-OutputColor "  $localNode -> $($node.Name): Avg ${avg}ms, Max ${max}ms" -color $color
+            } catch {
+                Write-OutputColor "  $localNode -> $($node.Name): UNREACHABLE" -color "Error"
+            }
+        }
+
+        Write-OutputColor "`n  Thresholds: Green <5ms, Yellow 5-20ms, Red >20ms" -color "Info"
+    } catch {
+        Write-OutputColor "  Could not test cluster latency: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# Function to show all cluster resource groups and their status
+function Show-ClusterResourceStatus {
+    try {
+        $groups = Get-ClusterGroup -ErrorAction Stop
+
+        Write-OutputColor "`n  Cluster Resource Groups:" -color "Info"
+
+        $offlineCount = 0
+        foreach ($group in $groups) {
+            $state = $group.State.ToString()
+            $color = switch ($state) {
+                'Online'          { "Success" }
+                'PartiallyOnline' { "Warning" }
+                'Offline'         { "Error"; $offlineCount++ }
+                'Failed'          { "Error"; $offlineCount++ }
+                default           { "Info" }
+            }
+
+            $groupName = if ($group.Name -and $group.Name.Length -gt 30) { $group.Name.Substring(0, 27) + "..." } elseif ($group.Name) { $group.Name } else { "(unknown)" }
+            Write-OutputColor "  $groupName  Owner: $($group.OwnerNode)  State: $state" -color $color
+        }
+
+        $total = @($groups).Count
+        Write-OutputColor "`n  Total: $total groups, $offlineCount offline/failed" -color "Info"
+    } catch {
+        Write-OutputColor "  Could not get cluster resources: $($_.Exception.Message)" -color "Error"
     }
 }
 
@@ -553,7 +634,7 @@ function Initialize-ClusterCSV {
         Write-OutputColor "" -color "Info"
     }
 
-    $summaryColor = if ($issues -eq 0) { "Success" } else { "Warning" }
+    $summaryColor = if ($issues -eq 0) { "Success" } else { "Error" }
     Write-OutputColor "  CSV VALIDATION: $($csvs.Count) volume(s) checked, $issues issue(s)" -color $summaryColor
     Add-SessionChange -Category "Cluster" -Description "CSV validation: $($csvs.Count) volumes, $issues issues"
 }

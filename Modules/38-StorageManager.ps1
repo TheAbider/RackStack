@@ -53,6 +53,50 @@ function Get-DiskHealthStatus {
     }
 }
 
+# Function to check if a disk is the system/boot disk
+function Test-SystemDisk {
+    param(
+        [Parameter(Mandatory=$true)]
+        [object]$Disk
+    )
+
+    $diskNumber = if ($Disk -is [int]) { $Disk } else { $Disk.Number }
+
+    # Check IsBoot/IsSystem properties on the disk object
+    if ($Disk -isnot [int]) {
+        if ($Disk.IsBoot -eq $true -or $Disk.IsSystem -eq $true) {
+            return $true
+        }
+    }
+
+    # Also check by OS partition location
+    try {
+        $systemDrive = $env:SystemDrive.TrimEnd(':')
+        $osPartition = Get-Partition -DriveLetter $systemDrive -ErrorAction SilentlyContinue
+        if ($null -ne $osPartition -and $osPartition.DiskNumber -eq $diskNumber) {
+            return $true
+        }
+    }
+    catch {
+        # Silently continue if we can't determine
+    }
+
+    # Check via Get-Disk if we received an int
+    if ($Disk -is [int]) {
+        try {
+            $diskObj = Get-Disk -Number $diskNumber -ErrorAction SilentlyContinue
+            if ($null -ne $diskObj -and ($diskObj.IsBoot -eq $true -or $diskObj.IsSystem -eq $true)) {
+                return $true
+            }
+        }
+        catch {
+            # Silently continue
+        }
+    }
+
+    return $false
+}
+
 # Function to display all disks with details
 function Show-AllDisks {
     Clear-Host
@@ -92,10 +136,25 @@ function Show-AllDisks {
             default { "Info" }
         }
 
+        # System/boot disk indicator
+        $diskLabel = ""
+        if ($disk.IsBoot -eq $true -and $disk.IsSystem -eq $true) {
+            $diskLabel = " (System/Boot)"
+        } elseif ($disk.IsSystem -eq $true) {
+            $diskLabel = " (System)"
+        } elseif ($disk.IsBoot -eq $true) {
+            $diskLabel = " (Boot)"
+        }
+
         Write-OutputColor "$("$($disk.Number)".PadRight(6)) " -color "Info" -NoNewline
         Write-OutputColor "$("$($disk.OperationalStatus)".PadRight(12)) " -color $statusColor -NoNewline
         Write-OutputColor "$("$health".PadRight(12)) " -color $healthColor -NoNewline
-        Write-OutputColor "$($size.PadRight(15)) $($partStyle.PadRight(12)) $("$($disk.NumberOfPartitions)".PadRight(15)) $busType" -color "Info"
+        Write-OutputColor "$($size.PadRight(15)) $($partStyle.PadRight(12)) $("$($disk.NumberOfPartitions)".PadRight(15)) $busType" -color "Info" -NoNewline
+        if ($diskLabel) {
+            Write-OutputColor "$diskLabel" -color "Warning"
+        } else {
+            Write-OutputColor "" -color "Info"
+        }
 
         # Show friendly name
         if ($disk.FriendlyName) {
@@ -273,10 +332,16 @@ function Select-Disk {
         $size = Format-ByteSize -Bytes $disk.Size
         $partStyle = if ($disk.PartitionStyle -eq "RAW") { "Not Initialized" } else { $disk.PartitionStyle }
 
-        # Mark OS disk with warning
+        # Mark OS/system/boot disk with warning
         $osMarker = ""
         if ($disk.Number -eq $osDiskNumber) {
             $osMarker = " [OS DISK]"
+        } elseif ($disk.IsBoot -eq $true -and $disk.IsSystem -eq $true) {
+            $osMarker = " [System/Boot]"
+        } elseif ($disk.IsSystem -eq $true) {
+            $osMarker = " [System]"
+        } elseif ($disk.IsBoot -eq $true) {
+            $osMarker = " [Boot]"
         }
 
         if ($osMarker -and -not $AllowOSDisk) {
@@ -313,7 +378,7 @@ function Select-Disk {
         }
     }
 
-    Write-OutputColor "  Invalid selection." -color "Error"
+    Write-OutputColor "  Invalid selection. Enter a listed disk number or 'back'." -color "Error"
     return $null
 }
 
@@ -372,7 +437,7 @@ function Select-Partition {
         }
     }
 
-    Write-OutputColor "  Invalid selection." -color "Error"
+    Write-OutputColor "  Invalid selection. Enter a listed partition number or 'back'." -color "Error"
     return $null
 }
 
@@ -426,6 +491,13 @@ function Initialize-NewDisk {
     $disk = Select-Disk -Prompt "Select a disk to initialize:" -OnlyUninitialized
 
     if (-not $disk) {
+        return
+    }
+
+    # System disk protection
+    if (Test-SystemDisk -Disk $disk) {
+        Write-OutputColor "  Cannot perform this operation on the system disk (Disk $($disk.Number))" -color "Error"
+        Write-OutputColor "  This disk contains the operating system and is protected" -color "Warning"
         return
     }
 
@@ -489,6 +561,7 @@ function Initialize-NewDisk {
 
         Write-OutputColor "  Disk $($disk.Number) initialized successfully as $partitionStyle!" -color "Success"
         Add-SessionChange -Category "Storage" -Description "Initialized Disk $($disk.Number) as $partitionStyle"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to initialize disk: $_" -color "Error"
@@ -515,6 +588,13 @@ function Set-DiskOnlineStatus {
     Write-OutputColor "" -color "Info"
 
     if ($disk.OperationalStatus -eq "Online") {
+        # System disk protection - prevent taking system disk offline
+        if (Test-SystemDisk -Disk $disk) {
+            Write-OutputColor "  Cannot take the system disk offline (Disk $($disk.Number))" -color "Error"
+            Write-OutputColor "  This disk contains the operating system and is protected" -color "Warning"
+            return
+        }
+
         Write-OutputColor "  Options:" -color "Info"
         Write-OutputColor "  [1] Take disk OFFLINE" -color "Warning"
         Write-OutputColor "  [2] Cancel" -color "Success"
@@ -537,6 +617,7 @@ function Set-DiskOnlineStatus {
                 Set-Disk -Number $disk.Number -IsOffline $true -ErrorAction Stop
                 Write-OutputColor "  Disk $($disk.Number) is now OFFLINE." -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Set Disk $($disk.Number) offline"
+                Clear-MenuCache
                 Add-UndoAction -Category "Storage" -Description "Set Disk $($disk.Number) offline" -UndoScript {
                     param($DiskNum)
                     Set-Disk -Number $DiskNum -IsOffline $false -ErrorAction SilentlyContinue
@@ -565,6 +646,7 @@ function Set-DiskOnlineStatus {
 
                 Write-OutputColor "  Disk $($disk.Number) is now ONLINE." -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Set Disk $($disk.Number) online"
+                Clear-MenuCache
                 Add-UndoAction -Category "Storage" -Description "Set Disk $($disk.Number) online" -UndoScript {
                     param($DiskNum)
                     Set-Disk -Number $DiskNum -IsOffline $true -ErrorAction SilentlyContinue
@@ -596,13 +678,11 @@ function Clear-DiskData {
         return
     }
 
-    # Double check it's not the OS disk
-    $systemDrive = $env:SystemDrive.TrimEnd(':')
-    $osPartition = Get-Partition -DriveLetter $systemDrive -ErrorAction SilentlyContinue
-    if ($osPartition -and $osPartition.DiskNumber -eq $disk.Number) {
+    # Double check it's not the system disk
+    if (Test-SystemDisk -Disk $disk) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  BLOCKED: Cannot clear the operating system disk!" -color "Error"
-        Write-OutputColor "  This would make your system unbootable." -color "Error"
+        Write-OutputColor "  Cannot perform this operation on the system disk (Disk $($disk.Number))" -color "Error"
+        Write-OutputColor "  This disk contains the operating system and is protected" -color "Warning"
         return
     }
 
@@ -650,6 +730,7 @@ function Clear-DiskData {
         Write-OutputColor "  Disk $($disk.Number) cleared successfully!" -color "Success"
         Write-OutputColor "  The disk is now uninitialized and ready to be set up fresh." -color "Info"
         Add-SessionChange -Category "Storage" -Description "Cleared all data from Disk $($disk.Number)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to clear disk: $_" -color "Error"
@@ -786,6 +867,7 @@ function New-DiskPartition {
         Write-OutputColor "  Note: The partition is not yet formatted. Use 'Format Volume' to format it." -color "Warning"
 
         Add-SessionChange -Category "Storage" -Description "Created partition on Disk $($disk.Number)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to create partition: $_" -color "Error"
@@ -804,6 +886,13 @@ function Remove-DiskPartition {
     $disk = Select-Disk -Prompt "Select a disk:" -OnlyInitialized
 
     if (-not $disk) {
+        return
+    }
+
+    # System disk protection
+    if (Test-SystemDisk -Disk $disk) {
+        Write-OutputColor "  Cannot perform this operation on the system disk (Disk $($disk.Number))" -color "Error"
+        Write-OutputColor "  This disk contains the operating system and is protected" -color "Warning"
         return
     }
 
@@ -850,6 +939,7 @@ function Remove-DiskPartition {
 
         Write-OutputColor "  Partition deleted successfully!" -color "Success"
         Add-SessionChange -Category "Storage" -Description "Deleted Partition $($partition.PartitionNumber) from Disk $($disk.Number)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to delete partition: $_" -color "Error"
@@ -868,6 +958,13 @@ function Format-DiskVolume {
     $disk = Select-Disk -Prompt "Select a disk:" -OnlyInitialized
 
     if (-not $disk) {
+        return
+    }
+
+    # System disk protection
+    if (Test-SystemDisk -Disk $disk) {
+        Write-OutputColor "  Cannot perform this operation on the system disk (Disk $($disk.Number))" -color "Error"
+        Write-OutputColor "  This disk contains the operating system and is protected" -color "Warning"
         return
     }
 
@@ -1038,6 +1135,7 @@ function Format-DiskVolume {
         }
 
         Add-SessionChange -Category "Storage" -Description "Formatted Partition $($partition.PartitionNumber) on Disk $($disk.Number) as $fileSystem"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to format volume: $_" -color "Error"
@@ -1144,6 +1242,7 @@ function Expand-DiskVolume {
         Write-OutputColor "  New Size: $(Format-ByteSize -Bytes $newSize)" -color "Info"
 
         Add-SessionChange -Category "Storage" -Description "Extended Partition $($partition.PartitionNumber) on Disk $($disk.Number) to $(Format-ByteSize -Bytes $newSize)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to extend partition: $_" -color "Error"
@@ -1253,6 +1352,7 @@ function Compress-DiskVolume {
         Write-OutputColor "  Freed Space: $(Format-ByteSize -Bytes $shrinkAmount)" -color "Info"
 
         Add-SessionChange -Category "Storage" -Description "Shrunk Partition $($partition.PartitionNumber) on Disk $($disk.Number) by $(Format-ByteSize -Bytes $shrinkAmount)"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to shrink partition: $_" -color "Error"
@@ -1536,7 +1636,7 @@ function Set-VolumeDriveLetter {
     if ($navResult.ShouldReturn) { return }
 
     if ($selection -notmatch '^\d+$' -or [int]$selection -lt 1 -or [int]$selection -gt $allVolumes.Count) {
-        Write-OutputColor "  Invalid selection." -color "Error"
+        Write-OutputColor "  Invalid selection. Enter 1-$($allVolumes.Count) or B." -color "Error"
         return
     }
 
@@ -1580,11 +1680,13 @@ function Set-VolumeDriveLetter {
                     Set-CimInstance -InputObject $cimVol -Property @{ DriveLetter = $null } -ErrorAction Stop
                     Write-OutputColor "  CD/DVD drive letter removed." -color "Success"
                     Add-SessionChange -Category "Storage" -Description "Removed CD/DVD drive letter $($currentLetter):"
+                    Clear-MenuCache
                 }
             } else {
                 Remove-PartitionAccessPath -DiskNumber $selected.DiskNumber -PartitionNumber $selected.PartNumber -AccessPath "$($currentLetter):\" -ErrorAction Stop
                 Write-OutputColor "  Drive letter removed." -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Removed drive letter $($currentLetter):"
+                Clear-MenuCache
             }
         }
         catch {
@@ -1643,6 +1745,7 @@ function Set-VolumeDriveLetter {
                 Set-CimInstance -InputObject $cimVol -Property @{ DriveLetter = "$($newLetter):" } -ErrorAction Stop
                 Write-OutputColor "  CD/DVD drive letter changed to $($newLetter): successfully!" -color "Success"
                 Add-SessionChange -Category "Storage" -Description "Changed CD/DVD drive letter from $($currentLetter): to $($newLetter):"
+                Clear-MenuCache
             } else {
                 Write-OutputColor "  Could not find CD/DVD volume." -color "Error"
             }
@@ -1655,6 +1758,7 @@ function Set-VolumeDriveLetter {
             Set-Partition -DiskNumber $selected.DiskNumber -PartitionNumber $selected.PartNumber -NewDriveLetter $newLetter -ErrorAction Stop
             Write-OutputColor "  Drive letter changed to $($newLetter): successfully!" -color "Success"
             Add-SessionChange -Category "Storage" -Description "Changed drive letter to $($newLetter): on Disk $($selected.DiskNumber) Partition $($selected.PartNumber)"
+            Clear-MenuCache
         }
     }
     catch {
@@ -1731,6 +1835,7 @@ function Set-VolumeLabel {
         }
 
         Add-SessionChange -Category "Storage" -Description "Changed label of $driveLetter`: to '$newLabel'"
+        Clear-MenuCache
     }
     catch {
         Write-OutputColor "  Failed to change volume label: $_" -color "Error"

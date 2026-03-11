@@ -25,6 +25,7 @@ function Select-PhysicalAdapters {
             Status = 8
         }
 
+        Show-AdapterHealthSummary
         Show-AdaptersTable -adapters $adapters -columnWidths $columnWidths
 
         Write-OutputColor "  Enter adapter index numbers separated by commas (e.g., 1,2) or type 'all' for all adapters:" -color "Warning"
@@ -278,6 +279,47 @@ function Format-LinkSpeed {
     }
     catch {
         return "N/A"
+    }
+}
+
+# Function to show overall network adapter health summary
+function Show-AdapterHealthSummary {
+    Write-OutputColor "`n  Network Adapter Health:" -color "Info"
+
+    try {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue
+        $physical = @($adapters | Where-Object { $_.Virtual -eq $false })
+        $virtual = @($adapters | Where-Object { $_.Virtual -eq $true })
+
+        Write-OutputColor "  Physical: $($physical.Count), Virtual: $($virtual.Count)" -color "Info"
+
+        foreach ($adapter in $physical) {
+            $status = $adapter.Status.ToString()
+            $color = switch ($status) {
+                'Up'           { "Success" }
+                'Disconnected' { "Error" }
+                'Disabled'     { "Warning" }
+                default        { "Info" }
+            }
+
+            $name = if ($adapter.Name.Length -gt 20) { $adapter.Name.Substring(0, 17) + "..." } else { $adapter.Name }
+            $driver = if (-not [string]::IsNullOrWhiteSpace($adapter.DriverVersion)) { " (Driver: $($adapter.DriverVersion))" } else { "" }
+
+            Write-OutputColor "  $name  $($adapter.LinkSpeed)  $status$driver" -color $color
+
+            # Check for errors
+            try {
+                $stats = Get-NetAdapterStatistics -Name $adapter.Name -ErrorAction SilentlyContinue
+                if ($null -ne $stats) {
+                    $errors = $stats.InErrors + $stats.OutErrors
+                    if ($errors -gt 0) {
+                        Write-OutputColor "    Errors: $errors (In: $($stats.InErrors), Out: $($stats.OutErrors))" -color "Warning"
+                    }
+                }
+            } catch { }
+        }
+    } catch {
+        Write-OutputColor "  Could not check adapters: $($_.Exception.Message)" -color "Warning"
     }
 }
 

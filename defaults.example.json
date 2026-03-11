@@ -111,6 +111,7 @@
     "SANTargetPairings": {
         "_comment": "Advanced: Defines how SAN targets are paired (A/B sides) and assigned to hosts. By convention, A side = even suffixes, B side = odd suffixes. When omitted (or null), RackStack uses the default cycling pattern from SANTargetMappings above. Set this to customize which pair each host gets as primary, and the retry order when the primary pair is unreachable.",
         "_how_it_works": "Each 'Pair' groups two SAN targets (A side and B side) by their last-octet suffix. HostAssignments maps host numbers (mod CycleSize) to their primary pair and retry order. Host 5 maps to HostMod 1, host 6 to HostMod 2, etc. This repeats every CycleSize hosts.",
+        "_example_2controller": "Example 2-controller SAN with A/B failover: Host 1: Primary=Pair0 (.10/.11), Retry=Pair2 (.14/.15) | Host 2: Primary=Pair1 (.12/.13), Retry=Pair3 (.16/.17)",
 
         "Pairs": [
             { "Name": "Pair0", "A": 10, "B": 11, "ALabel": "A0", "BLabel": "B0", "_comment": "Controller A port 0 (.10) + Controller B port 0 (.11)" },
@@ -278,6 +279,7 @@
 
     "CustomVMTemplates": {
         "_comment": "VM templates define the specs (CPU, RAM, disks) for common server types. RackStack ships with 3 built-in templates: DC (Domain Controller), FS (File Server), WEB (Web Server). Here you can: (1) Override built-in templates by using the same key (e.g. 'FS') -- only specify the fields you want to change, everything else keeps its default. (2) Add brand new templates with a new key (e.g. 'SQL') -- new templates need all required fields.",
+        "_required_fields": "Required fields for custom templates: FullName, Prefix, OSType, vCPU, MemoryGB, Disks[], NICs, MemoryType",
 
         "FS": {
             "_comment": "This OVERRIDES the built-in File Server template. We only changed MemoryGB and Disks -- everything else (vCPU, NICs, etc) stays at the built-in defaults.",
@@ -370,5 +372,37 @@
         "MemoryType": "Dynamic",
         "DiskSizeGB": 100,
         "DiskType": "Fixed"
+    },
+
+    "_section_batch": "========== BATCH MODE ==========",
+
+    "_DryRun_help": "Set to true for batch mode simulation (no changes applied)",
+    "DryRun": false,
+
+    "_section_dashboard": "========== DASHBOARD & DISPLAY ==========",
+
+    "_DashboardWarningPercent_help": "Dashboard color thresholds for CPU/memory/disk usage",
+    "DashboardWarningPercent": 70,
+    "DashboardCriticalPercent": 90,
+
+    "_section_timeouts": "========== TIMEOUT OVERRIDES ==========",
+
+    "_Timeouts_help": "Timeout overrides (seconds). Only include values you want to change from defaults.",
+    "Timeouts": {
+        "CIMQuery": 10,
+        "CIMQuerySlow": 15,
+        "WMIQuery": 15,
+        "iSCSIConnection": 25,
+        "SubnetSweep": 30,
+        "DomainJoin": 120,
+        "WindowsUpdate": 300,
+        "FeatureInstall": 1800,
+        "LargeFileDownload": 3600,
+        "VMCreation": 60,
+        "ClusterOperation": 300,
+        "DCPromotion": 600,
+        "CredentialExpiry": 1800,
+        "MenuCache": 60,
+        "HealthCheckCache": 30
     }
 }
