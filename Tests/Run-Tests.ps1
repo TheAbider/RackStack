@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.21.17
+    Automated Test Runner for RackStack v1.21.18
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -764,8 +764,6 @@ $trueInputs = @(
     @{ Input = "B";    ExpAction = "back"; Desc = "'B' -> back" }
     @{ Input = "b";    ExpAction = "back"; Desc = "'b' -> back (lowercase)" }
     @{ Input = "BACK"; ExpAction = "back"; Desc = "'BACK' -> back" }
-    @{ Input = "Q";    ExpAction = "exit"; Desc = "'Q' -> exit" }
-    @{ Input = "q";    ExpAction = "exit"; Desc = "'q' -> exit (lowercase)" }
     @{ Input = "QUIT"; ExpAction = "exit"; Desc = "'QUIT' -> exit" }
     @{ Input = "EXIT"; ExpAction = "exit"; Desc = "'EXIT' -> exit" }
     @{ Input = "exit"; ExpAction = "exit"; Desc = "'exit' -> exit" }
@@ -786,6 +784,8 @@ foreach ($tc in $trueInputs) {
 
 # Commands that should return ShouldReturn=$false
 $falseInputs = @(
+    @{ Input = "Q";        Desc = "'Q' -> no match (menu shortcut, not exit)" }
+    @{ Input = "q";        Desc = "'q' -> no match (menu shortcut, not exit)" }
     @{ Input = "1";        Desc = "'1' -> no match" }
     @{ Input = "X";        Desc = "'X' -> no match" }
     @{ Input = "H";        Desc = "'H' -> no match" }
@@ -3344,8 +3344,8 @@ $navEdgeCases = @(
     @{ Input = "EXIT";    Action = "exit";    Desc = "uppercase EXIT" }
     @{ Input = "Exit";    Action = "exit";    Desc = "mixed case Exit" }
     @{ Input = "QUIT";    Action = "exit";    Desc = "uppercase QUIT" }
-    @{ Input = "Q";       Action = "exit";    Desc = "single Q" }
-    @{ Input = "q";       Action = "exit";    Desc = "lowercase q" }
+    @{ Input = "Q";       Action = "continue"; Desc = "single Q (menu shortcut)" }
+    @{ Input = "q";       Action = "continue"; Desc = "lowercase q (menu shortcut)" }
     @{ Input = "B";       Action = "back";    Desc = "single B" }
     @{ Input = "b";       Action = "back";    Desc = "lowercase b" }
     @{ Input = "1";       Action = "continue"; Desc = "numeric input" }

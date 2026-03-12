@@ -8,7 +8,7 @@ function Test-NavigationCommand {
     )
 
     $backCommands = @("back", "b", "cancel", "c", "0")
-    $exitCommands = @("exit", "quit", "q")
+    $exitCommands = @("exit", "quit")
     $homeCommands = @("home", "main", "m")
 
     if ([string]::IsNullOrWhiteSpace($UserInput)) {

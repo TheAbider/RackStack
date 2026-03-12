@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.21.18
+
+- **Bug Fix:** Pressing Q for Quick Setup Wizard on the Configure Server menu exited the script instead of launching the wizard — "q" was in the global exit commands list, intercepting it before the menu could handle it. Removed "q" from exit shortcuts; users can still type "exit" or "quit" to close the script (04-Navigation).
+- 64 modules, 2501 tests
+
 ## v1.21.17
 
 - **Bug Fix:** Company defaults prompt appeared with empty name when no company defaults files existed — defaults loading redesigned: single defaults file loads silently, company picker only shown when multiple defaults files are present (56-OperationsMenu).
