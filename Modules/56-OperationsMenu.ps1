@@ -689,52 +689,36 @@ function Import-Defaults {
     $merged = $builtinDefaults.Clone()
 
     # Tier 2: Merge company defaults if available and not yet loaded
+    # - 0 company files: skip silently (no prompt)
+    # - 1 company file: auto-load silently (user placed it there intentionally)
+    # - 2+ company files: auto-resolve from saved preference, or show picker
     if ($companyFiles.Count -gt 0 -and -not $script:CompanyDefaultsPath) {
-        $companyDefaultsResolved = $false
-        if (Test-Path -LiteralPath $script:DefaultsPath) {
-            # defaults.json exists: silently re-load company file if previously selected
-            try {
-                $existingDefaults = Get-Content -LiteralPath $script:DefaultsPath -Raw | ConvertFrom-Json
-                if ($existingDefaults._companyDefaults) {
-                    $matchingFile = $companyFiles | Where-Object { $_.Name -eq $existingDefaults._companyDefaults } | Select-Object -First 1
-                    if ($matchingFile) {
-                        $script:CompanyDefaultsName = $matchingFile.Name
-                        $script:CompanyDefaultsPath = $matchingFile.Path
-                        $companyDefaultsResolved = $true
-                    }
-                }
-            } catch {
-                Write-OutputColor "  Warning: Could not read defaults.json for company defaults: $_" -color "Warning"
-            }
-            # If defaults.json exists but has no _companyDefaults, prompt the user
-            if (-not $companyDefaultsResolved) {
-                if ($companyFiles.Count -eq 1) {
-                    $compFile = $companyFiles[0]
-                    if (Confirm-UserAction -Message "Load company defaults '$($compFile.Name)'?" -DefaultYes) {
-                        $script:CompanyDefaultsName = $compFile.Name
-                        $script:CompanyDefaultsPath = $compFile.Path
-                    }
-                }
-                else {
-                    Write-OutputColor "  Multiple company defaults files found." -color "Info"
-                    $picked = Show-CompanyDefaultsPicker
-                    if ($null -ne $picked -and $picked -ne "__skip__") {
-                        $script:CompanyDefaultsName = $picked.Name
-                        $script:CompanyDefaultsPath = $picked.Path
-                    }
-                }
-            }
+        if ($companyFiles.Count -eq 1) {
+            # Single company defaults file: load silently
+            $script:CompanyDefaultsName = $companyFiles[0].Name
+            $script:CompanyDefaultsPath = $companyFiles[0].Path
         }
         else {
-            # No defaults.json: offer company defaults
-            if ($companyFiles.Count -eq 1) {
-                $compFile = $companyFiles[0]
-                if (Confirm-UserAction -Message "Load company defaults '$($compFile.Name)'?" -DefaultYes) {
-                    $script:CompanyDefaultsName = $compFile.Name
-                    $script:CompanyDefaultsPath = $compFile.Path
+            # Multiple company defaults files: try saved preference first
+            $companyDefaultsResolved = $false
+            if (Test-Path -LiteralPath $script:DefaultsPath) {
+                try {
+                    $existingDefaults = Get-Content -LiteralPath $script:DefaultsPath -Raw | ConvertFrom-Json
+                    if ($existingDefaults._companyDefaults) {
+                        $matchingFile = $companyFiles | Where-Object { $_.Name -eq $existingDefaults._companyDefaults } | Select-Object -First 1
+                        if ($matchingFile) {
+                            $script:CompanyDefaultsName = $matchingFile.Name
+                            $script:CompanyDefaultsPath = $matchingFile.Path
+                            $companyDefaultsResolved = $true
+                        }
+                    }
+                } catch {
+                    Write-OutputColor "  Warning: Could not read defaults.json for company defaults: $_" -color "Warning"
                 }
             }
-            else {
+            # If not auto-resolved, show picker
+            if (-not $companyDefaultsResolved) {
+                Write-OutputColor "  Multiple defaults files found." -color "Info"
                 $picked = Show-CompanyDefaultsPicker
                 if ($null -ne $picked -and $picked -ne "__skip__") {
                     $script:CompanyDefaultsName = $picked.Name

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.21.17
+
+- **Bug Fix:** Company defaults prompt appeared with empty name when no company defaults files existed — defaults loading redesigned: single defaults file loads silently, company picker only shown when multiple defaults files are present (56-OperationsMenu).
+- 64 modules, 2501 tests
+
 ## v1.21.16
 
 - **Bug Fix:** Color severity mismatches across 7 modules — actual failures (connection failures, task errors, catch blocks) now consistently use error color instead of warning color (44-VMDeployment, 63-ScheduledTasks, 32-Deduplication, 47-ExitCleanup, 08-VLAN, 11-Hostname).
