@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.21.18
+    Automated Test Runner for RackStack v1.22.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 64 modules)
+    - Parse tests (monolithic + 65 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 64  # 00-63 inclusive
+$expectedModuleCount = 65  # 00-64 inclusive
 
 # ============================================================================
 # BANNER
@@ -268,7 +268,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 64 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 65 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -539,8 +539,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "63-ScheduledTasks.ps1"
-    Write-TestResult "Module range 00-Initialization to 63-ScheduledTasks" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "64-SystemDebloat.ps1"
+    Write-TestResult "Module range 00-Initialization to 64-SystemDebloat" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -1955,8 +1955,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 63 #region tags" ($regionStartCount -eq 63) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 63 #endregion tags" ($regionEndCount -eq 63) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 64 #region tags" ($regionStartCount -eq 64) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 64 #endregion tags" ($regionEndCount -eq 64) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4273,7 +4273,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 64 modules" ($readmeContent -match '64 module')
+    Write-TestResult "README: mentions 65 modules" ($readmeContent -match '65 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6682,18 +6682,18 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 64 modules" ($loaderContent -match '64 modules')
+    Write-TestResult "RackStack.ps1: mentions 65 modules" ($loaderContent -match '65 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 64" ($moduleCount -eq 64) "Found $moduleCount modules"
+    Write-TestResult "Module count is 65" ($moduleCount -eq 65) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
     $changelogContent = Get-Content $changelogPath -Raw
     Write-TestResult "Changelog: has v1.4.0 entry" ($changelogContent -match '## v1\.4\.0')
     Write-TestResult "Changelog: mentions Server Role Templates" ($changelogContent -match 'Server Role Templates')
-    Write-TestResult "Changelog: mentions 64 modules" ($changelogContent -match '64 modules')
+    Write-TestResult "Changelog: mentions 65 modules" ($changelogContent -match '65 modules')
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
@@ -8024,7 +8024,7 @@ Write-TestResult "45-Config: baseline second number nav check" ($ceContent2 -mat
 
 # DiskCleanup and NetworkDiagnostics specific error messages
 $dcContent = Get-Content -LiteralPath "$modulesPath\20-DiskCleanup.ps1" -Raw
-Write-TestResult "20-DiskCleanup: specific invalid msg" ($dcContent -match 'Enter 1-6 or B')
+Write-TestResult "20-DiskCleanup: specific invalid msg" ($dcContent -match 'Enter 1-13 or B')
 $ndContent = Get-Content -LiteralPath "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
 Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-10 or B')
 
@@ -8385,7 +8385,7 @@ Write-TestResult "58-NetDiag: Show-ArpTable function exists" ($ndContent3 -match
 Write-TestResult "58-NetDiag: menu has 10 options" ($ndContent3 -match 'Enter 1-10 or B')
 
 # 48-MenuDisplay: Invoke-WithTimeout function existence (critical helper)
-Write-TestResult "04-Navigation: Invoke-WithTimeout defined" ((Get-Command -Name Invoke-WithTimeout -ErrorAction SilentlyContinue) -ne $null)
+Write-TestResult "04-Navigation: Invoke-WithTimeout defined" ($null -ne (Get-Command -Name Invoke-WithTimeout -ErrorAction SilentlyContinue))
 
 # 11-Hostname behavioral tests
 $hnContent2 = Get-Content -LiteralPath "$modulesPath\11-Hostname.ps1" -Raw

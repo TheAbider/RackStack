@@ -1,4 +1,4 @@
-@{
+﻿@{
     # PSScriptAnalyzer settings for RackStack
     # This is an interactive console UI tool - rules designed for reusable
     # PowerShell modules/cmdlets do not apply.
@@ -42,6 +42,9 @@
 
         # Install-Prerequisites.ps1 uses Get-WmiObject for PS 2.0 compatibility
         # (Get-CimInstance not available until PS 3.0/WMF 3.0)
-        'PSAvoidUsingWMICmdlet'
+        'PSAvoidUsingWMICmdlet',
+
+        # Test-only: dummy credentials for unit tests (no real secrets)
+        'PSAvoidUsingConvertToSecureStringWithPlainText'
     )
 }

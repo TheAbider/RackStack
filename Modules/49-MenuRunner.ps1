@@ -296,9 +296,10 @@ function Start-Show-ToolsUtilitiesMenu {
             "11" { Install-WindowsServerBackup; Write-PressEnter }
             "12" { Show-CertificateMenu }
             "13" { Show-ScheduledTaskManager }
+            "14" { Start-SystemDebloat }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-14 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

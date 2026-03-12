@@ -57,6 +57,16 @@ function Start-DiskCleanup {
         Write-MenuItem -Text "[4]  Clear Windows Update Cache Only"
         Write-MenuItem -Text "[5]  Run Windows Disk Cleanup Tool"
         Write-MenuItem -Text "[6]  Detailed Cleanup Analysis"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  EXTENDED CLEANUP".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem -Text "[7]  Clear Windows.old"
+        Write-MenuItem -Text "[8]  Clear Browser Caches"
+        Write-MenuItem -Text "[9]  Empty Recycle Bin"
+        Write-MenuItem -Text "[10] Clean User Profile Temp Files"
+        Write-MenuItem -Text "[11] Clear Shadow Copies"
+        Write-MenuItem -Text "[12] Full Enhanced Cleanup (runs all applicable)"
+        Write-MenuItem -Text "[13] Enhanced Cleanup Analysis"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -96,9 +106,37 @@ function Start-DiskCleanup {
             "6" {
                 Show-CleanupAnalysis
             }
+            "7" {
+                Clear-WindowsOld
+            }
+            "8" {
+                Clear-BrowserCaches
+            }
+            "9" {
+                Invoke-RecycleBinCleanup
+            }
+            "10" {
+                Clear-UserProfileTemp
+            }
+            "11" {
+                Clear-ShadowCopies
+            }
+            "12" {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Full Enhanced Cleanup will run all applicable cleanup operations." -color "Warning"
+                Write-OutputColor "  This includes: Quick Clean, WU Cache, Browser Caches, Recycle Bin," -color "Warning"
+                Write-OutputColor "  User Profile Temp, Windows.old (if present), and Shadow Copies." -color "Warning"
+                Write-OutputColor "" -color "Info"
+                if (Confirm-UserAction -Message "Run Full Enhanced Cleanup? Some operations are irreversible.") {
+                    Invoke-FullEnhancedCleanup
+                }
+            }
+            "13" {
+                Show-EnhancedCleanupAnalysis
+            }
             "b" { return }
             "B" { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -249,5 +287,734 @@ function Show-CleanupAnalysis {
     $totalMB = [math]::Round($totalSavings / 1MB, 0)
     $totalGB = [math]::Round($totalSavings / 1GB, 1)
     Write-OutputColor "`n  Potential savings: ${totalMB} MB (${totalGB} GB)" -color $(if ($totalGB -gt 1) { "Warning" } else { "Success" })
+}
+
+function Clear-WindowsOld {
+    Write-OutputColor "" -color "Info"
+    $winOldPath = "C:\Windows.old"
+
+    if (-not (Test-Path -LiteralPath $winOldPath)) {
+        Write-OutputColor "  Windows.old directory not found. Nothing to clean." -color "Info"
+        return
+    }
+
+    # Calculate size
+    Write-OutputColor "  Calculating Windows.old size..." -color "Info"
+    $winOldSize = [long](Get-ChildItem -LiteralPath $winOldPath -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+    $winOldGB = [math]::Round($winOldSize / 1GB, 2)
+    Write-OutputColor "  Windows.old size: $winOldGB GB" -color "Warning"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  WARNING: This will permanently remove the previous Windows installation." -color "Warning"
+    Write-OutputColor "  You will NOT be able to roll back to the previous version of Windows." -color "Warning"
+    Write-OutputColor "" -color "Info"
+
+    if (-not (Confirm-UserAction -Message "Remove Windows.old ($winOldGB GB)? This is irreversible.")) {
+        Write-OutputColor "  Operation cancelled." -color "Info"
+        return
+    }
+
+    Write-OutputColor "  Taking ownership and removing Windows.old..." -color "Info"
+    try {
+        # Take ownership
+        $null = takeown /F $winOldPath /R /A /D Y 2>&1
+        $null = icacls $winOldPath /grant Administrators:F /T /C /Q 2>&1
+
+        # Remove the directory
+        Remove-Item -LiteralPath $winOldPath -Recurse -Force -ErrorAction Stop
+        Write-OutputColor "  Windows.old removed. Freed $winOldGB GB." -color "Success"
+        Add-SessionChange -Category "System" -Description "Removed Windows.old, freed $winOldGB GB"
+        Clear-MenuCache
+    }
+    catch {
+        Write-OutputColor "  Failed to remove Windows.old: $_" -color "Error"
+        Write-OutputColor "  Try running Windows Disk Cleanup (option 5) with 'Previous Windows installations' checked." -color "Info"
+    }
+}
+
+function Clear-BrowserCaches {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Browser Cache Cleanup" -color "Info"
+    Write-OutputColor "  ─────────────────────" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  NOTE: Close all browsers before proceeding for best results." -color "Warning"
+    Write-OutputColor "" -color "Info"
+
+    $totalCleaned = 0
+    $browsersFound = 0
+
+    # Edge
+    $edgeCachePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data"
+    if (Test-Path -LiteralPath $edgeCachePath) {
+        $browsersFound++
+        $edgeSize = [long](Get-ChildItem -Path "$edgeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $edgeCodeSize = [long](Get-ChildItem -Path "$edgeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $edgeTotal = $edgeSize + $edgeCodeSize
+        $edgeMB = [math]::Round($edgeTotal / 1MB, 1)
+        Write-OutputColor "  Microsoft Edge cache: $edgeMB MB" -color "Info"
+
+        if ($edgeTotal -gt 0) {
+            if (Confirm-UserAction -Message "Clear Edge cache ($edgeMB MB)?" -DefaultYes) {
+                $cleaned = 0
+                Get-ChildItem -Path "$edgeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                    try {
+                        $fileLen = $_.Length
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                        $cleaned += $fileLen
+                    }
+                    catch { $null = $_ }
+                }
+                Get-ChildItem -Path "$edgeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                    try {
+                        $fileLen = $_.Length
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                        $cleaned += $fileLen
+                    }
+                    catch { $null = $_ }
+                }
+                $cleanedMB = [math]::Round($cleaned / 1MB, 1)
+                Write-OutputColor "  Edge cache cleared: $cleanedMB MB freed." -color "Success"
+                $totalCleaned += $cleaned
+            }
+        }
+    }
+
+    # Chrome
+    $chromeCachePath = "$env:LOCALAPPDATA\Google\Chrome\User Data"
+    if (Test-Path -LiteralPath $chromeCachePath) {
+        $browsersFound++
+        $chromeSize = [long](Get-ChildItem -Path "$chromeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $chromeCodeSize = [long](Get-ChildItem -Path "$chromeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $chromeTotal = $chromeSize + $chromeCodeSize
+        $chromeMB = [math]::Round($chromeTotal / 1MB, 1)
+        Write-OutputColor "  Google Chrome cache: $chromeMB MB" -color "Info"
+
+        if ($chromeTotal -gt 0) {
+            if (Confirm-UserAction -Message "Clear Chrome cache ($chromeMB MB)?" -DefaultYes) {
+                $cleaned = 0
+                Get-ChildItem -Path "$chromeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                    try {
+                        $fileLen = $_.Length
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                        $cleaned += $fileLen
+                    }
+                    catch { $null = $_ }
+                }
+                Get-ChildItem -Path "$chromeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                    try {
+                        $fileLen = $_.Length
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                        $cleaned += $fileLen
+                    }
+                    catch { $null = $_ }
+                }
+                $cleanedMB = [math]::Round($cleaned / 1MB, 1)
+                Write-OutputColor "  Chrome cache cleared: $cleanedMB MB freed." -color "Success"
+                $totalCleaned += $cleaned
+            }
+        }
+    }
+
+    # Firefox
+    $firefoxProfilePath = "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles"
+    if (Test-Path -LiteralPath $firefoxProfilePath) {
+        $browsersFound++
+        $firefoxSize = [long](Get-ChildItem -Path "$firefoxProfilePath\*\cache2\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $firefoxMB = [math]::Round($firefoxSize / 1MB, 1)
+        Write-OutputColor "  Mozilla Firefox cache: $firefoxMB MB" -color "Info"
+
+        if ($firefoxSize -gt 0) {
+            if (Confirm-UserAction -Message "Clear Firefox cache ($firefoxMB MB)?" -DefaultYes) {
+                $cleaned = 0
+                Get-ChildItem -Path "$firefoxProfilePath\*\cache2\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                    try {
+                        $fileLen = $_.Length
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                        $cleaned += $fileLen
+                    }
+                    catch { $null = $_ }
+                }
+                $cleanedMB = [math]::Round($cleaned / 1MB, 1)
+                Write-OutputColor "  Firefox cache cleared: $cleanedMB MB freed." -color "Success"
+                $totalCleaned += $cleaned
+            }
+        }
+    }
+
+    if ($browsersFound -eq 0) {
+        Write-OutputColor "  No browser cache directories found." -color "Info"
+        return
+    }
+
+    if ($totalCleaned -gt 0) {
+        $totalCleanedMB = [math]::Round($totalCleaned / 1MB, 1)
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Total browser cache freed: $totalCleanedMB MB" -color "Success"
+        Add-SessionChange -Category "System" -Description "Cleared browser caches, freed $totalCleanedMB MB"
+        Clear-MenuCache
+    } else {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  No browser cache files were removed." -color "Info"
+    }
+}
+
+function Invoke-RecycleBinCleanup {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Recycle Bin Cleanup" -color "Info"
+    Write-OutputColor "  ───────────────────" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Estimate recycle bin size using COM object
+    $recycleBinSize = 0
+    $recycleBinCount = 0
+    try {
+        $shell = New-Object -ComObject Shell.Application
+        $recycleBin = $shell.NameSpace(0x0A)
+        if ($null -ne $recycleBin) {
+            $items = $recycleBin.Items()
+            $recycleBinCount = $items.Count
+            foreach ($item in $items) {
+                try {
+                    $recycleBinSize += $recycleBin.GetDetailsOf($item, 2) -replace '[^\d]', ''
+                }
+                catch { $null = $_ }
+            }
+        }
+    }
+    catch {
+        Write-OutputColor "  Could not estimate recycle bin size." -color "Warning"
+    }
+    finally {
+        if ($null -ne $shell) {
+            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+        }
+    }
+
+    if ($recycleBinCount -eq 0) {
+        Write-OutputColor "  Recycle Bin is empty. Nothing to clean." -color "Info"
+        return
+    }
+
+    Write-OutputColor "  Recycle Bin contains approximately $recycleBinCount item(s)." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    if (-not (Confirm-UserAction -Message "Empty the Recycle Bin?" -DefaultYes)) {
+        Write-OutputColor "  Operation cancelled." -color "Info"
+        return
+    }
+
+    try {
+        # Try PowerShell 5.1+ cmdlet first
+        Clear-RecycleBin -Force -ErrorAction Stop
+        Write-OutputColor "  Recycle Bin emptied successfully." -color "Success"
+        Add-SessionChange -Category "System" -Description "Emptied Recycle Bin ($recycleBinCount items)"
+        Clear-MenuCache
+    }
+    catch {
+        # Fallback: use COM Shell.Application
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            $recycleBin = $shell.NameSpace(0x0A)
+            if ($null -ne $recycleBin) {
+                foreach ($item in $recycleBin.Items()) {
+                    try {
+                        Remove-Item -LiteralPath $item.Path -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    catch { $null = $_ }
+                }
+            }
+            Write-OutputColor "  Recycle Bin emptied (COM fallback)." -color "Success"
+            Add-SessionChange -Category "System" -Description "Emptied Recycle Bin ($recycleBinCount items)"
+            Clear-MenuCache
+        }
+        catch {
+            Write-OutputColor "  Failed to empty Recycle Bin: $_" -color "Error"
+        }
+        finally {
+            if ($null -ne $shell) {
+                [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+            }
+        }
+    }
+}
+
+function Clear-UserProfileTemp {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  User Profile Temp Cleanup" -color "Info"
+    Write-OutputColor "  ─────────────────────────" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $currentUser = $env:USERNAME
+    $profilesPath = "C:\Users"
+    $totalCleaned = 0
+    $totalFiles = 0
+
+    $subPaths = @(
+        "AppData\Local\Temp",
+        "AppData\Local\CrashDumps",
+        "AppData\Local\D3DSCache",
+        "AppData\Local\Microsoft\Windows\INetCache"
+    )
+
+    $userProfiles = Get-ChildItem -LiteralPath $profilesPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -notin @('Public', 'Default', 'Default User', 'All Users')
+    }
+
+    if ($null -eq $userProfiles -or @($userProfiles).Count -eq 0) {
+        Write-OutputColor "  No user profiles found." -color "Info"
+        return
+    }
+
+    # Scan and display per-profile sizes
+    $profileData = @()
+    foreach ($userProfile in $userProfiles) {
+        $profileSize = 0
+        $isCurrentUser = ($userProfile.Name -eq $currentUser)
+        foreach ($subPath in $subPaths) {
+            $fullPath = Join-Path -Path $userProfile.FullName -ChildPath $subPath
+            if (Test-Path -LiteralPath $fullPath) {
+                # Skip current user's Temp (files in use)
+                if ($isCurrentUser -and $subPath -eq "AppData\Local\Temp") {
+                    continue
+                }
+                $profileSize += [long](Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+            }
+        }
+        $profileMB = [math]::Round($profileSize / 1MB, 1)
+        $skipNote = if ($isCurrentUser) { " (Temp skipped - in use)" } else { "" }
+        Write-OutputColor "  $($userProfile.Name): $profileMB MB$skipNote" -color $(if ($profileMB -gt 100) { "Warning" } else { "Info" })
+        $profileData += @{ Name = $userProfile.Name; Size = $profileSize; IsCurrentUser = $isCurrentUser; Path = $userProfile.FullName }
+    }
+
+    $grandTotal = ($profileData | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum
+    $grandTotalMB = [math]::Round($grandTotal / 1MB, 1)
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Total cleanable: $grandTotalMB MB" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    if ($grandTotal -eq 0) {
+        Write-OutputColor "  No temp files to clean." -color "Info"
+        return
+    }
+
+    if (-not (Confirm-UserAction -Message "Clean user profile temp files ($grandTotalMB MB)?" -DefaultYes)) {
+        Write-OutputColor "  Operation cancelled." -color "Info"
+        return
+    }
+
+    foreach ($pd in $profileData) {
+        if ($pd.Size -eq 0) { continue }
+        $profileCleaned = 0
+        $profileFiles = 0
+
+        foreach ($subPath in $subPaths) {
+            $fullPath = Join-Path -Path $pd.Path -ChildPath $subPath
+            if (-not (Test-Path -LiteralPath $fullPath)) { continue }
+
+            # Skip current user's Temp
+            if ($pd.IsCurrentUser -and $subPath -eq "AppData\Local\Temp") {
+                continue
+            }
+
+            $files = Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue
+            foreach ($file in $files) {
+                try {
+                    $fileSize = $file.Length
+                    Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop
+                    $profileCleaned += $fileSize
+                    $profileFiles++
+                }
+                catch { $null = $_ }
+            }
+        }
+
+        if ($profileCleaned -gt 0) {
+            $cleanedMB = [math]::Round($profileCleaned / 1MB, 1)
+            Write-OutputColor "  $($pd.Name): freed $cleanedMB MB ($profileFiles files)" -color "Success"
+            $totalCleaned += $profileCleaned
+            $totalFiles += $profileFiles
+        }
+    }
+
+    $totalCleanedMB = [math]::Round($totalCleaned / 1MB, 1)
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  User profile cleanup complete. Freed $totalCleanedMB MB ($totalFiles files)" -color "Success"
+    Add-SessionChange -Category "System" -Description "User profile temp cleanup freed $totalCleanedMB MB ($totalFiles files)"
+    Clear-MenuCache
+}
+
+function Clear-ShadowCopies {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Shadow Copy (Restore Point) Cleanup" -color "Info"
+    Write-OutputColor "  ────────────────────────────────────" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # List current shadow copies
+    try {
+        $vssOutput = vssadmin list shadows 2>&1
+        $shadowCount = @($vssOutput | Select-String -Pattern "Shadow Copy ID:" -ErrorAction SilentlyContinue).Count
+
+        if ($shadowCount -eq 0) {
+            Write-OutputColor "  No shadow copies found. Nothing to clean." -color "Info"
+            return
+        }
+
+        Write-OutputColor "  Found $shadowCount shadow copy/copies." -color "Info"
+
+        # Estimate storage used by shadow copies
+        $vssStorageOutput = vssadmin list shadowstorage 2>&1
+        $usedMatch = $vssStorageOutput | Select-String -Pattern "Used Shadow Copy Storage space:\s*(.+)" -ErrorAction SilentlyContinue
+        if ($null -ne $usedMatch) {
+            $usedStorage = $usedMatch.Matches[0].Groups[1].Value.Trim()
+            Write-OutputColor "  Shadow copy storage used: $usedStorage" -color "Info"
+        }
+    }
+    catch {
+        Write-OutputColor "  Could not enumerate shadow copies: $_" -color "Error"
+        return
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  WARNING: This will remove ALL shadow copies (restore points)." -color "Warning"
+    Write-OutputColor "  You will NOT be able to use System Restore to roll back." -color "Warning"
+    Write-OutputColor "  This operation CANNOT be undone." -color "Warning"
+    Write-OutputColor "" -color "Info"
+
+    # Explicit confirmation (no DefaultYes)
+    if (-not (Confirm-UserAction -Message "Delete ALL shadow copies? This is irreversible.")) {
+        Write-OutputColor "  Operation cancelled." -color "Info"
+        return
+    }
+
+    try {
+        $deleteOutput = vssadmin delete shadows /all /quiet 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-OutputColor "  All shadow copies deleted successfully." -color "Success"
+            Add-SessionChange -Category "System" -Description "Deleted $shadowCount shadow copies (restore points)"
+            Clear-MenuCache
+        } else {
+            Write-OutputColor "  Shadow copy deletion may have partially failed." -color "Warning"
+            Write-OutputColor "  vssadmin output: $deleteOutput" -color "Warning"
+        }
+    }
+    catch {
+        Write-OutputColor "  Failed to delete shadow copies: $_" -color "Error"
+    }
+}
+
+function Show-EnhancedCleanupAnalysis {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  ENHANCED DISK CLEANUP ANALYSIS".PadRight(72))│" -color "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Run standard analysis first
+    Show-CleanupAnalysis
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Extended Analysis:" -color "Info"
+    Write-OutputColor "  ──────────────────" -color "Info"
+
+    $extendedTotal = 0
+
+    # Windows.old
+    $winOldPath = "C:\Windows.old"
+    if (Test-Path -LiteralPath $winOldPath) {
+        $winOldSize = [long](Get-ChildItem -LiteralPath $winOldPath -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $winOldGB = [math]::Round($winOldSize / 1GB, 2)
+        $extendedTotal += $winOldSize
+        Write-OutputColor "  Windows.old: $winOldGB GB" -color "Warning"
+    } else {
+        Write-OutputColor "  Windows.old: Not present" -color "Info"
+    }
+
+    # Browser caches
+    $browserTotal = 0
+    $edgeCachePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data"
+    if (Test-Path -LiteralPath $edgeCachePath) {
+        $edgeSize = [long](Get-ChildItem -Path "$edgeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $edgeCodeSize = [long](Get-ChildItem -Path "$edgeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $browserTotal += $edgeSize + $edgeCodeSize
+        $edgeMB = [math]::Round(($edgeSize + $edgeCodeSize) / 1MB, 1)
+        Write-OutputColor "  Edge cache: $edgeMB MB" -color $(if ($edgeMB -gt 200) { "Warning" } else { "Info" })
+    }
+
+    $chromeCachePath = "$env:LOCALAPPDATA\Google\Chrome\User Data"
+    if (Test-Path -LiteralPath $chromeCachePath) {
+        $chromeSize = [long](Get-ChildItem -Path "$chromeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $chromeCodeSize = [long](Get-ChildItem -Path "$chromeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $browserTotal += $chromeSize + $chromeCodeSize
+        $chromeMB = [math]::Round(($chromeSize + $chromeCodeSize) / 1MB, 1)
+        Write-OutputColor "  Chrome cache: $chromeMB MB" -color $(if ($chromeMB -gt 200) { "Warning" } else { "Info" })
+    }
+
+    $firefoxProfilePath = "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles"
+    if (Test-Path -LiteralPath $firefoxProfilePath) {
+        $firefoxSize = [long](Get-ChildItem -Path "$firefoxProfilePath\*\cache2\*" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $browserTotal += $firefoxSize
+        $firefoxMB = [math]::Round($firefoxSize / 1MB, 1)
+        Write-OutputColor "  Firefox cache: $firefoxMB MB" -color $(if ($firefoxMB -gt 200) { "Warning" } else { "Info" })
+    }
+
+    if ($browserTotal -eq 0) {
+        Write-OutputColor "  Browser caches: No caches found" -color "Info"
+    }
+    $extendedTotal += $browserTotal
+
+    # Recycle Bin estimate
+    $recycleBinCount = 0
+    try {
+        $shell = New-Object -ComObject Shell.Application
+        $recycleBin = $shell.NameSpace(0x0A)
+        if ($null -ne $recycleBin) {
+            $recycleBinCount = $recycleBin.Items().Count
+        }
+    }
+    catch { $null = $_ }
+    finally {
+        if ($null -ne $shell) {
+            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+        }
+    }
+    Write-OutputColor "  Recycle Bin: $recycleBinCount item(s)" -color $(if ($recycleBinCount -gt 50) { "Warning" } else { "Info" })
+
+    # Shadow copies
+    try {
+        $vssOutput = vssadmin list shadows 2>&1
+        $shadowCount = @($vssOutput | Select-String -Pattern "Shadow Copy ID:" -ErrorAction SilentlyContinue).Count
+        Write-OutputColor "  Shadow copies: $shadowCount" -color $(if ($shadowCount -gt 3) { "Warning" } else { "Info" })
+
+        $vssStorageOutput = vssadmin list shadowstorage 2>&1
+        $usedMatch = $vssStorageOutput | Select-String -Pattern "Used Shadow Copy Storage space:\s*(.+)" -ErrorAction SilentlyContinue
+        if ($null -ne $usedMatch) {
+            $usedStorage = $usedMatch.Matches[0].Groups[1].Value.Trim()
+            Write-OutputColor "  Shadow copy storage used: $usedStorage" -color "Info"
+        }
+    }
+    catch {
+        Write-OutputColor "  Shadow copies: Could not enumerate" -color "Warning"
+    }
+
+    # User profile temp sizes
+    $userTempTotal = 0
+    $profilesPath = "C:\Users"
+    $currentUser = $env:USERNAME
+    $subPaths = @(
+        "AppData\Local\Temp",
+        "AppData\Local\CrashDumps",
+        "AppData\Local\D3DSCache",
+        "AppData\Local\Microsoft\Windows\INetCache"
+    )
+
+    $userProfiles = Get-ChildItem -LiteralPath $profilesPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -notin @('Public', 'Default', 'Default User', 'All Users')
+    }
+
+    foreach ($userProfile in $userProfiles) {
+        $profileSize = 0
+        $isCurrentUser = ($userProfile.Name -eq $currentUser)
+        foreach ($subPath in $subPaths) {
+            $fullPath = Join-Path -Path $userProfile.FullName -ChildPath $subPath
+            if (Test-Path -LiteralPath $fullPath) {
+                if ($isCurrentUser -and $subPath -eq "AppData\Local\Temp") { continue }
+                $profileSize += [long](Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+            }
+        }
+        $userTempTotal += $profileSize
+        $profileMB = [math]::Round($profileSize / 1MB, 1)
+        $skipNote = if ($isCurrentUser) { " (Temp skipped)" } else { "" }
+        if ($profileMB -gt 0) {
+            Write-OutputColor "  User temp ($($userProfile.Name)): $profileMB MB$skipNote" -color $(if ($profileMB -gt 100) { "Warning" } else { "Info" })
+        }
+    }
+    $extendedTotal += $userTempTotal
+
+    # Grand total
+    $extendedMB = [math]::Round($extendedTotal / 1MB, 0)
+    $extendedGB = [math]::Round($extendedTotal / 1GB, 1)
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Extended potential savings: ${extendedMB} MB (${extendedGB} GB)" -color $(if ($extendedGB -gt 1) { "Warning" } else { "Success" })
+    Write-OutputColor "  (Shadow copy and Recycle Bin sizes not included in total)" -color "Info"
+}
+
+function Invoke-FullEnhancedCleanup {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  FULL ENHANCED CLEANUP".PadRight(72))│" -color "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $totalFreed = 0
+
+    # 1. Quick Clean (temp files)
+    Write-OutputColor "  [1/7] Quick Clean (temp files)..." -color "Info"
+    $beforeTemp = (Get-PSDrive -Name C -ErrorAction SilentlyContinue).Free
+    Invoke-QuickClean
+    $afterTemp = (Get-PSDrive -Name C -ErrorAction SilentlyContinue).Free
+    $tempFreed = $afterTemp - $beforeTemp
+    if ($tempFreed -gt 0) { $totalFreed += $tempFreed }
+
+    # 2. Windows Update Cache
+    Write-OutputColor "  [2/7] Windows Update Cache..." -color "Info"
+    Clear-WindowsUpdateCache
+
+    # 3. Browser Caches (auto-confirm)
+    Write-OutputColor "  [3/7] Browser Caches..." -color "Info"
+    $browserPaths = @()
+    $edgeCachePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data"
+    if (Test-Path -LiteralPath $edgeCachePath) {
+        $browserPaths += "$edgeCachePath\*\Cache\*"
+        $browserPaths += "$edgeCachePath\*\Code Cache\*"
+    }
+    $chromeCachePath = "$env:LOCALAPPDATA\Google\Chrome\User Data"
+    if (Test-Path -LiteralPath $chromeCachePath) {
+        $browserPaths += "$chromeCachePath\*\Cache\*"
+        $browserPaths += "$chromeCachePath\*\Code Cache\*"
+    }
+    $firefoxProfilePath = "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles"
+    if (Test-Path -LiteralPath $firefoxProfilePath) {
+        $browserPaths += "$firefoxProfilePath\*\cache2\*"
+    }
+
+    $browserCleaned = 0
+    foreach ($bp in $browserPaths) {
+        Get-ChildItem -Path $bp -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                $fileLen = $_.Length
+                Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                $browserCleaned += $fileLen
+            }
+            catch { $null = $_ }
+        }
+    }
+    if ($browserCleaned -gt 0) {
+        $browserMB = [math]::Round($browserCleaned / 1MB, 1)
+        Write-OutputColor "  Browser caches cleared: $browserMB MB freed." -color "Success"
+        Add-SessionChange -Category "System" -Description "Full cleanup: browser caches freed $browserMB MB"
+    } else {
+        Write-OutputColor "  No browser cache files to clean." -color "Info"
+    }
+
+    # 4. Recycle Bin
+    Write-OutputColor "  [4/7] Recycle Bin..." -color "Info"
+    try {
+        Clear-RecycleBin -Force -ErrorAction Stop
+        Write-OutputColor "  Recycle Bin emptied." -color "Success"
+    }
+    catch {
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            $recycleBin = $shell.NameSpace(0x0A)
+            if ($null -ne $recycleBin) {
+                foreach ($item in $recycleBin.Items()) {
+                    try { Remove-Item -LiteralPath $item.Path -Recurse -Force -ErrorAction SilentlyContinue }
+                    catch { $null = $_ }
+                }
+            }
+            Write-OutputColor "  Recycle Bin emptied (COM fallback)." -color "Success"
+        }
+        catch {
+            Write-OutputColor "  Could not empty Recycle Bin: $_" -color "Warning"
+        }
+        finally {
+            if ($null -ne $shell) {
+                [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+            }
+        }
+    }
+
+    # 5. User Profile Temp
+    Write-OutputColor "  [5/7] User Profile Temp Files..." -color "Info"
+    $currentUser = $env:USERNAME
+    $subPaths = @(
+        "AppData\Local\Temp",
+        "AppData\Local\CrashDumps",
+        "AppData\Local\D3DSCache",
+        "AppData\Local\Microsoft\Windows\INetCache"
+    )
+    $profileCleaned = 0
+    $userProfiles = Get-ChildItem -LiteralPath "C:\Users" -Directory -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -notin @('Public', 'Default', 'Default User', 'All Users')
+    }
+    foreach ($userProfile in $userProfiles) {
+        $isCurrentUser = ($userProfile.Name -eq $currentUser)
+        foreach ($subPath in $subPaths) {
+            if ($isCurrentUser -and $subPath -eq "AppData\Local\Temp") { continue }
+            $fullPath = Join-Path -Path $userProfile.FullName -ChildPath $subPath
+            if (Test-Path -LiteralPath $fullPath) {
+                Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                    try {
+                        $fileLen = $_.Length
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                        $profileCleaned += $fileLen
+                    }
+                    catch { $null = $_ }
+                }
+            }
+        }
+    }
+    if ($profileCleaned -gt 0) {
+        $profileMB = [math]::Round($profileCleaned / 1MB, 1)
+        Write-OutputColor "  User profile temp cleaned: $profileMB MB freed." -color "Success"
+        Add-SessionChange -Category "System" -Description "Full cleanup: user profile temp freed $profileMB MB"
+    } else {
+        Write-OutputColor "  No user profile temp files to clean." -color "Info"
+    }
+
+    # 6. Windows.old (if present)
+    Write-OutputColor "  [6/7] Windows.old..." -color "Info"
+    if (Test-Path -LiteralPath "C:\Windows.old") {
+        $winOldSize = [long](Get-ChildItem -LiteralPath "C:\Windows.old" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        $winOldGB = [math]::Round($winOldSize / 1GB, 2)
+        Write-OutputColor "  Windows.old found ($winOldGB GB)." -color "Warning"
+        if (Confirm-UserAction -Message "Remove Windows.old ($winOldGB GB)? This is irreversible.") {
+            try {
+                $null = takeown /F "C:\Windows.old" /R /A /D Y 2>&1
+                $null = icacls "C:\Windows.old" /grant Administrators:F /T /C /Q 2>&1
+                Remove-Item -LiteralPath "C:\Windows.old" -Recurse -Force -ErrorAction Stop
+                Write-OutputColor "  Windows.old removed: $winOldGB GB freed." -color "Success"
+                Add-SessionChange -Category "System" -Description "Full cleanup: removed Windows.old ($winOldGB GB)"
+            }
+            catch {
+                Write-OutputColor "  Failed to remove Windows.old: $_" -color "Error"
+            }
+        } else {
+            Write-OutputColor "  Skipped Windows.old removal." -color "Info"
+        }
+    } else {
+        Write-OutputColor "  Windows.old not present. Skipping." -color "Info"
+    }
+
+    # 7. Shadow Copies
+    Write-OutputColor "  [7/7] Shadow Copies..." -color "Info"
+    try {
+        $vssOutput = vssadmin list shadows 2>&1
+        $shadowCount = @($vssOutput | Select-String -Pattern "Shadow Copy ID:" -ErrorAction SilentlyContinue).Count
+        if ($shadowCount -gt 0) {
+            Write-OutputColor "  Found $shadowCount shadow copy/copies." -color "Warning"
+            Write-OutputColor "  WARNING: Deleting shadow copies removes ALL restore points and CANNOT be undone." -color "Warning"
+            if (Confirm-UserAction -Message "Delete ALL shadow copies?") {
+                $null = vssadmin delete shadows /all /quiet 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-OutputColor "  Shadow copies deleted." -color "Success"
+                    Add-SessionChange -Category "System" -Description "Full cleanup: deleted $shadowCount shadow copies"
+                } else {
+                    Write-OutputColor "  Shadow copy deletion may have partially failed." -color "Warning"
+                }
+            } else {
+                Write-OutputColor "  Skipped shadow copy deletion." -color "Info"
+            }
+        } else {
+            Write-OutputColor "  No shadow copies found. Skipping." -color "Info"
+        }
+    }
+    catch {
+        Write-OutputColor "  Could not process shadow copies: $_" -color "Warning"
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Full Enhanced Cleanup complete." -color "Success"
+    Add-SessionChange -Category "System" -Description "Full Enhanced Cleanup completed"
+    Clear-MenuCache
 }
 #endregion

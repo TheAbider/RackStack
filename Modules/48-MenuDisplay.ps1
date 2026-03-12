@@ -214,7 +214,7 @@ function Show-ConfigureServerMenu {
     Write-OutputColor "  │$("  TOOLS & MONITORING".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[5]  Tools & Utilities ►"
-    Write-OutputColor "  │$("        NTP, Disk Cleanup, Performance, Events, Services".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("        NTP, Disk Cleanup, Debloat, Performance, Events, Services".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-MenuItem "[6]  Storage & Clustering ►"
     Write-OutputColor "  │$("        Storage Manager, Cluster, BitLocker, Dedup, Replica".PadRight(72))│" -color "Info"
@@ -467,6 +467,7 @@ function Show-ToolsUtilitiesMenu {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[1]  NTP Configuration" -Status $ntpStatus -StatusColor $ntpColor
     Write-MenuItem "[2]  Disk Cleanup"
+    Write-MenuItem "[14] System Debloat / Optimization ►"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 

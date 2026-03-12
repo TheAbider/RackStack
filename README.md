@@ -73,7 +73,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\RackStack.ps1
 ```
 
-> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 64 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
+> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 65 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
 
 ### Single-File Deployment (Production)
 
@@ -84,7 +84,7 @@ For production use, generate a monolithic single-file script (~35K lines) that y
 .\sync-to-monolithic.ps1
 ```
 
-The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 64 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
+The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 65 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
 > **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v{version}.ps1` = monolithic build for deployment/compilation.
 
@@ -273,7 +273,7 @@ New in v1.8.0: `InstallAgents` array for multi-agent installs, `ValidateCluster`
 
 ```
 RackStack/
-├── RackStack.ps1               # Modular loader -- dot-sources 64 modules (dev use)
+├── RackStack.ps1               # Modular loader -- dot-sources 65 modules (dev use)
 ├── RackStack v{version}.ps1    # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
@@ -294,7 +294,7 @@ RackStack/
 
 ### Module Architecture
 
-64 modules numbered for load order. Dependencies flow downward.
+65 modules numbered for load order. Dependencies flow downward.
 
 | Range | Category | Highlights |
 |---|---|---|
@@ -314,7 +314,7 @@ RackStack/
 # Full test suite (~1,854 tests, ~2 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
-# PSScriptAnalyzer (0 errors on all 64 modules + monolithic)
+# PSScriptAnalyzer (0 errors on all 65 modules + monolithic)
 powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 # Pre-release validation (parse + PSSA + structure + sync + version + tests)

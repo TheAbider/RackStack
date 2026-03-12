@@ -90,6 +90,11 @@ function Confirm-UserAction {
         [switch]$DefaultYes
     )
 
+    # In silent/headless mode, auto-confirm based on DefaultYes
+    if ($script:CLISilent) {
+        return $DefaultYes.IsPresent
+    }
+
     $prompt = if ($DefaultYes) { "$Message [Y/n]" } else { "$Message [y/N]" }
     Write-OutputColor $prompt -color "Info"
     $response = Read-Host

@@ -42,11 +42,11 @@ if (-not (Test-Path $monoPath)) {
     $initModuleFiles = Get-ChildItem $modulesDir -Filter "*.ps1" | Sort-Object Name
 
     # Verify expected module count
-    $expectedModuleCount = 64
+    $expectedModuleCount = 65
     $actualModuleCount = @($initModuleFiles).Count
     if ($actualModuleCount -ne $expectedModuleCount) {
         Write-Warning "Expected $expectedModuleCount modules but found $actualModuleCount"
-        $expectedNumbers = 0..63
+        $expectedNumbers = 0..64
         foreach ($num in $expectedNumbers) {
             $prefix = "{0:D2}-" -f $num
             $found = $initModuleFiles | Where-Object { $_.Name -like "$prefix*" }
@@ -120,11 +120,11 @@ Write-Host "Monolithic: $($monoLines.Count) lines"
 $moduleFiles = Get-ChildItem $modulesDir -Filter "*.ps1" | Sort-Object Name
 
 # Verify expected module count
-$expectedModuleCount = 64
+$expectedModuleCount = 65
 $actualModuleCount = @($moduleFiles).Count
 if ($actualModuleCount -ne $expectedModuleCount) {
     Write-Warning "Expected $expectedModuleCount modules but found $actualModuleCount"
-    $expectedNumbers = 0..63
+    $expectedNumbers = 0..64
     foreach ($num in $expectedNumbers) {
         $prefix = "{0:D2}-" -f $num
         $found = $moduleFiles | Where-Object { $_.Name -like "$prefix*" }

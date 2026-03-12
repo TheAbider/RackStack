@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.22.0
+
+- **New Feature:** CLI headless mode — run actions without interactive menus via command-line parameters: `-Action Cleanup|Debloat|HealthCheck|Batch`, `-Profile Light|Standard|Aggressive`, `-Config <path>`, `-Silent`. Works with both .ps1 and compiled .exe for remote one-liner deployment (Header, 00-Initialization, 03-InputValidation, 50-EntryPoint).
+- **New Feature:** System Debloat & Optimization module (64-SystemDebloat) — remove bloatware AppxPackages, disable telemetry services/tasks, apply registry performance tweaks, remove unnecessary optional features. Three profiles (Light/Standard/Aggressive) with separate workstation and server paths. Includes quick scan preview, custom category picker, undo support for services and registry changes.
+- **New Feature:** Enhanced Disk Cleanup — 7 new cleanup functions added to existing module: Windows.old removal, browser cache clearing (Edge/Chrome/Firefox), recycle bin emptying, user profile temp cleanup, shadow copy removal, enhanced analysis view, and full cleanup mode. Menu expanded from 6 to 13 options (20-DiskCleanup).
+- **New Feature:** PowerShell Scan workflow — daily PSSA scanning with automatic GitHub issue creation/resolution per script file, risk-level labeling, and workflow summary reports.
+- **Fix:** PSSA findings in test file — `$null` comparison order corrected, `PSAvoidUsingConvertToSecureStringWithPlainText` excluded for test-only dummy credentials (Tests/Run-Tests, PSScriptAnalyzerSettings).
+- 65 modules, 2501 tests
+
 ## v1.21.18
 
 - **Bug Fix:** Pressing Q for Quick Setup Wizard on the Configure Server menu exited the script instead of launching the wizard — "q" was in the global exit commands list, intercepting it before the menu could handle it. Removed "q" from exit shortcuts; users can still type "exit" or "quit" to close the script (04-Navigation).

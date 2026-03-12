@@ -94,7 +94,12 @@ function Assert-Elevation {
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         Write-OutputColor "  This script requires administrative privileges. Restarting with elevation..." -color "Error"
         try {
-            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -ErrorAction Stop
+            $elevateArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+            if ($script:CLIAction)  { $elevateArgs += " -Action $($script:CLIAction)" }
+            if ($script:CLIProfile -ne 'Standard') { $elevateArgs += " -Tier $($script:CLIProfile)" }
+            if ($script:CLIConfig)  { $elevateArgs += " -Config `"$($script:CLIConfig)`"" }
+            if ($script:CLISilent)  { $elevateArgs += " -Silent" }
+            Start-Process powershell -ArgumentList $elevateArgs -Verb RunAs -ErrorAction Stop
         }
         catch {
             Write-OutputColor "  Failed to elevate: $_" -color "Error"
@@ -138,11 +143,88 @@ function Assert-Elevation {
             }
         }
 
-        Start-Show-Mainmenu
+        # CLI headless mode: dispatch action instead of interactive menu
+        if ($script:HeadlessMode) {
+            Invoke-CLIAction
+        }
+        else {
+            Start-Show-Mainmenu
+        }
 
         # Stop transcript when done
         Stop-ScriptTranscript
     }
+}
+
+# CLI headless mode action dispatcher
+function Invoke-CLIAction {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor ("=" * 65) -color "Info"
+    Write-OutputColor "  $($script:ToolFullName.ToUpper()) v$($script:ScriptVersion) - CLI MODE" -color "Info"
+    Write-OutputColor ("=" * 65) -color "Info"
+    Write-OutputColor "  Action:  $($script:CLIAction)" -color "Info"
+    Write-OutputColor "  Profile: $($script:CLIProfile)" -color "Info"
+    if ($script:CLISilent) {
+        Write-OutputColor "  Mode:    Silent (prompts auto-confirmed)" -color "Info"
+    }
+    Write-OutputColor "" -color "Info"
+
+    switch ($script:CLIAction) {
+        'Cleanup' {
+            Write-OutputColor "  Running disk cleanup ($($script:CLIProfile) profile)..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            switch ($script:CLIProfile) {
+                'Light'      { Invoke-QuickClean }
+                'Standard'   { Invoke-StandardClean }
+                'Aggressive' { Invoke-DeepClean }
+            }
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Cleanup complete." -color "Success"
+        }
+        'Debloat' {
+            $osType = if (Test-WindowsServer) { "Server" } else { "Workstation" }
+            Write-OutputColor "  Running $osType debloat ($($script:CLIProfile) profile)..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            if (Test-WindowsServer) {
+                Invoke-ServerDebloat -DebloatProfile $script:CLIProfile
+            }
+            else {
+                Invoke-WorkstationDebloat -DebloatProfile $script:CLIProfile
+            }
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Debloat complete." -color "Success"
+        }
+        'HealthCheck' {
+            Show-SystemHealthCheck
+        }
+        'Batch' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Action Batch requires -Config <path>" -color "Error"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $script:CLIConfig)) {
+                Write-OutputColor "  ERROR: Config file not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+            try {
+                $batchConfig = Get-Content -LiteralPath $script:CLIConfig -Raw | ConvertFrom-Json
+                $configHash = @{}
+                $batchConfig.PSObject.Properties | ForEach-Object { $configHash[$_.Name] = $_.Value }
+                Start-BatchMode -Config $configHash
+            }
+            catch {
+                Write-OutputColor "  ERROR: Failed to load config: $_" -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
+        default {
+            Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
+            [Environment]::Exit(1)
+        }
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  CLI action completed successfully." -color "Success"
 }
 
 # Dry-run mode flag (set per batch session)
