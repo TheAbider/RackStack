@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.22.1
+    Automated Test Runner for RackStack v1.22.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9489,6 +9489,57 @@ try {
 
 } catch {
     Write-TestResult "Error code system tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION: CLI HEADLESS MODE & AUTOMATION
+# ============================================================================
+Write-SectionHeader "CLI HEADLESS MODE & AUTOMATION"
+
+try {
+    $mod50 = Get-Content -LiteralPath (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw -ErrorAction Stop
+    $headerContent = Get-Content -LiteralPath (Join-Path $script:ModuleRoot "Header.ps1") -Raw -ErrorAction Stop
+
+    # CLI action dispatch
+    Write-TestResult "50-EntryPoint: Invoke-CLIAction defined" ($mod50 -match 'function\s+Invoke-CLIAction\b')
+    Write-TestResult "50-EntryPoint: HeadlessMode routes to Invoke-CLIAction" ($mod50 -match 'HeadlessMode[\s\S]{0,100}Invoke-CLIAction')
+    Write-TestResult "50-EntryPoint: CLI handles Cleanup action" ($mod50 -match "Invoke-CLIAction[\s\S]*?'Cleanup'")
+    Write-TestResult "50-EntryPoint: CLI handles Debloat action" ($mod50 -match "Invoke-CLIAction[\s\S]*?'Debloat'")
+    Write-TestResult "50-EntryPoint: CLI handles HealthCheck action" ($mod50 -match "Invoke-CLIAction[\s\S]*?'HealthCheck'")
+    Write-TestResult "50-EntryPoint: CLI handles Batch action" ($mod50 -match "Invoke-CLIAction[\s\S]*?'Batch'")
+    Write-TestResult "50-EntryPoint: CLI handles QuickScan action" ($mod50 -match "Invoke-CLIAction[\s\S]*?'QuickScan'")
+    Write-TestResult "50-EntryPoint: CLI exits with code 0 on success" ($mod50 -match 'Invoke-CLIAction[\s\S]*?\[Environment\]::Exit\(0\)')
+    Write-TestResult "50-EntryPoint: CLI exits with code 1 on error" ($mod50 -match 'Invoke-CLIAction[\s\S]*?\[Environment\]::Exit\(1\)')
+
+    # Header param block
+    Write-TestResult "Header: has param block" ($headerContent -match 'param\s*\(')
+    Write-TestResult "Header: Action param with ValidateSet" ($headerContent -match "ValidateSet.*Cleanup.*Debloat.*HealthCheck.*Batch.*QuickScan")
+    Write-TestResult "Header: Tier param with ValidateSet" ($headerContent -match "ValidateSet.*Light.*Standard.*Aggressive")
+    Write-TestResult "Header: Silent switch param" ($headerContent -match '\[switch\]\$Silent')
+
+    # QuickScan runs health + disk + debloat
+    Write-TestResult "50-EntryPoint: QuickScan runs health check" ($mod50 -match "'QuickScan'[\s\S]{0,500}Show-SystemHealthCheck")
+    Write-TestResult "50-EntryPoint: QuickScan runs disk analysis" ($mod50 -match "'QuickScan'[\s\S]{0,500}Show-EnhancedCleanupAnalysis")
+    Write-TestResult "50-EntryPoint: QuickScan runs debloat analysis" ($mod50 -match "'QuickScan'[\s\S]{0,1000}Show-DebloatAnalysis")
+
+    # Bootstrap installer
+    $bootstrapPath = Join-Path $script:ModuleRoot "Install-RackStack.ps1"
+    if (Test-Path -LiteralPath $bootstrapPath) {
+        $bootstrapContent = Get-Content -LiteralPath $bootstrapPath -Raw
+        Write-TestResult "Install-RackStack: bootstrap installer exists" $true
+        Write-TestResult "Install-RackStack: checks for admin" ($bootstrapContent -match 'IsInRole.*Administrator')
+        Write-TestResult "Install-RackStack: queries GitHub releases API" ($bootstrapContent -match 'api\.github\.com/repos.*releases/latest')
+        Write-TestResult "Install-RackStack: downloads RackStack.exe" ($bootstrapContent -match 'Invoke-WebRequest.*RackStack\.exe|browser_download_url')
+        Write-TestResult "Install-RackStack: has Action param" ($bootstrapContent -match '\[string\]\$Action')
+        Write-TestResult "Install-RackStack: has Silent switch" ($bootstrapContent -match '\[switch\]\$Silent')
+        Write-TestResult "Install-RackStack: enforces TLS 1.2" ($bootstrapContent -match 'Tls12')
+    }
+    else {
+        Write-TestResult "Install-RackStack: bootstrap installer exists" $false "File not found"
+    }
+
+} catch {
+    Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

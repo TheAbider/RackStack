@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.22.2
+
+- **New Feature:** QuickScan CLI action — combined health check + disk analysis + debloat recommendations in a single pass (`-Action QuickScan`). Useful for first-time assessment of any machine (50-EntryPoint).
+- **New Feature:** Bootstrap installer (`Install-RackStack.ps1`) — one-liner remote deployment that downloads the latest release from GitHub and runs it with CLI parameters. Works with Ansible, RMM tools, PDQ, and any tool that can execute PowerShell. Includes version caching, TLS 1.2 enforcement, and proper exit codes.
+- **Improvement:** CLI headless mode now exits with proper exit codes (0 = success, 1 = error) for CI/CD integration.
+- 65 modules, 2554 tests
+
 ## v1.22.1
 
 - **New Feature:** Structured error code system — 46 error codes across 8 categories (RS-1xxx Core, RS-2xxx Network, RS-3xxx Security, RS-4xxx Roles, RS-5xxx VM, RS-6xxx Storage, RS-7xxx Config, RS-8xxx Agent) with wiki-linked troubleshooting. Errors display code, message, and clickable hyperlink to wiki documentation. OSC 8 hyperlinks in Windows Terminal, plain URL fallback elsewhere (02-Logging).

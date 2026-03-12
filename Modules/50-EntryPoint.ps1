@@ -217,6 +217,24 @@ function Invoke-CLIAction {
                 [Environment]::Exit(1)
             }
         }
+        'QuickScan' {
+            Write-OutputColor "  Running quick scan (health + disk + debloat analysis)..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            # Phase 1: System health
+            Write-OutputColor "  --- SYSTEM HEALTH ---" -color "Info"
+            Show-SystemHealthCheck
+
+            # Phase 2: Disk space analysis
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  --- DISK SPACE ANALYSIS ---" -color "Info"
+            Show-EnhancedCleanupAnalysis
+
+            # Phase 3: Debloat recommendations
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  --- DEBLOAT RECOMMENDATIONS ---" -color "Info"
+            Show-DebloatAnalysis
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
@@ -225,6 +243,11 @@ function Invoke-CLIAction {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  CLI action completed successfully." -color "Success"
+
+    # Exit with proper code for automation consumers
+    if ($script:HeadlessMode) {
+        [Environment]::Exit(0)
+    }
 }
 
 # Dry-run mode flag (set per batch session)

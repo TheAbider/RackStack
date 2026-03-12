@@ -30,7 +30,7 @@
     7h3 4b1d3r
 
 .VERSION
-    1.22.1
+    1.22.2
 
 .LAST UPDATED
     03/12/2026
@@ -1390,7 +1390,7 @@
 param(
     # CLI headless mode: run a specific action without interactive menus
     # Usage: RackStack.exe -Action Cleanup [-Tier Standard] [-Silent]
-    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch')]
+    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan')]
     [string]$Action,
 
     [ValidateSet('Light', 'Standard', 'Aggressive')]

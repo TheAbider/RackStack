@@ -269,6 +269,52 @@ Place `batch_config.json` next to the script and it runs automatically on launch
 
 New in v1.8.0: `InstallAgents` array for multi-agent installs, `ValidateCluster` for cluster readiness checks.
 
+## CLI Headless Mode
+
+Run RackStack non-interactively for automation (Ansible, RMM tools, PDQ, remote scripts):
+
+```powershell
+# Quick health + disk + debloat assessment
+RackStack.exe -Action QuickScan -Silent
+
+# Disk cleanup (Standard profile)
+RackStack.exe -Action Cleanup -Tier Standard -Silent
+
+# System debloat (Aggressive, auto-detects Server vs Workstation)
+RackStack.exe -Action Debloat -Tier Aggressive -Silent
+
+# Run a batch config JSON file
+RackStack.exe -Action Batch -Config "C:\path\to\config.json" -Silent
+```
+
+### One-Liner Remote Deployment
+
+Download and run the latest release in one command:
+
+```powershell
+# Download + QuickScan (default)
+irm https://raw.githubusercontent.com/TheAbider/RackStack/master/Install-RackStack.ps1 | iex
+
+# Download + specific action
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $s = irm https://raw.githubusercontent.com/TheAbider/RackStack/master/Install-RackStack.ps1; $s | Set-Content rs.ps1; .\rs.ps1 -Action Cleanup -Tier Standard -Silent }"
+```
+
+### Ansible Example
+
+```yaml
+- name: Run RackStack cleanup on Windows hosts
+  win_shell: |
+    $url = 'https://github.com/TheAbider/RackStack/releases/latest/download/RackStack.exe'
+    Invoke-WebRequest -Uri $url -OutFile C:\Temp\RackStack.exe -UseBasicParsing
+    C:\Temp\RackStack.exe -Action Cleanup -Tier Standard -Silent
+```
+
+**Exit codes:** `0` = success, `1` = error. All CLI actions return proper exit codes for CI/CD integration.
+
+**Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
+
+**Actions:** `Cleanup` (disk cleanup), `Debloat` (remove bloatware + telemetry), `HealthCheck` (system health report), `QuickScan` (health + disk + debloat analysis), `Batch` (JSON-driven full config).
+
 ## Project Structure
 
 ```
@@ -283,9 +329,9 @@ RackStack/
 │   ├── 00-Initialization.ps1   # Constants, variables, config loading
 │   ├── 01-Console.ps1          # Console window management
 │   ├── ...                     # 61 more modules
-│   └── 62-HyperVReplica.ps1
+│   └── 64-SystemDebloat.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 1854 automated tests
+│   ├── Run-Tests.ps1           # 2500+ automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -306,12 +352,12 @@ RackStack/
 | 40-44 | **VM Pipeline** | Host storage, VHD management, ISO downloads, offline VHD, VM deployment |
 | 45-50 | **Session** | Config export, session summary, cleanup, menus, entry point |
 | 51-59 | **Extended** | Cluster dashboard, checkpoints, export/import, HTML reports, QoL, operations, remote, diagnostics, storage backends |
-| 60-62 | **Server Roles** | Role templates, AD DS promotion, Hyper-V Replica management |
+| 60-64 | **Server Roles** | Role templates, AD DS promotion, Hyper-V Replica, scheduled tasks, system debloat |
 
 ## Testing
 
 ```powershell
-# Full test suite (~1,854 tests, ~2 minutes)
+# Full test suite (~2,500+ tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 65 modules + monolithic)
@@ -331,7 +377,7 @@ Tests cover parsing, module loading, function existence (300+), version consiste
 4. Test: `.\Tests\Run-Tests.ps1`
 5. Compile: `Invoke-PS2EXE -InputFile 'RackStack v{ver}.ps1' -OutputFile 'RackStack.exe'`
 
-The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 62 region pairs are flat (non-nested). Use `-DryRun` to preview.
+The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 64 region pairs are flat (non-nested). Use `-DryRun` to preview.
 
 > **File summary:** `RackStack.ps1` = modular loader (for dev). `RackStack v{version}.ps1` = monolithic build (for deployment). `RackStack.exe` = compiled from monolithic (for end users).
 
