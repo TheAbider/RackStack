@@ -92,7 +92,7 @@ function Remove-OldTranscripts {
 # Function to ensure the script is running with elevated privileges
 function Assert-Elevation {
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-OutputColor "  This script requires administrative privileges. Restarting with elevation..." -color "Error"
+        Write-RackStackError -Code "RS-1001"
         try {
             $elevateArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
             if ($script:CLIAction)  { $elevateArgs += " -Action $($script:CLIAction)" }

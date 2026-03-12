@@ -236,6 +236,150 @@ function Write-CenteredOutput {
     Write-OutputColor $border -color $color
 }
 
+# ── Error Code Registry ──────────────────────────────────────────────
+# Structured error codes with categories for wiki-linked troubleshooting
+# Ranges: 1xxx=Core, 2xxx=Network, 3xxx=Security, 4xxx=Roles, 5xxx=VM, 6xxx=Storage, 7xxx=Config, 8xxx=Agent
+$script:ErrorCodes = @{
+    # Core / System (1000-1999)
+    "RS-1001" = @{ Message = "Script requires administrative privileges"; Category = "Core" }
+    "RS-1002" = @{ Message = "defaults.json parse error"; Category = "Core" }
+    "RS-1003" = @{ Message = "Module load failure"; Category = "Core" }
+    "RS-1004" = @{ Message = "PowerShell version unsupported"; Category = "Core" }
+    "RS-1005" = @{ Message = "Transcript start failed"; Category = "Core" }
+    "RS-1006" = @{ Message = "Configuration directory inaccessible"; Category = "Core" }
+    "RS-1007" = @{ Message = "Invalid CLI parameter"; Category = "Core" }
+    "RS-1008" = @{ Message = "Batch config profile parse error"; Category = "Core" }
+
+    # Networking (2000-2999)
+    "RS-2001" = @{ Message = "No physical network adapters found"; Category = "Network" }
+    "RS-2002" = @{ Message = "Invalid IP address format"; Category = "Network" }
+    "RS-2003" = @{ Message = "Invalid subnet mask or CIDR prefix"; Category = "Network" }
+    "RS-2004" = @{ Message = "VLAN creation failed"; Category = "Network" }
+    "RS-2005" = @{ Message = "SET team creation failed"; Category = "Network" }
+    "RS-2006" = @{ Message = "iSCSI target unreachable"; Category = "Network" }
+    "RS-2007" = @{ Message = "DNS configuration failed"; Category = "Network" }
+    "RS-2008" = @{ Message = "Hostname change failed"; Category = "Network" }
+    "RS-2009" = @{ Message = "Domain join failed"; Category = "Network" }
+    "RS-2010" = @{ Message = "NTP synchronization failed"; Category = "Network" }
+    "RS-2011" = @{ Message = "Network connectivity test failed"; Category = "Network" }
+
+    # Security (3000-3999)
+    "RS-3001" = @{ Message = "Firewall profile configuration failed"; Category = "Security" }
+    "RS-3002" = @{ Message = "Password does not meet complexity requirements"; Category = "Security" }
+    "RS-3003" = @{ Message = "Local admin account creation failed"; Category = "Security" }
+    "RS-3004" = @{ Message = "Defender exclusion path not found"; Category = "Security" }
+    "RS-3005" = @{ Message = "BitLocker encryption failed"; Category = "Security" }
+    "RS-3006" = @{ Message = "Credential validation failed"; Category = "Security" }
+
+    # Roles / Features (4000-4999)
+    "RS-4001" = @{ Message = "Hyper-V role not installed"; Category = "Roles" }
+    "RS-4002" = @{ Message = "Windows feature installation failed"; Category = "Roles" }
+    "RS-4003" = @{ Message = "MPIO feature not available"; Category = "Roles" }
+    "RS-4004" = @{ Message = "Failover Clustering validation failed"; Category = "Roles" }
+    "RS-4005" = @{ Message = "Deduplication not supported on this OS"; Category = "Roles" }
+    "RS-4006" = @{ Message = "Storage Replica requires Server 2016+"; Category = "Roles" }
+
+    # VM Pipeline (5000-5999)
+    "RS-5001" = @{ Message = "VHD download or copy failed"; Category = "VM" }
+    "RS-5002" = @{ Message = "VM creation failed"; Category = "VM" }
+    "RS-5003" = @{ Message = "ISO download timeout"; Category = "VM" }
+    "RS-5004" = @{ Message = "Offline VHD servicing failed"; Category = "VM" }
+    "RS-5005" = @{ Message = "VM checkpoint operation failed"; Category = "VM" }
+    "RS-5006" = @{ Message = "VM export or import failed"; Category = "VM" }
+    "RS-5007" = @{ Message = "Host storage path not found"; Category = "VM" }
+
+    # Storage / Cluster (6000-6999)
+    "RS-6001" = @{ Message = "No iSCSI sessions found"; Category = "Storage" }
+    "RS-6002" = @{ Message = "Cluster validation failed"; Category = "Storage" }
+    "RS-6003" = @{ Message = "Storage backend initialization failed"; Category = "Storage" }
+    "RS-6004" = @{ Message = "Disk initialization failed"; Category = "Storage" }
+    "RS-6005" = @{ Message = "Cluster shared volume unavailable"; Category = "Storage" }
+
+    # Configuration / Export (7000-7999)
+    "RS-7001" = @{ Message = "Configuration export failed"; Category = "Config" }
+    "RS-7002" = @{ Message = "DC promotion failed"; Category = "Config" }
+    "RS-7003" = @{ Message = "Server role template apply failed"; Category = "Config" }
+    "RS-7004" = @{ Message = "Scheduled task creation failed"; Category = "Config" }
+    "RS-7005" = @{ Message = "Hyper-V Replica configuration failed"; Category = "Config" }
+
+    # Agent / External (8000-8999)
+    "RS-8001" = @{ Message = "Agent installer not found"; Category = "Agent" }
+    "RS-8002" = @{ Message = "File server unreachable"; Category = "Agent" }
+    "RS-8003" = @{ Message = "Agent installation failed"; Category = "Agent" }
+    "RS-8004" = @{ Message = "Download failed after max retries"; Category = "Agent" }
+}
+
+# Wiki base URL for error code lookups
+$script:ErrorCodeWikiUrl = "https://github.com/TheAbider/RackStack/wiki/Error-Codes"
+
+# Display a structured error with code, message, and wiki link
+# Usage: Write-RackStackError -Code "RS-2001"
+#        Write-RackStackError -Code "RS-2001" -Detail "Adapter enumeration returned 0 results"
+function Write-RackStackError {
+    param (
+        [Parameter(Mandatory=$true)]
+        [ValidatePattern('^RS-\d{4}$')]
+        [string]$Code,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Detail
+    )
+
+    # Look up the error code
+    $entry = $script:ErrorCodes[$Code]
+    if ($null -eq $entry) {
+        $message = "Unknown error"
+        $category = "General"
+    }
+    else {
+        $message = $entry.Message
+        $category = $entry.Category
+    }
+
+    # Display the error line
+    Write-OutputColor "  [$Code] $message" -color "Error"
+
+    # Show detail if provided
+    if ($Detail) {
+        Write-OutputColor "    $Detail" -color "Error"
+    }
+
+    # Build wiki URL
+    $anchor = $Code.ToLower()
+    $url = "$($script:ErrorCodeWikiUrl)#$anchor"
+
+    # Render the help link — use OSC 8 hyperlink if terminal supports it
+    $useHyperlink = $false
+    if ($null -ne $script:ConsoleCapabilities) {
+        # OSC 8 clickable hyperlinks require Windows Terminal (WT_SESSION) or build 18362+
+        if ($script:ConsoleCapabilities.SupportsVT -and -not $script:ConsoleCapabilities.IsRedirected) {
+            if ($env:WT_SESSION -or $script:OSBuildNumber -ge 18362) {
+                $useHyperlink = $true
+            }
+        }
+    }
+
+    if ($useHyperlink) {
+        $esc = [char]27
+        $bel = [char]7
+        # OSC 8 format: ESC]8;;URL BEL linktext ESC]8;; BEL
+        Write-Host "    Help: $esc]8;;${url}${bel}${url}$esc]8;;${bel}" -ForegroundColor DarkCyan
+    }
+    else {
+        Write-OutputColor "    Help: $url" -color "Debug"
+    }
+
+    # Structured log entry
+    $logData = @{ Code = $Code; Category = $category }
+    if ($Detail) { $logData.Detail = $Detail }
+    Write-StructuredLog -Message "[$Code] $message" -Level "ERROR" -Category $category -Data $logData
+
+    # File log if enabled
+    if ($logFilePath) {
+        Write-LogMessage -message "[$Code] $message$(if ($Detail) { " - $Detail" })" -logFilePath $logFilePath
+    }
+}
+
 # Helper to write a menu item line inside a box (72-char inner width, 70-char content)
 # Usage: Write-MenuItem "[1]  Configure Server"
 #        Write-MenuItem "[1]  Hyper-V" -Status "Installed" -StatusColor "Success"

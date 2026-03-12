@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.22.0
+    Automated Test Runner for RackStack v1.22.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9430,6 +9430,65 @@ try {
 
 } catch {
     Write-TestResult "Wave 8 module enhancement tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION: ERROR CODE SYSTEM
+# ============================================================================
+Write-SectionHeader "ERROR CODE SYSTEM"
+
+try {
+    $mod02 = Get-Content -LiteralPath (Join-Path $modulesPath "02-Logging.ps1") -Raw -ErrorAction Stop
+
+    # Error code registry exists
+    Write-TestResult "02-Logging: ErrorCodes hashtable defined" ($mod02 -match '\$script:ErrorCodes\s*=\s*@\{')
+    Write-TestResult "02-Logging: ErrorCodeWikiUrl defined" ($mod02 -match '\$script:ErrorCodeWikiUrl\s*=')
+
+    # Write-RackStackError function
+    Write-TestResult "02-Logging: Write-RackStackError defined" ($mod02 -match 'function\s+Write-RackStackError\b')
+    Write-TestResult "02-Logging: Write-RackStackError has Code param" ($mod02 -match 'function Write-RackStackError[\s\S]{0,500}\$Code')
+    Write-TestResult "02-Logging: Write-RackStackError has Detail param" ($mod02 -match 'function Write-RackStackError[\s\S]{0,500}\$Detail')
+    Write-TestResult "02-Logging: Write-RackStackError validates RS-XXXX format" ($mod02 -match "ValidatePattern.*RS-.*\\d\{4\}")
+    Write-TestResult "02-Logging: Write-RackStackError calls Write-OutputColor" ($mod02 -match 'function Write-RackStackError[\s\S]{0,2000}Write-OutputColor')
+    Write-TestResult "02-Logging: Write-RackStackError calls Write-StructuredLog" ($mod02 -match 'function Write-RackStackError[\s\S]{0,3000}Write-StructuredLog')
+    Write-TestResult "02-Logging: Write-RackStackError builds wiki URL" ($mod02 -match 'function Write-RackStackError[\s\S]{0,3000}ErrorCodeWikiUrl')
+    Write-TestResult "02-Logging: Write-RackStackError supports OSC 8 hyperlinks" ($mod02 -match 'function Write-RackStackError[\s\S]{0,4000}OSC 8|function Write-RackStackError[\s\S]{0,4000}esc\]8')
+
+    # Error code categories exist
+    Write-TestResult "02-Logging: Core error codes (RS-1xxx) present" ($mod02 -match '"RS-1001"')
+    Write-TestResult "02-Logging: Network error codes (RS-2xxx) present" ($mod02 -match '"RS-2001"')
+    Write-TestResult "02-Logging: Security error codes (RS-3xxx) present" ($mod02 -match '"RS-3001"')
+    Write-TestResult "02-Logging: Roles error codes (RS-4xxx) present" ($mod02 -match '"RS-4001"')
+    Write-TestResult "02-Logging: VM error codes (RS-5xxx) present" ($mod02 -match '"RS-5001"')
+    Write-TestResult "02-Logging: Storage error codes (RS-6xxx) present" ($mod02 -match '"RS-6001"')
+    Write-TestResult "02-Logging: Config error codes (RS-7xxx) present" ($mod02 -match '"RS-7001"')
+    Write-TestResult "02-Logging: Agent error codes (RS-8xxx) present" ($mod02 -match '"RS-8001"')
+
+    # Error codes have required fields
+    Write-TestResult "02-Logging: Error codes have Message field" ($mod02 -match '"RS-\d{4}"\s*=\s*@\{\s*Message\s*=')
+    Write-TestResult "02-Logging: Error codes have Category field" ($mod02 -match '"RS-\d{4}"\s*=\s*@\{[^}]*Category\s*=')
+
+    # Integration: error codes used in modules
+    $mod06 = Get-Content -LiteralPath (Join-Path $modulesPath "06-NetworkAdapters.ps1") -Raw -ErrorAction Stop
+    $mod07 = Get-Content -LiteralPath (Join-Path $modulesPath "07-IPConfiguration.ps1") -Raw -ErrorAction Stop
+    $mod09 = Get-Content -LiteralPath (Join-Path $modulesPath "09-SET.ps1") -Raw -ErrorAction Stop
+    $mod12 = Get-Content -LiteralPath (Join-Path $modulesPath "12-DomainJoin.ps1") -Raw -ErrorAction Stop
+    $mod25 = Get-Content -LiteralPath (Join-Path $modulesPath "25-HyperV.ps1") -Raw -ErrorAction Stop
+    $mod39 = Get-Content -LiteralPath (Join-Path $modulesPath "39-FileServer.ps1") -Raw -ErrorAction Stop
+    $mod44 = Get-Content -LiteralPath (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw -ErrorAction Stop
+    $mod50 = Get-Content -LiteralPath (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw -ErrorAction Stop
+
+    Write-TestResult "06-NetworkAdapters: Uses RS-2001 error code" ($mod06 -match 'Write-RackStackError.*RS-2001')
+    Write-TestResult "07-IPConfiguration: Uses RS-2002 error code" ($mod07 -match 'Write-RackStackError.*RS-2002')
+    Write-TestResult "09-SET: Uses RS-2005 error code" ($mod09 -match 'Write-RackStackError.*RS-2005')
+    Write-TestResult "12-DomainJoin: Uses RS-2009 error code" ($mod12 -match 'Write-RackStackError.*RS-2009')
+    Write-TestResult "25-HyperV: Uses RS-4001 error code" ($mod25 -match 'Write-RackStackError.*RS-4001')
+    Write-TestResult "39-FileServer: Uses RS-8002 error code" ($mod39 -match 'Write-RackStackError.*RS-8002')
+    Write-TestResult "44-VMDeployment: Uses RS-5002 error code" ($mod44 -match 'Write-RackStackError.*RS-5002')
+    Write-TestResult "50-EntryPoint: Uses RS-1001 error code" ($mod50 -match 'Write-RackStackError.*RS-1001')
+
+} catch {
+    Write-TestResult "Error code system tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

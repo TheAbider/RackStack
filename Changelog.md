@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.22.1
+
+- **New Feature:** Structured error code system — 46 error codes across 8 categories (RS-1xxx Core, RS-2xxx Network, RS-3xxx Security, RS-4xxx Roles, RS-5xxx VM, RS-6xxx Storage, RS-7xxx Config, RS-8xxx Agent) with wiki-linked troubleshooting. Errors display code, message, and clickable hyperlink to wiki documentation. OSC 8 hyperlinks in Windows Terminal, plain URL fallback elsewhere (02-Logging).
+- **Integration:** Error codes deployed to 10 high-traffic error sites across modules: elevation check, defaults parsing, adapter detection, IP validation, SET creation, iSCSI connection, domain join, Hyper-V detection, VM creation, file server connectivity (50-EntryPoint, 56-OperationsMenu, 06-NetworkAdapters, 07-IPConfiguration, 09-SET, 10-iSCSI, 12-DomainJoin, 25-HyperV, 44-VMDeployment, 39-FileServer).
+- **Wiki:** New Error Codes reference page with cause/resolution for all 46 codes.
+- 65 modules, 2531 tests
+
 ## v1.22.0
 
 - **New Feature:** CLI headless mode — run actions without interactive menus via command-line parameters: `-Action Cleanup|Debloat|HealthCheck|Batch`, `-Profile Light|Standard|Aggressive`, `-Config <path>`, `-Silent`. Works with both .ps1 and compiled .exe for remote one-liner deployment (Header, 00-Initialization, 03-InputValidation, 50-EntryPoint).

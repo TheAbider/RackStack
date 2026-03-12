@@ -201,7 +201,7 @@ function Join-Domain {
         }
         catch {
             $errMsg = $_.Exception.Message
-            Write-OutputColor "  Failed to join domain: $errMsg" -color "Error"
+            Write-RackStackError -Code "RS-2009" -Detail $errMsg
 
             # Provide specific guidance based on error
             if ($errMsg -match "network path was not found|RPC server is unavailable") {

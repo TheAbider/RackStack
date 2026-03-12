@@ -13,7 +13,7 @@ function Select-PhysicalAdapters {
         }
 
         if ($null -eq $adapters -or @($adapters).Count -eq 0) {
-            Write-OutputColor "  No physical adapters found." -color "Error"
+            Write-RackStackError -Code "RS-2001"
             return $null
         }
 

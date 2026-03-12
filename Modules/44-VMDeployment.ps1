@@ -2007,7 +2007,7 @@ function New-DeployedVM {
     }
     catch {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  ERROR creating VM: $_" -color "Error"
+        Write-RackStackError -Code "RS-5002" -Detail "$_"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  The VM may have been partially created. Check Hyper-V Manager." -color "Warning"
         Write-OutputColor "" -color "Info"

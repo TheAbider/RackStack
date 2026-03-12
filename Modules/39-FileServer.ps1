@@ -206,7 +206,7 @@ function Get-FileServerFiles {
         return $files
     }
     catch {
-        Write-OutputColor "  Failed to browse FileServer folder: $($_.Exception.Message)" -color "Error"
+        Write-RackStackError -Code "RS-8002" -Detail $_.Exception.Message
         return @()
     }
 }

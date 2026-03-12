@@ -11,7 +11,7 @@ function Test-HyperVInstallation {
         Write-OutputColor "  Hyper-V Role: Installed" -color "Success"
         $checks += $true
     } else {
-        Write-OutputColor "  Hyper-V Role: Not installed" -color "Error"
+        Write-RackStackError -Code "RS-4001"
         $checks += $false
     }
 

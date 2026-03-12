@@ -51,7 +51,7 @@ function Get-IPAddressAndSubnet {
         $cidr = [int]$regexMatches[2]
 
         if (-not (Test-ValidIPAddress -IPAddress $ipAddress)) {
-            Write-OutputColor "  Invalid IP address format. Must be X.X.X.X (e.g., 192.168.1.100)" -color "Error"
+            Write-RackStackError -Code "RS-2002" -Detail "Input: $ipAddress"
             return $null
         }
 

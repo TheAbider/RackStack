@@ -981,7 +981,7 @@ function Connect-iSCSITargets {
                             Write-OutputColor "    Already connected through this portal." -color "Info"
                         }
                         else {
-                            Write-OutputColor "    Failed to connect: $_" -color "Error"
+                            Write-RackStackError -Code "RS-2006" -Detail "$_"
                         }
                     }
                 }

@@ -764,7 +764,7 @@ function Import-Defaults {
             }
         }
         catch {
-            Write-OutputColor "  Warning: Could not read defaults.json: $_" -color "Warning"
+            Write-RackStackError -Code "RS-1002" -Detail "$_"
         }
     }
 

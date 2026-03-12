@@ -365,7 +365,7 @@ function New-SwitchEmbeddedTeam {
         }
     }
     catch {
-        Write-OutputColor "  Failed to create Switch Embedded Team: $_" -color "Error"
+        Write-RackStackError -Code "RS-2005" -Detail "$_"
         Write-OutputColor "  Attempting to clean up partially created switch..." -color "Warning"
         Remove-VMSwitch -Name $SwitchName -Force -ErrorAction SilentlyContinue
         Write-OutputColor "  SET creation failed. Partially created switch has been cleaned up." -color "Error"
