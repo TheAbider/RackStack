@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.36.0
+
+- **Enhancement:** Export CLI action now produces a comprehensive 8-section server profile (was 4 sections). In addition to Health, Inventory, Hardening, and Snapshot, Export now includes: Certificates (expiry audit across 5 stores with status classification), ListeningPorts (TCP listeners with process names and service labels), Software (registry scan of both 64-bit and 32-bit hives, deduplicated), and Uptime (CIM uptime with status + reboot history from event log including unexpected shutdowns). A single `RackStack.exe -Action Export -OutputFormat JSON` now captures a complete host profile in one pass (50-EntryPoint).
+- 65 modules, 2923 tests
+
 ## v1.35.0
 
 - **New Feature:** ListeningPorts CLI action — `RackStack.exe -Action ListeningPorts -OutputFormat JSON` scans all TCP listening endpoints on the local machine. Returns port, bind address, process name, PID, and well-known service labels (RDP, SMB, WinRM, DNS, HTTP, HTTPS, MSSQL, iSCSI, etc.). Includes unique port count and endpoint totals for fleet-wide attack surface monitoring (50-EntryPoint).
