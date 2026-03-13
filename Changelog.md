@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.28.0
+
+- **New Feature:** Performance Snapshot CLI action — `RackStack.exe -Action Snapshot -OutputFormat JSON` captures a point-in-time performance snapshot (CPU load, memory usage, disk space per volume, network adapter bytes) and saves it to the metrics directory. Enables scheduled trend collection via Windows Scheduled Tasks for use with HTML trend reports. Full JSON output support for piping to monitoring systems (50-EntryPoint, 54-HTMLReports).
+- 65 modules, 2689 tests
+
 ## v1.27.0
 
 - **New Feature:** Configuration Drift Check CLI action — `RackStack.exe -Action DriftCheck -Config <baseline.json> -OutputFormat JSON` compares current server state against a saved baseline and reports drift as structured JSON (hostname, IP, domain, timezone, RDP, WinRM, power plan, roles). Without `-Config`, captures and outputs the current server state as a new baseline. Designed for fleet compliance monitoring and automated drift detection (50-EntryPoint, Header).

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.27.0
+    Automated Test Runner for RackStack v1.28.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9609,6 +9609,7 @@ try {
         Write-TestResult "Install-RackStack: enforces TLS 1.2" ($bootstrapContent -match 'Tls12')
         Write-TestResult "Install-RackStack: has OutputFormat param" ($bootstrapContent -match "ValidateSet.*Console.*JSON.*\]\s*\[string\]\`$OutputFormat")
         Write-TestResult "Install-RackStack: passes OutputFormat to exe" ($bootstrapContent -match 'OutputFormat.*\$OutputFormat')
+        Write-TestResult "Install-RackStack: Snapshot in ValidateSet" ($bootstrapContent -match "ValidateSet.*Snapshot")
     }
     else {
         Write-TestResult "Install-RackStack: bootstrap installer exists" $false "File not found"
@@ -9704,7 +9705,7 @@ try {
     Write-TestResult "45-ConfigExport: inventory has Firewall" ($mod45 -match '\$inventory\.Firewall')
     Write-TestResult "45-ConfigExport: returns inventory" ($mod45 -match 'return\s+\$inventory')
 
-    # DriftCheck CLI action tests (v1.27.0)
+    # DriftCheck CLI action tests (v1.28.0)
     Write-TestResult "Header: DriftCheck in ValidateSet" ($headerContent -match "ValidateSet.*DriftCheck")
     Write-TestResult "50-EntryPoint: DriftCheck case exists" ($mod50 -match "'DriftCheck'\s*\{")
     Write-TestResult "50-EntryPoint: DriftCheck compares against config" ($mod50 -match "'DriftCheck'[\s\S]{0,500}Compare-ConfigurationDrift")
@@ -9714,6 +9715,14 @@ try {
     Write-TestResult "50-EntryPoint: DriftCheck captures baseline" ($mod50 -match "'DriftCheck'[\s\S]{0,3000}Save-DriftBaseline")
     Write-TestResult "50-EntryPoint: DriftCheck JSON output" ($mod50 -match "'DriftCheck'[\s\S]{0,3000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: DriftCheck Action field" ($mod50 -match "Action\s*=\s*'DriftCheck'")
+
+    # Snapshot CLI action tests (v1.28.0)
+    Write-TestResult "Header: Snapshot in ValidateSet" ($headerContent -match "ValidateSet.*Snapshot")
+    Write-TestResult "50-EntryPoint: Snapshot case exists" ($mod50 -match "'Snapshot'\s*\{")
+    Write-TestResult "50-EntryPoint: Snapshot calls Save-PerformanceSnapshot" ($mod50 -match "'Snapshot'[\s\S]{0,500}Save-PerformanceSnapshot")
+    Write-TestResult "50-EntryPoint: Snapshot JSON has Action field" ($mod50 -match "Action\s*=\s*'Snapshot'")
+    Write-TestResult "50-EntryPoint: Snapshot JSON has SavedTo field" ($mod50 -match "'Snapshot'[\s\S]{0,1000}SavedTo")
+    Write-TestResult "50-EntryPoint: Snapshot JSON output" ($mod50 -match "'Snapshot'[\s\S]{0,1500}ConvertTo-Json")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

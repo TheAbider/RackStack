@@ -293,6 +293,27 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'Snapshot' {
+            Write-OutputColor "  Saving performance snapshot..." -color "Info"
+            $snapshotPath = Save-PerformanceSnapshot
+            if ($null -ne $snapshotPath) {
+                Write-OutputColor "  Snapshot saved: $snapshotPath" -color "Success"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $snapshotData = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
+                    $jsonResult = @{
+                        Tool     = $script:ToolFullName
+                        Version  = $script:ScriptVersion
+                        Action   = 'Snapshot'
+                        Snapshot = $snapshotData
+                        SavedTo  = $snapshotPath
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            } else {
+                Write-OutputColor "  Failed to capture performance snapshot." -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
         'DriftCheck' {
             if ($script:CLIConfig) {
                 # Compare current state against a baseline/profile
