@@ -285,6 +285,9 @@ RackStack.exe -Action Debloat -Tier Aggressive -Silent
 
 # Run a batch config JSON file
 RackStack.exe -Action Batch -Config "C:\path\to\config.json" -Silent
+
+# Server inventory for CMDB/asset management
+RackStack.exe -Action Inventory -OutputFormat JSON -Silent
 ```
 
 ### One-Liner Remote Deployment
@@ -334,7 +337,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-**Actions:** `Cleanup` (disk cleanup), `Debloat` (remove bloatware + telemetry), `HealthCheck` (system health report), `QuickScan` (health + disk + debloat analysis), `Batch` (JSON-driven full config).
+**Actions:** `Cleanup` (disk cleanup), `Debloat` (remove bloatware + telemetry), `HealthCheck` (system health report), `QuickScan` (health + disk + debloat analysis), `Inventory` (server inventory for CMDB), `Batch` (JSON-driven full config).
 
 ## Project Structure
 

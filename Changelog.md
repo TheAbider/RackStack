@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.25.1
+
+- **Improvement:** README updated with Inventory CLI action — usage example and action reference list now includes `-Action Inventory` for CMDB/asset management workflows.
+- 65 modules, 2647 tests
+
 ## v1.25.0
 
 - **New Feature:** Server Inventory CLI action — `RackStack.exe -Action Inventory -OutputFormat JSON` gathers complete server inventory (hostname, domain, OS, CPU, RAM, disks, volumes, network adapters with IPs/MACs, installed roles/features, licensing, firewall, remote access, power plan, timezone, uptime) and outputs structured JSON for CMDB integration, asset management, and automation pipelines (45-ConfigExport, 50-EntryPoint, Header).
