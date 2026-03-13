@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.25.0
+
+- **New Feature:** Server Inventory CLI action — `RackStack.exe -Action Inventory -OutputFormat JSON` gathers complete server inventory (hostname, domain, OS, CPU, RAM, disks, volumes, network adapters with IPs/MACs, installed roles/features, licensing, firewall, remote access, power plan, timezone, uptime) and outputs structured JSON for CMDB integration, asset management, and automation pipelines (45-ConfigExport, 50-EntryPoint, Header).
+- 65 modules, 2647 tests
+
 ## v1.24.0
 
 - **Improvement:** Enriched QuickScan JSON output — disk cleanup analysis and system debloat scan now return structured data (cleanup savings breakdown, removable packages, telemetry tasks, service recommendations). QuickScan `-OutputFormat JSON` includes full `Health`, `DiskCleanup`, and `Debloat` sections with granular fields for automation dashboards and reporting (20-DiskCleanup, 64-SystemDebloat, 50-EntryPoint).

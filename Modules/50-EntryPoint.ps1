@@ -281,6 +281,18 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'Inventory' {
+            $inventoryReport = Get-ServerInventory
+            if ($script:CLIOutputFormat -eq 'JSON' -and $null -ne $inventoryReport) {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Inventory'
+                    Inventory = $inventoryReport
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.24.0
+    Automated Test Runner for RackStack v1.25.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9633,6 +9633,35 @@ try {
     Write-TestResult "50-EntryPoint: QuickScan JSON has DiskCleanup key" ($mod50 -match "'QuickScan'[\s\S]{0,2000}DiskCleanup\s*=\s*\`$cleanupReport")
     Write-TestResult "50-EntryPoint: QuickScan JSON has Debloat key" ($mod50 -match "'QuickScan'[\s\S]{0,2000}Debloat\s*=\s*\`$debloatReport")
     Write-TestResult "50-EntryPoint: QuickScan JSON has Health key" ($mod50 -match "'QuickScan'[\s\S]{0,2000}Health\s*=\s*\`$healthReport")
+
+    # Inventory CLI action tests (v1.25.0)
+    Write-TestResult "Header: Inventory in ValidateSet" ($headerContent -match "ValidateSet.*Inventory")
+    Write-TestResult "50-EntryPoint: Inventory case exists" ($mod50 -match "'Inventory'\s*\{")
+    Write-TestResult "50-EntryPoint: Inventory calls Get-ServerInventory" ($mod50 -match "'Inventory'[\s\S]{0,300}Get-ServerInventory")
+    Write-TestResult "50-EntryPoint: Inventory JSON output" ($mod50 -match "'Inventory'[\s\S]{0,500}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: Inventory JSON has Action field" ($mod50 -match "Action\s*=\s*'Inventory'")
+
+    # Get-ServerInventory function tests (v1.25.0)
+    $mod45 = Get-Content -LiteralPath (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw -ErrorAction Stop
+    Write-TestResult "45-ConfigExport: Get-ServerInventory defined" ($mod45 -match 'function\s+Get-ServerInventory')
+    Write-TestResult "45-ConfigExport: inventory has Timestamp" ($mod45 -match "Timestamp\s*=.*ToString\('o'\)")
+    Write-TestResult "45-ConfigExport: inventory has Hostname" ($mod45 -match "Hostname\s*=\s*\`$env:COMPUTERNAME")
+    Write-TestResult "45-ConfigExport: queries Win32_ComputerSystem" ($mod45 -match "Get-ServerInventory[\s\S]{0,2000}Win32_ComputerSystem")
+    Write-TestResult "45-ConfigExport: queries Win32_OperatingSystem" ($mod45 -match "Get-ServerInventory[\s\S]{0,2000}Win32_OperatingSystem")
+    Write-TestResult "45-ConfigExport: queries Win32_Processor" ($mod45 -match "Get-ServerInventory[\s\S]{0,2000}Win32_Processor")
+    Write-TestResult "45-ConfigExport: queries Win32_BIOS" ($mod45 -match "Get-ServerInventory[\s\S]{0,2000}Win32_BIOS")
+    Write-TestResult "45-ConfigExport: inventory has System section" ($mod45 -match '\$inventory\.System\s*=')
+    Write-TestResult "45-ConfigExport: inventory has OS section" ($mod45 -match '\$inventory\.OS\s*=')
+    Write-TestResult "45-ConfigExport: inventory has CPU section" ($mod45 -match '\$inventory\.CPU\s*=')
+    Write-TestResult "45-ConfigExport: inventory has MemoryGB" ($mod45 -match '\$inventory\.MemoryGB')
+    Write-TestResult "45-ConfigExport: inventory has NetworkAdapters" ($mod45 -match '\$inventory\.NetworkAdapters')
+    Write-TestResult "45-ConfigExport: inventory has Disks" ($mod45 -match '\$inventory\.Disks')
+    Write-TestResult "45-ConfigExport: inventory has Volumes" ($mod45 -match '\$inventory\.Volumes')
+    Write-TestResult "45-ConfigExport: inventory has Roles" ($mod45 -match '\$inventory\.Roles')
+    Write-TestResult "45-ConfigExport: inventory has Licensing" ($mod45 -match '\$inventory\.Licensing')
+    Write-TestResult "45-ConfigExport: inventory has RemoteAccess" ($mod45 -match '\$inventory\.RemoteAccess')
+    Write-TestResult "45-ConfigExport: inventory has Firewall" ($mod45 -match '\$inventory\.Firewall')
+    Write-TestResult "45-ConfigExport: returns inventory" ($mod45 -match 'return\s+\$inventory')
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

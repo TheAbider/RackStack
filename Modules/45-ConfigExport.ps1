@@ -1796,4 +1796,185 @@ function Show-DriftDetectionMenu {
         }
     }
 }
+
+# ════════════════════════════════════════════════════════════════════════
+# Server Inventory — non-interactive structured data for CLI/JSON output
+# ════════════════════════════════════════════════════════════════════════
+function Get-ServerInventory {
+    Write-OutputColor "  Gathering server inventory..." -color "Info"
+
+    $inventory = [ordered]@{
+        Timestamp = (Get-Date).ToString('o')
+        Hostname  = $env:COMPUTERNAME
+    }
+
+    # System info (batch CIM with timeout)
+    $sysInfo = Invoke-WithTimeout -ScriptBlock {
+        @{
+            CS   = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            OS   = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+            CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+            BIOS = Get-CimInstance -ClassName Win32_BIOS -ErrorAction SilentlyContinue
+            MB   = Get-CimInstance -ClassName Win32_BaseBoard -ErrorAction SilentlyContinue
+        }
+    } -TimeoutSeconds 15 -Activity "Querying system info"
+
+    if (-not $sysInfo.TimedOut) {
+        $cs  = $sysInfo.Result.CS
+        $os  = $sysInfo.Result.OS
+        $cpu = $sysInfo.Result.CPU
+        $bios = $sysInfo.Result.BIOS
+        $mb   = $sysInfo.Result.MB
+
+        $inventory.System = [ordered]@{
+            Domain         = if ($cs) { $cs.Domain } else { '' }
+            PartOfDomain   = if ($cs) { [bool]$cs.PartOfDomain } else { $false }
+            Manufacturer   = if ($cs) { $cs.Manufacturer } else { '' }
+            Model          = if ($cs) { $cs.Model } else { '' }
+            SerialNumber   = if ($bios) { $bios.SerialNumber } else { '' }
+            BIOSVersion    = if ($bios) { $bios.SMBIOSBIOSVersion } else { '' }
+            Motherboard    = if ($mb) { "$($mb.Manufacturer) $($mb.Product)" } else { '' }
+        }
+        $inventory.OS = [ordered]@{
+            Caption   = if ($os) { $os.Caption } else { '' }
+            Version   = if ($os) { $os.Version } else { '' }
+            Build     = if ($os) { $os.BuildNumber } else { '' }
+            Arch      = if ($os) { $os.OSArchitecture } else { '' }
+            InstallDate = if ($os -and $os.InstallDate) { $os.InstallDate.ToString('o') } else { '' }
+            LastBoot    = if ($os -and $os.LastBootUpTime) { $os.LastBootUpTime.ToString('o') } else { '' }
+        }
+        $inventory.CPU = [ordered]@{
+            Name           = if ($cpu) { $cpu.Name.Trim() } else { '' }
+            Cores          = if ($cpu) { $cpu.NumberOfCores } else { 0 }
+            LogicalCores   = if ($cpu) { $cpu.NumberOfLogicalProcessors } else { 0 }
+        }
+        $totalRAM = 0
+        if ($cs) { $totalRAM = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1) }
+        $inventory.MemoryGB = $totalRAM
+    } else {
+        $inventory.System = @{ Error = 'CIM query timed out' }
+        $inventory.OS = @{ Error = 'CIM query timed out' }
+        $inventory.CPU = @{ Error = 'CIM query timed out' }
+        $inventory.MemoryGB = 0
+    }
+    Write-OutputColor "  [+] System info" -color "Debug"
+
+    # Timezone and power plan
+    $inventory.Timezone = (Get-TimeZone).Id
+    $inventory.PowerPlan = Get-CurrentPowerPlan
+
+    # Licensing
+    try {
+        $lic = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationId='$($script:WindowsLicensingAppId)' AND LicenseStatus=1" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $inventory.Licensing = [ordered]@{
+            Activated   = ($null -ne $lic)
+            Edition     = if ($lic) { $lic.Name } else { '' }
+            Channel     = if ($lic) { $lic.Description } else { '' }
+        }
+    } catch {
+        $inventory.Licensing = @{ Activated = $false; Error = $_.Exception.Message }
+    }
+    Write-OutputColor "  [+] Licensing" -color "Debug"
+
+    # Network adapters
+    $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue)
+    $adapterList = @()
+    foreach ($a in $adapters) {
+        $ips = @(Get-NetIPAddress -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | Where-Object { $_.AddressFamily -eq 'IPv4' })
+        $dns = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ServerAddresses -ErrorAction SilentlyContinue)
+        $adapterList += [ordered]@{
+            Name        = $a.Name
+            Description = $a.InterfaceDescription
+            Status      = $a.Status
+            MacAddress  = $a.MacAddress
+            Speed       = if ($a.LinkSpeed) { $a.LinkSpeed } else { '' }
+            IPv4        = @($ips | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" })
+            DNS         = @($dns)
+            VLAN        = if ($a.VlanID) { $a.VlanID } else { $null }
+        }
+    }
+    $inventory.NetworkAdapters = $adapterList
+    Write-OutputColor "  [+] Network adapters ($($adapterList.Count))" -color "Debug"
+
+    # Disks and volumes
+    $diskInfo = Invoke-WithTimeout -ScriptBlock {
+        @{
+            Disks   = @(Get-Disk -ErrorAction SilentlyContinue)
+            Volumes = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter })
+        }
+    } -TimeoutSeconds 10 -Activity "Querying storage"
+
+    if (-not $diskInfo.TimedOut) {
+        $diskList = @()
+        foreach ($d in $diskInfo.Result.Disks) {
+            $diskList += [ordered]@{
+                Number       = $d.Number
+                FriendlyName = $d.FriendlyName
+                SizeGB       = [math]::Round($d.Size / 1GB, 1)
+                PartStyle    = "$($d.PartitionStyle)"
+                BusType      = "$($d.BusType)"
+                Status       = "$($d.OperationalStatus)"
+            }
+        }
+        $inventory.Disks = $diskList
+
+        $volList = @()
+        foreach ($v in $diskInfo.Result.Volumes) {
+            $volList += [ordered]@{
+                Drive      = "$($v.DriveLetter):"
+                Label      = if ($v.FileSystemLabel) { $v.FileSystemLabel } else { '' }
+                FileSystem = if ($v.FileSystem) { $v.FileSystem } else { '' }
+                SizeGB     = [math]::Round($v.Size / 1GB, 1)
+                FreeGB     = [math]::Round($v.SizeRemaining / 1GB, 1)
+            }
+        }
+        $inventory.Volumes = $volList
+    } else {
+        $inventory.Disks = @()
+        $inventory.Volumes = @()
+    }
+    Write-OutputColor "  [+] Storage" -color "Debug"
+
+    # Installed roles/features
+    $inventory.Roles = [ordered]@{
+        IsServer           = Test-WindowsServer
+        HyperV             = Test-HyperVInstalled
+        FailoverClustering = Test-FailoverClusteringInstalled
+        MPIO               = Test-MPIOInstalled
+    }
+
+    # Additional role detection via Get-WindowsFeature (Server only)
+    if ($inventory.Roles.IsServer) {
+        try {
+            $installedFeatures = @(Get-WindowsFeature -ErrorAction SilentlyContinue | Where-Object { $_.Installed })
+            $inventory.InstalledFeatures = @($installedFeatures | ForEach-Object { $_.Name })
+        } catch {
+            $inventory.InstalledFeatures = @()
+        }
+    }
+    Write-OutputColor "  [+] Roles and features" -color "Debug"
+
+    # Remote access
+    $inventory.RemoteAccess = [ordered]@{
+        RDP   = Get-RDPState
+        WinRM = Get-WinRMState
+    }
+
+    # Firewall
+    $inventory.Firewall = Get-FirewallState
+
+    # Uptime
+    $lastBoot = $null
+    if ($inventory.OS -and $inventory.OS.LastBoot -and $inventory.OS.LastBoot -ne '') {
+        try { $lastBoot = [datetime]$inventory.OS.LastBoot } catch {}
+    }
+    if ($lastBoot) {
+        $inventory.UptimeDays = [math]::Round(((Get-Date) - $lastBoot).TotalDays, 1)
+    } else {
+        $inventory.UptimeDays = $null
+    }
+
+    Write-OutputColor "  Inventory complete." -color "Success"
+    return $inventory
+}
 #endregion
