@@ -2252,4 +2252,146 @@ function Show-FleetTrendReport {
     }
     Write-OutputColor "" -color "Info"
 }
+
+# Query a directory of Export/Inventory JSON files with a search expression
+# Query format: "section.field=value", "section.field~contains", "section.field<num", "section.field>num"
+function Invoke-FleetQuery {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ReportDir,
+        [Parameter(Mandatory=$true)]
+        [string]$QueryExpr
+    )
+
+    if (-not (Test-Path -LiteralPath $ReportDir -PathType Container)) {
+        Write-OutputColor "  ERROR: Directory not found: $ReportDir" -color "Error"
+        return $null
+    }
+
+    # Parse query expression: section.field<operator>value
+    $queryMatch = $null
+    if ($QueryExpr -match '^([^.]+)\.([^=~<>]+)(=|~|<|>)(.+)$') {
+        $regexMatches = $Matches
+        $queryMatch = @{
+            Section  = $regexMatches[1]
+            Field    = $regexMatches[2]
+            Operator = $regexMatches[3]
+            Value    = $regexMatches[4]
+        }
+    }
+    if ($null -eq $queryMatch) {
+        Write-OutputColor "  ERROR: Invalid query syntax. Use: section.field=value, section.field~contains, section.field<num, section.field>num" -color "Error"
+        return $null
+    }
+
+    $jsonFiles = @(Get-ChildItem -Path $ReportDir -Filter "*.json" -File -ErrorAction SilentlyContinue)
+    if ($jsonFiles.Count -eq 0) {
+        Write-OutputColor "  No JSON reports found in $ReportDir" -color "Warning"
+        return @{ Query = $QueryExpr; MatchCount = 0; TotalReports = 0; Matches = @() }
+    }
+
+    $matches2 = [System.Collections.Generic.List[object]]::new()
+    $totalReports = 0
+
+    foreach ($file in $jsonFiles) {
+        try {
+            $content = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop
+            $report = $content | ConvertFrom-Json -ErrorAction Stop
+        } catch { continue }
+
+        # Must have a Hostname to be a valid report
+        if (-not $report.Hostname) { continue }
+        $totalReports++
+
+        # Navigate to the section
+        $section = $null
+        $sectionName = $queryMatch.Section
+
+        # Map common query section names to JSON structure
+        $sectionData = $null
+        if ($report.PSObject.Properties.Name -contains $sectionName) {
+            $sectionData = $report.$sectionName
+        } elseif ($sectionName -eq 'health' -and $report.Health) {
+            $sectionData = $report.Health
+        } elseif ($sectionName -eq 'hardening' -and $report.Hardening) {
+            $sectionData = $report.Hardening
+        }
+
+        if ($null -eq $sectionData) { continue }
+
+        $fieldName = $queryMatch.Field
+        $op = $queryMatch.Operator
+        $queryVal = $queryMatch.Value
+
+        # Handle array sections (ListeningPorts, Software, Services, Events, Certificates, Network/Adapters)
+        $dataArray = $null
+        if ($sectionData -is [array]) {
+            $dataArray = $sectionData
+        } elseif ($sectionData.PSObject.Properties.Name -contains 'Items') {
+            $dataArray = $sectionData.Items
+        }
+
+        if ($null -ne $dataArray) {
+            # Search within array items
+            $matched = $false
+            $matchedVal = $null
+            foreach ($item in $dataArray) {
+                if (-not ($item.PSObject.Properties.Name -contains $fieldName)) { continue }
+                $itemVal = $item.$fieldName
+                $itemValStr = "$itemVal"
+
+                $hit = switch ($op) {
+                    '=' { $itemValStr -eq $queryVal }
+                    '~' { $itemValStr -like "*$queryVal*" }
+                    '>' { ($itemVal -as [double]) -gt ($queryVal -as [double]) }
+                    '<' { ($itemVal -as [double]) -lt ($queryVal -as [double]) }
+                }
+                if ($hit) {
+                    $matched = $true
+                    $matchedVal = $itemValStr
+                    break
+                }
+            }
+            if ($matched) {
+                $matches2.Add(@{
+                    Hostname     = $report.Hostname
+                    Timestamp    = if ($report.Timestamp) { $report.Timestamp } else { $null }
+                    MatchedValue = $matchedVal
+                })
+            }
+        } else {
+            # Scalar or object section — check the field directly
+            $fieldVal = $null
+            if ($sectionData.PSObject.Properties.Name -contains $fieldName) {
+                $fieldVal = $sectionData.$fieldName
+            } elseif ($sectionData -is [hashtable] -and $sectionData.ContainsKey($fieldName)) {
+                $fieldVal = $sectionData[$fieldName]
+            }
+
+            if ($null -ne $fieldVal) {
+                $fieldValStr = "$fieldVal"
+                $hit = switch ($op) {
+                    '=' { $fieldValStr -eq $queryVal }
+                    '~' { $fieldValStr -like "*$queryVal*" }
+                    '>' { ($fieldVal -as [double]) -gt ($queryVal -as [double]) }
+                    '<' { ($fieldVal -as [double]) -lt ($queryVal -as [double]) }
+                }
+                if ($hit) {
+                    $matches2.Add(@{
+                        Hostname     = $report.Hostname
+                        Timestamp    = if ($report.Timestamp) { $report.Timestamp } else { $null }
+                        MatchedValue = $fieldValStr
+                    })
+                }
+            }
+        }
+    }
+
+    return @{
+        Query        = $QueryExpr
+        MatchCount   = $matches2.Count
+        TotalReports = $totalReports
+        Matches      = @($matches2)
+    }
+}
 #endregion

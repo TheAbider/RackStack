@@ -1980,6 +1980,143 @@ function Invoke-CLIAction {
 
             if (-not $validation.IsValid) { [Environment]::Exit(1) }
         }
+        'Watch' {
+            # -Config: optional path to thresholds JSON file
+            Write-OutputColor "  Running threshold checks..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            # Load thresholds
+            $thresholds = Get-DefaultWatchThresholds
+            if ($script:CLIConfig -and (Test-Path -LiteralPath $script:CLIConfig)) {
+                try {
+                    $customThresholds = Get-Content -LiteralPath $script:CLIConfig -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                    # Merge custom thresholds over defaults
+                    foreach ($prop in $customThresholds.PSObject.Properties) {
+                        if ($prop.Name -eq 'CPU' -and $null -ne $prop.Value.MaxPercent) {
+                            $thresholds.CPU = @{ MaxPercent = $prop.Value.MaxPercent }
+                        } elseif ($prop.Name -eq 'Memory' -and $null -ne $prop.Value.MaxPercent) {
+                            $thresholds.Memory = @{ MaxPercent = $prop.Value.MaxPercent }
+                        } elseif ($prop.Name -eq 'Disk' -and $null -ne $prop.Value.MaxUsedPercent) {
+                            $thresholds.Disk = @{ MaxUsedPercent = $prop.Value.MaxUsedPercent }
+                        } elseif ($prop.Name -eq 'Uptime' -and $null -ne $prop.Value.MaxDays) {
+                            $thresholds.Uptime = @{ MaxDays = $prop.Value.MaxDays }
+                        } elseif ($prop.Name -eq 'Certificates' -and $null -ne $prop.Value.MinDaysToExpiry) {
+                            $thresholds.Certificates = @{ MinDaysToExpiry = $prop.Value.MinDaysToExpiry }
+                        } elseif ($prop.Name -eq 'Services' -and $null -ne $prop.Value.RequireRunning) {
+                            $thresholds.Services = @{ RequireRunning = @($prop.Value.RequireRunning) }
+                        } elseif ($prop.Name -eq 'Events') {
+                            $evtThresh = @{ MaxCriticalCount = 0; HoursBack = 24 }
+                            if ($null -ne $prop.Value.MaxCriticalCount) { $evtThresh.MaxCriticalCount = $prop.Value.MaxCriticalCount }
+                            if ($null -ne $prop.Value.HoursBack) { $evtThresh.HoursBack = $prop.Value.HoursBack }
+                            $thresholds.Events = $evtThresh
+                        }
+                    }
+                } catch {
+                    Write-OutputColor "  WARNING: Could not parse thresholds file, using defaults: $_" -color "Warning"
+                }
+            }
+
+            $watchChecks = Test-WatchThresholds -Thresholds $thresholds
+            $alertCount = @($watchChecks | Where-Object { $_.Status -eq 'ALERT' }).Count
+            $okCount = @($watchChecks | Where-Object { $_.Status -eq 'OK' }).Count
+            $overallStatus = if ($alertCount -gt 0) { "ALERT" } else { "OK" }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  WATCH - THRESHOLD CHECK".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($chk in $watchChecks) {
+                $checkName = if ($chk.Check.Length -gt 30) { $chk.Check.Substring(0, 27) + "..." } else { $chk.Check }
+                $line = "  $($checkName.PadRight(32)) $("$($chk.Value) $($chk.Unit)".PadRight(18)) [$($chk.Status)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = if ($chk.Status -eq 'ALERT') { "Error" } else { "Success" }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Status: $overallStatus   OK: $okCount   Alerts: $alertCount"
+            $summaryColor = if ($alertCount -gt 0) { "Error" } else { "Success" }
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $summaryColor
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool       = $script:ToolFullName
+                    Version    = $script:ScriptVersion
+                    Action     = 'Watch'
+                    Timestamp  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname   = $env:COMPUTERNAME
+                    Status     = $overallStatus
+                    AlertCount = $alertCount
+                    OKCount    = $okCount
+                    Checks     = $watchChecks
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($alertCount -gt 0) { [Environment]::Exit(1) }
+        }
+        'Query' {
+            # -Config: "C:\exports,section.field=value"
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config required." -color "Error"
+                Write-OutputColor "  Format: -Config ""C:\exports,section.field=value""" -color "Info"
+                Write-OutputColor "  Operators: = (equals), ~ (contains), > (greater), < (less)" -color "Info"
+                Write-OutputColor "  Examples:" -color "Info"
+                Write-OutputColor "    -Config ""C:\exports,ListeningPorts.LocalPort=3389""" -color "Info"
+                Write-OutputColor "    -Config ""C:\exports,Software.Name~SQL""" -color "Info"
+                Write-OutputColor "    -Config ""C:\exports,Hardening.Score<60""" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            $commaIdx = $script:CLIConfig.IndexOf(',')
+            if ($commaIdx -lt 1) {
+                Write-OutputColor "  ERROR: -Config must be ""directory,query"" format." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $queryDir = $script:CLIConfig.Substring(0, $commaIdx)
+            $queryExpr = $script:CLIConfig.Substring($commaIdx + 1)
+
+            Write-OutputColor "  Querying reports in: $queryDir" -color "Info"
+            Write-OutputColor "  Query: $queryExpr" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $queryResult = Invoke-FleetQuery -ReportDir $queryDir -QueryExpr $queryExpr
+            if ($null -eq $queryResult) { [Environment]::Exit(1) }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  FLEET QUERY RESULTS".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Query: $queryExpr".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Reports: $($queryResult.TotalReports)   Matches: $($queryResult.MatchCount)".PadRight(72))│" -color $(if ($queryResult.MatchCount -gt 0) { "Success" } else { "Warning" })
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if ($queryResult.MatchCount -gt 0) {
+                foreach ($m in $queryResult.Matches) {
+                    $hostLine = "  $($m.Hostname.PadRight(20)) $($m.MatchedValue)"
+                    if ($hostLine.Length -gt 72) { $hostLine = $hostLine.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($hostLine.PadRight(72))│" -color "Info"
+                }
+            } else {
+                Write-OutputColor "  │$("  No matching hosts found.".PadRight(72))│" -color "Warning"
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool         = $script:ToolFullName
+                    Version      = $script:ScriptVersion
+                    Action       = 'Query'
+                    Timestamp    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname     = $env:COMPUTERNAME
+                    Query        = $queryExpr
+                    TotalReports = $queryResult.TotalReports
+                    MatchCount   = $queryResult.MatchCount
+                    Matches      = $queryResult.Matches
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

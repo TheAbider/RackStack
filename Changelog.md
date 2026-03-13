@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.40.0
+
+- **New Feature:** Watch CLI action — `RackStack.exe -Action Watch [-Config "thresholds.json"] -OutputFormat JSON` runs configurable threshold checks (CPU, memory, disk, uptime, certificates, services, events) and exits with code 0 (all clear) or code 1 (alert). Works as a monitoring health gate without external JSON parsing. Sensible defaults when no config file is provided (CPU 90%, memory 90%, disk 95%, uptime 60 days, certs 7 days, 0 critical events). Custom thresholds via JSON config for required running services, event window, and all numeric limits (45-ConfigExport, 50-EntryPoint).
+- **New Feature:** Query CLI action — `RackStack.exe -Action Query -Config "C:\exports,section.field=value"` searches a directory of Export/Inventory JSON files and returns matching hosts. Supports equals (=), contains (~), greater (>), and less (<) operators. Query examples: `ListeningPorts.LocalPort=3389`, `Software.Name~SQL`, `Hardening.Score<60`, `Certificates.Status=Expired`. Makes the export archive queryable for fleet-wide searches without custom scripts (54-HTMLReports, 50-EntryPoint).
+- 65 modules, 3048 tests
+
 ## v1.39.0
 
 - **New Feature:** ScheduledExport CLI action — `RackStack.exe -Action ScheduledExport -Tier Register -Config "C:\Exports,Daily"` creates a Windows Scheduled Task that runs Export automatically on an Hourly, Daily, or Weekly schedule. Outputs JSON to the specified directory, running as SYSTEM with highest privileges. Sub-commands: Register (create/update task), Unregister (remove task), Status (check task state, last run, next run). Optional section filtering: `-Config "C:\Exports,Daily,Health,Inventory,Network"` runs only specified sections. Includes automatic export file rotation to keep the last 30 files (45-ConfigExport, 50-EntryPoint).

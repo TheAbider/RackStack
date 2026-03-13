@@ -2481,4 +2481,149 @@ function Invoke-ExportRotation {
         Kept    = [math]::Min($files.Count, $KeepCount)
     }
 }
+
+# Default thresholds for Watch action (used when no -Config is provided)
+function Get-DefaultWatchThresholds {
+    return @{
+        CPU          = @{ MaxPercent = 90 }
+        Memory       = @{ MaxPercent = 90 }
+        Disk         = @{ MaxUsedPercent = 95 }
+        Uptime       = @{ MaxDays = 60 }
+        Certificates = @{ MinDaysToExpiry = 7 }
+        Services     = @{ RequireRunning = @() }
+        Events       = @{ MaxCriticalCount = 0; HoursBack = 24 }
+    }
+}
+
+# Run threshold checks and return structured results
+function Test-WatchThresholds {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Thresholds
+    )
+
+    $checks = [System.Collections.Generic.List[object]]::new()
+
+    # CPU check
+    if ($Thresholds.CPU -and $null -ne $Thresholds.CPU.MaxPercent) {
+        $cpuVal = $null
+        try {
+            $cpuCim = Invoke-WithTimeout -ScriptBlock {
+                (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
+            } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "CPU check"
+            if (-not $cpuCim.TimedOut -and $null -ne $cpuCim.Result) {
+                $cpuVal = [math]::Round($cpuCim.Result, 1)
+            }
+        } catch { }
+        if ($null -ne $cpuVal) {
+            $status = if ($cpuVal -gt $Thresholds.CPU.MaxPercent) { "ALERT" } else { "OK" }
+            $checks.Add(@{ Category = "CPU"; Check = "CPU usage"; Value = $cpuVal; Threshold = $Thresholds.CPU.MaxPercent; Unit = "%"; Status = $status })
+        }
+    }
+
+    # Memory check
+    if ($Thresholds.Memory -and $null -ne $Thresholds.Memory.MaxPercent) {
+        $memVal = $null
+        try {
+            $memCim = Invoke-WithTimeout -ScriptBlock {
+                Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Memory check"
+            if (-not $memCim.TimedOut -and $null -ne $memCim.Result) {
+                $os = $memCim.Result
+                $totalMB = $os.TotalVisibleMemorySize / 1024
+                $freeMB = $os.FreePhysicalMemory / 1024
+                if ($totalMB -gt 0) {
+                    $memVal = [math]::Round((($totalMB - $freeMB) / $totalMB) * 100, 1)
+                }
+            }
+        } catch { }
+        if ($null -ne $memVal) {
+            $status = if ($memVal -gt $Thresholds.Memory.MaxPercent) { "ALERT" } else { "OK" }
+            $checks.Add(@{ Category = "Memory"; Check = "Memory usage"; Value = $memVal; Threshold = $Thresholds.Memory.MaxPercent; Unit = "%"; Status = $status })
+        }
+    }
+
+    # Disk check
+    if ($Thresholds.Disk -and $null -ne $Thresholds.Disk.MaxUsedPercent) {
+        try {
+            $diskCim = Invoke-WithTimeout -ScriptBlock {
+                Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+            } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Disk check"
+            if (-not $diskCim.TimedOut -and $null -ne $diskCim.Result) {
+                foreach ($disk in @($diskCim.Result)) {
+                    if ($disk.Size -gt 0) {
+                        $usedPct = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1)
+                        $status = if ($usedPct -gt $Thresholds.Disk.MaxUsedPercent) { "ALERT" } else { "OK" }
+                        $checks.Add(@{ Category = "Disk"; Check = "$($disk.DeviceID) usage"; Value = $usedPct; Threshold = $Thresholds.Disk.MaxUsedPercent; Unit = "%"; Status = $status })
+                    }
+                }
+            }
+        } catch { }
+    }
+
+    # Uptime check
+    if ($Thresholds.Uptime -and $null -ne $Thresholds.Uptime.MaxDays) {
+        try {
+            $uptimeCim = Invoke-WithTimeout -ScriptBlock {
+                (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).LastBootUpTime
+            } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Uptime check"
+            if (-not $uptimeCim.TimedOut -and $null -ne $uptimeCim.Result) {
+                $uptimeDays = [math]::Round(((Get-Date) - $uptimeCim.Result).TotalDays, 1)
+                $status = if ($uptimeDays -gt $Thresholds.Uptime.MaxDays) { "ALERT" } else { "OK" }
+                $checks.Add(@{ Category = "Uptime"; Check = "Days since reboot"; Value = $uptimeDays; Threshold = $Thresholds.Uptime.MaxDays; Unit = "days"; Status = $status })
+            }
+        } catch { }
+    }
+
+    # Certificate check
+    if ($Thresholds.Certificates -and $null -ne $Thresholds.Certificates.MinDaysToExpiry) {
+        try {
+            $stores = @('My', 'WebHosting', 'Remote Desktop')
+            $minDays = $Thresholds.Certificates.MinDaysToExpiry
+            $expiringCerts = 0
+            foreach ($store in $stores) {
+                $certs = @(Get-ChildItem "Cert:\LocalMachine\$store" -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter })
+                foreach ($cert in $certs) {
+                    $daysLeft = [math]::Round(($cert.NotAfter - (Get-Date)).TotalDays, 0)
+                    if ($daysLeft -le $minDays) { $expiringCerts++ }
+                }
+            }
+            $status = if ($expiringCerts -gt 0) { "ALERT" } else { "OK" }
+            $checks.Add(@{ Category = "Certificates"; Check = "Certs expiring within $minDays days"; Value = $expiringCerts; Threshold = 0; Unit = "certs"; Status = $status })
+        } catch { }
+    }
+
+    # Service check
+    if ($Thresholds.Services -and $Thresholds.Services.RequireRunning -and @($Thresholds.Services.RequireRunning).Count -gt 0) {
+        $failedSvcs = [System.Collections.Generic.List[string]]::new()
+        foreach ($svcName in @($Thresholds.Services.RequireRunning)) {
+            try {
+                $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+                if ($null -ne $svc -and $svc.Status -ne 'Running') {
+                    $failedSvcs.Add($svcName)
+                }
+            } catch { }
+        }
+        $status = if ($failedSvcs.Count -gt 0) { "ALERT" } else { "OK" }
+        $detail = if ($failedSvcs.Count -gt 0) { $failedSvcs -join ', ' } else { "all running" }
+        $checks.Add(@{ Category = "Services"; Check = "Required services"; Value = $failedSvcs.Count; Threshold = 0; Unit = "stopped"; Status = $status; Detail = $detail })
+    }
+
+    # Event check
+    if ($Thresholds.Events -and $null -ne $Thresholds.Events.MaxCriticalCount) {
+        $hoursBack = if ($null -ne $Thresholds.Events.HoursBack) { $Thresholds.Events.HoursBack } else { 24 }
+        $startTime = (Get-Date).AddHours(-$hoursBack)
+        $critCount = 0
+        try {
+            $critEvents = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Level = 1; StartTime = $startTime } -MaxEvents 100 -ErrorAction SilentlyContinue)
+            $critCount += $critEvents.Count
+            $critEventsApp = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Level = 1; StartTime = $startTime } -MaxEvents 100 -ErrorAction SilentlyContinue)
+            $critCount += $critEventsApp.Count
+        } catch { }
+        $status = if ($critCount -gt $Thresholds.Events.MaxCriticalCount) { "ALERT" } else { "OK" }
+        $checks.Add(@{ Category = "Events"; Check = "Critical events (${hoursBack}h)"; Value = $critCount; Threshold = $Thresholds.Events.MaxCriticalCount; Unit = "events"; Status = $status })
+    }
+
+    return @($checks)
+}
 #endregion
