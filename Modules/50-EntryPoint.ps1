@@ -262,19 +262,21 @@ function Invoke-CLIAction {
             # Phase 2: Disk space analysis
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  --- DISK SPACE ANALYSIS ---" -color "Info"
-            Show-EnhancedCleanupAnalysis
+            $cleanupReport = Show-EnhancedCleanupAnalysis
 
             # Phase 3: Debloat recommendations
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  --- DEBLOAT RECOMMENDATIONS ---" -color "Info"
-            Show-DebloatAnalysis
+            $debloatReport = Show-DebloatAnalysis
 
-            if ($script:CLIOutputFormat -eq 'JSON' -and $null -ne $healthReport) {
+            if ($script:CLIOutputFormat -eq 'JSON') {
                 $jsonResult = @{
-                    Tool    = $script:ToolFullName
-                    Version = $script:ScriptVersion
-                    Action  = 'QuickScan'
-                    Report  = $healthReport
+                    Tool        = $script:ToolFullName
+                    Version     = $script:ScriptVersion
+                    Action      = 'QuickScan'
+                    Health      = $healthReport
+                    DiskCleanup = $cleanupReport
+                    Debloat     = $debloatReport
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }

@@ -717,6 +717,7 @@ function Show-EnhancedCleanupAnalysis {
     Write-OutputColor "  ──────────────────" -color "Info"
 
     $extendedTotal = 0
+    $shadowCount = 0
 
     # Windows.old
     $winOldPath = "C:\Windows.old"
@@ -836,6 +837,23 @@ function Show-EnhancedCleanupAnalysis {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Extended potential savings: ${extendedMB} MB (${extendedGB} GB)" -color $(if ($extendedGB -gt 1) { "Warning" } else { "Success" })
     Write-OutputColor "  (Shadow copy and Recycle Bin sizes not included in total)" -color "Info"
+
+    # Return structured report for JSON output mode
+    $winOldSizeValue = 0
+    if (Test-Path -LiteralPath "C:\Windows.old") { $winOldSizeValue = [math]::Round($winOldSize / 1MB, 1) }
+    $cleanupReport = @{
+        WindowsOld      = @{
+            Present = (Test-Path -LiteralPath "C:\Windows.old")
+            SizeMB  = $winOldSizeValue
+        }
+        BrowserCacheMB  = [math]::Round($browserTotal / 1MB, 1)
+        RecycleBinItems = $recycleBinCount
+        ShadowCopies    = $shadowCount
+        UserTempMB      = [math]::Round($userTempTotal / 1MB, 1)
+        TotalSavingsMB  = $extendedMB
+        TotalSavingsGB  = $extendedGB
+    }
+    return $cleanupReport
 }
 
 function Invoke-FullEnhancedCleanup {

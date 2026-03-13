@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.23.2
+    Automated Test Runner for RackStack v1.24.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9604,6 +9604,35 @@ try {
     Write-TestResult "37-HealthCheck: report has Firewall section" ($mod37 -match "\`$report\.Sections\['Firewall'\]")
     Write-TestResult "37-HealthCheck: report returns Issues" ($mod37 -match '\$report\.Issues\s*=\s*\$issues')
     Write-TestResult "37-HealthCheck: report returns Health status" ($mod37 -match "\`$report\.Health\s*=")
+
+    # DiskCleanup structured report tests (v1.24.0)
+    Write-TestResult "20-DiskCleanup: builds cleanupReport hashtable" ($mod20 -match '\$cleanupReport\s*=\s*@\{')
+    Write-TestResult "20-DiskCleanup: cleanupReport has WindowsOld" ($mod20 -match "WindowsOld\s*=\s*@\{")
+    Write-TestResult "20-DiskCleanup: cleanupReport has BrowserCacheMB" ($mod20 -match "BrowserCacheMB\s*=")
+    Write-TestResult "20-DiskCleanup: cleanupReport has RecycleBinItems" ($mod20 -match "RecycleBinItems\s*=")
+    Write-TestResult "20-DiskCleanup: cleanupReport has ShadowCopies" ($mod20 -match "ShadowCopies\s*=")
+    Write-TestResult "20-DiskCleanup: cleanupReport has UserTempMB" ($mod20 -match "UserTempMB\s*=")
+    Write-TestResult "20-DiskCleanup: cleanupReport has TotalSavingsMB" ($mod20 -match "TotalSavingsMB\s*=")
+    Write-TestResult "20-DiskCleanup: cleanupReport has TotalSavingsGB" ($mod20 -match "TotalSavingsGB\s*=")
+    Write-TestResult "20-DiskCleanup: returns cleanupReport" ($mod20 -match 'return\s+\$cleanupReport')
+
+    # SystemDebloat structured report tests (v1.24.0)
+    $mod64 = Get-Content -LiteralPath (Join-Path $modulesPath "64-SystemDebloat.ps1") -Raw -ErrorAction Stop
+    Write-TestResult "64-SystemDebloat: builds debloatReport hashtable" ($mod64 -match '\$debloatReport\s*=\s*@\{')
+    Write-TestResult "64-SystemDebloat: debloatReport has OSType" ($mod64 -match "OSType\s*=")
+    Write-TestResult "64-SystemDebloat: debloatReport has RemovablePackages" ($mod64 -match "RemovablePackages\s*=")
+    Write-TestResult "64-SystemDebloat: debloatReport has PackageSizeMB" ($mod64 -match "PackageSizeMB\s*=")
+    Write-TestResult "64-SystemDebloat: debloatReport has DisableableServices" ($mod64 -match "DisableableServices\s*=")
+    Write-TestResult "64-SystemDebloat: debloatReport has TelemetryTasks" ($mod64 -match "TelemetryTasks\s*=")
+    Write-TestResult "64-SystemDebloat: debloatReport has TotalActionable" ($mod64 -match "TotalActionable\s*=")
+    Write-TestResult "64-SystemDebloat: returns debloatReport" ($mod64 -match 'return\s+\$debloatReport')
+
+    # QuickScan enriched JSON tests (v1.24.0)
+    Write-TestResult "50-EntryPoint: QuickScan captures cleanup report" ($mod50 -match '\$cleanupReport\s*=\s*Show-EnhancedCleanupAnalysis')
+    Write-TestResult "50-EntryPoint: QuickScan captures debloat report" ($mod50 -match '\$debloatReport\s*=\s*Show-DebloatAnalysis')
+    Write-TestResult "50-EntryPoint: QuickScan JSON has DiskCleanup key" ($mod50 -match "'QuickScan'[\s\S]{0,2000}DiskCleanup\s*=\s*\`$cleanupReport")
+    Write-TestResult "50-EntryPoint: QuickScan JSON has Debloat key" ($mod50 -match "'QuickScan'[\s\S]{0,2000}Debloat\s*=\s*\`$debloatReport")
+    Write-TestResult "50-EntryPoint: QuickScan JSON has Health key" ($mod50 -match "'QuickScan'[\s\S]{0,2000}Health\s*=\s*\`$healthReport")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

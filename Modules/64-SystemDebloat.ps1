@@ -1193,6 +1193,19 @@ function Show-DebloatAnalysis {
     Write-OutputColor "  │$("  ─────────────────────────────────────────".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Total actionable items: $totalItems".PadRight(72))│" -color $impactColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    # Return structured report for JSON output mode
+    $osTypeValue = 'Workstation'
+    if ($isServer) { $osTypeValue = 'Server' }
+    $debloatReport = @{
+        OSType              = $osTypeValue
+        RemovablePackages   = $removableCount
+        PackageSizeMB       = [math]::Round($totalPackageSize / 1MB, 1)
+        DisableableServices = $disableableCount
+        TelemetryTasks      = $enabledTaskCount
+        TotalActionable     = $totalItems
+    }
+    return $debloatReport
 }
 
 # ════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.24.0
+
+- **Improvement:** Enriched QuickScan JSON output — disk cleanup analysis and system debloat scan now return structured data (cleanup savings breakdown, removable packages, telemetry tasks, service recommendations). QuickScan `-OutputFormat JSON` includes full `Health`, `DiskCleanup`, and `Debloat` sections with granular fields for automation dashboards and reporting (20-DiskCleanup, 64-SystemDebloat, 50-EntryPoint).
+- 65 modules, 2623 tests
+
 ## v1.23.2
 
 - **Improvement:** README updated with JSON output mode documentation — usage examples, PowerShell parsing, and Ansible integration patterns for `-OutputFormat JSON`.
