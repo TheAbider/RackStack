@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.43.0
+
+- **New Feature:** PatchStatus CLI action — `RackStack.exe -Action PatchStatus [-Config 15] -OutputFormat JSON` reports patch currency by querying installed hotfixes and Windows Update history. Classifies as OK (under 30 days), Warning (30-60 days), or Critical (60+ days). Detects pending reboots via registry. Exits code 1 when patch currency is Critical or reboot pending, usable as a compliance gate (50-EntryPoint).
+- **New Feature:** UserAudit CLI action — `RackStack.exe -Action UserAudit [-Config "365,90"] -OutputFormat JSON` audits all local user accounts for security hygiene. Detects stale accounts, old/expired passwords, never-logged-in users, and Administrators group membership. Configurable thresholds for password age and login staleness. Exits code 1 when issues detected (50-EntryPoint).
+- 65 modules, 3214 tests
+
 ## v1.42.0
 
 - **New Feature:** Alert CLI action — `RackStack.exe -Action Alert -Config "alert-config.json"` detects threshold breaches or configuration drift and dispatches notifications via webhook (Slack, Teams, generic JSON POST), email (SMTP), or Windows Event Log. Sub-commands via -Tier: Watch (default, runs threshold checks then alerts), Diff (runs export diff then alerts), Test (sends test notification). Completes the detect-and-notify automation loop with Watch and Diff (45-ConfigExport, 50-EntryPoint).

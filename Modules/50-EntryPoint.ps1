@@ -2529,6 +2529,245 @@ function Invoke-CLIAction {
 
             if ($failCount -gt 0 -or $timeoutCount -gt 0) { [Environment]::Exit(1) }
         }
+        'PatchStatus' {
+            # -Config: optional, max number of recent updates to return (default 15)
+            $maxRecent = 15
+            if ($script:CLIConfig -and $script:CLIConfig -match '^\d+$') {
+                $maxRecent = [int]$script:CLIConfig
+            }
+
+            Write-OutputColor "  Checking patch status..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            # Last installed hotfix
+            $lastPatch = $null
+            $daysSinceLastPatch = $null
+            try {
+                $hotfixes = @(Get-HotFix -ErrorAction Stop | Sort-Object InstalledOn -Descending -ErrorAction SilentlyContinue)
+                if ($hotfixes.Count -gt 0) {
+                    $hf = $hotfixes[0]
+                    $installedDate = if ($null -ne $hf.InstalledOn) { $hf.InstalledOn } else { $null }
+                    $daysSince = if ($null -ne $installedDate) { [math]::Round(((Get-Date) - $installedDate).TotalDays, 0) } else { $null }
+                    $lastPatch = @{
+                        KBID        = $hf.HotFixID
+                        InstalledOn = if ($null -ne $installedDate) { $installedDate.ToString("yyyy-MM-dd") } else { "Unknown" }
+                        DaysSince   = $daysSince
+                    }
+                    $daysSinceLastPatch = $daysSince
+                }
+            } catch { }
+
+            # Patch currency classification
+            $patchCurrency = 'Unknown'
+            if ($null -ne $daysSinceLastPatch) {
+                if ($daysSinceLastPatch -le 30) { $patchCurrency = 'OK' }
+                elseif ($daysSinceLastPatch -le 60) { $patchCurrency = 'Warning' }
+                else { $patchCurrency = 'Critical' }
+            }
+
+            # Pending reboot detection
+            $pendingReboot = $false
+            $rebootKeys = @(
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired',
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+            )
+            foreach ($rk in $rebootKeys) {
+                if (Test-Path -LiteralPath $rk -ErrorAction SilentlyContinue) { $pendingReboot = $true; break }
+            }
+
+            # Windows Update service status
+            $wuService = $null
+            try {
+                $svc = Get-Service -Name wuauserv -ErrorAction Stop
+                $wuService = @{ Status = "$($svc.Status)"; StartType = "$($svc.StartupType)" }
+            } catch { }
+
+            # Recent update history via COM
+            $recentUpdates = @()
+            $succeeded = 0; $failed = 0
+            try {
+                $session = New-Object -ComObject Microsoft.Update.Session
+                $searcher = $session.CreateUpdateSearcher()
+                $totalHistory = $searcher.GetTotalHistoryCount()
+                $count = [math]::Min($maxRecent, $totalHistory)
+                if ($count -gt 0) {
+                    $history = $searcher.QueryHistory(0, $count)
+                    for ($i = 0; $i -lt $history.Count; $i++) {
+                        $entry = $history.Item($i)
+                        $resultText = switch ($entry.ResultCode) { 0 { 'NotStarted' } 1 { 'InProgress' } 2 { 'Succeeded' } 3 { 'SucceededWithErrors' } 4 { 'Failed' } 5 { 'Aborted' } default { 'Unknown' } }
+                        $kbMatch = ''
+                        if ($entry.Title -match 'KB\d+') { $regexMatches = $Matches; $kbMatch = $regexMatches[0] }
+                        $recentUpdates += @{
+                            Title  = "$($entry.Title)"
+                            Date   = $entry.Date.ToString("yyyy-MM-ddTHH:mm:ss")
+                            Result = $resultText
+                            KBID   = $kbMatch
+                        }
+                        if ($resultText -eq 'Succeeded' -or $resultText -eq 'SucceededWithErrors') { $succeeded++ }
+                        elseif ($resultText -eq 'Failed') { $failed++ }
+                    }
+                }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PATCH STATUS - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if ($null -ne $lastPatch) {
+                Write-OutputColor "  │$("  Last Patch:     $($lastPatch.KBID) ($($lastPatch.InstalledOn), $($lastPatch.DaysSince) days ago)".PadRight(72))│" -color "Info"
+            } else {
+                Write-OutputColor "  │$("  Last Patch:     Unknown".PadRight(72))│" -color "Warning"
+            }
+            $currencyColor = switch ($patchCurrency) { 'OK' { 'Success' } 'Warning' { 'Warning' } 'Critical' { 'Error' } default { 'Warning' } }
+            Write-OutputColor "  │$("  Patch Currency: $patchCurrency".PadRight(72))│" -color $currencyColor
+            $rebootColor = if ($pendingReboot) { "Warning" } else { "Success" }
+            Write-OutputColor "  │$("  Pending Reboot: $pendingReboot".PadRight(72))│" -color $rebootColor
+            if ($null -ne $wuService) {
+                Write-OutputColor "  │$("  WU Service:     $($wuService.Status) ($($wuService.StartType))".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Recent: $($recentUpdates.Count)   Succeeded: $succeeded   Failed: $failed"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($failed -gt 0) { "Warning" } else { "Info" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool          = $script:ToolFullName
+                    Version       = $script:ScriptVersion
+                    Action        = 'PatchStatus'
+                    Timestamp     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname      = $env:COMPUTERNAME
+                    LastPatch     = $lastPatch
+                    PatchCurrency = $patchCurrency
+                    PendingReboot = $pendingReboot
+                    UpdateService = $wuService
+                    RecentUpdates = $recentUpdates
+                    Summary       = @{
+                        TotalRecent        = $recentUpdates.Count
+                        Succeeded          = $succeeded
+                        Failed             = $failed
+                        DaysSinceLastPatch = $daysSinceLastPatch
+                    }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($patchCurrency -eq 'Critical' -or $pendingReboot) { [Environment]::Exit(1) }
+        }
+        'UserAudit' {
+            # -Config: optional "passwordAgeDays,staleLoginDays" thresholds (default: 365,90)
+            $pwdAgeThreshold = 365
+            $staleLoginThreshold = 90
+            if ($script:CLIConfig -and $script:CLIConfig -match '^\d+,\d+$') {
+                $parts = $script:CLIConfig.Split(',')
+                $pwdAgeThreshold = [int]$parts[0]
+                $staleLoginThreshold = [int]$parts[1]
+            }
+
+            Write-OutputColor "  Auditing local user accounts..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $accounts = @()
+            $issueCount = 0
+            $adminCount = 0
+
+            # Get Administrators group members
+            $adminMembers = @()
+            try {
+                $adminMembers = @(Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name -replace '^.*\\', '' })
+            } catch { }
+
+            try {
+                $localUsers = @(Get-LocalUser -ErrorAction Stop)
+                foreach ($user in $localUsers) {
+                    $flags = @()
+                    $isAdmin = $adminMembers -contains $user.Name
+                    if ($isAdmin) { $adminCount++ }
+
+                    $pwdAgeDays = $null
+                    if ($null -ne $user.PasswordLastSet) {
+                        $pwdAgeDays = [math]::Round(((Get-Date) - $user.PasswordLastSet).TotalDays, 0)
+                        if ($user.Enabled -and $pwdAgeDays -gt $pwdAgeThreshold) { $flags += 'OLD PWD' }
+                        elseif ($user.Enabled -and $pwdAgeDays -gt 90) { $flags += 'AGING' }
+                    }
+
+                    $lastLogonDays = $null
+                    if ($null -ne $user.LastLogon) {
+                        $lastLogonDays = [math]::Round(((Get-Date) - $user.LastLogon).TotalDays, 0)
+                        if ($user.Enabled -and $lastLogonDays -gt $staleLoginThreshold) { $flags += 'STALE' }
+                    } elseif ($user.Enabled) {
+                        $flags += 'NO LOGIN'
+                    }
+
+                    $pwdExpires = 'N/A'
+                    if ($user.PasswordNeverExpires) { $pwdExpires = 'Never' }
+                    elseif ($null -ne $user.PasswordExpires) { $pwdExpires = $user.PasswordExpires.ToString("yyyy-MM-dd") }
+
+                    if ($user.Enabled -and $user.PasswordExpires -and $user.PasswordExpires -lt (Get-Date)) {
+                        $flags += 'EXPIRED'
+                    }
+
+                    if ($flags.Count -gt 0) { $issueCount++ }
+
+                    $accounts += @{
+                        Name            = $user.Name
+                        Enabled         = $user.Enabled
+                        PasswordLastSet = if ($null -ne $user.PasswordLastSet) { $user.PasswordLastSet.ToString("yyyy-MM-ddTHH:mm:ss") } else { $null }
+                        PasswordAgeDays = $pwdAgeDays
+                        LastLogon       = if ($null -ne $user.LastLogon) { $user.LastLogon.ToString("yyyy-MM-ddTHH:mm:ss") } else { $null }
+                        LastLogonDays   = $lastLogonDays
+                        PasswordExpires = $pwdExpires
+                        IsAdmin         = $isAdmin
+                        Flags           = $flags
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query local users: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $enabledCount = @($accounts | Where-Object { $_.Enabled }).Count
+            $disabledCount = @($accounts | Where-Object { -not $_.Enabled }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  USER AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($acct in $accounts) {
+                $status = if ($acct.Enabled) { "ON " } else { "OFF" }
+                $flagText = if ($acct.Flags.Count -gt 0) { " [$(($acct.Flags -join ', '))]" } else { "" }
+                $adminTag = if ($acct.IsAdmin) { " (Admin)" } else { "" }
+                $line = "  $($acct.Name.PadRight(22)) $status$adminTag$flagText"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = if ($acct.Flags.Count -gt 0) { "Warning" } elseif (-not $acct.Enabled) { "Info" } else { "Success" }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Total: $($accounts.Count)   Enabled: $enabledCount   Disabled: $disabledCount   Issues: $issueCount   Admins: $adminCount"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($issueCount -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'UserAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        Total          = $accounts.Count
+                        Enabled        = $enabledCount
+                        Disabled       = $disabledCount
+                        Issues         = $issueCount
+                        Administrators = $adminCount
+                    }
+                    Accounts  = $accounts
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($issueCount -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
