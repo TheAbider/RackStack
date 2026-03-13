@@ -2044,4 +2044,212 @@ function Show-FleetCompareReport {
     Write-OutputColor "  Summary: $($s.Total) compared, $($s.Matched) match, $($s.Different) different" -color $sumColor
     Write-OutputColor "" -color "Info"
 }
+
+# Fleet Trend — analyze performance snapshots from a single host over time
+function Invoke-FleetTrend {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InputPath
+    )
+
+    if (-not (Test-Path -LiteralPath $InputPath -PathType Container)) {
+        Write-OutputColor "  ERROR: Directory not found: $InputPath" -color "Error"
+        return $null
+    }
+
+    $jsonFiles = @(Get-ChildItem -LiteralPath $InputPath -Filter "*.json" -File)
+    if ($jsonFiles.Count -eq 0) {
+        Write-OutputColor "  No JSON files found in: $InputPath" -color "Error"
+        return $null
+    }
+
+    $snapshots = [System.Collections.Generic.List[object]]::new()
+    $failedFiles = 0
+    foreach ($file in $jsonFiles) {
+        try {
+            $data = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+            if ($null -ne $data.Timestamp) {
+                $snapshots.Add($data)
+            } else {
+                $failedFiles++
+            }
+        } catch {
+            $failedFiles++
+        }
+    }
+
+    if ($failedFiles -gt 0) {
+        Write-OutputColor "  Warning: $failedFiles file(s) skipped (invalid JSON or missing Timestamp)." -color "Warning"
+    }
+
+    if ($snapshots.Count -lt 2) {
+        Write-OutputColor "  ERROR: At least 2 valid snapshots required for trend analysis (found $($snapshots.Count))." -color "Error"
+        return $null
+    }
+
+    $sorted = @($snapshots | Sort-Object { [datetime]::Parse($_.Timestamp) })
+    $first = $sorted[0]
+    $last = $sorted[$sorted.Count - 1]
+    $hostname = if ($null -ne $last.Hostname) { $last.Hostname } else { 'Unknown' }
+
+    $getDirection = {
+        param([double]$FirstVal, [double]$LastVal)
+        $delta = $LastVal - $FirstVal
+        if ($delta -gt 5) { return 'Rising' }
+        elseif ($delta -lt -5) { return 'Falling' }
+        else { return 'Stable' }
+    }
+
+    # CPU trend
+    $cpuValues = [System.Collections.Generic.List[double]]::new()
+    foreach ($snap in $sorted) {
+        if ($null -ne $snap.CPUPercent) { $cpuValues.Add([double]$snap.CPUPercent) }
+    }
+    $cpuTrend = $null
+    if ($cpuValues.Count -ge 2) {
+        $cpuTrend = @{
+            Avg       = [math]::Round(($cpuValues | Measure-Object -Average).Average, 1)
+            Min       = [math]::Round(($cpuValues | Measure-Object -Minimum).Minimum, 1)
+            Max       = [math]::Round(($cpuValues | Measure-Object -Maximum).Maximum, 1)
+            First     = [math]::Round($cpuValues[0], 1)
+            Last      = [math]::Round($cpuValues[$cpuValues.Count - 1], 1)
+            Direction = & $getDirection $cpuValues[0] $cpuValues[$cpuValues.Count - 1]
+        }
+    }
+
+    # Memory trend
+    $memValues = [System.Collections.Generic.List[double]]::new()
+    foreach ($snap in $sorted) {
+        if ($null -ne $snap.MemoryUsedPercent) { $memValues.Add([double]$snap.MemoryUsedPercent) }
+    }
+    $memTrend = $null
+    if ($memValues.Count -ge 2) {
+        $memTrend = @{
+            Avg       = [math]::Round(($memValues | Measure-Object -Average).Average, 1)
+            Min       = [math]::Round(($memValues | Measure-Object -Minimum).Minimum, 1)
+            Max       = [math]::Round(($memValues | Measure-Object -Maximum).Maximum, 1)
+            First     = [math]::Round($memValues[0], 1)
+            Last      = [math]::Round($memValues[$memValues.Count - 1], 1)
+            Direction = & $getDirection $memValues[0] $memValues[$memValues.Count - 1]
+        }
+    }
+
+    # Disk trends per drive
+    $diskTrends = [System.Collections.Generic.List[object]]::new()
+    $allDrives = [System.Collections.Generic.List[string]]::new()
+    foreach ($snap in $sorted) {
+        if ($null -ne $snap.Disks) {
+            foreach ($d in @($snap.Disks)) {
+                if ($null -ne $d.Drive -and -not $allDrives.Contains($d.Drive)) {
+                    $allDrives.Add($d.Drive)
+                }
+            }
+        }
+    }
+
+    foreach ($drive in @($allDrives | Sort-Object)) {
+        $diskValues = [System.Collections.Generic.List[double]]::new()
+        foreach ($snap in $sorted) {
+            if ($null -ne $snap.Disks) {
+                $diskEntry = $snap.Disks | Where-Object { $_.Drive -eq $drive } | Select-Object -First 1
+                if ($null -ne $diskEntry -and $null -ne $diskEntry.UsedPercent) {
+                    $diskValues.Add([double]$diskEntry.UsedPercent)
+                }
+            }
+        }
+        if ($diskValues.Count -ge 2) {
+            $diskTrends.Add(@{
+                Drive     = $drive
+                Avg       = [math]::Round(($diskValues | Measure-Object -Average).Average, 1)
+                Min       = [math]::Round(($diskValues | Measure-Object -Minimum).Minimum, 1)
+                Max       = [math]::Round(($diskValues | Measure-Object -Maximum).Maximum, 1)
+                First     = [math]::Round($diskValues[0], 1)
+                Last      = [math]::Round($diskValues[$diskValues.Count - 1], 1)
+                Direction = & $getDirection $diskValues[0] $diskValues[$diskValues.Count - 1]
+            })
+        }
+    }
+
+    return @{
+        Hostname  = $hostname
+        TimeRange = @{
+            Start     = $first.Timestamp
+            End       = $last.Timestamp
+            Snapshots = $sorted.Count
+        }
+        CPU       = $cpuTrend
+        Memory    = $memTrend
+        Disks     = @($diskTrends)
+    }
+}
+
+# Display fleet trend report to console
+function Show-FleetTrendReport {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Result
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ── Performance Trend Report ──" -color "Info"
+    Write-OutputColor "  Host:       $($Result.Hostname)" -color "Info"
+    Write-OutputColor "  Time range: $($Result.TimeRange.Start) -> $($Result.TimeRange.End)" -color "Info"
+    Write-OutputColor "  Snapshots:  $($Result.TimeRange.Snapshots)" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $metricW = 16; $avgW = 8; $minW = 8; $maxW = 8; $firstW = 8; $lastW = 8; $dirW = 9
+    $headerLine = "  $('Metric'.PadRight($metricW))  $('Avg'.PadRight($avgW))  $('Min'.PadRight($minW))  $('Max'.PadRight($maxW))  $('First'.PadRight($firstW))  $('Last'.PadRight($lastW))  Direction"
+    $divider = "  $('-' * $metricW)  $('-' * $avgW)  $('-' * $minW)  $('-' * $maxW)  $('-' * $firstW)  $('-' * $lastW)  $('-' * $dirW)"
+    Write-OutputColor $headerLine -color "Info"
+    Write-OutputColor $divider -color "Info"
+
+    $dirColor = {
+        param([string]$Direction)
+        if ($Direction -eq 'Rising') { return 'Warning' }
+        else { return 'Success' }
+    }
+
+    if ($null -ne $Result.CPU) {
+        $c = $Result.CPU
+        $color = & $dirColor $c.Direction
+        $line = "  $('CPU %'.PadRight($metricW))  $("$($c.Avg)".PadRight($avgW))  $("$($c.Min)".PadRight($minW))  $("$($c.Max)".PadRight($maxW))  $("$($c.First)".PadRight($firstW))  $("$($c.Last)".PadRight($lastW))  $($c.Direction)"
+        Write-OutputColor $line -color $color
+    }
+
+    if ($null -ne $Result.Memory) {
+        $m = $Result.Memory
+        $color = & $dirColor $m.Direction
+        $line = "  $('Memory %'.PadRight($metricW))  $("$($m.Avg)".PadRight($avgW))  $("$($m.Min)".PadRight($minW))  $("$($m.Max)".PadRight($maxW))  $("$($m.First)".PadRight($firstW))  $("$($m.Last)".PadRight($lastW))  $($m.Direction)"
+        Write-OutputColor $line -color $color
+    }
+
+    foreach ($disk in $Result.Disks) {
+        $color = & $dirColor $disk.Direction
+        $label = "Disk $($disk.Drive) %"
+        $line = "  $($label.PadRight($metricW))  $("$($disk.Avg)".PadRight($avgW))  $("$($disk.Min)".PadRight($minW))  $("$($disk.Max)".PadRight($maxW))  $("$($disk.First)".PadRight($firstW))  $("$($disk.Last)".PadRight($lastW))  $($disk.Direction)"
+        Write-OutputColor $line -color $color
+    }
+
+    Write-OutputColor "" -color "Info"
+
+    $warnings = 0
+    if ($null -ne $Result.CPU -and $Result.CPU.Direction -eq 'Rising') {
+        Write-OutputColor "  [!] CPU usage is trending upward" -color "Warning"
+        $warnings++
+    }
+    if ($null -ne $Result.Memory -and $Result.Memory.Direction -eq 'Rising') {
+        Write-OutputColor "  [!] Memory usage is trending upward" -color "Warning"
+        $warnings++
+    }
+    foreach ($disk in $Result.Disks) {
+        if ($disk.Direction -eq 'Rising') {
+            Write-OutputColor "  [!] Disk $($disk.Drive) usage is trending upward" -color "Warning"
+            $warnings++
+        }
+    }
+    if ($warnings -eq 0) {
+        Write-OutputColor "  All metrics stable or declining." -color "Success"
+    }
+    Write-OutputColor "" -color "Info"
+}
 #endregion

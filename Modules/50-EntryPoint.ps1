@@ -637,6 +637,106 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'Export' {
+            Write-OutputColor "  Running full server export (health + inventory + hardening + snapshot)..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            Write-OutputColor "  [1/4] Collecting system health..." -color "Info"
+            $healthReport = Show-SystemHealthCheck
+
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  [2/4] Collecting server inventory..." -color "Info"
+            $inventoryReport = Get-ServerInventory
+
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  [3/4] Running security hardening audit..." -color "Info"
+            $hardeningChecks = Get-SecurityHardeningChecks
+            $hardenPassCount = @($hardeningChecks | Where-Object { $_.Status -eq 'Pass' }).Count
+            $hardenTotalCount = @($hardeningChecks).Count
+            $hardenScore = if ($hardenTotalCount -gt 0) { [math]::Round(($hardenPassCount / $hardenTotalCount) * 100) } else { 0 }
+
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  [4/4] Capturing performance snapshot..." -color "Info"
+            $snapshotPath = Save-PerformanceSnapshot
+            $snapshotData = $null
+            if ($null -ne $snapshotPath -and (Test-Path -LiteralPath $snapshotPath)) {
+                try {
+                    $snapshotData = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
+                } catch {
+                    Write-OutputColor "  Warning: Could not read snapshot file." -color "Warning"
+                }
+            }
+
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Export complete." -color "Success"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Export'
+                    Hostname  = $env:COMPUTERNAME
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Health    = $healthReport
+                    Inventory = $inventoryReport
+                    Hardening = @{
+                        Score    = $hardenScore
+                        Total    = $hardenTotalCount
+                        Passed   = $hardenPassCount
+                        Failed   = @($hardeningChecks | Where-Object { $_.Status -eq 'Fail' }).Count
+                        Warnings = @($hardeningChecks | Where-Object { $_.Status -eq 'Warn' }).Count
+                        Info     = @($hardeningChecks | Where-Object { $_.Status -eq 'Info' }).Count
+                        Checks   = @($hardeningChecks | ForEach-Object {
+                            @{
+                                Category = $_.Category
+                                Name     = $_.Name
+                                Value    = $_.Value
+                                Status   = $_.Status
+                            }
+                        })
+                    }
+                    Snapshot  = $snapshotData
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'Trend' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config <path> is required for Trend." -color "Error"
+                Write-OutputColor "  Provide a directory containing snapshot JSON files." -color "Info"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $script:CLIConfig)) {
+                Write-OutputColor "  ERROR: Path not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  Analyzing performance trends from: $($script:CLIConfig)" -color "Info"
+            Write-OutputColor "" -color "Info"
+            $trendResult = Invoke-FleetTrend -InputPath $script:CLIConfig
+
+            if ($null -eq $trendResult) {
+                Write-OutputColor "  Trend analysis failed." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Show-FleetTrendReport -Result $trendResult
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Trend'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $trendResult.Hostname
+                    TimeRange = $trendResult.TimeRange
+                    CPU       = $trendResult.CPU
+                    Memory    = $trendResult.Memory
+                    Disks     = $trendResult.Disks
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.33.0
+
+- **New Feature:** Export CLI action — `RackStack.exe -Action Export -OutputFormat JSON` runs health check, server inventory, security hardening audit, and performance snapshot in a single pass. Returns a unified JSON object with Health, Inventory, Hardening (score + per-check details), and Snapshot sections. Eliminates the need to run 4 separate CLI actions to get a complete host profile (50-EntryPoint).
+- **New Feature:** Trend CLI action — `RackStack.exe -Action Trend -Config <snapshots-dir> -OutputFormat JSON` analyzes performance snapshots from a single host over time. Reads a directory of snapshot JSON files, sorts by timestamp, and calculates CPU/memory/disk trends with avg/min/max/first/last values and direction indicators (Rising/Falling/Stable). Console output includes color-coded warnings for rising resource usage (54-HTMLReports, 50-EntryPoint).
+- 65 modules, 2837 tests
+
 ## v1.32.0
 
 - **New Feature:** Aggregate CLI action — `RackStack.exe -Action Aggregate -Config <directory> -OutputFormat JSON` reads a directory of JSON output files from previous CLI runs and produces a fleet-wide summary report. Auto-detects action types and aggregates per-type: HealthCheck (health status counts), Harden (avg/min/max scores + top 10 common failures), Compliance (readiness score stats + drift counts), Inventory (OS/domain/role distribution), Snapshot (CPU/memory/disk averages), Remediate (fix/skip/fail totals + reboot count). Supports single JSON array files as well as directories. Console and JSON output (54-HTMLReports, 50-EntryPoint).
