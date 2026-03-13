@@ -2302,4 +2302,183 @@ function Get-ServerInventory {
     Write-OutputColor "  Inventory complete." -color "Success"
     return $inventory
 }
+
+# Register a Windows Scheduled Task to run Export on a recurring schedule
+function Register-ScheduledExport {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$OutputDir,
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Hourly', 'Daily', 'Weekly')]
+        [string]$Frequency,
+        [string]$Sections,
+        [string]$OutputFormat = 'JSON'
+    )
+
+    $taskName = "$($script:ToolName)-ScheduledExport"
+    $taskPath = "\$($script:ToolName)\"
+
+    # Validate output directory
+    if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
+        try {
+            New-Item -Path $OutputDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+            Write-OutputColor "  Created output directory: $OutputDir" -color "Success"
+        } catch {
+            Write-OutputColor "  ERROR: Cannot create output directory: $OutputDir" -color "Error"
+            return $false
+        }
+    }
+
+    # Resolve the script path for the scheduled task action
+    $exePath = $script:ScriptPath
+    if (-not $exePath) {
+        Write-OutputColor "  ERROR: Cannot determine script path for scheduled task." -color "Error"
+        return $false
+    }
+
+    # Build the argument string
+    $configArg = $OutputDir
+    if ($Sections) { $configArg = "$OutputDir|$Sections" }
+    $isExe = $exePath -match '\.exe$'
+
+    if ($isExe) {
+        $actionExe = $exePath
+        $actionArgs = "-Action Export -Config `"$configArg`" -OutputFormat $OutputFormat -Silent"
+    } else {
+        $actionExe = "powershell.exe"
+        $actionArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$exePath`" -Action Export -Config `"$configArg`" -OutputFormat $OutputFormat -Silent"
+    }
+
+    # Build the trigger based on frequency
+    switch ($Frequency) {
+        'Hourly' {
+            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 1)
+        }
+        'Daily' {
+            $trigger = New-ScheduledTaskTrigger -Daily -At "02:00AM" -DaysInterval 1
+        }
+        'Weekly' {
+            $trigger = New-ScheduledTaskTrigger -Weekly -At "02:00AM" -DaysOfWeek Monday
+        }
+    }
+
+    $action = New-ScheduledTaskAction -Execute $actionExe -Argument $actionArgs
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+
+    # Remove existing task if present
+    try {
+        $existing = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+        if ($null -ne $existing) {
+            Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
+            Write-OutputColor "  Removed existing scheduled export task." -color "Info"
+        }
+    } catch { }
+
+    try {
+        Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "$($script:ToolFullName) Scheduled Export ($Frequency) - Output: $OutputDir" -ErrorAction Stop | Out-Null
+        Write-OutputColor "  Scheduled export task registered successfully." -color "Success"
+        Write-OutputColor "  Task:      $taskPath$taskName" -color "Info"
+        Write-OutputColor "  Frequency: $Frequency" -color "Info"
+        Write-OutputColor "  Output:    $OutputDir" -color "Info"
+        if ($Sections) {
+            Write-OutputColor "  Sections:  $Sections" -color "Info"
+        }
+        return $true
+    } catch {
+        Write-OutputColor "  ERROR: Failed to register scheduled task: $($_.Exception.Message)" -color "Error"
+        return $false
+    }
+}
+
+# Unregister the scheduled export task
+function Unregister-ScheduledExport {
+    $taskName = "$($script:ToolName)-ScheduledExport"
+    $taskPath = "\$($script:ToolName)\"
+
+    try {
+        $existing = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+        if ($null -eq $existing) {
+            Write-OutputColor "  No scheduled export task found." -color "Warning"
+            return $false
+        }
+        Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
+        Write-OutputColor "  Scheduled export task removed successfully." -color "Success"
+        return $true
+    } catch {
+        Write-OutputColor "  ERROR: Failed to remove scheduled task: $($_.Exception.Message)" -color "Error"
+        return $false
+    }
+}
+
+# Get the status of the scheduled export task
+function Get-ScheduledExportStatus {
+    $taskName = "$($script:ToolName)-ScheduledExport"
+    $taskPath = "\$($script:ToolName)\"
+
+    try {
+        $task = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+        if ($null -eq $task) {
+            return @{
+                Registered = $false
+                TaskName   = $taskName
+            }
+        }
+
+        $taskInfo = $task | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
+        $lastRun = if ($null -ne $taskInfo -and $null -ne $taskInfo.LastRunTime -and $taskInfo.LastRunTime.Year -gt 1999) {
+            $taskInfo.LastRunTime.ToString("yyyy-MM-ddTHH:mm:ss")
+        } else { $null }
+        $nextRun = if ($null -ne $taskInfo -and $null -ne $taskInfo.NextRunTime -and $taskInfo.NextRunTime.Year -gt 1999) {
+            $taskInfo.NextRunTime.ToString("yyyy-MM-ddTHH:mm:ss")
+        } else { $null }
+        $lastResult = if ($null -ne $taskInfo) { $taskInfo.LastTaskResult } else { $null }
+
+        return @{
+            Registered  = $true
+            TaskName    = "$taskPath$taskName"
+            State       = "$($task.State)"
+            Description = $task.Description
+            LastRun     = $lastRun
+            LastResult  = $lastResult
+            NextRun     = $nextRun
+        }
+    } catch {
+        return @{
+            Registered = $false
+            TaskName   = $taskName
+            Error      = $_.Exception.Message
+        }
+    }
+}
+
+# Rotate export files - keep only the N most recent
+function Invoke-ExportRotation {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$OutputDir,
+        [int]$KeepCount = 30
+    )
+
+    if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
+        return @{ Removed = 0; Kept = 0 }
+    }
+
+    $files = @(Get-ChildItem -Path $OutputDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    $removed = 0
+    if ($files.Count -gt $KeepCount) {
+        $toRemove = @($files | Select-Object -Skip $KeepCount)
+        foreach ($f in $toRemove) {
+            try {
+                Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop
+                $removed++
+            } catch { }
+        }
+    }
+
+    return @{
+        Removed = $removed
+        Kept    = [math]::Min($files.Count, $KeepCount)
+    }
+}
 #endregion

@@ -1716,6 +1716,270 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'ScheduledExport' {
+            # -Tier: Register, Unregister, Status (default: Status)
+            # -Config: "C:\ExportDir,Daily" or "C:\ExportDir,Hourly,Health,Inventory" (dir,frequency[,sections...])
+            $subCommand = if ($script:CLIProfile -and $script:CLIProfile -ne 'Standard') { $script:CLIProfile } else { 'Status' }
+
+            switch ($subCommand) {
+                'Register' {
+                    if (-not $script:CLIConfig) {
+                        Write-OutputColor "  ERROR: -Config required for Register." -color "Error"
+                        Write-OutputColor "  Format: -Config ""C:\ExportDir,Daily""" -color "Info"
+                        Write-OutputColor "  Frequencies: Hourly, Daily, Weekly" -color "Info"
+                        Write-OutputColor "  Optional sections: -Config ""C:\ExportDir,Daily,Health,Inventory""" -color "Info"
+                        [Environment]::Exit(1)
+                    }
+
+                    $parts = @($script:CLIConfig -split ',' | ForEach-Object { $_.Trim() })
+                    if ($parts.Count -lt 2) {
+                        Write-OutputColor "  ERROR: -Config must include output directory and frequency." -color "Error"
+                        Write-OutputColor "  Example: -Config ""C:\Exports,Daily""" -color "Info"
+                        [Environment]::Exit(1)
+                    }
+
+                    $exportDir = $parts[0]
+                    $freq = $parts[1]
+                    $validFreqs = @('Hourly', 'Daily', 'Weekly')
+                    if ($freq -notin $validFreqs) {
+                        Write-OutputColor "  ERROR: Invalid frequency '$freq'. Must be: $($validFreqs -join ', ')" -color "Error"
+                        [Environment]::Exit(1)
+                    }
+
+                    $sectionFilter = $null
+                    if ($parts.Count -gt 2) {
+                        $exportAllSections = @('Health', 'Inventory', 'Hardening', 'Snapshot', 'Certificates', 'ListeningPorts', 'Software', 'Uptime', 'Services', 'Events', 'Network')
+                        $reqSections = @($parts[2..($parts.Count - 1)])
+                        $invalidSec = @($reqSections | Where-Object { $_ -notin $exportAllSections })
+                        if ($invalidSec.Count -gt 0) {
+                            Write-OutputColor "  ERROR: Unknown section(s): $($invalidSec -join ', ')" -color "Error"
+                            Write-OutputColor "  Valid: $($exportAllSections -join ', ')" -color "Info"
+                            [Environment]::Exit(1)
+                        }
+                        $sectionFilter = $reqSections -join ','
+                    }
+
+                    Write-OutputColor "  Registering scheduled export task..." -color "Info"
+                    Write-OutputColor "" -color "Info"
+
+                    $outFmt = if ($script:CLIOutputFormat -eq 'JSON') { 'JSON' } else { 'JSON' }
+                    $regResult = Register-ScheduledExport -OutputDir $exportDir -Frequency $freq -Sections $sectionFilter -OutputFormat $outFmt
+
+                    if ($script:CLIOutputFormat -eq 'JSON') {
+                        $jsonResult = @{
+                            Tool      = $script:ToolFullName
+                            Version   = $script:ScriptVersion
+                            Action    = 'ScheduledExport'
+                            SubAction = 'Register'
+                            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                            Hostname  = $env:COMPUTERNAME
+                            Success   = [bool]$regResult
+                            Config    = @{
+                                OutputDir = $exportDir
+                                Frequency = $freq
+                                Sections  = $sectionFilter
+                            }
+                        }
+                        Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                    }
+
+                    if (-not $regResult) { [Environment]::Exit(1) }
+                }
+                'Unregister' {
+                    Write-OutputColor "  Removing scheduled export task..." -color "Info"
+                    Write-OutputColor "" -color "Info"
+
+                    $unregResult = Unregister-ScheduledExport
+
+                    if ($script:CLIOutputFormat -eq 'JSON') {
+                        $jsonResult = @{
+                            Tool      = $script:ToolFullName
+                            Version   = $script:ScriptVersion
+                            Action    = 'ScheduledExport'
+                            SubAction = 'Unregister'
+                            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                            Hostname  = $env:COMPUTERNAME
+                            Success   = [bool]$unregResult
+                        }
+                        Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                    }
+
+                    if (-not $unregResult) { [Environment]::Exit(1) }
+                }
+                'Status' {
+                    Write-OutputColor "  Checking scheduled export status..." -color "Info"
+                    Write-OutputColor "" -color "Info"
+
+                    $status = Get-ScheduledExportStatus
+
+                    if ($status.Registered) {
+                        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                        Write-OutputColor "  │$("  SCHEDULED EXPORT STATUS".PadRight(72))│" -color "Info"
+                        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                        Write-OutputColor "  │$("  Task:     $($status.TaskName)".PadRight(72))│" -color "Success"
+                        Write-OutputColor "  │$("  State:    $($status.State)".PadRight(72))│" -color $(if ($status.State -eq 'Ready') { "Success" } else { "Warning" })
+                        if ($status.LastRun) {
+                            Write-OutputColor "  │$("  Last Run: $($status.LastRun)".PadRight(72))│" -color "Info"
+                        }
+                        if ($null -ne $status.LastResult) {
+                            $resultColor = if ($status.LastResult -eq 0) { "Success" } else { "Error" }
+                            Write-OutputColor "  │$("  Result:   $($status.LastResult)".PadRight(72))│" -color $resultColor
+                        }
+                        if ($status.NextRun) {
+                            Write-OutputColor "  │$("  Next Run: $($status.NextRun)".PadRight(72))│" -color "Info"
+                        }
+                        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                    } else {
+                        Write-OutputColor "  No scheduled export task is registered." -color "Warning"
+                    }
+
+                    if ($script:CLIOutputFormat -eq 'JSON') {
+                        $jsonResult = @{
+                            Tool      = $script:ToolFullName
+                            Version   = $script:ScriptVersion
+                            Action    = 'ScheduledExport'
+                            SubAction = 'Status'
+                            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                            Hostname  = $env:COMPUTERNAME
+                            Status    = $status
+                        }
+                        Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                    }
+                }
+                default {
+                    Write-OutputColor "  ERROR: Unknown ScheduledExport sub-command: $subCommand" -color "Error"
+                    Write-OutputColor "  Valid: Register, Unregister, Status" -color "Info"
+                    Write-OutputColor "  Usage: -Action ScheduledExport -Tier Register -Config ""C:\Exports,Daily""" -color "Info"
+                    [Environment]::Exit(1)
+                }
+            }
+        }
+        'ValidateConfig' {
+            # -Config: path to batch_config.json file
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config required. Provide path to batch_config.json." -color "Error"
+                Write-OutputColor "  Usage: -Action ValidateConfig -Config ""C:\path\to\batch_config.json""" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            $configPath = $script:CLIConfig
+            if (-not (Test-Path -LiteralPath $configPath)) {
+                Write-OutputColor "  ERROR: File not found: $configPath" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  Validating batch config: $configPath" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            # Parse the JSON file
+            try {
+                $rawContent = Get-Content -LiteralPath $configPath -Raw -ErrorAction Stop
+                $batchConfig = $rawContent | ConvertFrom-Json -ErrorAction Stop
+            } catch {
+                Write-OutputColor "  ERROR: Invalid JSON: $($_.Exception.Message)" -color "Error"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool      = $script:ToolFullName
+                        Version   = $script:ScriptVersion
+                        Action    = 'ValidateConfig'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                        Hostname  = $env:COMPUTERNAME
+                        File      = $configPath
+                        Valid     = $false
+                        Errors    = @("Invalid JSON: $($_.Exception.Message)")
+                        Warnings  = @()
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+                [Environment]::Exit(1)
+            }
+
+            # Convert PSCustomObject to hashtable for Test-BatchConfig
+            $configHash = @{}
+            foreach ($prop in $batchConfig.PSObject.Properties) {
+                if ($prop.Name -notlike '_*') {
+                    $configHash[$prop.Name] = $prop.Value
+                }
+            }
+
+            $validation = Test-BatchConfig -Config $configHash
+
+            # Count active steps (non-null, non-false settings that map to batch steps)
+            $activeSteps = 0
+            $stepFields = @('Hostname', 'IPAddress', 'DomainName', 'Timezone', 'EnableRDP', 'EnableWinRM',
+                           'ConfigureFirewall', 'SetPowerPlan', 'InstallHyperV', 'InstallMPIO',
+                           'InstallFailoverClustering', 'CreateLocalAdmin', 'DisableBuiltInAdmin',
+                           'InstallUpdates', 'CreateVirtualSwitch', 'ConfigureSharedStorage',
+                           'ConfigureMPIO', 'InitializeHostStorage', 'ConfigureDefenderExclusions',
+                           'ServerRoleTemplate', 'PromoteToDC')
+            foreach ($sf in $stepFields) {
+                $val = $configHash[$sf]
+                if ($null -ne $val -and $val -ne $false -and $val -ne '') {
+                    $activeSteps++
+                }
+            }
+
+            # Display results
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  BATCH CONFIG VALIDATION".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  File: $configPath".PadRight(72))│" -color "Info"
+
+            $cfgType = if ($configHash.ConfigType) { $configHash.ConfigType } else { "(not set)" }
+            Write-OutputColor "  │$("  Type: $cfgType".PadRight(72))│" -color "Info"
+
+            $cfgHost = if ($configHash.Hostname) { $configHash.Hostname } else { "(not set)" }
+            Write-OutputColor "  │$("  Hostname: $cfgHost".PadRight(72))│" -color "Info"
+
+            Write-OutputColor "  │$("  Active Steps: $activeSteps".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+            if ($validation.IsValid -and $validation.Warnings.Count -eq 0) {
+                Write-OutputColor "  │$("  RESULT: VALID - No errors or warnings".PadRight(72))│" -color "Success"
+            } elseif ($validation.IsValid) {
+                Write-OutputColor "  │$("  RESULT: VALID with $($validation.Warnings.Count) warning(s)".PadRight(72))│" -color "Warning"
+            } else {
+                Write-OutputColor "  │$("  RESULT: INVALID - $($validation.Errors.Count) error(s)".PadRight(72))│" -color "Error"
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($validation.Errors.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  ERRORS:" -color "Error"
+                foreach ($e in $validation.Errors) {
+                    Write-OutputColor "    [X] $e" -color "Error"
+                }
+            }
+            if ($validation.Warnings.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  WARNINGS:" -color "Warning"
+                foreach ($w in $validation.Warnings) {
+                    Write-OutputColor "    [!] $w" -color "Warning"
+                }
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'ValidateConfig'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    File      = $configPath
+                    Valid     = $validation.IsValid
+                    Errors    = $validation.Errors
+                    Warnings  = $validation.Warnings
+                    Summary   = @{
+                        ConfigType  = $cfgType
+                        Hostname    = $cfgHost
+                        ActiveSteps = $activeSteps
+                    }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if (-not $validation.IsValid) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

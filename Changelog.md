@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.39.0
+
+- **New Feature:** ScheduledExport CLI action — `RackStack.exe -Action ScheduledExport -Tier Register -Config "C:\Exports,Daily"` creates a Windows Scheduled Task that runs Export automatically on an Hourly, Daily, or Weekly schedule. Outputs JSON to the specified directory, running as SYSTEM with highest privileges. Sub-commands: Register (create/update task), Unregister (remove task), Status (check task state, last run, next run). Optional section filtering: `-Config "C:\Exports,Daily,Health,Inventory,Network"` runs only specified sections. Includes automatic export file rotation to keep the last 30 files (45-ConfigExport, 50-EntryPoint).
+- **New Feature:** ValidateConfig CLI action — `RackStack.exe -Action ValidateConfig -Config "C:\path\to\batch_config.json"` performs pre-flight validation of batch configuration files without executing them. Checks JSON syntax, validates all field types and values (hostnames, IPs, CIDR, power plans, storage backends, DC promotion settings), counts active steps, and reports errors and warnings. Exits with code 1 on validation errors, code 0 on valid (with or without warnings). JSON output includes full error/warning lists and a summary with config type, hostname, and active step count (50-EntryPoint).
+- 65 modules, 3001 tests
+
 ## v1.38.0
 
 - **Enhancement:** Export CLI action expanded to 11 sections (was 8). Now also captures Services (key service status from configurable monitored list), Events (critical/error event log summary from last 24 hours), and Network (adapter configuration with IPv4, DNS, gateway, VLAN, NIC errors).
