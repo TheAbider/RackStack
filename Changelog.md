@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.23.2
+
+- **Improvement:** README updated with JSON output mode documentation — usage examples, PowerShell parsing, and Ansible integration patterns for `-OutputFormat JSON`.
+- 65 modules, 2601 tests
+
 ## v1.23.1
 
 - **Improvement:** Error code coverage expanded — 10 new error codes (RS-1009, RS-2012, RS-3007, RS-4007, RS-4008, RS-5008, RS-6006, RS-6007, RS-6008, RS-7006) integrated into 8 additional modules: Windows Updates, RDP, Defender Exclusions, Failover Clustering, Storage Manager, Disk Cleanup, Hyper-V Replica, Scheduled Tasks. Total: 56 error codes across 18 modules (02-Logging).

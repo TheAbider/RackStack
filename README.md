@@ -309,6 +309,27 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $s = irm https://raw
     C:\Temp\RackStack.exe -Action Cleanup -Tier Standard -Silent
 ```
 
+### JSON Output Mode
+
+Add `-OutputFormat JSON` to get structured, machine-readable output from HealthCheck and QuickScan actions. Useful for feeding results into monitoring dashboards, alerting pipelines, or Ansible `register`:
+
+```powershell
+# JSON health check
+RackStack.exe -Action HealthCheck -OutputFormat JSON -Silent
+
+# Parse JSON in PowerShell
+$report = (.\RackStack.exe -Action HealthCheck -OutputFormat JSON -Silent | ConvertFrom-Json).Report
+$report.Sections.CPU
+$report.Issues
+
+# Ansible: capture JSON output
+# - name: Health check
+#   win_shell: C:\Temp\RackStack.exe -Action HealthCheck -OutputFormat JSON -Silent
+#   register: health_result
+# - set_fact:
+#     health: "{{ health_result.stdout | from_json }}"
+```
+
 **Exit codes:** `0` = success, `1` = error. All CLI actions return proper exit codes for CI/CD integration.
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
