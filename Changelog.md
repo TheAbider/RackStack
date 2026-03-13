@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.27.0
+
+- **New Feature:** Configuration Drift Check CLI action — `RackStack.exe -Action DriftCheck -Config <baseline.json> -OutputFormat JSON` compares current server state against a saved baseline and reports drift as structured JSON (hostname, IP, domain, timezone, RDP, WinRM, power plan, roles). Without `-Config`, captures and outputs the current server state as a new baseline. Designed for fleet compliance monitoring and automated drift detection (50-EntryPoint, Header).
+- 65 modules, 2682 tests
+
 ## v1.26.0
 
 - **Improvement:** Error code coverage expanded — 12 new error codes (RS-2013, RS-2014, RS-3008, RS-4009, RS-5009, RS-5010, RS-6009, RS-6010, RS-6011, RS-7007) and 18 integration points across 10 additional modules: BitLocker, Host Storage, VHD Management, Offline VHD, Cluster Dashboard, VM Checkpoints, VM Export/Import, Network Diagnostics, Storage Backends, Active Directory. Total: 68 error codes across 28 modules.

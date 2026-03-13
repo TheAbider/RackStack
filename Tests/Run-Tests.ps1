@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.26.0
+    Automated Test Runner for RackStack v1.27.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9703,6 +9703,17 @@ try {
     Write-TestResult "45-ConfigExport: inventory has RemoteAccess" ($mod45 -match '\$inventory\.RemoteAccess')
     Write-TestResult "45-ConfigExport: inventory has Firewall" ($mod45 -match '\$inventory\.Firewall')
     Write-TestResult "45-ConfigExport: returns inventory" ($mod45 -match 'return\s+\$inventory')
+
+    # DriftCheck CLI action tests (v1.27.0)
+    Write-TestResult "Header: DriftCheck in ValidateSet" ($headerContent -match "ValidateSet.*DriftCheck")
+    Write-TestResult "50-EntryPoint: DriftCheck case exists" ($mod50 -match "'DriftCheck'\s*\{")
+    Write-TestResult "50-EntryPoint: DriftCheck compares against config" ($mod50 -match "'DriftCheck'[\s\S]{0,500}Compare-ConfigurationDrift")
+    Write-TestResult "50-EntryPoint: DriftCheck shows drift report" ($mod50 -match "'DriftCheck'[\s\S]{0,800}Show-DriftReport")
+    Write-TestResult "50-EntryPoint: DriftCheck JSON has DriftCount" ($mod50 -match "'DriftCheck'[\s\S]{0,2000}DriftCount")
+    Write-TestResult "50-EntryPoint: DriftCheck JSON has Status" ($mod50 -match "'DriftCheck'[\s\S]{0,2000}Status\s*=.*Clean.*Drifted")
+    Write-TestResult "50-EntryPoint: DriftCheck captures baseline" ($mod50 -match "'DriftCheck'[\s\S]{0,3000}Save-DriftBaseline")
+    Write-TestResult "50-EntryPoint: DriftCheck JSON output" ($mod50 -match "'DriftCheck'[\s\S]{0,3000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: DriftCheck Action field" ($mod50 -match "Action\s*=\s*'DriftCheck'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

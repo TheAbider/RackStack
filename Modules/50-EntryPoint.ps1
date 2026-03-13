@@ -293,6 +293,66 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'DriftCheck' {
+            if ($script:CLIConfig) {
+                # Compare current state against a baseline/profile
+                Write-OutputColor "  Comparing against baseline: $($script:CLIConfig)" -color "Info"
+                $driftResults = Compare-ConfigurationDrift -ProfilePath $script:CLIConfig
+                if ($null -eq $driftResults) {
+                    Write-OutputColor "  Failed to load baseline." -color "Error"
+                    [Environment]::Exit(1)
+                }
+                Show-DriftReport -DriftResults $driftResults
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $driftItems = @()
+                    foreach ($key in $driftResults.Keys) {
+                        $item = $driftResults[$key]
+                        $driftItems += @{
+                            Setting  = $key
+                            Expected = $item.Expected
+                            Current  = $item.Current
+                            Match    = $item.Match
+                        }
+                    }
+                    $driftCount = @($driftItems | Where-Object { -not $_.Match }).Count
+                    $jsonResult = @{
+                        Tool       = $script:ToolFullName
+                        Version    = $script:ScriptVersion
+                        Action     = 'DriftCheck'
+                        Hostname   = $env:COMPUTERNAME
+                        Baseline   = $script:CLIConfig
+                        Checks     = $driftItems
+                        DriftCount = $driftCount
+                        Status     = if ($driftCount -eq 0) { 'Clean' } else { 'Drifted' }
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            } else {
+                # No baseline — capture current state
+                Write-OutputColor "  Capturing server baseline..." -color "Info"
+                $baselinePath = Save-DriftBaseline -Description "CLI baseline capture"
+                if ($null -ne $baselinePath) {
+                    Write-OutputColor "  Baseline saved: $baselinePath" -color "Success"
+                    if ($script:CLIOutputFormat -eq 'JSON') {
+                        $baselineData = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json
+                        $jsonResult = @{
+                            Tool      = $script:ToolFullName
+                            Version   = $script:ScriptVersion
+                            Action    = 'DriftCheck'
+                            Mode      = 'Capture'
+                            Hostname  = $env:COMPUTERNAME
+                            Baseline  = $baselineData
+                            SavedTo   = $baselinePath
+                        }
+                        Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                    }
+                } else {
+                    Write-OutputColor "  Failed to capture baseline." -color "Error"
+                    [Environment]::Exit(1)
+                }
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
