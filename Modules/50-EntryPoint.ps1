@@ -2306,6 +2306,229 @@ function Invoke-CLIAction {
                 }
             }
         }
+        'Alert' {
+            # -Config: path to alert configuration JSON
+            # -Tier: Test (send test notification), Watch (default), Diff
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config required. Provide path to alert config JSON." -color "Error"
+                Write-OutputColor "  Format: -Config ""C:\alert-config.json""" -color "Info"
+                Write-OutputColor "  Sub-commands via -Tier: Watch (default), Diff, Test" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            if (-not (Test-Path -LiteralPath $script:CLIConfig)) {
+                Write-OutputColor "  ERROR: Alert config not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            try {
+                $alertConfig = Get-Content -LiteralPath $script:CLIConfig -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                # Convert PSObject to hashtable for Channels
+                $alertHashConfig = @{ Channels = $alertConfig.Channels }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to parse alert config: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $alertMode = if ($script:CLIProfile -and $script:CLIProfile -ne 'Standard') { $script:CLIProfile } else { 'Watch' }
+            $alertData = $null
+            $triggered = $false
+
+            switch ($alertMode) {
+                'Test' {
+                    Write-OutputColor "  Sending test notification to all channels..." -color "Info"
+                    $alertData = @{
+                        Action     = 'Alert'
+                        Hostname   = $env:COMPUTERNAME
+                        Timestamp  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                        AlertCount = 1
+                        Checks     = @(@{ Check = 'Test'; Status = 'ALERT'; Value = 'Test notification'; Unit = '' })
+                    }
+                    $triggered = $true
+                }
+                'Diff' {
+                    if (-not $alertConfig.DiffPaths -or -not $alertConfig.DiffPaths.Old -or -not $alertConfig.DiffPaths.New) {
+                        Write-OutputColor "  ERROR: Alert config must include DiffPaths.Old and DiffPaths.New for Diff mode." -color "Error"
+                        [Environment]::Exit(1)
+                    }
+                    Write-OutputColor "  Running Diff detection..." -color "Info"
+                    $diffResult = Invoke-ExportDiff -OldPath $alertConfig.DiffPaths.Old -NewPath $alertConfig.DiffPaths.New
+                    if ($null -eq $diffResult) { [Environment]::Exit(1) }
+                    if ($diffResult.TotalChanges -gt 0) {
+                        $alertData = @{
+                            Action          = 'Alert'
+                            Hostname        = $diffResult.Hostname
+                            Timestamp       = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                            AlertCount      = $diffResult.TotalChanges
+                            TotalChanges    = $diffResult.TotalChanges
+                            ChangedSections = $diffResult.ChangedSections
+                        }
+                        $triggered = $true
+                    }
+                }
+                default {
+                    # Watch mode (default)
+                    Write-OutputColor "  Running Watch detection..." -color "Info"
+                    $thresholds = Get-DefaultWatchThresholds
+                    if ($null -ne $alertConfig.Thresholds) {
+                        foreach ($prop in $alertConfig.Thresholds.PSObject.Properties) {
+                            if ($prop.Name -eq 'CPU' -and $null -ne $prop.Value.MaxPercent) {
+                                $thresholds.CPU = @{ MaxPercent = $prop.Value.MaxPercent }
+                            } elseif ($prop.Name -eq 'Memory' -and $null -ne $prop.Value.MaxPercent) {
+                                $thresholds.Memory = @{ MaxPercent = $prop.Value.MaxPercent }
+                            } elseif ($prop.Name -eq 'Disk' -and $null -ne $prop.Value.MaxUsedPercent) {
+                                $thresholds.Disk = @{ MaxUsedPercent = $prop.Value.MaxUsedPercent }
+                            }
+                        }
+                    }
+                    $watchChecks = Test-WatchThresholds -Thresholds $thresholds
+                    $watchAlertCount = @($watchChecks | Where-Object { $_.Status -eq 'ALERT' }).Count
+                    if ($watchAlertCount -gt 0) {
+                        $alertData = @{
+                            Action     = 'Alert'
+                            Hostname   = $env:COMPUTERNAME
+                            Timestamp  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                            AlertCount = $watchAlertCount
+                            Checks     = $watchChecks
+                        }
+                        $triggered = $true
+                    }
+                }
+            }
+
+            if ($triggered -and $null -ne $alertData) {
+                $dispatchResult = Invoke-AlertDispatch -AlertConfig $alertHashConfig -AlertData $alertData
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  ALERT DISPATCH - $($alertData.Hostname)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Mode: $alertMode   Alerts: $($alertData.AlertCount)".PadRight(72))│" -color "Warning"
+                foreach ($cr in $dispatchResult.ChannelResults) {
+                    $statusText = if ($cr.Success) { "OK" } else { "FAILED" }
+                    $color = if ($cr.Success) { "Success" } else { "Error" }
+                    $line = "  $($cr.Channel.PadRight(20)) [$statusText]"
+                    if (-not $cr.Success -and $cr.Error) { $line += " $($cr.Error)" }
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                }
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                $summaryLine = "  Dispatched: $($dispatchResult.Dispatched)   OK: $($dispatchResult.Succeeded)   Failed: $($dispatchResult.Failed)"
+                Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($dispatchResult.Failed -gt 0) { "Error" } else { "Success" })
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            } else {
+                Write-OutputColor "  No alerts detected. No notifications sent." -color "Success"
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool           = $script:ToolFullName
+                    Version        = $script:ScriptVersion
+                    Action         = 'Alert'
+                    Mode           = $alertMode
+                    Timestamp      = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname       = $env:COMPUTERNAME
+                    Triggered      = $triggered
+                    AlertCount     = if ($null -ne $alertData) { $alertData.AlertCount } else { 0 }
+                    ChannelResults = if ($null -ne $dispatchResult) { $dispatchResult.ChannelResults } else { @() }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($null -ne $dispatchResult -and $dispatchResult.Failed -gt 0) { [Environment]::Exit(1) }
+        }
+        'FleetScan' {
+            # -Config: path to fleet scan configuration JSON
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config required. Provide path to fleet scan config JSON." -color "Error"
+                Write-OutputColor "  Format: -Config ""C:\fleet-config.json""" -color "Info"
+                Write-OutputColor "  Config: { ""Targets"": [...], ""Action"": ""Watch"", ""Parallel"": 5, ""TimeoutSeconds"": 300 }" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            if (-not (Test-Path -LiteralPath $script:CLIConfig)) {
+                Write-OutputColor "  ERROR: Fleet config not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            try {
+                $fleetConfig = Get-Content -LiteralPath $script:CLIConfig -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            } catch {
+                Write-OutputColor "  ERROR: Failed to parse fleet config: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            if (-not $fleetConfig.Targets -or -not $fleetConfig.Action) {
+                Write-OutputColor "  ERROR: Fleet config must include Targets and Action fields." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $targets = Get-FleetTargets -Targets $fleetConfig.Targets
+            if ($null -eq $targets -or $targets.Count -eq 0) {
+                Write-OutputColor "  ERROR: No valid targets found." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $parallel = if ($null -ne $fleetConfig.Parallel) { $fleetConfig.Parallel } else { 5 }
+            $timeout = if ($null -ne $fleetConfig.TimeoutSeconds) { $fleetConfig.TimeoutSeconds } else { 300 }
+            $actionConfig = if ($fleetConfig.ActionConfig) { "$($fleetConfig.ActionConfig)" } else { $null }
+            $actionTier = if ($fleetConfig.ActionTier) { "$($fleetConfig.ActionTier)" } else { $null }
+
+            Write-OutputColor "  Fleet Scan: $($fleetConfig.Action) on $($targets.Count) target(s)" -color "Info"
+            Write-OutputColor "  Parallel: $parallel   Timeout: ${timeout}s" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $fleetResults = Invoke-FleetAction -Targets $targets -Action $fleetConfig.Action -ActionConfig $actionConfig -ActionTier $actionTier -Parallel $parallel -TimeoutSeconds $timeout
+
+            $successCount = @($fleetResults | Where-Object { $_.Status -eq 'Success' }).Count
+            $failCount = @($fleetResults | Where-Object { $_.Status -eq 'Failed' }).Count
+            $timeoutCount = @($fleetResults | Where-Object { $_.Status -eq 'Timeout' }).Count
+
+            # Save results if OutputDir specified
+            $savedPath = $null
+            if ($fleetConfig.OutputDir) {
+                $savedPath = Save-FleetResults -OutputDir $fleetConfig.OutputDir -Results $fleetResults -Action $fleetConfig.Action
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  FLEET SCAN - $($fleetConfig.Action)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($r in $fleetResults) {
+                $statusIcon = switch ($r.Status) { 'Success' { 'OK' } 'Failed' { 'FAIL' } 'Timeout' { 'TIME' } default { '??' } }
+                $line = "  $($r.Hostname.PadRight(25)) [$statusIcon]  $($r.Duration)s"
+                if ($r.Error) { $line += "  $($r.Error)" }
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = switch ($r.Status) { 'Success' { 'Success' } 'Failed' { 'Error' } 'Timeout' { 'Warning' } default { 'Info' } }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Total: $($targets.Count)   OK: $successCount   Failed: $failCount   Timeout: $timeoutCount"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($failCount -gt 0 -or $timeoutCount -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($null -ne $savedPath) {
+                Write-OutputColor "  Results saved: $savedPath" -color "Info"
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool           = $script:ToolFullName
+                    Version        = $script:ScriptVersion
+                    Action         = 'FleetScan'
+                    Timestamp      = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname       = $env:COMPUTERNAME
+                    TargetAction   = $fleetConfig.Action
+                    TotalTargets   = $targets.Count
+                    Succeeded      = $successCount
+                    Failed         = $failCount
+                    TimedOut        = $timeoutCount
+                    Results        = $fleetResults
+                }
+                if ($null -ne $savedPath) { $jsonResult['OutputPath'] = $savedPath }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($failCount -gt 0 -or $timeoutCount -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

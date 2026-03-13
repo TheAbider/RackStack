@@ -2681,4 +2681,373 @@ function Get-LatestBaseline {
     if ($files.Count -eq 0) { return $null }
     return $files[0].FullName
 }
+
+# Send alert notification via webhook (Slack, Teams, or generic JSON POST)
+function Send-AlertWebhook {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+        [Parameter(Mandatory=$true)]
+        [hashtable]$AlertData
+    )
+
+    if (-not $Config.URL) {
+        return @{ Channel = 'Webhook'; Success = $false; Error = 'No URL configured' }
+    }
+
+    try {
+        $template = if ($Config.BodyTemplate) { $Config.BodyTemplate } else { 'payload' }
+        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERNAME }
+        $summary = "RackStack Alert on $hostname — $($AlertData.AlertCount) alert(s) detected"
+
+        switch ($template) {
+            'slack' {
+                $body = @{ text = $summary } | ConvertTo-Json -Depth 5
+            }
+            'teams' {
+                $body = @{
+                    '@type' = 'MessageCard'
+                    summary = $summary
+                    themeColor = 'FF0000'
+                    title = $summary
+                    text = "Action: $($AlertData.Action)`nTimestamp: $($AlertData.Timestamp)`nAlerts: $($AlertData.AlertCount)"
+                } | ConvertTo-Json -Depth 5
+            }
+            default {
+                $body = $AlertData | ConvertTo-Json -Depth 10
+            }
+        }
+
+        $params = @{
+            Uri         = $Config.URL
+            Method      = if ($Config.Method) { $Config.Method } else { 'POST' }
+            Body        = $body
+            ContentType = 'application/json'
+            ErrorAction = 'Stop'
+        }
+        if ($Config.Headers) {
+            $headers = @{}
+            foreach ($prop in $Config.Headers.PSObject.Properties) { $headers[$prop.Name] = $prop.Value }
+            $params['Headers'] = $headers
+        }
+
+        Invoke-RestMethod @params | Out-Null
+        return @{ Channel = 'Webhook'; Success = $true; Error = $null }
+    } catch {
+        return @{ Channel = 'Webhook'; Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+# Send alert notification via email (SMTP)
+function Send-AlertEmail {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+        [Parameter(Mandatory=$true)]
+        [hashtable]$AlertData
+    )
+
+    if (-not $Config.SmtpServer -or -not $Config.To -or -not $Config.From) {
+        return @{ Channel = 'Email'; Success = $false; Error = 'Missing SmtpServer, To, or From' }
+    }
+
+    try {
+        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERNAME }
+        $subject = "RackStack Alert: $hostname — $($AlertData.AlertCount) alert(s)"
+        $bodyLines = @(
+            "RackStack Alert Notification"
+            "============================"
+            ""
+            "Hostname:  $hostname"
+            "Action:    $($AlertData.Action)"
+            "Timestamp: $($AlertData.Timestamp)"
+            "Alerts:    $($AlertData.AlertCount)"
+            ""
+        )
+        if ($AlertData.Checks) {
+            $bodyLines += "Check Details:"
+            $bodyLines += "─────────────"
+            foreach ($chk in $AlertData.Checks) {
+                $bodyLines += "  $($chk.Check): $($chk.Value) $($chk.Unit) [$($chk.Status)]"
+            }
+        }
+        if ($AlertData.TotalChanges) {
+            $bodyLines += "Changes:   $($AlertData.TotalChanges) across $($AlertData.ChangedSections -join ', ')"
+        }
+
+        $mailParams = @{
+            From       = $Config.From
+            To         = @($Config.To)
+            Subject    = $subject
+            Body       = ($bodyLines -join "`r`n")
+            SmtpServer = $Config.SmtpServer
+            ErrorAction = 'Stop'
+        }
+        if ($Config.SmtpPort) { $mailParams['Port'] = $Config.SmtpPort }
+        if ($Config.UseSsl) { $mailParams['UseSsl'] = $true }
+
+        Send-MailMessage @mailParams
+        return @{ Channel = 'Email'; Success = $true; Error = $null }
+    } catch {
+        return @{ Channel = 'Email'; Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+# Send alert notification to Windows Event Log
+function Send-AlertEventLog {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+        [Parameter(Mandatory=$true)]
+        [hashtable]$AlertData
+    )
+
+    try {
+        $logName = if ($Config.LogName) { $Config.LogName } else { 'Application' }
+        $source = if ($Config.Source) { $Config.Source } else { 'RackStack' }
+
+        # Create event source if it doesn't exist
+        if (-not [System.Diagnostics.EventLog]::SourceExists($source)) {
+            New-EventLog -LogName $logName -Source $source -ErrorAction Stop
+        }
+
+        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERNAME }
+        $message = "RackStack Alert on $hostname`r`nAction: $($AlertData.Action)`r`nAlerts: $($AlertData.AlertCount)`r`nTimestamp: $($AlertData.Timestamp)"
+
+        $entryType = if ($AlertData.AlertCount -gt 0) { 'Warning' } else { 'Information' }
+        Write-EventLog -LogName $logName -Source $source -EventId 1000 -EntryType $entryType -Message $message -ErrorAction Stop
+
+        return @{ Channel = 'EventLog'; Success = $true; Error = $null }
+    } catch {
+        return @{ Channel = 'EventLog'; Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+# Dispatch alert to all enabled channels
+function Invoke-AlertDispatch {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$AlertConfig,
+        [Parameter(Mandatory=$true)]
+        [hashtable]$AlertData
+    )
+
+    $results = [System.Collections.Generic.List[object]]::new()
+    $channels = $AlertConfig.Channels
+
+    if ($null -ne $channels.Webhook -and $channels.Webhook.Enabled) {
+        $whConfig = @{}
+        foreach ($prop in $channels.Webhook.PSObject.Properties) { $whConfig[$prop.Name] = $prop.Value }
+        $results.Add((Send-AlertWebhook -Config $whConfig -AlertData $AlertData))
+    }
+    if ($null -ne $channels.Email -and $channels.Email.Enabled) {
+        $emConfig = @{}
+        foreach ($prop in $channels.Email.PSObject.Properties) { $emConfig[$prop.Name] = $prop.Value }
+        $results.Add((Send-AlertEmail -Config $emConfig -AlertData $AlertData))
+    }
+    if ($null -ne $channels.EventLog -and $channels.EventLog.Enabled) {
+        $elConfig = @{}
+        foreach ($prop in $channels.EventLog.PSObject.Properties) { $elConfig[$prop.Name] = $prop.Value }
+        $results.Add((Send-AlertEventLog -Config $elConfig -AlertData $AlertData))
+    }
+
+    $successCount = @($results | Where-Object { $_.Success }).Count
+    $failCount = @($results | Where-Object { -not $_.Success }).Count
+
+    return @{
+        Dispatched   = $results.Count
+        Succeeded    = $successCount
+        Failed       = $failCount
+        ChannelResults = @($results)
+    }
+}
+
+# Resolve fleet targets from array, .txt file, or .json file
+function Get-FleetTargets {
+    param(
+        [Parameter(Mandatory=$true)]
+        $Targets
+    )
+
+    # If already an array, return validated
+    if ($Targets -is [array]) {
+        return @($Targets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() })
+    }
+
+    # If a string path, load from file
+    $targetPath = "$Targets"
+    if (-not (Test-Path -LiteralPath $targetPath)) {
+        Write-OutputColor "  ERROR: Targets file not found: $targetPath" -color "Error"
+        return $null
+    }
+
+    if ($targetPath -match '\.json$') {
+        try {
+            $content = Get-Content -LiteralPath $targetPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            return @($content | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { "$_".Trim() })
+        } catch {
+            Write-OutputColor "  ERROR: Failed to parse targets JSON: $($_.Exception.Message)" -color "Error"
+            return $null
+        }
+    } else {
+        # Treat as .txt — one hostname per line
+        try {
+            $lines = @(Get-Content -LiteralPath $targetPath -ErrorAction Stop)
+            return @($lines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -notmatch '^\s*#' } | ForEach-Object { $_.Trim() })
+        } catch {
+            Write-OutputColor "  ERROR: Failed to read targets file: $($_.Exception.Message)" -color "Error"
+            return $null
+        }
+    }
+}
+
+# Execute a RackStack action against multiple remote hosts via WinRM
+function Invoke-FleetAction {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$Targets,
+        [Parameter(Mandatory=$true)]
+        [string]$Action,
+        [string]$ActionConfig,
+        [string]$ActionTier,
+        [int]$Parallel = 5,
+        [int]$TimeoutSeconds = 300
+    )
+
+    $results = [System.Collections.Generic.List[object]]::new()
+    $exePath = $script:ScriptPath
+    if (-not $exePath) { $exePath = "RackStack.exe" }
+
+    $scriptBlock = {
+        param($rackExe, $rackAction, $rackConfig, $rackTier)
+        $cmdArgs = @($rackExe, '-Action', $rackAction, '-OutputFormat', 'JSON', '-Silent')
+        if ($rackConfig) { $cmdArgs += @('-Config', $rackConfig) }
+        if ($rackTier) { $cmdArgs += @('-Tier', $rackTier) }
+        try {
+            $output = & $cmdArgs[0] $cmdArgs[1..($cmdArgs.Count-1)] 2>&1
+            return @{ Output = ($output -join "`n"); ExitCode = $LASTEXITCODE }
+        } catch {
+            return @{ Output = $_.Exception.Message; ExitCode = 99 }
+        }
+    }
+
+    # Process in batches for throttling
+    $batchSize = if ($Parallel -gt 0) { $Parallel } else { 5 }
+    for ($i = 0; $i -lt $Targets.Count; $i += $batchSize) {
+        $batch = @($Targets[$i..[math]::Min($i + $batchSize - 1, $Targets.Count - 1)])
+        $jobs = @()
+
+        foreach ($target in $batch) {
+            $startTime = Get-Date
+            try {
+                $job = Invoke-Command -ComputerName $target -ScriptBlock $scriptBlock `
+                    -ArgumentList $exePath, $Action, $ActionConfig, $ActionTier `
+                    -AsJob -ErrorAction Stop
+                $jobs += @{ Job = $job; Target = $target; StartTime = $startTime }
+            } catch {
+                $results.Add(@{
+                    Hostname = $target
+                    Status   = 'Failed'
+                    ExitCode = 99
+                    Duration = 0
+                    Error    = $_.Exception.Message
+                    Result   = $null
+                })
+            }
+        }
+
+        # Wait for batch jobs
+        foreach ($entry in $jobs) {
+            $completed = $entry.Job | Wait-Job -Timeout $TimeoutSeconds -ErrorAction SilentlyContinue
+            $duration = [math]::Round(((Get-Date) - $entry.StartTime).TotalSeconds, 1)
+
+            if ($null -eq $completed -or $entry.Job.State -eq 'Running') {
+                $entry.Job | Stop-Job -ErrorAction SilentlyContinue
+                $entry.Job | Remove-Job -Force -ErrorAction SilentlyContinue
+                $results.Add(@{
+                    Hostname = $entry.Target
+                    Status   = 'Timeout'
+                    ExitCode = 99
+                    Duration = $duration
+                    Error    = "Timed out after ${TimeoutSeconds}s"
+                    Result   = $null
+                })
+            } else {
+                try {
+                    $jobResult = $entry.Job | Receive-Job -ErrorAction Stop
+                    $parsed = $null
+                    if ($jobResult.Output) {
+                        try { $parsed = $jobResult.Output | ConvertFrom-Json -ErrorAction Stop } catch { }
+                    }
+                    $exitCode = if ($null -ne $jobResult.ExitCode) { $jobResult.ExitCode } else { 0 }
+                    $results.Add(@{
+                        Hostname = $entry.Target
+                        Status   = if ($exitCode -eq 0) { 'Success' } else { 'Failed' }
+                        ExitCode = $exitCode
+                        Duration = $duration
+                        Error    = $null
+                        Result   = $parsed
+                    })
+                } catch {
+                    $results.Add(@{
+                        Hostname = $entry.Target
+                        Status   = 'Failed'
+                        ExitCode = 99
+                        Duration = $duration
+                        Error    = $_.Exception.Message
+                        Result   = $null
+                    })
+                }
+                $entry.Job | Remove-Job -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    return @($results)
+}
+
+# Save fleet scan results to individual JSON files and summary
+function Save-FleetResults {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$OutputDir,
+        [Parameter(Mandatory=$true)]
+        [array]$Results,
+        [string]$Action
+    )
+
+    if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
+        try {
+            New-Item -Path $OutputDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        } catch {
+            Write-OutputColor "  ERROR: Cannot create output directory: $OutputDir" -color "Error"
+            return $null
+        }
+    }
+
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+
+    # Save per-host results
+    foreach ($r in $Results) {
+        if ($null -ne $r.Result) {
+            $hostFile = Join-Path $OutputDir "$($r.Hostname)_${Action}_${timestamp}.json"
+            $r.Result | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $hostFile -Encoding UTF8 -Force
+        }
+    }
+
+    # Save fleet summary
+    $summaryFile = Join-Path $OutputDir "fleet_${Action}_${timestamp}.json"
+    $summary = @{
+        Action    = $Action
+        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+        Total     = $Results.Count
+        Succeeded = @($Results | Where-Object { $_.Status -eq 'Success' }).Count
+        Failed    = @($Results | Where-Object { $_.Status -eq 'Failed' }).Count
+        TimedOut  = @($Results | Where-Object { $_.Status -eq 'Timeout' }).Count
+        Results   = $Results
+    }
+    $summary | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $summaryFile -Encoding UTF8 -Force
+
+    return $summaryFile
+}
 #endregion

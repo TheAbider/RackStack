@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.42.0
+
+- **New Feature:** Alert CLI action — `RackStack.exe -Action Alert -Config "alert-config.json"` detects threshold breaches or configuration drift and dispatches notifications via webhook (Slack, Teams, generic JSON POST), email (SMTP), or Windows Event Log. Sub-commands via -Tier: Watch (default, runs threshold checks then alerts), Diff (runs export diff then alerts), Test (sends test notification). Completes the detect-and-notify automation loop with Watch and Diff (45-ConfigExport, 50-EntryPoint).
+- **New Feature:** FleetScan CLI action — `RackStack.exe -Action FleetScan -Config "fleet-config.json"` executes any RackStack action across multiple remote servers via WinRM. Configurable parallelism, per-host timeout, and optional result persistence. Turns any single-server action into a fleet-wide operation (45-ConfigExport, 50-EntryPoint).
+- 65 modules, 3184 tests
+
 ## v1.41.0
 
 - **New Feature:** Diff CLI action — `RackStack.exe -Action Diff -Config "old_export.json,new_export.json"` deep-diffs two Export JSON profiles from the same host at different times. Detects changes across 8 sections: Software (added/removed/version changed), ListeningPorts (opened/closed), Services (state/startup changes), Certificates (new expirations), Network (config changes), Hardening (score delta), Health (status changes), and Uptime (reboots). Exits code 1 when changes detected, making it a CI/pipeline drift gate (54-HTMLReports, 50-EntryPoint).
