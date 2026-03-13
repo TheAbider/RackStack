@@ -36,7 +36,7 @@
 #>
 
 param(
-    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden')]
+    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate')]
     [string]$Action = 'QuickScan',
 
     [ValidateSet('Light', 'Standard', 'Aggressive')]
@@ -142,12 +142,12 @@ Write-Host ""
 Write-Host "  Launching RackStack -Action $Action -Tier $Tier$(if ($Silent) { ' -Silent' })$(if ($OutputFormat -ne 'Console') { " -OutputFormat $OutputFormat" })..." -ForegroundColor Cyan
 Write-Host ""
 
-$args = @("-Action", $Action, "-Tier", $Tier)
-if ($Silent) { $args += "-Silent" }
-if ($OutputFormat -ne 'Console') { $args += @("-OutputFormat", $OutputFormat) }
+$exeArgs = @("-Action", $Action, "-Tier", $Tier)
+if ($Silent) { $exeArgs += "-Silent" }
+if ($OutputFormat -ne 'Console') { $exeArgs += @("-OutputFormat", $OutputFormat) }
 
 try {
-    $process = Start-Process -FilePath $exePath -ArgumentList $args -Wait -PassThru -NoNewWindow
+    $process = Start-Process -FilePath $exePath -ArgumentList $exeArgs -Wait -PassThru -NoNewWindow
     exit $process.ExitCode
 }
 catch {

@@ -9612,6 +9612,7 @@ try {
         Write-TestResult "Install-RackStack: Snapshot in ValidateSet" ($bootstrapContent -match "ValidateSet.*Snapshot")
         Write-TestResult "Install-RackStack: Compliance in ValidateSet" ($bootstrapContent -match "ValidateSet.*Compliance")
         Write-TestResult "Install-RackStack: Harden in ValidateSet" ($bootstrapContent -match "ValidateSet.*Harden")
+        Write-TestResult "Install-RackStack: Remediate in ValidateSet" ($bootstrapContent -match "ValidateSet.*Remediate")
     }
     else {
         Write-TestResult "Install-RackStack: bootstrap installer exists" $false "File not found"
@@ -9772,6 +9773,33 @@ try {
     Write-TestResult "37-HealthCheck: Show-SecurityHardeningReport exists" ($mod37 -match "function Show-SecurityHardeningReport")
     Write-TestResult "37-HealthCheck: Show-SecurityHardeningReport returns Score" ($mod37 -match "Show-SecurityHardeningReport[\s\S]{0,3000}Score\s*=")
     Write-TestResult "37-HealthCheck: Show-SecurityHardeningReport calls Get-SecurityHardeningChecks" ($mod37 -match "Show-SecurityHardeningReport[\s\S]{0,500}Get-SecurityHardeningChecks")
+
+    # Remediate CLI action tests (v1.31.0)
+    Write-TestResult "Header: Remediate in ValidateSet" ($headerContent -match "ValidateSet.*Remediate")
+    Write-TestResult "50-EntryPoint: Remediate case exists" ($mod50 -match "'Remediate'\s*\{")
+    Write-TestResult "50-EntryPoint: Remediate requires -Config" ($mod50 -match "'Remediate'[\s\S]{0,500}CLIConfig")
+    Write-TestResult "50-EntryPoint: Remediate calls Invoke-Remediation" ($mod50 -match "'Remediate'[\s\S]{0,800}Invoke-Remediation")
+    Write-TestResult "50-EntryPoint: Remediate calls Show-RemediationReport" ($mod50 -match "'Remediate'[\s\S]{0,1500}Show-RemediationReport")
+    Write-TestResult "50-EntryPoint: Remediate JSON has Summary" ($mod50 -match "'Remediate'[\s\S]{0,2500}Summary")
+    Write-TestResult "50-EntryPoint: Remediate JSON has Fixed count" ($mod50 -match "'Remediate'[\s\S]{0,2500}Fixed")
+    Write-TestResult "50-EntryPoint: Remediate JSON has RebootRequired" ($mod50 -match "'Remediate'[\s\S]{0,3000}RebootRequired")
+    Write-TestResult "50-EntryPoint: Remediate JSON output" ($mod50 -match "'Remediate'[\s\S]{0,3500}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: Remediate Action field" ($mod50 -match "Action\s*=\s*'Remediate'")
+
+    # Invoke-Remediation function tests (v1.31.0)
+    $ceContentCLI = Get-Content -LiteralPath (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw -ErrorAction Stop
+    Write-TestResult "45-ConfigExport: Invoke-Remediation function exists" ($ceContentCLI -match "function Invoke-Remediation")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation calls Compare-ConfigurationDrift" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,2000}Compare-ConfigurationDrift")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation has remediation order" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,3000}remediationOrder")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Timezone" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Set-TimeZone")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation handles RDP" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,6000}fDenyTSConnections")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation handles DNS" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,8000}Set-DnsClientServerAddress")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Hostname" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,13000}Rename-Computer")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation tracks reboot" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,3000}RebootRequired")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation calls Add-SessionChange" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Add-SessionChange.*Remediation")
+    Write-TestResult "45-ConfigExport: Show-RemediationReport function exists" ($ceContentCLI -match "function Show-RemediationReport")
+    Write-TestResult "45-ConfigExport: Show-RemediationReport displays items" ($ceContentCLI -match "Show-RemediationReport[\s\S]{0,2000}FIXED|Show-RemediationReport[\s\S]{0,2000}Fixed")
+    Write-TestResult "45-ConfigExport: Domain marked as manual" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Domain.*Manual|Domain.*requires credentials")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

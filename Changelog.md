@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.31.0
+
+- **New Feature:** Remediate CLI action — `RackStack.exe -Action Remediate -Config <baseline.json> -OutputFormat JSON` automatically fixes configuration drift by comparing current state to a saved baseline and applying corrections. Supports timezone, power plan, RDP, WinRM, DNS, IP address/gateway, Windows features (Hyper-V, MPIO, Failover Clustering), and hostname remediation. Domain join flagged as manual (requires credentials). Feature uninstall skipped (destructive). Reports fixed/failed/skipped/manual counts with reboot indicator. Full JSON output for automation pipelines (45-ConfigExport, 50-EntryPoint).
+- **Fix:** Renamed `$args` to `$exeArgs` in Install-RackStack.ps1 to avoid PSScriptAnalyzer warning about automatic variable assignment.
+- 65 modules, 2752 tests
+
 ## v1.30.0
 
 - **New Feature:** Security Hardening Audit CLI action — `RackStack.exe -Action Harden -OutputFormat JSON` performs a CIS-lite security posture check across protocol security (SMBv1, NTLMv1, TLS 1.0/1.1), account security (guest account, built-in admin), network security (firewall profiles, admin shares, WinRM encryption), remote access (RDP NLA), system security (UAC, screen lock timeout), audit and logging (PowerShell script block logging, command line auditing), endpoint protection (Defender real-time, BitLocker, Windows Update service), and unnecessary services (Remote Registry, Fax, Telephony). Returns color-coded pass/fail/warn/info results with an overall hardening score percentage. Full JSON output support for fleet-wide security posture monitoring (37-HealthCheck, 50-EntryPoint).

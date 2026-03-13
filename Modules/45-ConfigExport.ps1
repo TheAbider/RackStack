@@ -1243,6 +1243,331 @@ function Show-DriftReport {
     Write-OutputColor "  Summary: $totalCount checked, $matchCount match, $driftCount drifted" -color $summaryColor
 }
 
+# Remediate drifted settings by applying fixes from a baseline profile
+function Invoke-Remediation {
+    <#
+    .SYNOPSIS
+        Compares current state to a baseline profile and applies fixes for drifted settings.
+        Returns structured remediation results.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ProfilePath
+    )
+
+    # Load the profile for reference during fixes
+    try {
+        $savedProfile = Get-Content -LiteralPath $ProfilePath -Raw | ConvertFrom-Json
+    } catch {
+        Write-OutputColor "  Failed to parse profile: $_" -color "Error"
+        return $null
+    }
+
+    # Run drift comparison
+    $driftResults = Compare-ConfigurationDrift -ProfilePath $ProfilePath
+    if ($null -eq $driftResults) { return $null }
+
+    # Filter for drifted items only
+    $driftedKeys = @()
+    foreach ($key in $driftResults.Keys) {
+        if (-not $driftResults[$key].Match) {
+            $driftedKeys += $key
+        }
+    }
+
+    if ($driftedKeys.Count -eq 0) {
+        Write-OutputColor "  No drift detected — server matches baseline." -color "Success"
+        return @{
+            Total          = 0
+            Fixed          = 0
+            Skipped        = 0
+            Failed         = 0
+            Manual         = 0
+            RebootRequired = $false
+            Items          = @()
+        }
+    }
+
+    Write-OutputColor "  Found $($driftedKeys.Count) drifted setting(s). Remediating..." -color "Warning"
+    Write-OutputColor "" -color "Info"
+
+    # Remediation order (safe first, reboot-required last)
+    $remediationOrder = @(
+        'Timezone', 'PowerPlan', 'RDP', 'WinRM', 'DNS',
+        'IPAddress', 'Gateway',
+        'Hyper-V', 'MPIO', 'FailoverClustering',
+        'Domain', 'Hostname'
+    )
+    $rebootSettings = @('Hostname', 'Domain', 'Hyper-V', 'MPIO', 'FailoverClustering')
+
+    $items = [System.Collections.Generic.List[object]]::new()
+    $fixedCount = 0
+    $skippedCount = 0
+    $failedCount = 0
+    $manualCount = 0
+    $rebootNeeded = $false
+
+    # Process in order, skip keys that aren't drifted
+    $orderedKeys = @($remediationOrder | Where-Object { $driftedKeys -contains $_ })
+    # Add any drifted keys not in our order (future-proofing)
+    foreach ($k in $driftedKeys) {
+        if ($orderedKeys -notcontains $k) { $orderedKeys += $k }
+    }
+
+    # Get primary adapter for network fixes
+    $primaryAdapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    $adapterName = if ($primaryAdapter) { $primaryAdapter.Name } else { $null }
+
+    foreach ($key in $orderedKeys) {
+        $drift = $driftResults[$key]
+        $expected = $drift.Expected
+        $current = $drift.Current
+
+        # Skip Gateway if IPAddress is also drifted (they'll be fixed together)
+        if ($key -eq 'Gateway' -and $driftedKeys -contains 'IPAddress') {
+            $items.Add(@{
+                Setting  = $key
+                Expected = $expected
+                Current  = $current
+                Action   = "Skipped"
+                Detail   = "Applied with IPAddress"
+            })
+            $skippedCount++
+            continue
+        }
+
+        # Domain always requires manual intervention (needs credentials)
+        if ($key -eq 'Domain') {
+            Write-OutputColor "  [MANUAL] $key — requires credentials (cannot auto-remediate)" -color "Warning"
+            $items.Add(@{
+                Setting  = $key
+                Expected = $expected
+                Current  = $current
+                Action   = "Manual"
+                Detail   = "Domain join requires credentials"
+            })
+            $manualCount++
+            continue
+        }
+
+        try {
+            $detail = ""
+            switch ($key) {
+                'Timezone' {
+                    Write-OutputColor "  [FIX] Timezone: $current → $expected" -color "Info"
+                    Microsoft.PowerShell.Management\Set-TimeZone -Id $expected -ErrorAction Stop
+                    $detail = "Set timezone to $expected"
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'PowerPlan' {
+                    Write-OutputColor "  [FIX] PowerPlan: $current → $expected" -color "Info"
+                    if ($script:PowerPlanGUID.ContainsKey($expected)) {
+                        $ppOutput = powercfg /setactive $script:PowerPlanGUID[$expected] 2>&1
+                        $detail = "Set power plan to $expected"
+                    } else {
+                        throw "Unknown power plan: $expected"
+                    }
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'RDP' {
+                    Write-OutputColor "  [FIX] RDP: $current → $expected" -color "Info"
+                    if ($expected -eq "Enabled") {
+                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
+                        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                        $detail = "Enabled RDP"
+                    } else {
+                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 1 -ErrorAction Stop
+                        Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                        $detail = "Disabled RDP"
+                    }
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'WinRM' {
+                    Write-OutputColor "  [FIX] WinRM: $current → $expected" -color "Info"
+                    if ($expected -eq "Enabled") {
+                        Enable-PSRemoting -Force -SkipNetworkProfileCheck -ErrorAction Stop
+                        $detail = "Enabled WinRM"
+                    } else {
+                        Disable-PSRemoting -Force -ErrorAction SilentlyContinue
+                        $detail = "Disabled WinRM"
+                    }
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'DNS' {
+                    if (-not $adapterName) { throw "No active network adapter found" }
+                    Write-OutputColor "  [FIX] DNS: $current → $expected" -color "Info"
+                    $dnsServers = @()
+                    if ($savedProfile.Network.DNS1) { $dnsServers += $savedProfile.Network.DNS1 }
+                    if ($savedProfile.Network.DNS2) { $dnsServers += $savedProfile.Network.DNS2 }
+                    Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers -ErrorAction Stop
+                    $detail = "Set DNS to $($dnsServers -join ', ')"
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'IPAddress' {
+                    if (-not $adapterName) { throw "No active network adapter found" }
+                    $newIP = $savedProfile.Network.IPAddress
+                    $newGW = $savedProfile.Network.Gateway
+                    $cidr = if ($savedProfile.Network.SubnetCIDR) { [int]$savedProfile.Network.SubnetCIDR } else { 24 }
+                    Write-OutputColor "  [FIX] IPAddress: $current → $newIP (/$cidr, GW: $newGW)" -color "Info"
+                    Remove-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                    Remove-NetRoute -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                    if ($newGW) {
+                        New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $newIP -PrefixLength $cidr -DefaultGateway $newGW -ErrorAction Stop | Out-Null
+                    } else {
+                        New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $newIP -PrefixLength $cidr -ErrorAction Stop | Out-Null
+                    }
+                    $detail = "Set IP to $newIP/$cidr$(if ($newGW) { " GW $newGW" })"
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'Gateway' {
+                    # Standalone gateway fix (only if IP wasn't also drifted)
+                    if (-not $adapterName) { throw "No active network adapter found" }
+                    Write-OutputColor "  [FIX] Gateway: $current → $expected" -color "Info"
+                    Remove-NetRoute -InterfaceAlias $adapterName -DestinationPrefix "0.0.0.0/0" -Confirm:$false -ErrorAction SilentlyContinue
+                    New-NetRoute -InterfaceAlias $adapterName -DestinationPrefix "0.0.0.0/0" -NextHop $expected -ErrorAction Stop | Out-Null
+                    $detail = "Set default gateway to $expected"
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'Hyper-V' {
+                    if ($expected -eq "Installed") {
+                        Write-OutputColor "  [FIX] Hyper-V: Installing..." -color "Info"
+                        Install-WindowsFeature -Name Hyper-V -IncludeManagementTools -ErrorAction Stop | Out-Null
+                        $rebootNeeded = $true
+                        $detail = "Installed Hyper-V (reboot required)"
+                    } else {
+                        $detail = "Skipped — uninstalling features is destructive"
+                        $items.Add(@{ Setting = $key; Expected = $expected; Current = $current; Action = "Skipped"; Detail = $detail })
+                        $skippedCount++
+                        Write-OutputColor "  [SKIP] $key — $detail" -color "Warning"
+                        continue
+                    }
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'MPIO' {
+                    if ($expected -eq "Installed") {
+                        Write-OutputColor "  [FIX] MPIO: Installing..." -color "Info"
+                        Install-WindowsFeature -Name Multipath-IO -ErrorAction Stop | Out-Null
+                        $rebootNeeded = $true
+                        $detail = "Installed MPIO (reboot required)"
+                    } else {
+                        $detail = "Skipped — uninstalling features is destructive"
+                        $items.Add(@{ Setting = $key; Expected = $expected; Current = $current; Action = "Skipped"; Detail = $detail })
+                        $skippedCount++
+                        Write-OutputColor "  [SKIP] $key — $detail" -color "Warning"
+                        continue
+                    }
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'FailoverClustering' {
+                    if ($expected -eq "Installed") {
+                        Write-OutputColor "  [FIX] FailoverClustering: Installing..." -color "Info"
+                        Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools -ErrorAction Stop | Out-Null
+                        $rebootNeeded = $true
+                        $detail = "Installed Failover Clustering (reboot required)"
+                    } else {
+                        $detail = "Skipped — uninstalling features is destructive"
+                        $items.Add(@{ Setting = $key; Expected = $expected; Current = $current; Action = "Skipped"; Detail = $detail })
+                        $skippedCount++
+                        Write-OutputColor "  [SKIP] $key — $detail" -color "Warning"
+                        continue
+                    }
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                'Hostname' {
+                    Write-OutputColor "  [FIX] Hostname: $current → $expected" -color "Info"
+                    if (Test-ValidHostname -Hostname $expected) {
+                        Rename-Computer -NewName $expected -Force -ErrorAction Stop
+                        $rebootNeeded = $true
+                        $detail = "Renamed to $expected (reboot required)"
+                    } else {
+                        throw "Invalid hostname: $expected"
+                    }
+                    Add-SessionChange -Category "Remediation" -Description $detail
+                }
+                default {
+                    # Unknown drift key — skip
+                    $items.Add(@{ Setting = $key; Expected = $expected; Current = $current; Action = "Skipped"; Detail = "No remediation handler" })
+                    $skippedCount++
+                    Write-OutputColor "  [SKIP] $key — no remediation handler" -color "Warning"
+                    continue
+                }
+            }
+
+            # If we got here, the fix succeeded
+            if ($rebootSettings -contains $key) { $rebootNeeded = $true }
+            $items.Add(@{
+                Setting  = $key
+                Expected = $expected
+                Current  = $current
+                Action   = "Fixed"
+                Detail   = $detail
+            })
+            $fixedCount++
+            Write-OutputColor "  [OK] $key remediated" -color "Success"
+
+        } catch {
+            $items.Add(@{
+                Setting  = $key
+                Expected = $expected
+                Current  = $current
+                Action   = "Failed"
+                Detail   = $_.Exception.Message
+            })
+            $failedCount++
+            Write-OutputColor "  [FAIL] $key — $_" -color "Error"
+        }
+    }
+
+    return @{
+        Total          = $driftedKeys.Count
+        Fixed          = $fixedCount
+        Skipped        = $skippedCount
+        Failed         = $failedCount
+        Manual         = $manualCount
+        RebootRequired = $rebootNeeded
+        Items          = @($items)
+    }
+}
+
+# Display remediation results in a formatted report
+function Show-RemediationReport {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Result
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ── Remediation Summary ──" -color "Info"
+    Write-OutputColor "  Total drifted: $($Result.Total)  Fixed: $($Result.Fixed)  Failed: $($Result.Failed)  Skipped: $($Result.Skipped)  Manual: $($Result.Manual)" -color $(if ($Result.Failed -eq 0) { 'Success' } else { 'Warning' })
+
+    if ($Result.Items.Count -gt 0) {
+        Write-OutputColor "" -color "Info"
+        foreach ($item in $Result.Items) {
+            $icon = switch ($item.Action) {
+                'Fixed'   { '[FIXED]' }
+                'Failed'  { '[FAIL] ' }
+                'Skipped' { '[SKIP] ' }
+                'Manual'  { '[MANUAL]' }
+                default   { '[----] ' }
+            }
+            $itemColor = switch ($item.Action) {
+                'Fixed'   { 'Success' }
+                'Failed'  { 'Error' }
+                'Skipped' { 'Warning' }
+                'Manual'  { 'Warning' }
+                default   { 'Info' }
+            }
+            Write-OutputColor "  $icon $($item.Setting.PadRight(22)) $($item.Detail)" -color $itemColor
+        }
+    }
+
+    if ($Result.RebootRequired) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ** One or more changes require a reboot to take effect. **" -color "Warning"
+    }
+    Write-OutputColor "" -color "Info"
+}
+
 # Interactive drift check — prompts for profile, shows report, offers to apply fixes
 function Start-DriftCheck {
     Clear-Host

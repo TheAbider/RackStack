@@ -493,6 +493,61 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'Remediate' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config <baseline.json> is required for Remediate." -color "Error"
+                Write-OutputColor "  Usage: RackStack.exe -Action Remediate -Config <path>" -color "Info"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $script:CLIConfig)) {
+                Write-OutputColor "  ERROR: Config file not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  Remediating drift against: $($script:CLIConfig)" -color "Info"
+            Write-OutputColor "" -color "Info"
+            $remediationResult = Invoke-Remediation -ProfilePath $script:CLIConfig
+
+            if ($null -eq $remediationResult) {
+                Write-OutputColor "  Remediation failed." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Show-RemediationReport -Result $remediationResult
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Remediate'
+                    Hostname  = $env:COMPUTERNAME
+                    Baseline  = $script:CLIConfig
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Summary   = @{
+                        Total    = $remediationResult.Total
+                        Fixed    = $remediationResult.Fixed
+                        Skipped  = $remediationResult.Skipped
+                        Failed   = $remediationResult.Failed
+                        Manual   = $remediationResult.Manual
+                    }
+                    Items     = @($remediationResult.Items | ForEach-Object {
+                        @{
+                            Setting  = $_.Setting
+                            Expected = $_.Expected
+                            Current  = $_.Current
+                            Action   = $_.Action
+                            Detail   = $_.Detail
+                        }
+                    })
+                    RebootRequired = $remediationResult.RebootRequired
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($remediationResult.RebootRequired) {
+                $global:RebootNeeded = $true
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
