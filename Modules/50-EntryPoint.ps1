@@ -883,6 +883,259 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'ListeningPorts' {
+            Write-OutputColor "  Scanning listening ports..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            try {
+                $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Sort-Object LocalPort)
+            } catch {
+                Write-OutputColor "  Could not query TCP connections: $_" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $portList = [System.Collections.Generic.List[object]]::new()
+            $seenPorts = @{}
+            foreach ($conn in $listeners) {
+                $port = $conn.LocalPort
+                $addr = $conn.LocalAddress
+                $key = "$addr`:$port"
+                if ($seenPorts.ContainsKey($key)) { continue }
+                $seenPorts[$key] = $true
+
+                $processName = "Unknown"
+                try {
+                    $proc = Get-Process -Id $conn.OwningProcess -ErrorAction Stop
+                    $processName = $proc.ProcessName
+                } catch {
+                    $processName = "PID $($conn.OwningProcess)"
+                }
+
+                $svcLabel = switch ($port) {
+                    22 { "SSH" } 53 { "DNS" } 80 { "HTTP" } 135 { "RPC" } 139 { "NetBIOS" }
+                    389 { "LDAP" } 443 { "HTTPS" } 445 { "SMB" } 636 { "LDAPS" }
+                    1433 { "MSSQL" } 3260 { "iSCSI" } 3389 { "RDP" }
+                    5985 { "WinRM" } 5986 { "WinRM-S" } default { "" }
+                }
+
+                $portList.Add([PSCustomObject]@{
+                    Port    = $port
+                    Address = $addr
+                    Process = $processName
+                    PID     = $conn.OwningProcess
+                    Service = $svcLabel
+                })
+            }
+
+            $allPorts = @($portList)
+            $uniquePortCount = @($allPorts | Select-Object -Property Port -Unique).Count
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  LISTENING PORTS".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Total Endpoints:  $($allPorts.Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Unique Ports:     $uniquePortCount".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            # Show well-known ports in console
+            $wellKnown = @($allPorts | Where-Object { $_.Port -le 1023 })
+            if ($wellKnown.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                foreach ($p in $wellKnown) {
+                    $label = if ($p.Service) { " ($($p.Service))" } else { "" }
+                    Write-OutputColor "    :$($p.Port)$label — $($p.Process)" -color "Info"
+                }
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'ListeningPorts'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        TotalEndpoints = $allPorts.Count
+                        UniquePorts    = $uniquePortCount
+                    }
+                    Ports     = @($allPorts | Select-Object Port, Address, Process, PID, Service)
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'SoftwareList' {
+            Write-OutputColor "  Scanning installed software..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $softwareList = [System.Collections.Generic.List[object]]::new()
+            $regPaths = @(
+                "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+                "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+            )
+
+            foreach ($regPath in $regPaths) {
+                try {
+                    $entries = @(Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue |
+                        Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne "" })
+                    foreach ($entry in $entries) {
+                        $softwareList.Add([PSCustomObject]@{
+                            Name        = $entry.DisplayName
+                            Version     = if ($entry.DisplayVersion) { $entry.DisplayVersion } else { "N/A" }
+                            Publisher   = if ($entry.Publisher) { $entry.Publisher } else { "Unknown" }
+                            InstallDate = if ($entry.InstallDate -and $entry.InstallDate -match '^\d{8}$') {
+                                "$($entry.InstallDate.Substring(0,4))-$($entry.InstallDate.Substring(4,2))-$($entry.InstallDate.Substring(6,2))"
+                            } else { $null }
+                            SizeMB      = if ($entry.EstimatedSize) { [math]::Round($entry.EstimatedSize / 1024, 1) } else { $null }
+                        })
+                    }
+                } catch {
+                    Write-OutputColor "  Could not read registry: $_" -color "Warning"
+                }
+            }
+
+            $software = @($softwareList | Sort-Object Name, Version -Unique)
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  INSTALLED SOFTWARE".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Total Programs:   $($software.Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            # Show top publishers
+            $byPublisher = @($software | Group-Object Publisher | Sort-Object Count -Descending | Select-Object -First 5)
+            if ($byPublisher.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                foreach ($pub in $byPublisher) {
+                    $pubName = if ($pub.Name.Length -gt 40) { $pub.Name.Substring(0, 37) + "..." } else { $pub.Name }
+                    Write-OutputColor "    $($pubName.PadRight(45)) $($pub.Count) app(s)" -color "Info"
+                }
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'SoftwareList'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Count     = $software.Count
+                    Software  = @($software | Select-Object Name, Version, Publisher, InstallDate, SizeMB)
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'Uptime' {
+            Write-OutputColor "  Checking uptime and reboot history..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $lastBootStr = $null
+            $uptimeDays = 0
+            $uptimeDisplay = "Unknown"
+            $uptimeStatus = "Unknown"
+
+            try {
+                $uptCim = Invoke-WithTimeout -ScriptBlock {
+                    Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+                } -TimeoutSeconds 10 -Activity "Querying uptime"
+                if ($uptCim.TimedOut) { throw "CIM query timed out" }
+                $osData = $uptCim.Result
+                $lastBoot = $osData.LastBootUpTime
+                $uptime = (Get-Date) - $lastBoot
+                $lastBootStr = $lastBoot.ToString("yyyy-MM-ddTHH:mm:ss")
+                $uptimeDays = [math]::Round($uptime.TotalDays, 2)
+
+                $uptimeDisplay = ""
+                if ($uptime.Days -gt 0) { $uptimeDisplay += "$($uptime.Days)d " }
+                $uptimeDisplay += "$($uptime.Hours)h $($uptime.Minutes)m"
+
+                $uptimeStatus = if ($uptime.Days -ge 60) { "Critical" }
+                                elseif ($uptime.Days -ge 30) { "Warning" }
+                                else { "OK" }
+            } catch {
+                Write-OutputColor "  Could not determine uptime: $_" -color "Error"
+            }
+
+            # Reboot history from event log
+            $rebootList = [System.Collections.Generic.List[object]]::new()
+            try {
+                $shutdownEvents = @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 1074 } -MaxEvents 20 -ErrorAction Stop)
+                foreach ($e in $shutdownEvents) {
+                    $reason = ($e.Message -split "`n")[0]
+                    if ($null -eq $reason) { $reason = "Planned restart" }
+                    if ($reason.Length -gt 80) { $reason = $reason.Substring(0, 77) + "..." }
+                    $rebootList.Add([PSCustomObject]@{
+                        Time   = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss")
+                        Type   = "Planned"
+                        Reason = $reason
+                    })
+                }
+            } catch {
+                if ($_.Exception.Message -notmatch "No events were found") {
+                    Write-OutputColor "  Could not read planned shutdown events: $_" -color "Warning"
+                }
+            }
+
+            try {
+                $unexpectedEvents = @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 6008 } -MaxEvents 10 -ErrorAction Stop)
+                foreach ($e in $unexpectedEvents) {
+                    $rebootList.Add([PSCustomObject]@{
+                        Time   = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss")
+                        Type   = "Unexpected"
+                        Reason = "Unexpected shutdown (crash/power loss)"
+                    })
+                }
+            } catch {
+                if ($_.Exception.Message -notmatch "No events were found") {
+                    Write-OutputColor "  Could not read unexpected shutdown events: $_" -color "Warning"
+                }
+            }
+
+            $rebootEvents = @($rebootList | Sort-Object Time -Descending | Select-Object -First 15)
+            $totalReboots = $rebootEvents.Count
+            $unexpectedCount = @($rebootEvents | Where-Object { $_.Type -eq "Unexpected" }).Count
+
+            # Console output
+            $statusColor = switch ($uptimeStatus) { "Critical" { "Error" } "Warning" { "Warning" } default { "Success" } }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  UPTIME & REBOOT HISTORY".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Last Boot:        $lastBootStr".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Uptime:           $uptimeDisplay".PadRight(72))│" -color $statusColor
+            Write-OutputColor "  │$("  Status:           $uptimeStatus".PadRight(72))│" -color $statusColor
+            Write-OutputColor "  │$("  Total Reboots:    $totalReboots".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Unexpected:       $unexpectedCount".PadRight(72))│" -color $(if ($unexpectedCount -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($unexpectedCount -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  ATTENTION: $unexpectedCount unexpected shutdown(s) detected!" -color "Warning"
+                foreach ($evt in @($rebootEvents | Where-Object { $_.Type -eq "Unexpected" })) {
+                    Write-OutputColor "    [UNEXPECTED] $($evt.Time)" -color "Warning"
+                }
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Uptime'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    LastBoot  = $lastBootStr
+                    Uptime    = @{
+                        Days    = $uptimeDays
+                        Display = $uptimeDisplay
+                        Status  = $uptimeStatus
+                    }
+                    RebootHistory = @{
+                        Total      = $totalReboots
+                        Unexpected = $unexpectedCount
+                        Events     = @($rebootEvents | Select-Object Time, Type, Reason)
+                    }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.35.0
+
+- **New Feature:** ListeningPorts CLI action — `RackStack.exe -Action ListeningPorts -OutputFormat JSON` scans all TCP listening endpoints on the local machine. Returns port, bind address, process name, PID, and well-known service labels (RDP, SMB, WinRM, DNS, HTTP, HTTPS, MSSQL, iSCSI, etc.). Includes unique port count and endpoint totals for fleet-wide attack surface monitoring (50-EntryPoint).
+- **New Feature:** SoftwareList CLI action — `RackStack.exe -Action SoftwareList -OutputFormat JSON` scans both 64-bit and 32-bit registry hives for installed software. Returns name, version, publisher, install date, and estimated size. Deduplicates entries and groups by publisher. Useful for fleet-wide software auditing, rogue install detection, and compliance verification (50-EntryPoint).
+- **New Feature:** Uptime CLI action — `RackStack.exe -Action Uptime -OutputFormat JSON` reports current uptime with status classification (OK, Warning at 30+ days, Critical at 60+ days) and recent reboot history from the Windows event log. Detects both planned (Event ID 1074) and unexpected (Event ID 6008) shutdowns with timestamps and reasons. Identifies servers that haven't rebooted after patching or have had unexpected crashes (50-EntryPoint).
+- 65 modules, 2910 tests
+
 ## v1.34.0
 
 - **New Feature:** CertCheck CLI action — `RackStack.exe -Action CertCheck -OutputFormat JSON` audits certificate expiry across five local machine stores (Personal, Trusted Root CA, Intermediate CA, Web Hosting, Remote Desktop). Categorizes certificates as Expired, Critical (≤7 days), Warning (≤30 days), Expiring (≤90 days), or Valid. Console output shows color-coded summary and highlights certificates needing immediate attention. JSON output includes full certificate list with store, subject, thumbprint, expiry date, days remaining, and status for fleet-wide compliance monitoring (50-EntryPoint).
