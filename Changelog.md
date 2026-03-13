@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.34.0
+
+- **New Feature:** CertCheck CLI action — `RackStack.exe -Action CertCheck -OutputFormat JSON` audits certificate expiry across five local machine stores (Personal, Trusted Root CA, Intermediate CA, Web Hosting, Remote Desktop). Categorizes certificates as Expired, Critical (≤7 days), Warning (≤30 days), Expiring (≤90 days), or Valid. Console output shows color-coded summary and highlights certificates needing immediate attention. JSON output includes full certificate list with store, subject, thumbprint, expiry date, days remaining, and status for fleet-wide compliance monitoring (50-EntryPoint).
+- **New Feature:** ReportHTML CLI action — `RackStack.exe -Action ReportHTML -Config Health|Readiness|Trend` generates HTML reports from the command line. Supports three report types: Health (system performance, storage, network, security), Readiness (deployment readiness assessment), and Trend (performance trend visualization). Reports are saved to the Desktop by default. JSON output includes the output file path, generation status, and file size for automation pipelines (50-EntryPoint, 54-HTMLReports).
+- 65 modules, 2875 tests
+
 ## v1.33.0
 
 - **New Feature:** Export CLI action — `RackStack.exe -Action Export -OutputFormat JSON` runs health check, server inventory, security hardening audit, and performance snapshot in a single pass. Returns a unified JSON object with Health, Inventory, Hardening (score + per-check details), and Snapshot sections. Eliminates the need to run 4 separate CLI actions to get a complete host profile (50-EntryPoint).

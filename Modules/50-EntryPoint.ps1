@@ -737,6 +737,152 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'CertCheck' {
+            Write-OutputColor "  Running certificate expiry audit..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $stores = @(
+                @{ Name = "Personal (My)";    Path = "Cert:\LocalMachine\My" }
+                @{ Name = "Trusted Root CA";  Path = "Cert:\LocalMachine\Root" }
+                @{ Name = "Intermediate CA";  Path = "Cert:\LocalMachine\CA" }
+                @{ Name = "Web Hosting";      Path = "Cert:\LocalMachine\WebHosting" }
+                @{ Name = "Remote Desktop";   Path = "Cert:\LocalMachine\Remote Desktop" }
+            )
+
+            $warnDays = 90
+            $now = Get-Date
+            $certList = [System.Collections.Generic.List[object]]::new()
+
+            foreach ($store in $stores) {
+                try {
+                    $certs = @(Get-ChildItem -Path $store.Path -ErrorAction Stop | Where-Object {
+                        $null -ne $_.NotAfter
+                    })
+                    foreach ($cert in $certs) {
+                        $daysLeft = [math]::Round(($cert.NotAfter - $now).TotalDays, 0)
+                        $subject = if ($cert.Subject) { $cert.Subject } else { "(no subject)" }
+                        if ($subject.Length -gt 60) { $subject = $subject.Substring(0, 57) + "..." }
+
+                        $status = if ($daysLeft -lt 0) { "Expired" }
+                                  elseif ($daysLeft -le 7) { "Critical" }
+                                  elseif ($daysLeft -le 30) { "Warning" }
+                                  elseif ($daysLeft -le $warnDays) { "Expiring" }
+                                  else { "Valid" }
+
+                        $certList.Add([PSCustomObject]@{
+                            Store      = $store.Name
+                            Subject    = $subject
+                            Thumbprint = if ($cert.Thumbprint) { $cert.Thumbprint } else { "N/A" }
+                            Expires    = $cert.NotAfter.ToString("yyyy-MM-dd")
+                            DaysLeft   = $daysLeft
+                            Status     = $status
+                        })
+                    }
+                } catch {
+                    Write-OutputColor "  Could not read $($store.Name) store: $_" -color "Warning"
+                }
+            }
+
+            $allCerts = @($certList)
+            $expired = @($allCerts | Where-Object { $_.Status -eq "Expired" })
+            $critical = @($allCerts | Where-Object { $_.Status -eq "Critical" })
+            $warning = @($allCerts | Where-Object { $_.Status -eq "Warning" })
+            $expiring = @($allCerts | Where-Object { $_.Status -eq "Expiring" })
+            $valid = @($allCerts | Where-Object { $_.Status -eq "Valid" })
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  CERTIFICATE EXPIRY AUDIT".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Total Certificates:   $($allCerts.Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Expired:              $($expired.Count)".PadRight(72))│" -color $(if ($expired.Count -gt 0) { "Error" } else { "Success" })
+            Write-OutputColor "  │$("  Critical (≤7d):       $($critical.Count)".PadRight(72))│" -color $(if ($critical.Count -gt 0) { "Error" } else { "Success" })
+            Write-OutputColor "  │$("  Warning (≤30d):       $($warning.Count)".PadRight(72))│" -color $(if ($warning.Count -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  │$("  Expiring (≤${warnDays}d):     $($expiring.Count)".PadRight(72))│" -color $(if ($expiring.Count -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  │$("  Valid:                $($valid.Count)".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($expired.Count -gt 0 -or $critical.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  ATTENTION: $($expired.Count + $critical.Count) certificate(s) require immediate action!" -color "Error"
+                foreach ($cert in @($expired + $critical | Sort-Object DaysLeft)) {
+                    Write-OutputColor "    [$($cert.Status.ToUpper())] $($cert.Subject) — expires $($cert.Expires) ($($cert.DaysLeft)d)" -color "Error"
+                }
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'CertCheck'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        Total    = $allCerts.Count
+                        Expired  = $expired.Count
+                        Critical = $critical.Count
+                        Warning  = $warning.Count
+                        Expiring = $expiring.Count
+                        Valid    = $valid.Count
+                    }
+                    Certificates = @($allCerts | Select-Object Store, Subject, Thumbprint, Expires, DaysLeft, Status)
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'ReportHTML' {
+            # Report type from -Config (default: Health)
+            $reportType = if ($script:CLIConfig) { $script:CLIConfig } else { "Health" }
+            $validTypes = @("Health", "Readiness", "Trend")
+
+            if ($reportType -notin $validTypes) {
+                Write-OutputColor "  ERROR: Invalid report type '$reportType'." -color "Error"
+                Write-OutputColor "  Valid types: $($validTypes -join ', ')" -color "Info"
+                Write-OutputColor "  Usage: -Action ReportHTML -Config Health|Readiness|Trend" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+            $outputPath = "$env:USERPROFILE\Desktop\${reportType}Report_${timestamp}.html"
+
+            Write-OutputColor "  Generating $reportType HTML report..." -color "Info"
+            Write-OutputColor "  Output: $outputPath" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            switch ($reportType) {
+                'Health' {
+                    Export-HTMLHealthReport -OutputPath $outputPath -Sections @("Performance", "Storage", "Network", "Security")
+                }
+                'Readiness' {
+                    Export-HTMLReadinessReport -OutputPath $outputPath
+                }
+                'Trend' {
+                    Export-HTMLTrendReport -OutputPath $outputPath
+                }
+            }
+
+            if (Test-Path -LiteralPath $outputPath) {
+                $fileSize = [math]::Round((Get-Item $outputPath).Length / 1KB, 1)
+                Write-OutputColor "  Report generated: $outputPath ($fileSize KB)" -color "Success"
+            } else {
+                Write-OutputColor "  Report generation may have failed — file not found." -color "Warning"
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool       = $script:ToolFullName
+                    Version    = $script:ScriptVersion
+                    Action     = 'ReportHTML'
+                    Timestamp  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname   = $env:COMPUTERNAME
+                    ReportType = $reportType
+                    OutputPath = $outputPath
+                    Generated  = (Test-Path -LiteralPath $outputPath)
+                    FileSizeKB = if (Test-Path -LiteralPath $outputPath) { [math]::Round((Get-Item $outputPath).Length / 1KB, 1) } else { 0 }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
