@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.37.0
+
+- **New Feature:** ServiceAudit CLI action — `RackStack.exe -Action ServiceAudit -OutputFormat JSON` audits key Windows services against a configurable monitored service list (from defaults.json or built-in fallback). Reports status, startup type, and flags misconfigured services (Automatic but Stopped). Exits with code 1 when any automatic service is not running, making it suitable for monitoring and alerting pipelines (50-EntryPoint).
+- **New Feature:** EventAudit CLI action — `RackStack.exe -Action EventAudit -OutputFormat JSON [-Config <hours>]` scans System and Application event logs for Critical (Level 1) and Error (Level 2) events within a configurable time window (default 24 hours). Groups errors by source and returns event details with timestamps, IDs, and truncated messages. Useful for fleet-wide health monitoring and incident response triage (50-EntryPoint).
+- **New Feature:** NetInfo CLI action — `RackStack.exe -Action NetInfo -OutputFormat JSON` captures network adapter configuration including status, link speed, IPv4 addresses with prefix, gateway, DNS servers, VLAN ID, and NIC error counters (InErrors/OutErrors). Provides a quick network configuration audit across a fleet without the overhead of a full Inventory scan (50-EntryPoint).
+- 65 modules, 2963 tests
+
 ## v1.36.0
 
 - **Enhancement:** Export CLI action now produces a comprehensive 8-section server profile (was 4 sections). In addition to Health, Inventory, Hardening, and Snapshot, Export now includes: Certificates (expiry audit across 5 stores with status classification), ListeningPorts (TCP listeners with process names and service labels), Software (registry scan of both 64-bit and 32-bit hives, deduplicated), and Uptime (CIM uptime with status + reboot history from event log including unexpected shutdowns). A single `RackStack.exe -Action Export -OutputFormat JSON` now captures a complete host profile in one pass (50-EntryPoint).

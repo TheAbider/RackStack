@@ -1262,6 +1262,313 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'ServiceAudit' {
+            Write-OutputColor "  Auditing key service status..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            # Configurable service list (from defaults.json MonitoredServices or built-in fallback)
+            $auditServices = if ($script:Defaults.MonitoredServices) {
+                $script:Defaults.MonitoredServices
+            } else {
+                @(
+                    @{ Name = "vmms"; DisplayName = "Hyper-V Virtual Machine Management" }
+                    @{ Name = "vmcompute"; DisplayName = "Hyper-V Host Compute Service" }
+                    @{ Name = "ClusSvc"; DisplayName = "Cluster Service" }
+                    @{ Name = "MSiSCSI"; DisplayName = "Microsoft iSCSI Initiator Service" }
+                    @{ Name = "WinRM"; DisplayName = "Windows Remote Management" }
+                    @{ Name = "DNS"; DisplayName = "DNS Client" }
+                    @{ Name = "wuauserv"; DisplayName = "Windows Update" }
+                    @{ Name = "W32Time"; DisplayName = "Windows Time" }
+                    @{ Name = "LanmanServer"; DisplayName = "Server (SMB)" }
+                    @{ Name = "LanmanWorkstation"; DisplayName = "Workstation (SMB Client)" }
+                    @{ Name = "EventLog"; DisplayName = "Windows Event Log" }
+                    @{ Name = "Netlogon"; DisplayName = "Netlogon" }
+                    @{ Name = "NTDS"; DisplayName = "Active Directory Domain Services" }
+                )
+            }
+
+            $svcResults = [System.Collections.Generic.List[object]]::new()
+            $svcRunning = 0
+            $svcStopped = 0
+            $svcMisconfigured = 0
+
+            foreach ($svc in $auditServices) {
+                $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
+                if ($null -eq $service) { continue }
+                $startTag = switch ($service.StartType) { "Automatic" { "Auto" } "Manual" { "Manual" } "Disabled" { "Disabled" } default { "$($service.StartType)" } }
+                $dn = if ($service.DisplayName) { $service.DisplayName } elseif ($svc.DisplayName) { $svc.DisplayName } else { $svc.Name }
+                $svcStatus = "OK"
+                if ($service.Status -eq "Running") {
+                    $svcRunning++
+                } else {
+                    $svcStopped++
+                    if ($service.StartType -eq "Automatic") {
+                        $svcMisconfigured++
+                        $svcStatus = "FAIL"
+                    } elseif ($service.StartType -eq "Disabled") {
+                        $svcStatus = "Disabled"
+                    } else {
+                        $svcStatus = "Stopped"
+                    }
+                }
+                $svcResults.Add(@{ Name = $svc.Name; DisplayName = $dn; Status = "$($service.Status)"; StartType = $startTag; Health = $svcStatus })
+            }
+            $svcItems = @($svcResults)
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SERVICE AUDIT".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($s in $svcItems) {
+                $dispName = if ($s.DisplayName.Length -gt 38) { $s.DisplayName.Substring(0, 35) + "..." } else { $s.DisplayName }
+                $line = "  $($dispName.PadRight(40)) $($s.Status.PadRight(10)) [$($s.StartType)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = switch ($s.Health) { "FAIL" { "Error" } "Stopped" { "Warning" } "Disabled" { "Info" } default { "Success" } }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Running: $svcRunning   Stopped: $svcStopped   Misconfigured: $svcMisconfigured".PadRight(72))│" -color $(if ($svcMisconfigured -gt 0) { "Error" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($svcMisconfigured -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  WARNING: $svcMisconfigured service(s) set to Automatic but not running!" -color "Error"
+                foreach ($s in @($svcItems | Where-Object { $_.Health -eq "FAIL" })) {
+                    Write-OutputColor "    [FAIL] $($s.DisplayName) ($($s.Name))" -color "Error"
+                }
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'ServiceAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        Total         = $svcItems.Count
+                        Running       = $svcRunning
+                        Stopped       = $svcStopped
+                        Misconfigured = $svcMisconfigured
+                    }
+                    Services  = $svcItems
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($svcMisconfigured -gt 0) {
+                [Environment]::Exit(1)
+            }
+        }
+        'EventAudit' {
+            $hoursBack = 24
+            if ($script:CLIConfig -and $script:CLIConfig -match '^\d+$') {
+                $hoursBack = [int]$script:CLIConfig
+            }
+            Write-OutputColor "  Auditing critical/error events (last $hoursBack hours)..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $startTime = (Get-Date).AddHours(-$hoursBack)
+            $logNames = @('System', 'Application')
+            $totalCritical = 0
+            $totalError = 0
+            $eventList = [System.Collections.Generic.List[object]]::new()
+            $sourceGroups = [System.Collections.Generic.List[object]]::new()
+
+            foreach ($logName in $logNames) {
+                try {
+                    $criticalEvents = @(Get-WinEvent -FilterHashtable @{ LogName = $logName; Level = 1; StartTime = $startTime } -MaxEvents 25 -ErrorAction SilentlyContinue)
+                    foreach ($evt in $criticalEvents) {
+                        $msg = if ($evt.Message) { $evt.Message -replace "`r?`n", " " } else { "(no message)" }
+                        if ($msg.Length -gt 120) { $msg = $msg.Substring(0, 117) + "..." }
+                        $eventList.Add(@{ Time = $evt.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Log = $logName; Level = "Critical"; EventId = $evt.Id; Source = $evt.ProviderName; Message = $msg })
+                    }
+                    $totalCritical += $criticalEvents.Count
+                } catch {
+                    if ($_.Exception.Message -notmatch "No events were found") {
+                        Write-OutputColor "  Could not read $logName critical events: $_" -color "Warning"
+                    }
+                }
+                try {
+                    $errorEvents = @(Get-WinEvent -FilterHashtable @{ LogName = $logName; Level = 2; StartTime = $startTime } -MaxEvents 25 -ErrorAction SilentlyContinue)
+                    foreach ($evt in $errorEvents) {
+                        $msg = if ($evt.Message) { $evt.Message -replace "`r?`n", " " } else { "(no message)" }
+                        if ($msg.Length -gt 120) { $msg = $msg.Substring(0, 117) + "..." }
+                        $eventList.Add(@{ Time = $evt.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Log = $logName; Level = "Error"; EventId = $evt.Id; Source = $evt.ProviderName; Message = $msg })
+                    }
+                    $totalError += $errorEvents.Count
+
+                    # Group errors by source for console summary
+                    $grouped = $errorEvents | Group-Object ProviderName | Sort-Object Count -Descending | Select-Object -First 10
+                    foreach ($g in $grouped) {
+                        $sourceGroups.Add(@{ Log = $logName; Source = $g.Name; Count = $g.Count })
+                    }
+                } catch {
+                    if ($_.Exception.Message -notmatch "No events were found") {
+                        Write-OutputColor "  Could not read $logName error events: $_" -color "Warning"
+                    }
+                }
+            }
+
+            $allEvents = @($eventList | Sort-Object { $_.Time } -Descending)
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  EVENT AUDIT (last $hoursBack hours)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Critical Events:  $totalCritical".PadRight(72))│" -color $(if ($totalCritical -gt 0) { "Error" } else { "Success" })
+            Write-OutputColor "  │$("  Error Events:     $totalError".PadRight(72))│" -color $(if ($totalError -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if (@($sourceGroups).Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Top error sources:" -color "Info"
+                foreach ($sg in @($sourceGroups | Sort-Object { $_.Count } -Descending | Select-Object -First 8)) {
+                    $src = if ($sg.Source.Length -gt 40) { $sg.Source.Substring(0, 37) + "..." } else { $sg.Source }
+                    Write-OutputColor "    $($sg.Log.PadRight(12)) $($src.PadRight(42)) $($sg.Count) error(s)" -color "Warning"
+                }
+            }
+
+            if ($totalCritical -eq 0 -and $totalError -eq 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  No critical or error events found." -color "Success"
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'EventAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    TimeWindowHours = $hoursBack
+                    Summary   = @{
+                        Critical = $totalCritical
+                        Error    = $totalError
+                    }
+                    TopSources = @($sourceGroups | Sort-Object { $_.Count } -Descending)
+                    Events    = $allEvents
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'NetInfo' {
+            Write-OutputColor "  Scanning network configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $adapterList = [System.Collections.Generic.List[object]]::new()
+            $upCount = 0
+            $downCount = 0
+            $nicErrors = 0
+
+            try {
+                $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Sort-Object Name)
+                foreach ($adapter in $adapters) {
+                    $ipv4Addrs = @()
+                    $gateway = $null
+                    $dnsServers = @()
+                    $vlanId = $null
+
+                    if ($adapter.Status -eq "Up") {
+                        $upCount++
+                        try {
+                            $ipAddrs = @(Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue)
+                            $ipv4Addrs = @($ipAddrs | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" })
+                        } catch { }
+                        try {
+                            $gw = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue
+                            if ($null -ne $gw -and $null -ne $gw.IPv4DefaultGateway) {
+                                $gateway = $gw.IPv4DefaultGateway.NextHop
+                            }
+                        } catch { }
+                        try {
+                            $dns = Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+                            if ($null -ne $dns) { $dnsServers = @($dns.ServerAddresses) }
+                        } catch { }
+                    } else {
+                        $downCount++
+                    }
+
+                    try { $vlanId = $adapter.VlanID } catch { }
+
+                    # NIC error counters
+                    $inErrors = 0
+                    $outErrors = 0
+                    try {
+                        $stats = Get-NetAdapterStatistics -Name $adapter.Name -ErrorAction SilentlyContinue
+                        if ($null -ne $stats) {
+                            $inErrors = if ($null -ne $stats.InErrors) { $stats.InErrors } else { 0 }
+                            $outErrors = if ($null -ne $stats.OutErrors) { $stats.OutErrors } else { 0 }
+                            if ($inErrors -gt 0 -or $outErrors -gt 0) { $nicErrors++ }
+                        }
+                    } catch { }
+
+                    $speed = if ($adapter.LinkSpeed) { "$($adapter.LinkSpeed)" } else { "N/A" }
+
+                    $adapterList.Add(@{
+                        Name        = $adapter.Name
+                        Description = $adapter.InterfaceDescription
+                        Status      = "$($adapter.Status)"
+                        MacAddress  = $adapter.MacAddress
+                        Speed       = $speed
+                        IPv4        = $ipv4Addrs
+                        Gateway     = $gateway
+                        DNS         = $dnsServers
+                        VlanID      = $vlanId
+                        InErrors    = $inErrors
+                        OutErrors   = $outErrors
+                    })
+                }
+            } catch {
+                Write-OutputColor "  Could not enumerate adapters: $_" -color "Error"
+            }
+            $netItems = @($adapterList)
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  NETWORK CONFIGURATION".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($nic in $netItems) {
+                $nicName = if ($nic.Name.Length -gt 20) { $nic.Name.Substring(0, 17) + "..." } else { $nic.Name }
+                $statusColor = if ($nic.Status -eq "Up") { "Success" } else { "Error" }
+                Write-OutputColor "  │$("  $nicName  [$($nic.Status)]  $($nic.Speed)".PadRight(72))│" -color $statusColor
+                if ($nic.IPv4.Count -gt 0) {
+                    $ipStr = $nic.IPv4 -join ", "
+                    if ($ipStr.Length -gt 60) { $ipStr = $ipStr.Substring(0, 57) + "..." }
+                    Write-OutputColor "  │$("    IP: $ipStr".PadRight(72))│" -color "Info"
+                }
+                if ($nic.Gateway) {
+                    Write-OutputColor "  │$("    GW: $($nic.Gateway)".PadRight(72))│" -color "Info"
+                }
+                if ($nic.DNS.Count -gt 0) {
+                    Write-OutputColor "  │$("    DNS: $($nic.DNS -join ', ')".PadRight(72))│" -color "Info"
+                }
+                if ($nic.InErrors -gt 0 -or $nic.OutErrors -gt 0) {
+                    Write-OutputColor "  │$("    NIC Errors: In=$($nic.InErrors) Out=$($nic.OutErrors)".PadRight(72))│" -color "Warning"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Adapters: $($netItems.Count)   Up: $upCount   Down: $downCount   NIC Errors: $nicErrors".PadRight(72))│" -color $(if ($nicErrors -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'NetInfo'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        Total     = $netItems.Count
+                        Up        = $upCount
+                        Down      = $downCount
+                        NICErrors = $nicErrors
+                    }
+                    Adapters  = $netItems
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
