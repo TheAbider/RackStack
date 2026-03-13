@@ -463,6 +463,36 @@ function Invoke-CLIAction {
                 }
             }
         }
+        'Harden' {
+            Write-OutputColor "  Running security hardening audit..." -color "Info"
+            $hardenReport = Show-SecurityHardeningReport
+            if ($script:CLIOutputFormat -eq 'JSON' -and $null -ne $hardenReport) {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Harden'
+                    Hostname  = $env:COMPUTERNAME
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Score     = $hardenReport.Score
+                    Summary   = @{
+                        Total    = $hardenReport.Total
+                        Passed   = $hardenReport.Passed
+                        Failed   = $hardenReport.Failed
+                        Warnings = $hardenReport.Warnings
+                        Info     = $hardenReport.Info
+                    }
+                    Checks    = @($hardenReport.Checks | ForEach-Object {
+                        @{
+                            Category = $_.Category
+                            Name     = $_.Name
+                            Value    = $_.Value
+                            Status   = $_.Status
+                        }
+                    })
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

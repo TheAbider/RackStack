@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.30.0
+
+- **New Feature:** Security Hardening Audit CLI action — `RackStack.exe -Action Harden -OutputFormat JSON` performs a CIS-lite security posture check across protocol security (SMBv1, NTLMv1, TLS 1.0/1.1), account security (guest account, built-in admin), network security (firewall profiles, admin shares, WinRM encryption), remote access (RDP NLA), system security (UAC, screen lock timeout), audit and logging (PowerShell script block logging, command line auditing), endpoint protection (Defender real-time, BitLocker, Windows Update service), and unnecessary services (Remote Registry, Fax, Telephony). Returns color-coded pass/fail/warn/info results with an overall hardening score percentage. Full JSON output support for fleet-wide security posture monitoring (37-HealthCheck, 50-EntryPoint).
+- 65 modules, 2729 tests
+
 ## v1.29.1
 
 - **Improvement:** README updated with all 9 CLI actions — DriftCheck, Snapshot, and Compliance added to the actions reference list.

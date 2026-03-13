@@ -9611,6 +9611,7 @@ try {
         Write-TestResult "Install-RackStack: passes OutputFormat to exe" ($bootstrapContent -match 'OutputFormat.*\$OutputFormat')
         Write-TestResult "Install-RackStack: Snapshot in ValidateSet" ($bootstrapContent -match "ValidateSet.*Snapshot")
         Write-TestResult "Install-RackStack: Compliance in ValidateSet" ($bootstrapContent -match "ValidateSet.*Compliance")
+        Write-TestResult "Install-RackStack: Harden in ValidateSet" ($bootstrapContent -match "ValidateSet.*Harden")
     }
     else {
         Write-TestResult "Install-RackStack: bootstrap installer exists" $false "File not found"
@@ -9744,6 +9745,33 @@ try {
     Write-TestResult "54-HTMLReports: Readiness checks firewall" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,4000}Firewall")
     Write-TestResult "54-HTMLReports: Readiness checks defender" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,9000}Defender")
     Write-TestResult "54-HTMLReports: Export-HTMLReadinessReport uses Get-ReadinessChecks" ($mod54 -match "Export-HTMLReadinessReport[\s\S]{0,2000}Get-ReadinessChecks")
+
+    # Harden CLI action tests (v1.30.0)
+    Write-TestResult "Header: Harden in ValidateSet" ($headerContent -match "ValidateSet.*Harden")
+    Write-TestResult "50-EntryPoint: Harden case exists" ($mod50 -match "'Harden'\s*\{")
+    Write-TestResult "50-EntryPoint: Harden calls Show-SecurityHardeningReport" ($mod50 -match "'Harden'[\s\S]{0,500}Show-SecurityHardeningReport")
+    Write-TestResult "50-EntryPoint: Harden JSON has Score field" ($mod50 -match "'Harden'[\s\S]{0,1500}Score")
+    Write-TestResult "50-EntryPoint: Harden JSON has Summary" ($mod50 -match "'Harden'[\s\S]{0,1500}Summary")
+    Write-TestResult "50-EntryPoint: Harden JSON output" ($mod50 -match "'Harden'[\s\S]{0,2500}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: Harden Action field" ($mod50 -match "Action\s*=\s*'Harden'")
+
+    # Get-SecurityHardeningChecks function tests (v1.30.0)
+    Write-TestResult "37-HealthCheck: Get-SecurityHardeningChecks function exists" ($mod37 -match "function Get-SecurityHardeningChecks")
+    Write-TestResult "37-HealthCheck: SecurityHardeningChecks returns array" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,500}checks\.Add")
+    Write-TestResult "37-HealthCheck: Hardening checks SMBv1" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,2000}SMBv1")
+    Write-TestResult "37-HealthCheck: Hardening checks NTLMv1" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,3000}NTLMv1")
+    Write-TestResult "37-HealthCheck: Hardening checks Guest Account" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,5000}Guest")
+    Write-TestResult "37-HealthCheck: Hardening checks Firewall" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,6000}Firewall")
+    Write-TestResult "37-HealthCheck: Hardening checks UAC" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,9000}UAC")
+    Write-TestResult "37-HealthCheck: Hardening checks RDP NLA" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,8000}RDP NLA")
+    Write-TestResult "37-HealthCheck: Hardening checks TLS" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,3500}TLS 1\.")
+    Write-TestResult "37-HealthCheck: Hardening checks BitLocker" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,14000}BitLocker")
+    Write-TestResult "37-HealthCheck: Hardening checks Script Block Logging" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,12000}ScriptBlockLogging")
+    Write-TestResult "37-HealthCheck: Hardening checks antivirus" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,14000}MpComputerStatus")
+    Write-TestResult "37-HealthCheck: Hardening checks WinRM" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,7000}WinRM Encryption")
+    Write-TestResult "37-HealthCheck: Show-SecurityHardeningReport exists" ($mod37 -match "function Show-SecurityHardeningReport")
+    Write-TestResult "37-HealthCheck: Show-SecurityHardeningReport returns Score" ($mod37 -match "Show-SecurityHardeningReport[\s\S]{0,3000}Score\s*=")
+    Write-TestResult "37-HealthCheck: Show-SecurityHardeningReport calls Get-SecurityHardeningChecks" ($mod37 -match "Show-SecurityHardeningReport[\s\S]{0,500}Get-SecurityHardeningChecks")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

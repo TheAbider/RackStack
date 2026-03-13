@@ -287,6 +287,381 @@ function Test-NUMATopology {
     return $numaIssues
 }
 
+# CIS-lite security hardening audit — returns structured check results
+function Get-SecurityHardeningChecks {
+    <#
+    .SYNOPSIS
+        Returns structured security hardening check results as an array of hashtables.
+        CIS-lite audit of security settings. Reusable by CLI Harden action and reports.
+    #>
+    $checks = [System.Collections.Generic.List[object]]::new()
+
+    # ── PROTOCOL SECURITY ──
+
+    # SMBv1 Disabled
+    try {
+        $smbConfig = Get-SmbServerConfiguration -ErrorAction Stop
+        if ($smbConfig.EnableSMB1Protocol) {
+            $checks.Add(@{ Category = "Protocol"; Name = "SMBv1"; Value = "Enabled (insecure)"; Status = "Fail" })
+        } else {
+            $checks.Add(@{ Category = "Protocol"; Name = "SMBv1"; Value = "Disabled"; Status = "Pass" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Protocol"; Name = "SMBv1"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # NTLMv1 Disabled (LmCompatibilityLevel >= 3 means NTLMv2 only)
+    try {
+        $lsa = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name LmCompatibilityLevel -ErrorAction Stop
+        $lmLevel = $lsa.LmCompatibilityLevel
+        if ($lmLevel -ge 3) {
+            $checks.Add(@{ Category = "Protocol"; Name = "NTLMv1"; Value = "Disabled (Level $lmLevel)"; Status = "Pass" })
+        } else {
+            $checks.Add(@{ Category = "Protocol"; Name = "NTLMv1"; Value = "Allowed (Level $lmLevel)"; Status = "Fail" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Protocol"; Name = "NTLMv1"; Value = "Default (key absent)"; Status = "Warn" })
+    }
+
+    # TLS 1.0 Disabled
+    try {
+        $tls10Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server'
+        if (Test-Path -LiteralPath $tls10Path) {
+            $tls10 = Get-ItemProperty -Path $tls10Path -Name Enabled -ErrorAction SilentlyContinue
+            if ($null -ne $tls10 -and $tls10.Enabled -eq 0) {
+                $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.0"; Value = "Disabled"; Status = "Pass" })
+            } else {
+                $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.0"; Value = "Enabled"; Status = "Fail" })
+            }
+        } else {
+            $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.0"; Value = "Not explicitly disabled"; Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.0"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # TLS 1.1 Disabled
+    try {
+        $tls11Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server'
+        if (Test-Path -LiteralPath $tls11Path) {
+            $tls11 = Get-ItemProperty -Path $tls11Path -Name Enabled -ErrorAction SilentlyContinue
+            if ($null -ne $tls11 -and $tls11.Enabled -eq 0) {
+                $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.1"; Value = "Disabled"; Status = "Pass" })
+            } else {
+                $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.1"; Value = "Enabled"; Status = "Fail" })
+            }
+        } else {
+            $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.1"; Value = "Not explicitly disabled"; Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Protocol"; Name = "TLS 1.1"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # ── ACCOUNT SECURITY ──
+
+    # Guest Account Disabled
+    try {
+        $guest = Get-LocalUser -Name "Guest" -ErrorAction Stop
+        if ($guest.Enabled) {
+            $checks.Add(@{ Category = "Account"; Name = "Guest Account"; Value = "Enabled"; Status = "Fail" })
+        } else {
+            $checks.Add(@{ Category = "Account"; Name = "Guest Account"; Value = "Disabled"; Status = "Pass" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Account"; Name = "Guest Account"; Value = "Not found"; Status = "Pass" })
+    }
+
+    # Built-in Administrator Account
+    try {
+        $adminAcct = Get-LocalUser -Name "Administrator" -ErrorAction Stop
+        if ($adminAcct.Enabled) {
+            $checks.Add(@{ Category = "Account"; Name = "Built-in Admin"; Value = "Enabled"; Status = "Warn" })
+        } else {
+            $checks.Add(@{ Category = "Account"; Name = "Built-in Admin"; Value = "Disabled"; Status = "Pass" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Account"; Name = "Built-in Admin"; Value = "Check failed"; Status = "Warn" })
+    }
+
+    # ── NETWORK SECURITY ──
+
+    # Windows Firewall (all profiles)
+    try {
+        $fw = Get-FirewallState
+        $fwAllEnabled = ($fw.Domain -eq "Enabled" -and $fw.Private -eq "Enabled" -and $fw.Public -eq "Enabled")
+        if ($fwAllEnabled) {
+            $checks.Add(@{ Category = "Network"; Name = "Windows Firewall"; Value = "All profiles enabled"; Status = "Pass" })
+        } else {
+            $fwDisabled = @()
+            if ($fw.Domain -ne "Enabled") { $fwDisabled += "Domain" }
+            if ($fw.Private -ne "Enabled") { $fwDisabled += "Private" }
+            if ($fw.Public -ne "Enabled") { $fwDisabled += "Public" }
+            $checks.Add(@{ Category = "Network"; Name = "Windows Firewall"; Value = "Disabled: $($fwDisabled -join ', ')"; Status = "Fail" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Network"; Name = "Windows Firewall"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # Admin Shares (AutoShareServer / AutoShareWks)
+    try {
+        $lanmanPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'
+        $autoShareServer = Get-ItemProperty -Path $lanmanPath -Name AutoShareServer -ErrorAction SilentlyContinue
+        $autoShareWks = Get-ItemProperty -Path $lanmanPath -Name AutoShareWks -ErrorAction SilentlyContinue
+        $serverDisabled = ($null -ne $autoShareServer -and $autoShareServer.AutoShareServer -eq 0)
+        $wksDisabled = ($null -ne $autoShareWks -and $autoShareWks.AutoShareWks -eq 0)
+        if ($serverDisabled -or $wksDisabled) {
+            $checks.Add(@{ Category = "Network"; Name = "Admin Shares"; Value = "Disabled"; Status = "Pass" })
+        } else {
+            $checks.Add(@{ Category = "Network"; Name = "Admin Shares"; Value = "Enabled (default)"; Status = "Info" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Network"; Name = "Admin Shares"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # WinRM Encryption
+    try {
+        $winrmSvc = Get-Service -Name WinRM -ErrorAction SilentlyContinue
+        if ($null -ne $winrmSvc -and $winrmSvc.Status -eq "Running") {
+            $wsmanPath = 'WSMan:\localhost\Service\AllowUnencrypted'
+            $allowUnencrypted = $null
+            try { $allowUnencrypted = (Get-Item -LiteralPath $wsmanPath -ErrorAction Stop).Value } catch {}
+            if ($null -ne $allowUnencrypted -and $allowUnencrypted -eq 'false') {
+                $checks.Add(@{ Category = "Network"; Name = "WinRM Encryption"; Value = "Enforced"; Status = "Pass" })
+            } elseif ($null -ne $allowUnencrypted -and $allowUnencrypted -eq 'true') {
+                $checks.Add(@{ Category = "Network"; Name = "WinRM Encryption"; Value = "Unencrypted allowed"; Status = "Fail" })
+            } else {
+                $checks.Add(@{ Category = "Network"; Name = "WinRM Encryption"; Value = "Could not determine"; Status = "Warn" })
+            }
+        } else {
+            $checks.Add(@{ Category = "Network"; Name = "WinRM Encryption"; Value = "WinRM not running"; Status = "Info" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Network"; Name = "WinRM Encryption"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # ── REMOTE ACCESS ──
+
+    # RDP NLA Required
+    try {
+        $nla = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ErrorAction Stop).UserAuthentication
+        if ($nla -eq 1) {
+            $checks.Add(@{ Category = "Remote Access"; Name = "RDP NLA"; Value = "Required"; Status = "Pass" })
+        } else {
+            $checks.Add(@{ Category = "Remote Access"; Name = "RDP NLA"; Value = "Not required"; Status = "Fail" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Remote Access"; Name = "RDP NLA"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # ── SYSTEM SECURITY ──
+
+    # UAC Enabled
+    try {
+        $uacKey = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction Stop
+        if ($uacKey.EnableLUA -eq 1) {
+            $checks.Add(@{ Category = "System"; Name = "UAC"; Value = "Enabled"; Status = "Pass" })
+        } else {
+            $checks.Add(@{ Category = "System"; Name = "UAC"; Value = "Disabled"; Status = "Fail" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "System"; Name = "UAC"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # Screen Lock Timeout
+    try {
+        $ssTimeout = Get-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name ScreenSaveTimeOut -ErrorAction SilentlyContinue
+        $ssActive = Get-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name ScreenSaveActive -ErrorAction SilentlyContinue
+        $ssSecure = Get-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name ScreenSaverIsSecure -ErrorAction SilentlyContinue
+        $timeoutSec = if ($null -ne $ssTimeout -and $ssTimeout.ScreenSaveTimeOut) { [int]$ssTimeout.ScreenSaveTimeOut } else { 0 }
+        $isActive = ($null -ne $ssActive -and $ssActive.ScreenSaveActive -eq '1')
+        $isSecure = ($null -ne $ssSecure -and $ssSecure.ScreenSaverIsSecure -eq '1')
+
+        if ($isActive -and $isSecure -and $timeoutSec -gt 0 -and $timeoutSec -le 900) {
+            $checks.Add(@{ Category = "System"; Name = "Screen Lock"; Value = "${timeoutSec}s timeout, password required"; Status = "Pass" })
+        } elseif ($isActive -and $timeoutSec -gt 0) {
+            $pwdNote = if (-not $isSecure) { ', no password' } else { '' }
+            $checks.Add(@{ Category = "System"; Name = "Screen Lock"; Value = "${timeoutSec}s timeout${pwdNote}"; Status = "Warn" })
+        } else {
+            $checks.Add(@{ Category = "System"; Name = "Screen Lock"; Value = "Not configured"; Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "System"; Name = "Screen Lock"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # ── AUDIT & LOGGING ──
+
+    # PowerShell Script Block Logging
+    try {
+        $sblPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+        if (Test-Path -LiteralPath $sblPath) {
+            $sbl = Get-ItemProperty -Path $sblPath -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue
+            if ($null -ne $sbl -and $sbl.EnableScriptBlockLogging -eq 1) {
+                $checks.Add(@{ Category = "Audit"; Name = "Script Block Logging"; Value = "Enabled"; Status = "Pass" })
+            } else {
+                $checks.Add(@{ Category = "Audit"; Name = "Script Block Logging"; Value = "Disabled"; Status = "Fail" })
+            }
+        } else {
+            $checks.Add(@{ Category = "Audit"; Name = "Script Block Logging"; Value = "Not configured"; Status = "Fail" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Audit"; Name = "Script Block Logging"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # Command Line in Process Audit Events
+    try {
+        $auditPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit'
+        if (Test-Path -LiteralPath $auditPath) {
+            $procAudit = Get-ItemProperty -Path $auditPath -Name ProcessCreationIncludeCmdLine_Enabled -ErrorAction SilentlyContinue
+            if ($null -ne $procAudit -and $procAudit.ProcessCreationIncludeCmdLine_Enabled -eq 1) {
+                $checks.Add(@{ Category = "Audit"; Name = "Command Line Auditing"; Value = "Enabled"; Status = "Pass" })
+            } else {
+                $checks.Add(@{ Category = "Audit"; Name = "Command Line Auditing"; Value = "Disabled"; Status = "Warn" })
+            }
+        } else {
+            $checks.Add(@{ Category = "Audit"; Name = "Command Line Auditing"; Value = "Not configured"; Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Audit"; Name = "Command Line Auditing"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # ── ENDPOINT PROTECTION ──
+
+    # Antivirus / Defender Status
+    try {
+        $mpStat = Get-MpComputerStatus -ErrorAction Stop
+        if ($mpStat.RealTimeProtectionEnabled) {
+            $checks.Add(@{ Category = "Endpoint"; Name = "Antivirus Real-Time"; Value = "Enabled"; Status = "Pass" })
+        } else {
+            $checks.Add(@{ Category = "Endpoint"; Name = "Antivirus Real-Time"; Value = "DISABLED"; Status = "Fail" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Endpoint"; Name = "Antivirus Real-Time"; Value = "Defender unavailable"; Status = "Warn" })
+    }
+
+    # BitLocker Status (C: drive)
+    try {
+        $blVolume = Get-BitLockerVolume -MountPoint "C:" -ErrorAction Stop
+        if ($null -ne $blVolume -and $blVolume.ProtectionStatus -eq 'On') {
+            $checks.Add(@{ Category = "Endpoint"; Name = "BitLocker (C:)"; Value = "Protected ($($blVolume.EncryptionMethod))"; Status = "Pass" })
+        } elseif ($null -ne $blVolume) {
+            $checks.Add(@{ Category = "Endpoint"; Name = "BitLocker (C:)"; Value = "$($blVolume.VolumeStatus)"; Status = "Fail" })
+        } else {
+            $checks.Add(@{ Category = "Endpoint"; Name = "BitLocker (C:)"; Value = "Not available"; Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Endpoint"; Name = "BitLocker (C:)"; Value = "Not available"; Status = "Info" })
+    }
+
+    # Windows Update Service Running
+    try {
+        $wuSvc = Get-Service -Name wuauserv -ErrorAction Stop
+        if ($wuSvc.Status -eq "Running") {
+            $checks.Add(@{ Category = "Endpoint"; Name = "Windows Update Svc"; Value = "Running"; Status = "Pass" })
+        } else {
+            $checks.Add(@{ Category = "Endpoint"; Name = "Windows Update Svc"; Value = $wuSvc.Status.ToString(); Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Endpoint"; Name = "Windows Update Svc"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # ── UNNECESSARY SERVICES ──
+
+    $riskyServices = @(
+        @{ Name = "RemoteRegistry"; Display = "Remote Registry" }
+        @{ Name = "Fax"; Display = "Fax Service" }
+        @{ Name = "TapiSrv"; Display = "Telephony" }
+    )
+    foreach ($riskySvc in $riskyServices) {
+        try {
+            $svc = Get-Service -Name $riskySvc.Name -ErrorAction SilentlyContinue
+            if ($null -ne $svc) {
+                if ($svc.Status -eq "Running") {
+                    $checks.Add(@{ Category = "Services"; Name = $riskySvc.Display; Value = "Running"; Status = "Warn" })
+                } else {
+                    $checks.Add(@{ Category = "Services"; Name = $riskySvc.Display; Value = "Stopped"; Status = "Pass" })
+                }
+            }
+        } catch {
+            # Service doesn't exist — fine
+        }
+    }
+
+    return @($checks)
+}
+
+# Display security hardening audit with color-coded results
+function Show-SecurityHardeningReport {
+    <#
+    .SYNOPSIS
+        Runs security hardening checks and displays categorized results.
+        Returns structured data for JSON output.
+    #>
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Auditing security hardening settings..." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $checks = Get-SecurityHardeningChecks
+    $passCount = @($checks | Where-Object { $_.Status -eq 'Pass' }).Count
+    $failCount = @($checks | Where-Object { $_.Status -eq 'Fail' }).Count
+    $warnCount = @($checks | Where-Object { $_.Status -eq 'Warn' }).Count
+    $infoCount = @($checks | Where-Object { $_.Status -eq 'Info' }).Count
+    $totalChecks = $checks.Count
+
+    # Group by category and display
+    $categories = $checks | Group-Object -Property Category
+    foreach ($cat in $categories) {
+        Write-OutputColor "  === $($cat.Name.ToUpper()) ===" -color "Info"
+        foreach ($check in $cat.Group) {
+            $icon = switch ($check.Status) {
+                'Pass' { '[PASS]' }
+                'Fail' { '[FAIL]' }
+                'Warn' { '[WARN]' }
+                'Info' { '[INFO]' }
+                default { '[----]' }
+            }
+            $statusColor = switch ($check.Status) {
+                'Pass' { 'Success' }
+                'Fail' { 'Error' }
+                'Warn' { 'Warning' }
+                'Info' { 'Info' }
+                default { 'Info' }
+            }
+            Write-OutputColor "  $icon $($check.Name.PadRight(28)) $($check.Value)" -color $statusColor
+        }
+        Write-OutputColor "" -color "Info"
+    }
+
+    # Score
+    $score = if ($totalChecks -gt 0) { [math]::Round(($passCount / $totalChecks) * 100) } else { 0 }
+    $scoreColor = if ($score -ge 80) { 'Success' } elseif ($score -ge 50) { 'Warning' } else { 'Error' }
+
+    Write-OutputColor "  ── Hardening Summary ──" -color "Info"
+    Write-OutputColor "  Score: $score% ($passCount passed, $failCount failed, $warnCount warnings, $infoCount info)" -color $scoreColor
+    Write-OutputColor "" -color "Info"
+
+    if ($failCount -gt 0) {
+        Write-OutputColor "  Failed checks:" -color "Error"
+        foreach ($failed in @($checks | Where-Object { $_.Status -eq 'Fail' })) {
+            Write-OutputColor "    - $($failed.Name): $($failed.Value)" -color "Error"
+        }
+        Write-OutputColor "" -color "Info"
+    }
+
+    Add-SessionChange -Category "Security" -Description "Ran security hardening audit (score: ${score}%, $failCount failed)"
+
+    return @{
+        Timestamp  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+        Hostname   = $env:COMPUTERNAME
+        Score      = $score
+        Total      = $totalChecks
+        Passed     = $passCount
+        Failed     = $failCount
+        Warnings   = $warnCount
+        Info       = $infoCount
+        Checks     = @($checks)
+    }
+}
+
 # Function to display system health information
 function Show-SystemHealthCheck {
     $report = @{

@@ -337,7 +337,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-**Actions:** `Cleanup` (disk cleanup), `Debloat` (remove bloatware + telemetry), `HealthCheck` (system health report), `QuickScan` (health + disk + debloat analysis), `Inventory` (server inventory for CMDB), `DriftCheck` (configuration drift detection), `Snapshot` (performance metric capture), `Compliance` (unified health + readiness + drift report), `Batch` (JSON-driven full config).
+**Actions:** `Cleanup` (disk cleanup), `Debloat` (remove bloatware + telemetry), `HealthCheck` (system health report), `QuickScan` (health + disk + debloat analysis), `Inventory` (server inventory for CMDB), `DriftCheck` (configuration drift detection), `Snapshot` (performance metric capture), `Compliance` (unified health + readiness + drift report), `Harden` (CIS-lite security hardening audit), `Batch` (JSON-driven full config).
 
 ## Project Structure
 
