@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.22.2
+    Automated Test Runner for RackStack v1.23.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9519,7 +9519,7 @@ try {
 
     # QuickScan runs health + disk + debloat
     Write-TestResult "50-EntryPoint: QuickScan runs health check" ($mod50 -match "'QuickScan'[\s\S]{0,500}Show-SystemHealthCheck")
-    Write-TestResult "50-EntryPoint: QuickScan runs disk analysis" ($mod50 -match "'QuickScan'[\s\S]{0,500}Show-EnhancedCleanupAnalysis")
+    Write-TestResult "50-EntryPoint: QuickScan runs disk analysis" ($mod50 -match "'QuickScan'[\s\S]{0,800}Show-EnhancedCleanupAnalysis")
     Write-TestResult "50-EntryPoint: QuickScan runs debloat analysis" ($mod50 -match "'QuickScan'[\s\S]{0,1000}Show-DebloatAnalysis")
 
     # Bootstrap installer
@@ -9533,10 +9533,44 @@ try {
         Write-TestResult "Install-RackStack: has Action param" ($bootstrapContent -match '\[string\]\$Action')
         Write-TestResult "Install-RackStack: has Silent switch" ($bootstrapContent -match '\[switch\]\$Silent')
         Write-TestResult "Install-RackStack: enforces TLS 1.2" ($bootstrapContent -match 'Tls12')
+        Write-TestResult "Install-RackStack: has OutputFormat param" ($bootstrapContent -match "ValidateSet.*Console.*JSON.*\]\s*\[string\]\`$OutputFormat")
+        Write-TestResult "Install-RackStack: passes OutputFormat to exe" ($bootstrapContent -match 'OutputFormat.*\$OutputFormat')
     }
     else {
         Write-TestResult "Install-RackStack: bootstrap installer exists" $false "File not found"
     }
+
+    # JSON output mode tests
+    $mod00 = Get-Content -LiteralPath (Join-Path $modulesPath "00-Initialization.ps1") -Raw -ErrorAction Stop
+    $mod37 = Get-Content -LiteralPath (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw -ErrorAction Stop
+
+    Write-TestResult "Header: OutputFormat param with ValidateSet" ($headerContent -match "ValidateSet.*Console.*JSON")
+    Write-TestResult "Header: OutputFormat defaults to Console" ($headerContent -match "\`$OutputFormat\s*=\s*'Console'")
+    Write-TestResult "00-Initialization: stores CLIOutputFormat" ($mod00 -match '\$script:CLIOutputFormat')
+    Write-TestResult "50-EntryPoint: HealthCheck captures report" ($mod50 -match '\$healthReport\s*=\s*Show-SystemHealthCheck')
+    Write-TestResult "50-EntryPoint: HealthCheck JSON output" ($mod50 -match "'HealthCheck'[\s\S]{0,500}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: QuickScan captures health report" ($mod50 -match "'QuickScan'[\s\S]{0,500}\`$healthReport\s*=\s*Show-SystemHealthCheck")
+    Write-TestResult "50-EntryPoint: QuickScan JSON output" ($mod50 -match "'QuickScan'[\s\S]{0,2000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: Cleanup JSON output" ($mod50 -match "'Cleanup'[\s\S]{0,800}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: Debloat JSON output" ($mod50 -match "'Debloat'[\s\S]{0,800}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: JSON includes Tool field" ($mod50 -match 'Tool\s*=\s*\$script:ToolFullName')
+    Write-TestResult "50-EntryPoint: JSON includes Version field" ($mod50 -match 'Version\s*=\s*\$script:ScriptVersion')
+    Write-TestResult "50-EntryPoint: JSON includes Action field" ($mod50 -match "Action\s*=\s*'HealthCheck'")
+    Write-TestResult "50-EntryPoint: OutputFormat in re-elevation" ($mod50 -match 'CLIOutputFormat.*elevateArgs.*OutputFormat')
+
+    # HealthCheck structured report tests
+    Write-TestResult "37-HealthCheck: builds report hashtable" ($mod37 -match '\$report\s*=\s*@\{')
+    Write-TestResult "37-HealthCheck: report has Timestamp" ($mod37 -match "\`$report\.Timestamp\s*=\s*.*ToString\('o'\)" -or $mod37 -match "Timestamp\s*=.*ToString\('o'\)")
+    Write-TestResult "37-HealthCheck: report has Hostname" ($mod37 -match "Hostname\s*=\s*\`$env:COMPUTERNAME")
+    Write-TestResult "37-HealthCheck: report has System section" ($mod37 -match "\`$report\.Sections\['System'\]")
+    Write-TestResult "37-HealthCheck: report has CPU section" ($mod37 -match "\`$report\.Sections\['CPU'\]")
+    Write-TestResult "37-HealthCheck: report has Memory section" ($mod37 -match "\`$report\.Sections\['Memory'\]")
+    Write-TestResult "37-HealthCheck: report has Disks section" ($mod37 -match "\`$report\.Sections\['Disks'\]")
+    Write-TestResult "37-HealthCheck: report has NetworkAdapters section" ($mod37 -match "\`$report\.Sections\['NetworkAdapters'\]")
+    Write-TestResult "37-HealthCheck: report has Services section" ($mod37 -match "\`$report\.Sections\['Services'\]")
+    Write-TestResult "37-HealthCheck: report has Firewall section" ($mod37 -match "\`$report\.Sections\['Firewall'\]")
+    Write-TestResult "37-HealthCheck: report returns Issues" ($mod37 -match '\$report\.Issues\s*=\s*\$issues')
+    Write-TestResult "37-HealthCheck: report returns Health status" ($mod37 -match "\`$report\.Health\s*=")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

@@ -99,6 +99,7 @@ function Assert-Elevation {
             if ($script:CLIProfile -ne 'Standard') { $elevateArgs += " -Tier $($script:CLIProfile)" }
             if ($script:CLIConfig)  { $elevateArgs += " -Config `"$($script:CLIConfig)`"" }
             if ($script:CLISilent)  { $elevateArgs += " -Silent" }
+            if ($script:CLIOutputFormat -ne 'Console') { $elevateArgs += " -OutputFormat $($script:CLIOutputFormat)" }
             Start-Process powershell -ArgumentList $elevateArgs -Verb RunAs -ErrorAction Stop
         }
         catch {
@@ -167,6 +168,10 @@ function Invoke-CLIAction {
     if ($script:CLISilent) {
         Write-OutputColor "  Mode:    Silent (prompts auto-confirmed)" -color "Info"
     }
+    if ($script:CLIOutputFormat -eq 'JSON') {
+        Write-OutputColor "  Output: JSON" -color "Info"
+        Write-OutputColor "" -color "Info"
+    }
     Write-OutputColor "" -color "Info"
 
     switch ($script:CLIAction) {
@@ -180,6 +185,16 @@ function Invoke-CLIAction {
             }
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  Cleanup complete." -color "Success"
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool    = $script:ToolFullName
+                    Version = $script:ScriptVersion
+                    Action  = 'Cleanup'
+                    Profile = $script:CLIProfile
+                    Status  = 'Complete'
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 5)
+            }
         }
         'Debloat' {
             $osType = if (Test-WindowsServer) { "Server" } else { "Workstation" }
@@ -193,9 +208,28 @@ function Invoke-CLIAction {
             }
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  Debloat complete." -color "Success"
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool    = $script:ToolFullName
+                    Version = $script:ScriptVersion
+                    Action  = 'Debloat'
+                    Profile = $script:CLIProfile
+                    Status  = 'Complete'
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 5)
+            }
         }
         'HealthCheck' {
-            Show-SystemHealthCheck
+            $healthReport = Show-SystemHealthCheck
+            if ($script:CLIOutputFormat -eq 'JSON' -and $null -ne $healthReport) {
+                $jsonResult = @{
+                    Tool    = $script:ToolFullName
+                    Version = $script:ScriptVersion
+                    Action  = 'HealthCheck'
+                    Report  = $healthReport
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
         }
         'Batch' {
             if (-not $script:CLIConfig) {
@@ -223,7 +257,7 @@ function Invoke-CLIAction {
 
             # Phase 1: System health
             Write-OutputColor "  --- SYSTEM HEALTH ---" -color "Info"
-            Show-SystemHealthCheck
+            $healthReport = Show-SystemHealthCheck
 
             # Phase 2: Disk space analysis
             Write-OutputColor "" -color "Info"
@@ -234,6 +268,16 @@ function Invoke-CLIAction {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  --- DEBLOAT RECOMMENDATIONS ---" -color "Info"
             Show-DebloatAnalysis
+
+            if ($script:CLIOutputFormat -eq 'JSON' -and $null -ne $healthReport) {
+                $jsonResult = @{
+                    Tool    = $script:ToolFullName
+                    Version = $script:ScriptVersion
+                    Action  = 'QuickScan'
+                    Report  = $healthReport
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

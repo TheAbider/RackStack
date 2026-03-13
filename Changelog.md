@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.23.0
+
+- **New Feature:** JSON output mode for CLI headless actions — pass `-OutputFormat JSON` to get structured JSON output from HealthCheck and QuickScan actions. Returns system info, CPU, memory, disk, network, services, firewall status, and issue summary in machine-readable format. Cleanup and Debloat actions return status confirmation. Designed for integration with monitoring dashboards, alerting pipelines, and automation orchestration (37-HealthCheck, 50-EntryPoint, Header, 00-Initialization).
+- **Improvement:** Bootstrap installer (`Install-RackStack.ps1`) passes `-OutputFormat` through to RackStack.exe for end-to-end JSON pipeline support.
+- 65 modules, 2581 tests
+
 ## v1.22.2
 
 - **New Feature:** QuickScan CLI action — combined health check + disk analysis + debloat recommendations in a single pass (`-Action QuickScan`). Useful for first-time assessment of any machine (50-EntryPoint).

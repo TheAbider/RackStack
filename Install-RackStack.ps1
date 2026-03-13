@@ -44,6 +44,9 @@ param(
 
     [switch]$Silent,
 
+    [ValidateSet('Console', 'JSON')]
+    [string]$OutputFormat = 'Console',
+
     [string]$InstallPath = 'C:\Temp\RackStack',
 
     [switch]$NoRun
@@ -136,11 +139,12 @@ if ($NoRun) {
 
 # Run with CLI parameters
 Write-Host ""
-Write-Host "  Launching RackStack -Action $Action -Tier $Tier$(if ($Silent) { ' -Silent' })..." -ForegroundColor Cyan
+Write-Host "  Launching RackStack -Action $Action -Tier $Tier$(if ($Silent) { ' -Silent' })$(if ($OutputFormat -ne 'Console') { " -OutputFormat $OutputFormat" })..." -ForegroundColor Cyan
 Write-Host ""
 
 $args = @("-Action", $Action, "-Tier", $Tier)
 if ($Silent) { $args += "-Silent" }
+if ($OutputFormat -ne 'Console') { $args += @("-OutputFormat", $OutputFormat) }
 
 try {
     $process = Start-Process -FilePath $exePath -ArgumentList $args -Wait -PassThru -NoNewWindow

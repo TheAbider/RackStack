@@ -289,6 +289,12 @@ function Test-NUMATopology {
 
 # Function to display system health information
 function Show-SystemHealthCheck {
+    $report = @{
+        Timestamp = (Get-Date).ToString('o')
+        Hostname  = $env:COMPUTERNAME
+        Sections  = [ordered]@{}
+        Issues    = @()
+    }
     Clear-Host
     Write-CenteredOutput "System Health Check" -color "Info"
 
@@ -324,6 +330,13 @@ function Show-SystemHealthCheck {
         $uptimeStr = "{0} days, {1} hours, {2} minutes" -f $uptime.Days, $uptime.Hours, $uptime.Minutes
     } else { $uptimeStr = "Unknown" }
     Write-OutputColor "  Uptime: $uptimeStr" -color "Info"
+    $report.Sections['System'] = @{
+        ComputerName = if ($cs) { $cs.Name } else { $env:COMPUTERNAME }
+        OS           = if ($os) { $os.Caption } else { 'Unknown' }
+        Version      = if ($os) { $os.Version } else { 'Unknown' }
+        LastBoot     = if ($os) { $os.LastBootUpTime.ToString('o') } else { $null }
+        UptimeDays   = if ($os -and $os.LastBootUpTime) { [math]::Floor(((Get-Date) - $os.LastBootUpTime).TotalDays) } else { $null }
+    }
     Write-OutputColor "" -color "Info"
 
     # CPU
@@ -339,6 +352,12 @@ function Show-SystemHealthCheck {
     $cpuLoad = if ($null -ne $cpuMeasure -and $null -ne $cpuMeasure.Average) { $cpuMeasure.Average } else { 0 }
     $cpuColor = if ($cpuLoad -gt 80) { "Error" } elseif ($cpuLoad -gt 50) { "Warning" } else { "Success" }
     Write-OutputColor "  Current Load: $([math]::Round($cpuLoad, 1))%" -color $cpuColor
+    $report.Sections['CPU'] = @{
+        Name           = $cpuName
+        Cores          = $cpuCores
+        LogicalCores   = $cpuLogical
+        LoadPercent    = [math]::Round($cpuLoad, 1)
+    }
     Write-OutputColor "" -color "Info"
 
     # Memory
@@ -356,6 +375,12 @@ function Show-SystemHealthCheck {
     Write-OutputColor "  Total: $totalMemGB GB" -color "Info"
     Write-OutputColor "  Used: $usedMemGB GB ($memPercent%)" -color $memColor
     Write-OutputColor "  Free: $freeMemGB GB" -color "Info"
+    $report.Sections['Memory'] = @{
+        TotalGB     = $totalMemGB
+        UsedGB      = $usedMemGB
+        FreeGB      = $freeMemGB
+        UsedPercent = $memPercent
+    }
     Write-OutputColor "" -color "Info"
 
     # Disk Space
@@ -374,6 +399,14 @@ function Show-SystemHealthCheck {
         $diskColor = if ($usedPercent -gt 90) { "Error" } elseif ($usedPercent -gt 75) { "Warning" } else { "Success" }
         Write-OutputColor "  $($disk.DeviceID) - Total: $totalGB GB | Free: $freeGB GB | Used: $usedPercent%" -color $diskColor
     }
+    $report.Sections['Disks'] = @(foreach ($disk in $disks) {
+        @{
+            Drive       = $disk.DeviceID
+            TotalGB     = [math]::Round($disk.Size / 1GB, 2)
+            FreeGB      = [math]::Round($disk.FreeSpace / 1GB, 2)
+            UsedPercent = if ($disk.Size -gt 0) { [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) } else { 0 }
+        }
+    })
     Write-OutputColor "" -color "Info"
 
     # Network Adapters
@@ -389,6 +422,15 @@ function Show-SystemHealthCheck {
     foreach ($adapter in ($allAdapters | Where-Object { $_.Status -ne "Up" })) {
         Write-OutputColor "  $($adapter.Name): DOWN" -color "Warning"
     }
+    $report.Sections['NetworkAdapters'] = @(foreach ($adapter in $allAdapters) {
+        $ip = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.Name } | Select-Object -First 1
+        @{
+            Name   = $adapter.Name
+            Status = $adapter.Status.ToString()
+            IP     = if ($ip) { $ip.IPAddress } else { $null }
+            Speed  = $adapter.LinkSpeed
+        }
+    })
     Write-OutputColor "" -color "Info"
 
     # Pending Updates
@@ -432,6 +474,12 @@ function Show-SystemHealthCheck {
             Write-OutputColor "  $($svc.Display): $statusStr" -color $svcColor
         }
     }
+    $report.Sections['Services'] = @(foreach ($svc in $keyServices) {
+        $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
+        if ($service) {
+            @{ Name = $svc.Display; Status = $service.Status.ToString() }
+        }
+    })
     Write-OutputColor "" -color "Info"
 
     # Certificates
@@ -676,6 +724,11 @@ function Show-SystemHealthCheck {
     catch {
         Write-OutputColor "  Firewall status unavailable." -color "Debug"
     }
+    $report.Sections['Firewall'] = @{
+        Domain  = $fwState['Domain']
+        Private = $fwState['Private']
+        Public  = $fwState['Public']
+    }
     Write-OutputColor "" -color "Info"
 
     # Certificate Expiration Check
@@ -712,6 +765,12 @@ function Show-SystemHealthCheck {
     Write-OutputColor "" -color "Info"
 
     Add-SessionChange -Category "System" -Description "Ran system health check ($($issues.Count) issue(s))"
+
+    # Return structured report for JSON output mode
+    $report.Issues = $issues
+    $report.IssueCount = $issues.Count
+    $report.Health = if ($issues.Count -eq 0) { 'GOOD' } elseif ($issues.Count -le 3) { 'ATTENTION' } else { 'CRITICAL' }
+    return $report
 }
 
 # Function to display server configuration readiness at a glance

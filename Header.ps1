@@ -30,10 +30,10 @@
     7h3 4b1d3r
 
 .VERSION
-    1.22.2
+    1.23.0
 
 .LAST UPDATED
-    03/12/2026
+    03/13/2026
 
 .CHANGELOG v1.21.1
     ROBUSTNESS, UX, CACHE CONSISTENCY:
@@ -1389,7 +1389,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification='Plural nouns used for clarity when dealing with collections')]
 param(
     # CLI headless mode: run a specific action without interactive menus
-    # Usage: RackStack.exe -Action Cleanup [-Tier Standard] [-Silent]
+    # Usage: RackStack.exe -Action Cleanup [-Tier Standard] [-Silent] [-OutputFormat JSON]
     [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan')]
     [string]$Action,
 
@@ -1398,6 +1398,9 @@ param(
 
     [string]$Config,
 
-    [switch]$Silent
+    [switch]$Silent,
+
+    [ValidateSet('Console', 'JSON')]
+    [string]$OutputFormat = 'Console'
 )
 
