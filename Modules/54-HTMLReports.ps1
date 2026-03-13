@@ -782,6 +782,197 @@ function Export-ProfileComparisonHTML {
 }
 
 # Function to generate HTML server readiness report
+function Get-ReadinessChecks {
+    <#
+    .SYNOPSIS
+        Returns structured readiness check results as an array of hashtables.
+        Reusable by both Export-HTMLReadinessReport and CLI Compliance action.
+    #>
+    $checks = [System.Collections.Generic.List[object]]::new()
+
+    # Hostname
+    $hostname = $env:COMPUTERNAME
+    $isDefault = $hostname -match '^WIN-|^DESKTOP-|^YOURSERVERNAME'
+    if (-not $isDefault) {
+        $checks.Add(@{ Category = "Identity"; Name = "Hostname"; Value = $hostname; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Identity"; Name = "Hostname"; Value = "$hostname (default)"; Status = "Fail" })
+    }
+
+    # Domain
+    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    $cs = if ($csResult.TimedOut) { $null } else { $csResult.Result }
+    if ($cs -and $cs.PartOfDomain) {
+        $checks.Add(@{ Category = "Identity"; Name = "Domain"; Value = $cs.Domain; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Identity"; Name = "Domain"; Value = "WORKGROUP"; Status = "Warn" })
+    }
+
+    # Site Number
+    $siteNum = Get-SiteNumberFromHostname
+    if ($siteNum) {
+        $checks.Add(@{ Category = "Identity"; Name = "Site Number"; Value = $siteNum; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Identity"; Name = "Site Number"; Value = "Not detected"; Status = "Warn" })
+    }
+
+    # RDP
+    $rdp = Get-RDPState
+    if ($rdp -eq "Enabled") {
+        $checks.Add(@{ Category = "Remote Access"; Name = "RDP"; Value = "Enabled"; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Remote Access"; Name = "RDP"; Value = "Disabled"; Status = "Warn" })
+    }
+
+    # WinRM
+    $winrm = Get-WinRMState
+    if ($winrm -eq "Enabled") {
+        $checks.Add(@{ Category = "Remote Access"; Name = "WinRM"; Value = "Enabled"; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Remote Access"; Name = "WinRM"; Value = $winrm; Status = "Warn" })
+    }
+
+    # Agent (only if configured)
+    if (Test-AgentInstallerConfigured) {
+        $agentCheck = Test-AgentInstalled
+        if ($agentCheck.Installed) {
+            $kVal = if ($agentCheck.Status -eq "Running") { "Running" } else { "$($agentCheck.Status)" }
+            $checks.Add(@{ Category = "Software"; Name = "$($script:AgentInstaller.ToolName) Agent"; Value = $kVal; Status = "OK" })
+        } else {
+            $checks.Add(@{ Category = "Software"; Name = "$($script:AgentInstaller.ToolName) Agent"; Value = "Not Installed"; Status = "Fail" })
+        }
+    }
+
+    # Hyper-V
+    if (Test-HyperVInstalled) {
+        $checks.Add(@{ Category = "Roles"; Name = "Hyper-V"; Value = "Installed"; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Roles"; Name = "Hyper-V"; Value = "Not Installed"; Status = "Warn" })
+    }
+
+    # Server-only roles
+    if (Test-WindowsServer) {
+        if (Test-MPIOInstalled) {
+            $checks.Add(@{ Category = "Roles"; Name = "MPIO"; Value = "Installed"; Status = "OK" })
+        } else {
+            $checks.Add(@{ Category = "Roles"; Name = "MPIO"; Value = "Not Installed"; Status = "Warn" })
+        }
+
+        if (Test-FailoverClusteringInstalled) {
+            $checks.Add(@{ Category = "Roles"; Name = "Failover Clustering"; Value = "Installed"; Status = "OK" })
+        } else {
+            $checks.Add(@{ Category = "Roles"; Name = "Failover Clustering"; Value = "Not Installed"; Status = "Warn" })
+        }
+    }
+
+    # Firewall
+    $fw = Get-FirewallState
+    if ($fw.Domain -eq "Enabled" -and $fw.Private -eq "Enabled" -and $fw.Public -eq "Enabled") {
+        $checks.Add(@{ Category = "Network"; Name = "Firewall"; Value = "All profiles enabled"; Status = "OK" })
+    } else {
+        $disabled = @()
+        if ($fw.Domain -ne "Enabled") { $disabled += "Domain" }
+        if ($fw.Private -ne "Enabled") { $disabled += "Private" }
+        if ($fw.Public -ne "Enabled") { $disabled += "Public" }
+        $checks.Add(@{ Category = "Network"; Name = "Firewall"; Value = "Disabled: $($disabled -join ', ')"; Status = "Warn" })
+    }
+
+    # Network adapters
+    $nics = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })
+    if ($nics.Count -gt 0) {
+        $checks.Add(@{ Category = "Network"; Name = "Adapters"; Value = "$($nics.Count) up"; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Network"; Name = "Adapters"; Value = "None up"; Status = "Fail" })
+    }
+
+    # Power plan
+    $power = Get-CurrentPowerPlan
+    if ($power.Name -eq "High performance") {
+        $checks.Add(@{ Category = "System"; Name = "Power Plan"; Value = "High Performance"; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "System"; Name = "Power Plan"; Value = $power.Name; Status = "Warn" })
+    }
+
+    # Reboot pending
+    if (Test-RebootPending) {
+        $checks.Add(@{ Category = "System"; Name = "Reboot Pending"; Value = "YES"; Status = "Fail" })
+    } else {
+        $checks.Add(@{ Category = "System"; Name = "Reboot Pending"; Value = "No"; Status = "OK" })
+    }
+
+    # License
+    $lic = Test-WindowsActivated
+    if ($lic) {
+        $checks.Add(@{ Category = "System"; Name = "Windows License"; Value = "Activated"; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "System"; Name = "Windows License"; Value = "Not Activated"; Status = "Warn" })
+    }
+
+    # C: Drive space
+    try {
+        $cVol = Get-Volume -DriveLetter C -ErrorAction Stop
+        if ($null -ne $cVol -and $cVol.Size -gt 0) {
+            $freeGB = [math]::Round($cVol.SizeRemaining / 1GB, 1)
+            $totalGB = [math]::Round($cVol.Size / 1GB, 1)
+            $usedPct = [math]::Round((($cVol.Size - $cVol.SizeRemaining) / $cVol.Size) * 100)
+            if ($freeGB -lt 5) {
+                $checks.Add(@{ Category = "Storage"; Name = "C: Drive Space"; Value = "${freeGB}GB free of ${totalGB}GB ($usedPct% used)"; Status = "Fail" })
+            } elseif ($freeGB -lt 20) {
+                $checks.Add(@{ Category = "Storage"; Name = "C: Drive Space"; Value = "${freeGB}GB free of ${totalGB}GB ($usedPct% used)"; Status = "Warn" })
+            } else {
+                $checks.Add(@{ Category = "Storage"; Name = "C: Drive Space"; Value = "${freeGB}GB free of ${totalGB}GB"; Status = "OK" })
+            }
+        } else {
+            $checks.Add(@{ Category = "Storage"; Name = "C: Drive Space"; Value = "Unable to read"; Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Storage"; Name = "C: Drive Space"; Value = "Check failed"; Status = "Warn" })
+    }
+
+    # DNS Resolution
+    try {
+        $dnsResult = Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
+        if ($dnsResult) {
+            $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "Working"; Status = "OK" })
+        } else {
+            $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "No response"; Status = "Warn" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "Failed"; Status = "Fail" })
+    }
+
+    # Time Sync
+    try {
+        $w32tmOut = w32tm /query /status 2>&1
+        $tsSource = "Unknown"
+        foreach ($tsLine in $w32tmOut) {
+            $tsText = $tsLine.ToString()
+            if ($tsText -match 'Source:\s*(.+)') { $regexMatches = $matches; $tsSource = $regexMatches[1].Trim() }
+        }
+        if ($tsSource -match 'Free-Running|Local CMOS') {
+            $checks.Add(@{ Category = "System"; Name = "Time Sync"; Value = "No external source ($tsSource)"; Status = "Warn" })
+        } else {
+            $checks.Add(@{ Category = "System"; Name = "Time Sync"; Value = "Source: $tsSource"; Status = "OK" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "System"; Name = "Time Sync"; Value = "Unable to check"; Status = "Warn" })
+    }
+
+    # Windows Defender
+    try {
+        $mpStat = Get-MpComputerStatus -ErrorAction Stop
+        if ($mpStat.RealTimeProtectionEnabled) {
+            $checks.Add(@{ Category = "Security"; Name = "Defender Real-Time"; Value = "Enabled"; Status = "OK" })
+        } else {
+            $checks.Add(@{ Category = "Security"; Name = "Defender Real-Time"; Value = "DISABLED"; Status = "Fail" })
+        }
+    } catch {
+        $checks.Add(@{ Category = "Security"; Name = "Defender Real-Time"; Value = "Unavailable"; Status = "Warn" })
+    }
+
+    return @($checks)
+}
+
 function Export-HTMLReadinessReport {
     param(
         [string]$OutputPath = "$env:USERPROFILE\Desktop\ReadinessReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
@@ -818,178 +1009,27 @@ function Export-HTMLReadinessReport {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Gathering readiness data..." -color "Info"
 
-    $ready = 0
-    $total = 0
+    # Use shared Get-ReadinessChecks function
+    $readinessChecks = Get-ReadinessChecks
+    $total = $readinessChecks.Count
+    $ready = @($readinessChecks | Where-Object { $_.Status -eq 'OK' }).Count
     $rows = ""
 
     # Helper to add a check row
     function Add-ReadinessRow {
         param([string]$Cat, [string]$Name, [string]$Value, [string]$Status)
-        $class = switch ($Status) { "ok" { "good" }; "warn" { "warn" }; "fail" { "bad" }; default { "good" } }
-        $icon = switch ($Status) { "ok" { "&#10004;" }; "warn" { "&#9888;" }; "fail" { "&#10008;" }; default { "?" } }
+        $class = switch ($Status) { "OK" { "good" }; "Warn" { "warn" }; "Fail" { "bad" }; default { "good" } }
+        $icon = switch ($Status) { "OK" { "&#10004;" }; "Warn" { "&#9888;" }; "Fail" { "&#10008;" }; default { "?" } }
         return "<tr><td>$(ConvertTo-HtmlSafe $Cat)</td><td>$(ConvertTo-HtmlSafe $Name)</td><td class='status-$class'>$icon $(ConvertTo-HtmlSafe $Value)</td></tr>"
     }
 
-    # Hostname
-    $hostname = $env:COMPUTERNAME
-    $isDefault = $hostname -match '^WIN-|^DESKTOP-|^YOURSERVERNAME'
-    $total++
-    if (-not $isDefault) { $ready++; $rows += Add-ReadinessRow -Cat "Identity" -Name "Hostname" -Value $hostname -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "Identity" -Name "Hostname" -Value "$hostname (default)" -Status "fail" }
+    foreach ($chk in $readinessChecks) {
+        $rows += Add-ReadinessRow -Cat $chk.Category -Name $chk.Name -Value $chk.Value -Status $chk.Status
+    }
 
-    # Domain
-    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    # Get domain info for report title (from checks)
+    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Getting hostname"
     $cs = if ($csResult.TimedOut) { $null } else { $csResult.Result }
-    $total++
-    if ($cs -and $cs.PartOfDomain) { $ready++; $rows += Add-ReadinessRow -Cat "Identity" -Name "Domain" -Value $cs.Domain -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "Identity" -Name "Domain" -Value "WORKGROUP" -Status "warn" }
-
-    # Site Number
-    $total++
-    $siteNum = Get-SiteNumberFromHostname
-    if ($siteNum) { $ready++; $rows += Add-ReadinessRow -Cat "Identity" -Name "Site Number" -Value $siteNum -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "Identity" -Name "Site Number" -Value "Not detected" -Status "warn" }
-
-    # RDP
-    $total++
-    $rdp = Get-RDPState
-    if ($rdp -eq "Enabled") { $ready++; $rows += Add-ReadinessRow -Cat "Remote Access" -Name "RDP" -Value "Enabled" -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "Remote Access" -Name "RDP" -Value "Disabled" -Status "warn" }
-
-    # WinRM
-    $total++
-    $winrm = Get-WinRMState
-    if ($winrm -eq "Enabled") { $ready++; $rows += Add-ReadinessRow -Cat "Remote Access" -Name "WinRM" -Value "Enabled" -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "Remote Access" -Name "WinRM" -Value $winrm -Status "warn" }
-
-    # Agent (only if configured)
-    if (Test-AgentInstallerConfigured) {
-        $total++
-        $agentCheck = Test-AgentInstalled
-        if ($agentCheck.Installed) {
-            $ready++
-            $kVal = if ($agentCheck.Status -eq "Running") { "Running" } else { "$($agentCheck.Status)" }
-            $rows += Add-ReadinessRow -Cat "Software" -Name "$($script:AgentInstaller.ToolName) Agent" -Value $kVal -Status "ok"
-        } else { $rows += Add-ReadinessRow -Cat "Software" -Name "$($script:AgentInstaller.ToolName) Agent" -Value "Not Installed" -Status "fail" }
-    }
-
-    # Hyper-V
-    $total++
-    if (Test-HyperVInstalled) { $ready++; $rows += Add-ReadinessRow -Cat "Roles" -Name "Hyper-V" -Value "Installed" -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "Roles" -Name "Hyper-V" -Value "Not Installed" -Status "warn" }
-
-    # Server-only roles
-    if (Test-WindowsServer) {
-        $total++
-        if (Test-MPIOInstalled) { $ready++; $rows += Add-ReadinessRow -Cat "Roles" -Name "MPIO" -Value "Installed" -Status "ok" }
-        else { $rows += Add-ReadinessRow -Cat "Roles" -Name "MPIO" -Value "Not Installed" -Status "warn" }
-
-        $total++
-        if (Test-FailoverClusteringInstalled) { $ready++; $rows += Add-ReadinessRow -Cat "Roles" -Name "Failover Clustering" -Value "Installed" -Status "ok" }
-        else { $rows += Add-ReadinessRow -Cat "Roles" -Name "Failover Clustering" -Value "Not Installed" -Status "warn" }
-    }
-
-    # Firewall
-    $total++
-    $fw = Get-FirewallState
-    if ($fw.Domain -eq "Enabled" -and $fw.Private -eq "Enabled" -and $fw.Public -eq "Enabled") {
-        $ready++; $rows += Add-ReadinessRow -Cat "Network" -Name "Firewall" -Value "All profiles enabled" -Status "ok"
-    } else {
-        $disabled = @()
-        if ($fw.Domain -ne "Enabled") { $disabled += "Domain" }
-        if ($fw.Private -ne "Enabled") { $disabled += "Private" }
-        if ($fw.Public -ne "Enabled") { $disabled += "Public" }
-        $rows += Add-ReadinessRow -Cat "Network" -Name "Firewall" -Value "Disabled: $($disabled -join ', ')" -Status "warn"
-    }
-
-    # Network
-    $total++
-    $nics = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })
-    if ($nics.Count -gt 0) { $ready++; $rows += Add-ReadinessRow -Cat "Network" -Name "Adapters" -Value "$($nics.Count) up" -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "Network" -Name "Adapters" -Value "None up" -Status "fail" }
-
-    # Power
-    $total++
-    $power = Get-CurrentPowerPlan
-    if ($power.Name -eq "High performance") { $ready++; $rows += Add-ReadinessRow -Cat "System" -Name "Power Plan" -Value "High Performance" -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "System" -Name "Power Plan" -Value $power.Name -Status "warn" }
-
-    # Reboot
-    $total++
-    if (Test-RebootPending) { $rows += Add-ReadinessRow -Cat "System" -Name "Reboot Pending" -Value "YES" -Status "fail" }
-    else { $ready++; $rows += Add-ReadinessRow -Cat "System" -Name "Reboot Pending" -Value "No" -Status "ok" }
-
-    # License
-    $total++
-    $lic = Test-WindowsActivated
-    if ($lic) { $ready++; $rows += Add-ReadinessRow -Cat "System" -Name "Windows License" -Value "Activated" -Status "ok" }
-    else { $rows += Add-ReadinessRow -Cat "System" -Name "Windows License" -Value "Not Activated" -Status "warn" }
-
-    # C: Drive Space
-    $total++
-    try {
-        $cVol = Get-Volume -DriveLetter C -ErrorAction Stop
-        if ($null -ne $cVol -and $cVol.Size -gt 0) {
-            $freeGB = [math]::Round($cVol.SizeRemaining / 1GB, 1)
-            $totalGB = [math]::Round($cVol.Size / 1GB, 1)
-            $usedPct = [math]::Round((($cVol.Size - $cVol.SizeRemaining) / $cVol.Size) * 100)
-            if ($freeGB -lt 5) {
-                $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "${freeGB}GB free of ${totalGB}GB ($usedPct% used)" -Status "fail"
-            } elseif ($freeGB -lt 20) {
-                $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "${freeGB}GB free of ${totalGB}GB ($usedPct% used)" -Status "warn"
-            } else {
-                $ready++; $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "${freeGB}GB free of ${totalGB}GB" -Status "ok"
-            }
-        } else {
-            $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "Unable to read" -Status "warn"
-        }
-    } catch {
-        $rows += Add-ReadinessRow -Cat "Storage" -Name "C: Drive Space" -Value "Check failed" -Status "warn"
-    }
-
-    # DNS Resolution
-    $total++
-    try {
-        $dnsResult = Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
-        if ($dnsResult) {
-            $ready++; $rows += Add-ReadinessRow -Cat "Network" -Name "DNS Resolution" -Value "Working" -Status "ok"
-        } else {
-            $rows += Add-ReadinessRow -Cat "Network" -Name "DNS Resolution" -Value "No response" -Status "warn"
-        }
-    } catch {
-        $rows += Add-ReadinessRow -Cat "Network" -Name "DNS Resolution" -Value "Failed" -Status "fail"
-    }
-
-    # Time Sync
-    $total++
-    try {
-        $w32tmOut = w32tm /query /status 2>&1
-        $tsSource = "Unknown"
-        foreach ($tsLine in $w32tmOut) {
-            $tsText = $tsLine.ToString()
-            if ($tsText -match 'Source:\s*(.+)') { $regexMatches = $matches; $tsSource = $regexMatches[1].Trim() }
-        }
-        if ($tsSource -match 'Free-Running|Local CMOS') {
-            $rows += Add-ReadinessRow -Cat "System" -Name "Time Sync" -Value "No external source ($tsSource)" -Status "warn"
-        } else {
-            $ready++; $rows += Add-ReadinessRow -Cat "System" -Name "Time Sync" -Value "Source: $tsSource" -Status "ok"
-        }
-    } catch {
-        $rows += Add-ReadinessRow -Cat "System" -Name "Time Sync" -Value "Unable to check" -Status "warn"
-    }
-
-    # Windows Defender
-    $total++
-    try {
-        $mpStat = Get-MpComputerStatus -ErrorAction Stop
-        if ($mpStat.RealTimeProtectionEnabled) {
-            $ready++; $rows += Add-ReadinessRow -Cat "Security" -Name "Defender Real-Time" -Value "Enabled" -Status "ok"
-        } else {
-            $rows += Add-ReadinessRow -Cat "Security" -Name "Defender Real-Time" -Value "DISABLED" -Status "fail"
-        }
-    } catch {
-        $rows += Add-ReadinessRow -Cat "Security" -Name "Defender Real-Time" -Value "Unavailable" -Status "warn"
-    }
 
     $pct = if ($total -gt 0) { [math]::Round(($ready / $total) * 100) } else { 0 }
     $overallStatus = if ($pct -ge 80) { "good" } elseif ($pct -ge 50) { "warn" } else { "bad" }

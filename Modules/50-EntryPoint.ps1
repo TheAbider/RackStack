@@ -293,6 +293,95 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'Compliance' {
+            Write-OutputColor "  Running compliance check..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            # Health check
+            Write-OutputColor "  [1/3] System health check..." -color "Info"
+            $healthReport = Show-SystemHealthCheck
+
+            # Readiness checks
+            Write-OutputColor "  [2/3] Readiness checks..." -color "Info"
+            $readinessChecks = Get-ReadinessChecks
+            $readyCount = @($readinessChecks | Where-Object { $_.Status -eq 'OK' }).Count
+            $totalChecks = $readinessChecks.Count
+            $readinessScore = if ($totalChecks -gt 0) { [math]::Round(($readyCount / $totalChecks) * 100) } else { 0 }
+
+            # Drift (optional, only if baseline provided)
+            $driftResults = $null
+            $driftCount = 0
+            if ($script:CLIConfig) {
+                Write-OutputColor "  [3/3] Drift check against: $($script:CLIConfig)" -color "Info"
+                $driftResults = Compare-ConfigurationDrift -ProfilePath $script:CLIConfig
+                if ($null -eq $driftResults) {
+                    Write-OutputColor "  Warning: Could not load baseline, skipping drift check." -color "Warning"
+                } else {
+                    $driftCount = @($driftResults.Keys | Where-Object { -not $driftResults[$_].Match }).Count
+                }
+            } else {
+                Write-OutputColor "  [3/3] Drift check skipped (no -Config baseline)" -color "Info"
+            }
+
+            # Calculate overall compliance score
+            $healthIssues = if ($healthReport -and $healthReport.Issues) { $healthReport.Issues } else { 0 }
+            $healthStatus = if ($healthReport -and $healthReport.Health) { $healthReport.Health } else { "Unknown" }
+
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ── Compliance Summary ──" -color "Info"
+            Write-OutputColor "  Health:     $healthStatus ($healthIssues issue(s))" -color $(if ($healthStatus -eq 'OK') { 'Success' } elseif ($healthStatus -eq 'Warning') { 'Warning' } else { 'Error' })
+            Write-OutputColor "  Readiness:  $readinessScore% ($readyCount/$totalChecks checks passing)" -color $(if ($readinessScore -ge 80) { 'Success' } elseif ($readinessScore -ge 50) { 'Warning' } else { 'Error' })
+            if ($null -ne $driftResults) {
+                Write-OutputColor "  Drift:      $driftCount setting(s) drifted" -color $(if ($driftCount -eq 0) { 'Success' } else { 'Warning' })
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $readinessItems = @()
+                foreach ($chk in $readinessChecks) {
+                    $readinessItems += @{
+                        Category = $chk.Category
+                        Name     = $chk.Name
+                        Value    = $chk.Value
+                        Status   = $chk.Status
+                    }
+                }
+
+                $jsonResult = @{
+                    Tool             = $script:ToolFullName
+                    Version          = $script:ScriptVersion
+                    Action           = 'Compliance'
+                    Hostname         = $env:COMPUTERNAME
+                    Timestamp        = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Health           = $healthReport
+                    Readiness        = @{
+                        Score  = $readinessScore
+                        Passed = $readyCount
+                        Total  = $totalChecks
+                        Checks = $readinessItems
+                    }
+                }
+
+                if ($null -ne $driftResults) {
+                    $driftItems = @()
+                    foreach ($key in $driftResults.Keys) {
+                        $item = $driftResults[$key]
+                        $driftItems += @{
+                            Setting  = $key
+                            Expected = $item.Expected
+                            Current  = $item.Current
+                            Match    = $item.Match
+                        }
+                    }
+                    $jsonResult.Drift = @{
+                        Baseline   = $script:CLIConfig
+                        DriftCount = $driftCount
+                        Checks     = $driftItems
+                    }
+                }
+
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         'Snapshot' {
             Write-OutputColor "  Saving performance snapshot..." -color "Info"
             $snapshotPath = Save-PerformanceSnapshot

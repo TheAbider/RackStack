@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.29.0
+
+- **New Feature:** Compliance Report CLI action — `RackStack.exe -Action Compliance -OutputFormat JSON` combines health check, readiness assessment, and optional drift detection into a single unified compliance report. With `-Config <baseline.json>`, also compares current state against a saved baseline. Returns readiness score (percentage), per-check status, health summary, and drift details in structured JSON for fleet compliance monitoring (50-EntryPoint, 54-HTMLReports).
+- **Refactor:** Extracted readiness check logic into reusable `Get-ReadinessChecks` function — shared by both the HTML readiness report and the new Compliance CLI action, eliminating code duplication (54-HTMLReports).
+- 65 modules, 2705 tests
+
 ## v1.28.0
 
 - **New Feature:** Performance Snapshot CLI action — `RackStack.exe -Action Snapshot -OutputFormat JSON` captures a point-in-time performance snapshot (CPU load, memory usage, disk space per volume, network adapter bytes) and saves it to the metrics directory. Enables scheduled trend collection via Windows Scheduled Tasks for use with HTML trend reports. Full JSON output support for piping to monitoring systems (50-EntryPoint, 54-HTMLReports).
