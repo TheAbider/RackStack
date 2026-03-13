@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.29.0
+    Automated Test Runner for RackStack v1.29.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9706,7 +9706,7 @@ try {
     Write-TestResult "45-ConfigExport: inventory has Firewall" ($mod45 -match '\$inventory\.Firewall')
     Write-TestResult "45-ConfigExport: returns inventory" ($mod45 -match 'return\s+\$inventory')
 
-    # DriftCheck CLI action tests (v1.29.0)
+    # DriftCheck CLI action tests (v1.29.1)
     Write-TestResult "Header: DriftCheck in ValidateSet" ($headerContent -match "ValidateSet.*DriftCheck")
     Write-TestResult "50-EntryPoint: DriftCheck case exists" ($mod50 -match "'DriftCheck'\s*\{")
     Write-TestResult "50-EntryPoint: DriftCheck compares against config" ($mod50 -match "'DriftCheck'[\s\S]{0,500}Compare-ConfigurationDrift")
@@ -9717,7 +9717,7 @@ try {
     Write-TestResult "50-EntryPoint: DriftCheck JSON output" ($mod50 -match "'DriftCheck'[\s\S]{0,3000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: DriftCheck Action field" ($mod50 -match "Action\s*=\s*'DriftCheck'")
 
-    # Snapshot CLI action tests (v1.29.0)
+    # Snapshot CLI action tests (v1.29.1)
     Write-TestResult "Header: Snapshot in ValidateSet" ($headerContent -match "ValidateSet.*Snapshot")
     Write-TestResult "50-EntryPoint: Snapshot case exists" ($mod50 -match "'Snapshot'\s*\{")
     Write-TestResult "50-EntryPoint: Snapshot calls Save-PerformanceSnapshot" ($mod50 -match "'Snapshot'[\s\S]{0,500}Save-PerformanceSnapshot")
@@ -9725,7 +9725,7 @@ try {
     Write-TestResult "50-EntryPoint: Snapshot JSON has SavedTo field" ($mod50 -match "'Snapshot'[\s\S]{0,1000}SavedTo")
     Write-TestResult "50-EntryPoint: Snapshot JSON output" ($mod50 -match "'Snapshot'[\s\S]{0,1500}ConvertTo-Json")
 
-    # Compliance CLI action tests (v1.29.0)
+    # Compliance CLI action tests (v1.29.1)
     Write-TestResult "Header: Compliance in ValidateSet" ($headerContent -match "ValidateSet.*Compliance")
     Write-TestResult "50-EntryPoint: Compliance case exists" ($mod50 -match "'Compliance'\s*\{")
     Write-TestResult "50-EntryPoint: Compliance runs health check" ($mod50 -match "'Compliance'[\s\S]{0,500}Show-SystemHealthCheck")
@@ -9735,7 +9735,7 @@ try {
     Write-TestResult "50-EntryPoint: Compliance JSON output" ($mod50 -match "'Compliance'[\s\S]{0,4000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: Compliance Action field" ($mod50 -match "Action\s*=\s*'Compliance'")
 
-    # Get-ReadinessChecks function tests (v1.29.0)
+    # Get-ReadinessChecks function tests (v1.29.1)
     $mod54 = Get-Content -LiteralPath (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw -ErrorAction Stop
     Write-TestResult "54-HTMLReports: Get-ReadinessChecks function exists" ($mod54 -match "function Get-ReadinessChecks")
     Write-TestResult "54-HTMLReports: Get-ReadinessChecks returns array" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,500}checks\.Add")

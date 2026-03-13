@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.29.1
+
+- **Improvement:** README updated with all 9 CLI actions — DriftCheck, Snapshot, and Compliance added to the actions reference list.
+- 65 modules, 2705 tests
+
 ## v1.29.0
 
 - **New Feature:** Compliance Report CLI action — `RackStack.exe -Action Compliance -OutputFormat JSON` combines health check, readiness assessment, and optional drift detection into a single unified compliance report. With `-Config <baseline.json>`, also compares current state against a saved baseline. Returns readiness score (percentage), per-check status, health summary, and drift details in structured JSON for fleet compliance monitoring (50-EntryPoint, 54-HTMLReports).
