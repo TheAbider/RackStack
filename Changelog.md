@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.38.0
+
+- **Enhancement:** Export CLI action expanded to 11 sections (was 8). Now also captures Services (key service status from configurable monitored list), Events (critical/error event log summary from last 24 hours), and Network (adapter configuration with IPv4, DNS, gateway, VLAN, NIC errors).
+- **New Feature:** Export section filtering via `-Config` — `RackStack.exe -Action Export -Config "Health,Hardening,Network" -OutputFormat JSON` runs only the specified sections. Comma-separated section names, validated against the full list of 11. Enables fast partial exports when full 11-section scans are unnecessary. Default (no `-Config`) runs all 11 sections.
+- 65 modules, 2962 tests
+
 ## v1.37.0
 
 - **New Feature:** ServiceAudit CLI action — `RackStack.exe -Action ServiceAudit -OutputFormat JSON` audits key Windows services against a configurable monitored service list (from defaults.json or built-in fallback). Reports status, startup type, and flags misconfigured services (Automatic but Stopped). Exits with code 1 when any automatic service is not running, making it suitable for monitoring and alerting pipelines (50-EntryPoint).

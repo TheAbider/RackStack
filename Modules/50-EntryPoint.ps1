@@ -638,138 +638,302 @@ function Invoke-CLIAction {
             }
         }
         'Export' {
-            Write-OutputColor "  Running comprehensive server export..." -color "Info"
+            # All valid section names (11 sections)
+            $exportAllSections = @('Health', 'Inventory', 'Hardening', 'Snapshot', 'Certificates', 'ListeningPorts', 'Software', 'Uptime', 'Services', 'Events', 'Network')
+
+            # Parse -Config for section filter (comma-separated, case-insensitive)
+            $exportSections = $exportAllSections
+            if ($script:CLIConfig) {
+                $requested = @($script:CLIConfig -split ',' | ForEach-Object { $_.Trim() })
+                $invalid = @($requested | Where-Object { $_ -notin $exportAllSections })
+                if ($invalid.Count -gt 0) {
+                    Write-OutputColor "  ERROR: Unknown Export section(s): $($invalid -join ', ')" -color "Error"
+                    Write-OutputColor "  Valid sections: $($exportAllSections -join ', ')" -color "Info"
+                    [Environment]::Exit(1)
+                }
+                $exportSections = $requested
+            }
+            $totalSteps = $exportSections.Count
+            $stepNum = 0
+
+            Write-OutputColor "  Running server export ($totalSteps section$(if ($totalSteps -ne 1) { 's' }))..." -color "Info"
             Write-OutputColor "" -color "Info"
 
-            Write-OutputColor "  [1/8] Collecting system health..." -color "Info"
-            $healthReport = Show-SystemHealthCheck
-
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [2/8] Collecting server inventory..." -color "Info"
-            $inventoryReport = Get-ServerInventory
-
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [3/8] Running security hardening audit..." -color "Info"
-            $hardeningChecks = Get-SecurityHardeningChecks
-            $hardenPassCount = @($hardeningChecks | Where-Object { $_.Status -eq 'Pass' }).Count
-            $hardenTotalCount = @($hardeningChecks).Count
-            $hardenScore = if ($hardenTotalCount -gt 0) { [math]::Round(($hardenPassCount / $hardenTotalCount) * 100) } else { 0 }
-
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [4/8] Capturing performance snapshot..." -color "Info"
-            $snapshotPath = Save-PerformanceSnapshot
+            $healthReport = $null
+            $inventoryReport = $null
+            $hardeningChecks = $null
+            $hardenScore = 0
+            $hardenPassCount = 0
+            $hardenTotalCount = 0
             $snapshotData = $null
-            if ($null -ne $snapshotPath -and (Test-Path -LiteralPath $snapshotPath)) {
-                try {
-                    $snapshotData = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
-                } catch {
-                    Write-OutputColor "  Warning: Could not read snapshot file." -color "Warning"
-                }
-            }
-
-            # Certificate expiry audit
-            Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [5/8] Auditing certificates..." -color "Info"
-            $certStores = @(
-                @{ Name = "Personal (My)";    Path = "Cert:\LocalMachine\My" }
-                @{ Name = "Trusted Root CA";  Path = "Cert:\LocalMachine\Root" }
-                @{ Name = "Intermediate CA";  Path = "Cert:\LocalMachine\CA" }
-                @{ Name = "Web Hosting";      Path = "Cert:\LocalMachine\WebHosting" }
-                @{ Name = "Remote Desktop";   Path = "Cert:\LocalMachine\Remote Desktop" }
-            )
-            $exportCertList = [System.Collections.Generic.List[object]]::new()
-            $certNow = Get-Date
-            foreach ($store in $certStores) {
-                try {
-                    $certs = @(Get-ChildItem -Path $store.Path -ErrorAction Stop | Where-Object { $null -ne $_.NotAfter })
-                    foreach ($cert in $certs) {
-                        $daysLeft = [math]::Round(($cert.NotAfter - $certNow).TotalDays, 0)
-                        $subject = if ($cert.Subject) { $cert.Subject } else { "(no subject)" }
-                        if ($subject.Length -gt 60) { $subject = $subject.Substring(0, 57) + "..." }
-                        $certStatus = if ($daysLeft -lt 0) { "Expired" }
-                                      elseif ($daysLeft -le 7) { "Critical" }
-                                      elseif ($daysLeft -le 30) { "Warning" }
-                                      elseif ($daysLeft -le 90) { "Expiring" }
-                                      else { "Valid" }
-                        $exportCertList.Add(@{ Store = $store.Name; Subject = $subject; Expires = $cert.NotAfter.ToString("yyyy-MM-dd"); DaysLeft = $daysLeft; Status = $certStatus })
-                    }
-                } catch { }
-            }
-            $exportCerts = @($exportCertList)
-            $certExpired = @($exportCerts | Where-Object { $_.Status -eq "Expired" }).Count
-            $certCritical = @($exportCerts | Where-Object { $_.Status -eq "Critical" }).Count
-
-            # Listening ports
-            Write-OutputColor "  [6/8] Scanning listening ports..." -color "Info"
-            $exportPortList = [System.Collections.Generic.List[object]]::new()
-            try {
-                $exportListeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Sort-Object LocalPort)
-                $exportSeenPorts = @{}
-                foreach ($conn in $exportListeners) {
-                    $key = "$($conn.LocalAddress):$($conn.LocalPort)"
-                    if ($exportSeenPorts.ContainsKey($key)) { continue }
-                    $exportSeenPorts[$key] = $true
-                    $pName = try { (Get-Process -Id $conn.OwningProcess -ErrorAction Stop).ProcessName } catch { "PID $($conn.OwningProcess)" }
-                    $svc = switch ($conn.LocalPort) { 22 { "SSH" } 53 { "DNS" } 80 { "HTTP" } 135 { "RPC" } 139 { "NetBIOS" } 389 { "LDAP" } 443 { "HTTPS" } 445 { "SMB" } 636 { "LDAPS" } 1433 { "MSSQL" } 3260 { "iSCSI" } 3389 { "RDP" } 5985 { "WinRM" } 5986 { "WinRM-S" } default { "" } }
-                    $exportPortList.Add(@{ Port = $conn.LocalPort; Address = $conn.LocalAddress; Process = $pName; Service = $svc })
-                }
-            } catch { }
-            $exportPorts = @($exportPortList)
-
-            # Installed software
-            Write-OutputColor "  [7/8] Scanning installed software..." -color "Info"
-            $exportSWList = [System.Collections.Generic.List[object]]::new()
-            foreach ($regPath in @("HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*")) {
-                try {
-                    $entries = @(Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne "" })
-                    foreach ($entry in $entries) {
-                        $exportSWList.Add(@{
-                            Name      = $entry.DisplayName
-                            Version   = if ($entry.DisplayVersion) { $entry.DisplayVersion } else { "N/A" }
-                            Publisher = if ($entry.Publisher) { $entry.Publisher } else { "Unknown" }
-                        })
-                    }
-                } catch { }
-            }
-            $exportSoftware = @($exportSWList | Sort-Object { $_.Name } -Unique)
-
-            # Uptime and reboot history
-            Write-OutputColor "  [8/8] Checking uptime..." -color "Info"
+            $exportCerts = @()
+            $certExpired = 0
+            $certCritical = 0
+            $exportPorts = @()
+            $exportSoftware = @()
             $exportLastBoot = $null
             $exportUptimeDays = 0
             $exportUptimeDisplay = "Unknown"
             $exportUptimeStatus = "Unknown"
-            try {
-                $exportCim = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } -TimeoutSeconds 10 -Activity "Querying uptime"
-                if (-not $exportCim.TimedOut) {
-                    $exportBoot = $exportCim.Result.LastBootUpTime
-                    $exportUptime = (Get-Date) - $exportBoot
-                    $exportLastBoot = $exportBoot.ToString("yyyy-MM-ddTHH:mm:ss")
-                    $exportUptimeDays = [math]::Round($exportUptime.TotalDays, 2)
-                    $exportUptimeDisplay = ""
-                    if ($exportUptime.Days -gt 0) { $exportUptimeDisplay += "$($exportUptime.Days)d " }
-                    $exportUptimeDisplay += "$($exportUptime.Hours)h $($exportUptime.Minutes)m"
-                    $exportUptimeStatus = if ($exportUptime.Days -ge 60) { "Critical" } elseif ($exportUptime.Days -ge 30) { "Warning" } else { "OK" }
+            $exportReboots = @()
+            $exportSvcItems = @()
+            $exportSvcRunning = 0
+            $exportSvcStopped = 0
+            $exportSvcMisconfigured = 0
+            $exportEvtItems = @()
+            $exportEvtCritical = 0
+            $exportEvtError = 0
+            $exportEvtSources = @()
+            $exportNetItems = @()
+            $exportNetUp = 0
+            $exportNetDown = 0
+            $exportNetNicErrors = 0
+
+            if ($exportSections -contains 'Health') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Collecting system health..." -color "Info"
+                $healthReport = Show-SystemHealthCheck
+                Write-OutputColor "" -color "Info"
+            }
+
+            if ($exportSections -contains 'Inventory') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Collecting server inventory..." -color "Info"
+                $inventoryReport = Get-ServerInventory
+                Write-OutputColor "" -color "Info"
+            }
+
+            if ($exportSections -contains 'Hardening') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Running security hardening audit..." -color "Info"
+                $hardeningChecks = Get-SecurityHardeningChecks
+                $hardenPassCount = @($hardeningChecks | Where-Object { $_.Status -eq 'Pass' }).Count
+                $hardenTotalCount = @($hardeningChecks).Count
+                $hardenScore = if ($hardenTotalCount -gt 0) { [math]::Round(($hardenPassCount / $hardenTotalCount) * 100) } else { 0 }
+                Write-OutputColor "" -color "Info"
+            }
+
+            if ($exportSections -contains 'Snapshot') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Capturing performance snapshot..." -color "Info"
+                $snapshotPath = Save-PerformanceSnapshot
+                if ($null -ne $snapshotPath -and (Test-Path -LiteralPath $snapshotPath)) {
+                    try {
+                        $snapshotData = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
+                    } catch {
+                        Write-OutputColor "  Warning: Could not read snapshot file." -color "Warning"
+                    }
                 }
-            } catch { }
-            $exportRebootList = [System.Collections.Generic.List[object]]::new()
-            try {
-                foreach ($e in @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 1074 } -MaxEvents 10 -ErrorAction Stop)) {
-                    $reason = ($e.Message -split "`n")[0]
-                    if ($null -eq $reason) { $reason = "Planned restart" }
-                    if ($reason.Length -gt 80) { $reason = $reason.Substring(0, 77) + "..." }
-                    $exportRebootList.Add(@{ Time = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Type = "Planned"; Reason = $reason })
+                Write-OutputColor "" -color "Info"
+            }
+
+            if ($exportSections -contains 'Certificates') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Auditing certificates..." -color "Info"
+                $certStores = @(
+                    @{ Name = "Personal (My)";    Path = "Cert:\LocalMachine\My" }
+                    @{ Name = "Trusted Root CA";  Path = "Cert:\LocalMachine\Root" }
+                    @{ Name = "Intermediate CA";  Path = "Cert:\LocalMachine\CA" }
+                    @{ Name = "Web Hosting";      Path = "Cert:\LocalMachine\WebHosting" }
+                    @{ Name = "Remote Desktop";   Path = "Cert:\LocalMachine\Remote Desktop" }
+                )
+                $exportCertList = [System.Collections.Generic.List[object]]::new()
+                $certNow = Get-Date
+                foreach ($store in $certStores) {
+                    try {
+                        $certs = @(Get-ChildItem -Path $store.Path -ErrorAction Stop | Where-Object { $null -ne $_.NotAfter })
+                        foreach ($cert in $certs) {
+                            $daysLeft = [math]::Round(($cert.NotAfter - $certNow).TotalDays, 0)
+                            $subject = if ($cert.Subject) { $cert.Subject } else { "(no subject)" }
+                            if ($subject.Length -gt 60) { $subject = $subject.Substring(0, 57) + "..." }
+                            $certStatus = if ($daysLeft -lt 0) { "Expired" }
+                                          elseif ($daysLeft -le 7) { "Critical" }
+                                          elseif ($daysLeft -le 30) { "Warning" }
+                                          elseif ($daysLeft -le 90) { "Expiring" }
+                                          else { "Valid" }
+                            $exportCertList.Add(@{ Store = $store.Name; Subject = $subject; Expires = $cert.NotAfter.ToString("yyyy-MM-dd"); DaysLeft = $daysLeft; Status = $certStatus })
+                        }
+                    } catch { }
                 }
-            } catch { }
-            try {
-                foreach ($e in @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 6008 } -MaxEvents 5 -ErrorAction Stop)) {
-                    $exportRebootList.Add(@{ Time = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Type = "Unexpected"; Reason = "Unexpected shutdown" })
+                $exportCerts = @($exportCertList)
+                $certExpired = @($exportCerts | Where-Object { $_.Status -eq "Expired" }).Count
+                $certCritical = @($exportCerts | Where-Object { $_.Status -eq "Critical" }).Count
+            }
+
+            if ($exportSections -contains 'ListeningPorts') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Scanning listening ports..." -color "Info"
+                $exportPortList = [System.Collections.Generic.List[object]]::new()
+                try {
+                    $exportListeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Sort-Object LocalPort)
+                    $exportSeenPorts = @{}
+                    foreach ($conn in $exportListeners) {
+                        $key = "$($conn.LocalAddress):$($conn.LocalPort)"
+                        if ($exportSeenPorts.ContainsKey($key)) { continue }
+                        $exportSeenPorts[$key] = $true
+                        $pName = try { (Get-Process -Id $conn.OwningProcess -ErrorAction Stop).ProcessName } catch { "PID $($conn.OwningProcess)" }
+                        $svc = switch ($conn.LocalPort) { 22 { "SSH" } 53 { "DNS" } 80 { "HTTP" } 135 { "RPC" } 139 { "NetBIOS" } 389 { "LDAP" } 443 { "HTTPS" } 445 { "SMB" } 636 { "LDAPS" } 1433 { "MSSQL" } 3260 { "iSCSI" } 3389 { "RDP" } 5985 { "WinRM" } 5986 { "WinRM-S" } default { "" } }
+                        $exportPortList.Add(@{ Port = $conn.LocalPort; Address = $conn.LocalAddress; Process = $pName; Service = $svc })
+                    }
+                } catch { }
+                $exportPorts = @($exportPortList)
+            }
+
+            if ($exportSections -contains 'Software') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Scanning installed software..." -color "Info"
+                $exportSWList = [System.Collections.Generic.List[object]]::new()
+                foreach ($regPath in @("HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*")) {
+                    try {
+                        $entries = @(Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne "" })
+                        foreach ($entry in $entries) {
+                            $exportSWList.Add(@{
+                                Name      = $entry.DisplayName
+                                Version   = if ($entry.DisplayVersion) { $entry.DisplayVersion } else { "N/A" }
+                                Publisher = if ($entry.Publisher) { $entry.Publisher } else { "Unknown" }
+                            })
+                        }
+                    } catch { }
                 }
-            } catch { }
-            $exportReboots = @($exportRebootList | Sort-Object { $_.Time } -Descending)
+                $exportSoftware = @($exportSWList | Sort-Object { $_.Name } -Unique)
+            }
+
+            if ($exportSections -contains 'Uptime') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Checking uptime..." -color "Info"
+                try {
+                    $exportCim = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } -TimeoutSeconds 10 -Activity "Querying uptime"
+                    if (-not $exportCim.TimedOut) {
+                        $exportBoot = $exportCim.Result.LastBootUpTime
+                        $exportUptime = (Get-Date) - $exportBoot
+                        $exportLastBoot = $exportBoot.ToString("yyyy-MM-ddTHH:mm:ss")
+                        $exportUptimeDays = [math]::Round($exportUptime.TotalDays, 2)
+                        $exportUptimeDisplay = ""
+                        if ($exportUptime.Days -gt 0) { $exportUptimeDisplay += "$($exportUptime.Days)d " }
+                        $exportUptimeDisplay += "$($exportUptime.Hours)h $($exportUptime.Minutes)m"
+                        $exportUptimeStatus = if ($exportUptime.Days -ge 60) { "Critical" } elseif ($exportUptime.Days -ge 30) { "Warning" } else { "OK" }
+                    }
+                } catch { }
+                $exportRebootList = [System.Collections.Generic.List[object]]::new()
+                try {
+                    foreach ($e in @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 1074 } -MaxEvents 10 -ErrorAction Stop)) {
+                        $reason = ($e.Message -split "`n")[0]
+                        if ($null -eq $reason) { $reason = "Planned restart" }
+                        if ($reason.Length -gt 80) { $reason = $reason.Substring(0, 77) + "..." }
+                        $exportRebootList.Add(@{ Time = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Type = "Planned"; Reason = $reason })
+                    }
+                } catch { }
+                try {
+                    foreach ($e in @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 6008 } -MaxEvents 5 -ErrorAction Stop)) {
+                        $exportRebootList.Add(@{ Time = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Type = "Unexpected"; Reason = "Unexpected shutdown" })
+                    }
+                } catch { }
+                $exportReboots = @($exportRebootList | Sort-Object { $_.Time } -Descending)
+            }
+
+            if ($exportSections -contains 'Services') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Auditing services..." -color "Info"
+                $exportSvcList = [System.Collections.Generic.List[object]]::new()
+                $svcMonitored = if ($script:Defaults.MonitoredServices) { $script:Defaults.MonitoredServices } else {
+                    @(
+                        @{ Name = "vmms"; DisplayName = "Hyper-V Virtual Machine Management" }
+                        @{ Name = "vmcompute"; DisplayName = "Hyper-V Host Compute Service" }
+                        @{ Name = "ClusSvc"; DisplayName = "Cluster Service" }
+                        @{ Name = "MSiSCSI"; DisplayName = "Microsoft iSCSI Initiator Service" }
+                        @{ Name = "WinRM"; DisplayName = "Windows Remote Management" }
+                        @{ Name = "DNS"; DisplayName = "DNS Client" }
+                        @{ Name = "wuauserv"; DisplayName = "Windows Update" }
+                        @{ Name = "W32Time"; DisplayName = "Windows Time" }
+                        @{ Name = "LanmanServer"; DisplayName = "Server (SMB)" }
+                        @{ Name = "LanmanWorkstation"; DisplayName = "Workstation (SMB Client)" }
+                        @{ Name = "EventLog"; DisplayName = "Windows Event Log" }
+                        @{ Name = "Netlogon"; DisplayName = "Netlogon" }
+                        @{ Name = "NTDS"; DisplayName = "Active Directory Domain Services" }
+                    )
+                }
+                foreach ($svc in $svcMonitored) {
+                    $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
+                    if ($null -eq $service) { continue }
+                    $startTag = switch ($service.StartType) { "Automatic" { "Auto" } "Manual" { "Manual" } "Disabled" { "Disabled" } default { "$($service.StartType)" } }
+                    $dn = if ($service.DisplayName) { $service.DisplayName } elseif ($svc.DisplayName) { $svc.DisplayName } else { $svc.Name }
+                    $svcHealth = "OK"
+                    if ($service.Status -eq "Running") {
+                        $exportSvcRunning++
+                    } else {
+                        $exportSvcStopped++
+                        if ($service.StartType -eq "Automatic") { $exportSvcMisconfigured++; $svcHealth = "FAIL" }
+                        elseif ($service.StartType -eq "Disabled") { $svcHealth = "Disabled" }
+                        else { $svcHealth = "Stopped" }
+                    }
+                    $exportSvcList.Add(@{ Name = $svc.Name; DisplayName = $dn; Status = "$($service.Status)"; StartType = $startTag; Health = $svcHealth })
+                }
+                $exportSvcItems = @($exportSvcList)
+            }
+
+            if ($exportSections -contains 'Events') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Auditing events (last 24h)..." -color "Info"
+                $evtStartTime = (Get-Date).AddHours(-24)
+                $exportEvtList = [System.Collections.Generic.List[object]]::new()
+                $exportEvtSourceList = [System.Collections.Generic.List[object]]::new()
+                foreach ($logName in @('System', 'Application')) {
+                    try {
+                        $critEvts = @(Get-WinEvent -FilterHashtable @{ LogName = $logName; Level = 1; StartTime = $evtStartTime } -MaxEvents 25 -ErrorAction SilentlyContinue)
+                        foreach ($evt in $critEvts) {
+                            $msg = if ($evt.Message) { $evt.Message -replace "`r?`n", " " } else { "(no message)" }
+                            if ($msg.Length -gt 120) { $msg = $msg.Substring(0, 117) + "..." }
+                            $exportEvtList.Add(@{ Time = $evt.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Log = $logName; Level = "Critical"; EventId = $evt.Id; Source = $evt.ProviderName; Message = $msg })
+                        }
+                        $exportEvtCritical += $critEvts.Count
+                    } catch { }
+                    try {
+                        $errEvts = @(Get-WinEvent -FilterHashtable @{ LogName = $logName; Level = 2; StartTime = $evtStartTime } -MaxEvents 25 -ErrorAction SilentlyContinue)
+                        foreach ($evt in $errEvts) {
+                            $msg = if ($evt.Message) { $evt.Message -replace "`r?`n", " " } else { "(no message)" }
+                            if ($msg.Length -gt 120) { $msg = $msg.Substring(0, 117) + "..." }
+                            $exportEvtList.Add(@{ Time = $evt.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); Log = $logName; Level = "Error"; EventId = $evt.Id; Source = $evt.ProviderName; Message = $msg })
+                        }
+                        $exportEvtError += $errEvts.Count
+                        $grouped = $errEvts | Group-Object ProviderName | Sort-Object Count -Descending | Select-Object -First 10
+                        foreach ($g in $grouped) {
+                            $exportEvtSourceList.Add(@{ Log = $logName; Source = $g.Name; Count = $g.Count })
+                        }
+                    } catch { }
+                }
+                $exportEvtItems = @($exportEvtList | Sort-Object { $_.Time } -Descending)
+                $exportEvtSources = @($exportEvtSourceList | Sort-Object { $_.Count } -Descending)
+            }
+
+            if ($exportSections -contains 'Network') {
+                $stepNum++
+                Write-OutputColor "  [$stepNum/$totalSteps] Scanning network configuration..." -color "Info"
+                $exportNetList = [System.Collections.Generic.List[object]]::new()
+                try {
+                    $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Sort-Object Name)
+                    foreach ($adapter in $adapters) {
+                        $ipv4Addrs = @()
+                        $gateway = $null
+                        $dnsServers = @()
+                        $vlanId = $null
+                        if ($adapter.Status -eq "Up") {
+                            $exportNetUp++
+                            try { $ipv4Addrs = @(Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" }) } catch { }
+                            try { $gw = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue; if ($null -ne $gw -and $null -ne $gw.IPv4DefaultGateway) { $gateway = $gw.IPv4DefaultGateway.NextHop } } catch { }
+                            try { $dns = Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue; if ($null -ne $dns) { $dnsServers = @($dns.ServerAddresses) } } catch { }
+                        } else { $exportNetDown++ }
+                        try { $vlanId = $adapter.VlanID } catch { }
+                        $inErrors = 0; $outErrors = 0
+                        try { $stats = Get-NetAdapterStatistics -Name $adapter.Name -ErrorAction SilentlyContinue; if ($null -ne $stats) { $inErrors = if ($null -ne $stats.InErrors) { $stats.InErrors } else { 0 }; $outErrors = if ($null -ne $stats.OutErrors) { $stats.OutErrors } else { 0 }; if ($inErrors -gt 0 -or $outErrors -gt 0) { $exportNetNicErrors++ } } } catch { }
+                        $speed = if ($adapter.LinkSpeed) { "$($adapter.LinkSpeed)" } else { "N/A" }
+                        $exportNetList.Add(@{ Name = $adapter.Name; Description = $adapter.InterfaceDescription; Status = "$($adapter.Status)"; MacAddress = $adapter.MacAddress; Speed = $speed; IPv4 = $ipv4Addrs; Gateway = $gateway; DNS = $dnsServers; VlanID = $vlanId; InErrors = $inErrors; OutErrors = $outErrors })
+                    }
+                } catch { }
+                $exportNetItems = @($exportNetList)
+            }
 
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "  Export complete (8 sections)." -color "Success"
+            Write-OutputColor "  Export complete ($totalSteps section$(if ($totalSteps -ne 1) { 's' }))." -color "Success"
 
             if ($script:CLIOutputFormat -eq 'JSON') {
                 $jsonResult = @{
@@ -778,51 +942,34 @@ function Invoke-CLIAction {
                     Action    = 'Export'
                     Hostname  = $env:COMPUTERNAME
                     Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
-                    Health    = $healthReport
-                    Inventory = $inventoryReport
-                    Hardening = @{
+                    Sections  = $exportSections
+                }
+                if ($exportSections -contains 'Health') { $jsonResult.Health = $healthReport }
+                if ($exportSections -contains 'Inventory') { $jsonResult.Inventory = $inventoryReport }
+                if ($exportSections -contains 'Hardening') {
+                    $jsonResult.Hardening = @{
                         Score    = $hardenScore
                         Total    = $hardenTotalCount
                         Passed   = $hardenPassCount
                         Failed   = @($hardeningChecks | Where-Object { $_.Status -eq 'Fail' }).Count
                         Warnings = @($hardeningChecks | Where-Object { $_.Status -eq 'Warn' }).Count
                         Info     = @($hardeningChecks | Where-Object { $_.Status -eq 'Info' }).Count
-                        Checks   = @($hardeningChecks | ForEach-Object {
-                            @{
-                                Category = $_.Category
-                                Name     = $_.Name
-                                Value    = $_.Value
-                                Status   = $_.Status
-                            }
-                        })
-                    }
-                    Snapshot  = $snapshotData
-                    Certificates = @{
-                        Total    = $exportCerts.Count
-                        Expired  = $certExpired
-                        Critical = $certCritical
-                        Items    = $exportCerts
-                    }
-                    ListeningPorts = @{
-                        Count = $exportPorts.Count
-                        Ports = $exportPorts
-                    }
-                    Software = @{
-                        Count = $exportSoftware.Count
-                        Items = $exportSoftware
-                    }
-                    Uptime = @{
-                        LastBoot  = $exportLastBoot
-                        Days      = $exportUptimeDays
-                        Display   = $exportUptimeDisplay
-                        Status    = $exportUptimeStatus
-                        Reboots   = @{
-                            Total      = $exportReboots.Count
-                            Unexpected = @($exportReboots | Where-Object { $_.Type -eq "Unexpected" }).Count
-                            Events     = $exportReboots
-                        }
+                        Checks   = @($hardeningChecks | ForEach-Object { @{ Category = $_.Category; Name = $_.Name; Value = $_.Value; Status = $_.Status } })
                     }
                 }
+                if ($exportSections -contains 'Snapshot') { $jsonResult.Snapshot = $snapshotData }
+                if ($exportSections -contains 'Certificates') { $jsonResult.Certificates = @{ Total = $exportCerts.Count; Expired = $certExpired; Critical = $certCritical; Items = $exportCerts } }
+                if ($exportSections -contains 'ListeningPorts') { $jsonResult.ListeningPorts = @{ Count = $exportPorts.Count; Ports = $exportPorts } }
+                if ($exportSections -contains 'Software') { $jsonResult.Software = @{ Count = $exportSoftware.Count; Items = $exportSoftware } }
+                if ($exportSections -contains 'Uptime') {
+                    $jsonResult.Uptime = @{
+                        LastBoot = $exportLastBoot; Days = $exportUptimeDays; Display = $exportUptimeDisplay; Status = $exportUptimeStatus
+                        Reboots = @{ Total = $exportReboots.Count; Unexpected = @($exportReboots | Where-Object { $_.Type -eq "Unexpected" }).Count; Events = $exportReboots }
+                    }
+                }
+                if ($exportSections -contains 'Services') { $jsonResult.Services = @{ Total = $exportSvcItems.Count; Running = $exportSvcRunning; Stopped = $exportSvcStopped; Misconfigured = $exportSvcMisconfigured; Items = $exportSvcItems } }
+                if ($exportSections -contains 'Events') { $jsonResult.Events = @{ TimeWindowHours = 24; Critical = $exportEvtCritical; Error = $exportEvtError; TopSources = $exportEvtSources; Items = $exportEvtItems } }
+                if ($exportSections -contains 'Network') { $jsonResult.Network = @{ Total = $exportNetItems.Count; Up = $exportNetUp; Down = $exportNetDown; NICErrors = $exportNetNicErrors; Adapters = $exportNetItems } }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
