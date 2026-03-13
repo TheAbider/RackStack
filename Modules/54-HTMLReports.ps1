@@ -2394,4 +2394,155 @@ function Invoke-FleetQuery {
         Matches      = @($matches2)
     }
 }
+
+# Deep-diff two Export JSONs from the same host at different times
+function Invoke-ExportDiff {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$OldPath,
+        [Parameter(Mandatory=$true)]
+        [string]$NewPath
+    )
+
+    try { $oldReport = Get-Content -LiteralPath $OldPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop }
+    catch {
+        Write-OutputColor "  ERROR: Failed to parse old report: $($_.Exception.Message)" -color "Error"
+        return $null
+    }
+    try { $newReport = Get-Content -LiteralPath $NewPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop }
+    catch {
+        Write-OutputColor "  ERROR: Failed to parse new report: $($_.Exception.Message)" -color "Error"
+        return $null
+    }
+
+    $changes = @{}
+    $totalChanges = 0
+    $changedSections = [System.Collections.Generic.List[string]]::new()
+
+    # Helper: diff two arrays by a key field, return Added/Removed/Changed
+    $diffArrays = {
+        param($oldArr, $newArr, [string]$keyField, [string[]]$compareFields)
+        $result = @{ Added = @(); Removed = @(); Changed = @() }
+        $oldItems = @{}; $newItems = @{}
+        foreach ($o in @($oldArr)) { if ($null -ne $o.$keyField) { $oldItems["$($o.$keyField)"] = $o } }
+        foreach ($n in @($newArr)) { if ($null -ne $n.$keyField) { $newItems["$($n.$keyField)"] = $n } }
+        # Added
+        foreach ($key in $newItems.Keys) {
+            if (-not $oldItems.ContainsKey($key)) { $result.Added += @{ $keyField = $key } }
+        }
+        # Removed
+        foreach ($key in $oldItems.Keys) {
+            if (-not $newItems.ContainsKey($key)) { $result.Removed += @{ $keyField = $key } }
+        }
+        # Changed
+        foreach ($key in $newItems.Keys) {
+            if ($oldItems.ContainsKey($key)) {
+                $diffs = @{}
+                foreach ($f in $compareFields) {
+                    $ov = "$($oldItems[$key].$f)"; $nv = "$($newItems[$key].$f)"
+                    if ($ov -ne $nv) { $diffs[$f] = @{ Old = $ov; New = $nv } }
+                }
+                if ($diffs.Count -gt 0) {
+                    $changed = @{ $keyField = $key }
+                    foreach ($dk in $diffs.Keys) { $changed[$dk] = $diffs[$dk] }
+                    $result.Changed += $changed
+                }
+            }
+        }
+        return $result
+    }
+
+    # Software diff
+    $oldSw = if ($null -ne $oldReport.Software) { $oldReport.Software } else { @() }
+    $newSw = if ($null -ne $newReport.Software) { $newReport.Software } else { @() }
+    if (@($oldSw).Count -gt 0 -or @($newSw).Count -gt 0) {
+        $swDiff = & $diffArrays $oldSw $newSw 'Name' @('Version')
+        $swCount = $swDiff.Added.Count + $swDiff.Removed.Count + $swDiff.Changed.Count
+        if ($swCount -gt 0) {
+            $changes['Software'] = $swDiff; $totalChanges += $swCount; $changedSections.Add('Software')
+        }
+    }
+
+    # ListeningPorts diff
+    $oldPorts = if ($null -ne $oldReport.ListeningPorts) { $oldReport.ListeningPorts } else { @() }
+    $newPorts = if ($null -ne $newReport.ListeningPorts) { $newReport.ListeningPorts } else { @() }
+    if (@($oldPorts).Count -gt 0 -or @($newPorts).Count -gt 0) {
+        $portDiff = & $diffArrays $oldPorts $newPorts 'LocalPort' @('Process', 'BindAddress')
+        $portCount = $portDiff.Added.Count + $portDiff.Removed.Count + $portDiff.Changed.Count
+        if ($portCount -gt 0) {
+            $changes['ListeningPorts'] = $portDiff; $totalChanges += $portCount; $changedSections.Add('ListeningPorts')
+        }
+    }
+
+    # Services diff
+    $oldSvc = if ($null -ne $oldReport.Services) { $oldReport.Services } else { @() }
+    $newSvc = if ($null -ne $newReport.Services) { $newReport.Services } else { @() }
+    if (@($oldSvc).Count -gt 0 -or @($newSvc).Count -gt 0) {
+        $svcDiff = & $diffArrays $oldSvc $newSvc 'Name' @('Status', 'StartType', 'Health')
+        $svcCount = $svcDiff.Added.Count + $svcDiff.Removed.Count + $svcDiff.Changed.Count
+        if ($svcCount -gt 0) {
+            $changes['Services'] = $svcDiff; $totalChanges += $svcCount; $changedSections.Add('Services')
+        }
+    }
+
+    # Certificates diff
+    $oldCerts = if ($null -ne $oldReport.Certificates) { $oldReport.Certificates } else { @() }
+    $newCerts = if ($null -ne $newReport.Certificates) { $newReport.Certificates } else { @() }
+    if (@($oldCerts).Count -gt 0 -or @($newCerts).Count -gt 0) {
+        $certDiff = & $diffArrays $oldCerts $newCerts 'Thumbprint' @('Status', 'DaysRemaining')
+        $certCount = $certDiff.Added.Count + $certDiff.Removed.Count + $certDiff.Changed.Count
+        if ($certCount -gt 0) {
+            $changes['Certificates'] = $certDiff; $totalChanges += $certCount; $changedSections.Add('Certificates')
+        }
+    }
+
+    # Network diff
+    $oldNet = if ($null -ne $oldReport.Network) { $oldReport.Network } else { @() }
+    $newNet = if ($null -ne $newReport.Network) { $newReport.Network } else { @() }
+    if (@($oldNet).Count -gt 0 -or @($newNet).Count -gt 0) {
+        $netDiff = & $diffArrays $oldNet $newNet 'Name' @('Status', 'IPv4', 'Gateway', 'DNS', 'Speed')
+        $netCount = $netDiff.Added.Count + $netDiff.Removed.Count + $netDiff.Changed.Count
+        if ($netCount -gt 0) {
+            $changes['Network'] = $netDiff; $totalChanges += $netCount; $changedSections.Add('Network')
+        }
+    }
+
+    # Hardening score diff
+    $oldScore = if ($null -ne $oldReport.Hardening -and $null -ne $oldReport.Hardening.Score) { $oldReport.Hardening.Score } else { $null }
+    $newScore = if ($null -ne $newReport.Hardening -and $null -ne $newReport.Hardening.Score) { $newReport.Hardening.Score } else { $null }
+    if ($null -ne $oldScore -and $null -ne $newScore -and $oldScore -ne $newScore) {
+        $changes['Hardening'] = @{ ScoreOld = $oldScore; ScoreNew = $newScore; ScoreDelta = $newScore - $oldScore }
+        $totalChanges++; $changedSections.Add('Hardening')
+    }
+
+    # Health status diff
+    $oldHealth = if ($null -ne $oldReport.Health -and $null -ne $oldReport.Health.Health) { "$($oldReport.Health.Health)" } else { $null }
+    $newHealth = if ($null -ne $newReport.Health -and $null -ne $newReport.Health.Health) { "$($newReport.Health.Health)" } else { $null }
+    if ($null -ne $oldHealth -and $null -ne $newHealth -and $oldHealth -ne $newHealth) {
+        $changes['Health'] = @{ Old = $oldHealth; New = $newHealth }
+        $totalChanges++; $changedSections.Add('Health')
+    }
+
+    # Uptime diff
+    $oldUptime = if ($null -ne $oldReport.Uptime -and $null -ne $oldReport.Uptime.Days) { $oldReport.Uptime.Days } else { $null }
+    $newUptime = if ($null -ne $newReport.Uptime -and $null -ne $newReport.Uptime.Days) { $newReport.Uptime.Days } else { $null }
+    if ($null -ne $oldUptime -and $null -ne $newUptime) {
+        # Uptime decreased = reboot happened
+        if ($newUptime -lt $oldUptime) {
+            $changes['Uptime'] = @{ OldDays = $oldUptime; NewDays = $newUptime; Rebooted = $true }
+            $totalChanges++; $changedSections.Add('Uptime')
+        }
+    }
+
+    $hostname = if ($newReport.Hostname) { $newReport.Hostname } elseif ($oldReport.Hostname) { $oldReport.Hostname } else { "Unknown" }
+
+    return @{
+        Hostname        = $hostname
+        TimestampOld    = if ($oldReport.Timestamp) { $oldReport.Timestamp } else { $null }
+        TimestampNew    = if ($newReport.Timestamp) { $newReport.Timestamp } else { $null }
+        TotalChanges    = $totalChanges
+        ChangedSections = @($changedSections)
+        Changes         = $changes
+    }
+}
 #endregion

@@ -2117,6 +2117,195 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
+        'Diff' {
+            # -Config: "old.json,new.json"
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config required. Provide two Export JSON paths." -color "Error"
+                Write-OutputColor "  Format: -Config ""old_export.json,new_export.json""" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            $commaIdx = $script:CLIConfig.IndexOf(',')
+            if ($commaIdx -lt 1) {
+                Write-OutputColor "  ERROR: -Config must contain two comma-separated file paths." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $oldPath = $script:CLIConfig.Substring(0, $commaIdx).Trim()
+            $newPath = $script:CLIConfig.Substring($commaIdx + 1).Trim()
+
+            if (-not (Test-Path -LiteralPath $oldPath)) {
+                Write-OutputColor "  ERROR: Old file not found: $oldPath" -color "Error"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $newPath)) {
+                Write-OutputColor "  ERROR: New file not found: $newPath" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  Comparing export profiles..." -color "Info"
+            Write-OutputColor "  Old: $(Split-Path $oldPath -Leaf)" -color "Info"
+            Write-OutputColor "  New: $(Split-Path $newPath -Leaf)" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $diffResult = Invoke-ExportDiff -OldPath $oldPath -NewPath $newPath
+            if ($null -eq $diffResult) { [Environment]::Exit(1) }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  EXPORT DIFF - $($diffResult.Hostname)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if ($diffResult.TimestampOld) {
+                Write-OutputColor "  │$("  Old: $($diffResult.TimestampOld)".PadRight(72))│" -color "Info"
+            }
+            if ($diffResult.TimestampNew) {
+                Write-OutputColor "  │$("  New: $($diffResult.TimestampNew)".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  │$("  Total Changes: $($diffResult.TotalChanges)".PadRight(72))│" -color $(if ($diffResult.TotalChanges -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+            if ($diffResult.TotalChanges -eq 0) {
+                Write-OutputColor "  │$("  No changes detected.".PadRight(72))│" -color "Success"
+            } else {
+                foreach ($section in $diffResult.ChangedSections) {
+                    $chg = $diffResult.Changes[$section]
+                    if ($section -eq 'Hardening') {
+                        $delta = if ($chg.ScoreDelta -gt 0) { "+$($chg.ScoreDelta)" } else { "$($chg.ScoreDelta)" }
+                        Write-OutputColor "  │$("  [$section] Score: $($chg.ScoreOld) -> $($chg.ScoreNew) ($delta)".PadRight(72))│" -color $(if ($chg.ScoreDelta -lt 0) { "Error" } else { "Success" })
+                    } elseif ($section -eq 'Health') {
+                        Write-OutputColor "  │$("  [$section] $($chg.Old) -> $($chg.New)".PadRight(72))│" -color "Warning"
+                    } elseif ($section -eq 'Uptime') {
+                        Write-OutputColor "  │$("  [$section] Rebooted ($($chg.OldDays)d -> $($chg.NewDays)d)".PadRight(72))│" -color "Info"
+                    } else {
+                        $parts = @()
+                        if ($chg.Added.Count -gt 0) { $parts += "+$($chg.Added.Count) added" }
+                        if ($chg.Removed.Count -gt 0) { $parts += "-$($chg.Removed.Count) removed" }
+                        if ($chg.Changed.Count -gt 0) { $parts += "$($chg.Changed.Count) changed" }
+                        Write-OutputColor "  │$("  [$section] $($parts -join ', ')".PadRight(72))│" -color "Warning"
+                    }
+                }
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool            = $script:ToolFullName
+                    Version         = $script:ScriptVersion
+                    Action          = 'Diff'
+                    Timestamp       = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname        = $diffResult.Hostname
+                    TimestampOld    = $diffResult.TimestampOld
+                    TimestampNew    = $diffResult.TimestampNew
+                    TotalChanges    = $diffResult.TotalChanges
+                    ChangedSections = $diffResult.ChangedSections
+                    Changes         = $diffResult.Changes
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($diffResult.TotalChanges -gt 0) { [Environment]::Exit(1) }
+        }
+        'Baseline' {
+            # -Config: directory to save baseline (or directory to check for latest)
+            # -Tier: Save (default), Status
+            $subCommand = if ($script:CLIProfile -and $script:CLIProfile -ne 'Standard') { $script:CLIProfile } else { 'Save' }
+
+            switch ($subCommand) {
+                'Save' {
+                    $baselineDir = if ($script:CLIConfig) { $script:CLIConfig } else { "$script:TempPath\baselines" }
+
+                    Write-OutputColor "  Capturing baseline Export..." -color "Info"
+                    Write-OutputColor "" -color "Info"
+
+                    # Run a full Export to collect all data (reuse Export internals)
+                    $exportAllSections = @('Health', 'Inventory', 'Hardening', 'Snapshot', 'Certificates', 'ListeningPorts', 'Software', 'Uptime', 'Services', 'Events', 'Network')
+                    $exportData = @{
+                        Tool      = $script:ToolFullName
+                        Version   = $script:ScriptVersion
+                        Action    = 'Export'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                        Hostname  = $env:COMPUTERNAME
+                        Sections  = $exportAllSections
+                    }
+
+                    # Collect each section
+                    try { $exportData['Health'] = Show-SystemHealthCheck } catch { }
+                    try { $exportData['Inventory'] = Get-ServerInventory } catch { }
+                    try {
+                        $hardenChecks = Get-SecurityHardeningChecks
+                        $hardenPassCount = @($hardenChecks | Where-Object { $_.Status -eq 'Pass' }).Count
+                        $hardenTotalCount = @($hardenChecks).Count
+                        $hardenScore = if ($hardenTotalCount -gt 0) { [math]::Round(($hardenPassCount / $hardenTotalCount) * 100, 0) } else { 0 }
+                        $exportData['Hardening'] = @{ Score = $hardenScore; Passed = $hardenPassCount; Total = $hardenTotalCount; Checks = $hardenChecks }
+                    } catch { }
+                    try { $exportData['Snapshot'] = Save-PerformanceSnapshot } catch { }
+
+                    $savedPath = Save-ExportBaseline -BaselineDir $baselineDir -ExportData $exportData
+
+                    if ($null -ne $savedPath) {
+                        Write-OutputColor "  Baseline saved: $savedPath" -color "Success"
+                    } else {
+                        Write-OutputColor "  ERROR: Failed to save baseline." -color "Error"
+                        [Environment]::Exit(1)
+                    }
+
+                    if ($script:CLIOutputFormat -eq 'JSON') {
+                        $jsonResult = @{
+                            Tool      = $script:ToolFullName
+                            Version   = $script:ScriptVersion
+                            Action    = 'Baseline'
+                            SubAction = 'Save'
+                            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                            Hostname  = $env:COMPUTERNAME
+                            Path      = $savedPath
+                            Sections  = $exportAllSections
+                        }
+                        Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                    }
+                }
+                'Status' {
+                    $baselineDir = if ($script:CLIConfig) { $script:CLIConfig } else { "$script:TempPath\baselines" }
+
+                    Write-OutputColor "  Checking for baseline in: $baselineDir" -color "Info"
+                    Write-OutputColor "" -color "Info"
+
+                    $latestPath = Get-LatestBaseline -BaselineDir $baselineDir -Hostname $env:COMPUTERNAME
+                    $hasBaseline = $null -ne $latestPath
+
+                    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                    Write-OutputColor "  │$("  BASELINE STATUS".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    if ($hasBaseline) {
+                        $baselineFile = Split-Path $latestPath -Leaf
+                        $baselineDate = (Get-Item $latestPath).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+                        Write-OutputColor "  │$("  Baseline: $baselineFile".PadRight(72))│" -color "Success"
+                        Write-OutputColor "  │$("  Date:     $baselineDate".PadRight(72))│" -color "Info"
+                    } else {
+                        Write-OutputColor "  │$("  No baseline found for $env:COMPUTERNAME".PadRight(72))│" -color "Warning"
+                    }
+                    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+                    if ($script:CLIOutputFormat -eq 'JSON') {
+                        $jsonResult = @{
+                            Tool        = $script:ToolFullName
+                            Version     = $script:ScriptVersion
+                            Action      = 'Baseline'
+                            SubAction   = 'Status'
+                            Timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                            Hostname    = $env:COMPUTERNAME
+                            HasBaseline = $hasBaseline
+                            Path        = $latestPath
+                        }
+                        Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                    }
+                }
+                default {
+                    Write-OutputColor "  ERROR: Unknown Baseline sub-command: $subCommand" -color "Error"
+                    Write-OutputColor "  Valid: Save, Status" -color "Info"
+                    [Environment]::Exit(1)
+                }
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

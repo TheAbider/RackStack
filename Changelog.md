@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.41.0
+
+- **New Feature:** Diff CLI action — `RackStack.exe -Action Diff -Config "old_export.json,new_export.json"` deep-diffs two Export JSON profiles from the same host at different times. Detects changes across 8 sections: Software (added/removed/version changed), ListeningPorts (opened/closed), Services (state/startup changes), Certificates (new expirations), Network (config changes), Hardening (score delta), Health (status changes), and Uptime (reboots). Exits code 1 when changes detected, making it a CI/pipeline drift gate (54-HTMLReports, 50-EntryPoint).
+- **New Feature:** Baseline CLI action — `RackStack.exe -Action Baseline [-Config "C:\baselines"]` captures a full Export profile as a timestamped baseline file. Sub-commands: Save (default, runs all 11 Export sections and saves with hostname + timestamp), Status (shows latest baseline for current host). Baselines pair with Diff for change detection: capture known-good state, then Diff against later exports to detect drift (45-ConfigExport, 50-EntryPoint).
+- 65 modules, 3110 tests
+
 ## v1.40.0
 
 - **New Feature:** Watch CLI action — `RackStack.exe -Action Watch [-Config "thresholds.json"] -OutputFormat JSON` runs configurable threshold checks (CPU, memory, disk, uptime, certificates, services, events) and exits with code 0 (all clear) or code 1 (alert). Works as a monitoring health gate without external JSON parsing. Sensible defaults when no config file is provided (CPU 90%, memory 90%, disk 95%, uptime 60 days, certs 7 days, 0 critical events). Custom thresholds via JSON config for required running services, event window, and all numeric limits (45-ConfigExport, 50-EntryPoint).

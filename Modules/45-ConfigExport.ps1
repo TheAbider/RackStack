@@ -2626,4 +2626,59 @@ function Test-WatchThresholds {
 
     return @($checks)
 }
+
+# Save a baseline Export to a directory with hostname-tagged filename
+function Save-ExportBaseline {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$BaselineDir,
+        [Parameter(Mandatory=$true)]
+        [hashtable]$ExportData
+    )
+
+    if (-not (Test-Path -LiteralPath $BaselineDir -PathType Container)) {
+        try {
+            New-Item -Path $BaselineDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        } catch {
+            Write-OutputColor "  ERROR: Cannot create baseline directory: $BaselineDir" -color "Error"
+            return $null
+        }
+    }
+
+    $hostname = if ($ExportData.Hostname) { $ExportData.Hostname } else { $env:COMPUTERNAME }
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $fileName = "${hostname}_baseline_${timestamp}.json"
+    $filePath = Join-Path $BaselineDir $fileName
+
+    # Add baseline metadata
+    $ExportData['IsBaseline'] = $true
+    $ExportData['BaselineTimestamp'] = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+
+    try {
+        $ExportData | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $filePath -Encoding UTF8 -Force
+        return $filePath
+    } catch {
+        Write-OutputColor "  ERROR: Failed to save baseline: $($_.Exception.Message)" -color "Error"
+        return $null
+    }
+}
+
+# Get the most recent baseline for a hostname from a directory
+function Get-LatestBaseline {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$BaselineDir,
+        [string]$Hostname
+    )
+
+    if (-not (Test-Path -LiteralPath $BaselineDir -PathType Container)) {
+        return $null
+    }
+
+    $pattern = if ($Hostname) { "${Hostname}_baseline_*.json" } else { "*_baseline_*.json" }
+    $files = @(Get-ChildItem -Path $BaselineDir -Filter $pattern -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+
+    if ($files.Count -eq 0) { return $null }
+    return $files[0].FullName
+}
 #endregion
