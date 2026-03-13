@@ -81,6 +81,7 @@ function Enable-RDP {
         Show-RDPSecurityStatus
     }
     catch {
+        Write-RackStackError -Code "RS-2012" -Detail "Remote Desktop configuration failed: $($_.Exception.Message)"
         Write-OutputColor "  Error configuring Remote Desktop: $_" -color "Error"
     }
 }

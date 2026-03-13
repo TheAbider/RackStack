@@ -581,6 +581,7 @@ function Enable-VMReplicationWizard {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-5008" -Detail "VM replication enable failed for '$vmName' to '$replicaServer': $($_.Exception.Message)"
         Write-OutputColor "  Failed to enable replication: $_" -color "Error"
     }
 }

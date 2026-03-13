@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.23.1
+
+- **Improvement:** Error code coverage expanded — 10 new error codes (RS-1009, RS-2012, RS-3007, RS-4007, RS-4008, RS-5008, RS-6006, RS-6007, RS-6008, RS-7006) integrated into 8 additional modules: Windows Updates, RDP, Defender Exclusions, Failover Clustering, Storage Manager, Disk Cleanup, Hyper-V Replica, Scheduled Tasks. Total: 56 error codes across 18 modules (02-Logging).
+- 65 modules, 2601 tests
+
 ## v1.23.0
 
 - **New Feature:** JSON output mode for CLI headless actions — pass `-OutputFormat JSON` to get structured JSON output from HealthCheck and QuickScan actions. Returns system info, CPU, memory, disk, network, services, firewall status, and issue summary in machine-readable format. Cleanup and Debloat actions return status confirmation. Designed for integration with monitoring dashboards, alerting pipelines, and automation orchestration (37-HealthCheck, 50-EntryPoint, Header, 00-Initialization).

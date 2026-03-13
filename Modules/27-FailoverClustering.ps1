@@ -314,6 +314,7 @@ function New-ClusterWizard {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-4007" -Detail "Cluster creation failed for '$clusterName': $($_.Exception.Message)"
         Write-OutputColor "  Failed to create cluster: $_" -color "Error"
     }
 }
@@ -1072,6 +1073,7 @@ function Suspend-ClusterNodeForMaintenance {
         Add-SessionChange -Category "Cluster" -Description "Paused cluster node: $($targetNode.Name) for maintenance"
         Clear-MenuCache
     } catch {
+        Write-RackStackError -Code "RS-4008" -Detail "Node drain/suspend failed for '$($targetNode.Name)': $($_.Exception.Message)"
         Write-OutputColor "  Failed to suspend node: $($_.Exception.Message)" -color "Error"
     }
 }

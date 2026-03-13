@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.23.0
+    Automated Test Runner for RackStack v1.23.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9486,6 +9486,39 @@ try {
     Write-TestResult "39-FileServer: Uses RS-8002 error code" ($mod39 -match 'Write-RackStackError.*RS-8002')
     Write-TestResult "44-VMDeployment: Uses RS-5002 error code" ($mod44 -match 'Write-RackStackError.*RS-5002')
     Write-TestResult "50-EntryPoint: Uses RS-1001 error code" ($mod50 -match 'Write-RackStackError.*RS-1001')
+
+    # v1.23.1: expanded error code integrations (8 more modules)
+    $mod14 = Get-Content -LiteralPath (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw -ErrorAction Stop
+    $mod15 = Get-Content -LiteralPath (Join-Path $modulesPath "15-RDP.ps1") -Raw -ErrorAction Stop
+    $mod17 = Get-Content -LiteralPath (Join-Path $modulesPath "17-DefenderExclusions.ps1") -Raw -ErrorAction Stop
+    $mod20 = Get-Content -LiteralPath (Join-Path $modulesPath "20-DiskCleanup.ps1") -Raw -ErrorAction Stop
+    $mod27 = Get-Content -LiteralPath (Join-Path $modulesPath "27-FailoverClustering.ps1") -Raw -ErrorAction Stop
+    $mod38 = Get-Content -LiteralPath (Join-Path $modulesPath "38-StorageManager.ps1") -Raw -ErrorAction Stop
+    $mod62 = Get-Content -LiteralPath (Join-Path $modulesPath "62-HyperVReplica.ps1") -Raw -ErrorAction Stop
+    $mod63 = Get-Content -LiteralPath (Join-Path $modulesPath "63-ScheduledTasks.ps1") -Raw -ErrorAction Stop
+
+    Write-TestResult "14-WindowsUpdates: Uses RS-1009 error code" ($mod14 -match 'Write-RackStackError.*RS-1009')
+    Write-TestResult "15-RDP: Uses RS-2012 error code" ($mod15 -match 'Write-RackStackError.*RS-2012')
+    Write-TestResult "17-DefenderExclusions: Uses RS-3007 error code" ($mod17 -match 'Write-RackStackError.*RS-3007')
+    Write-TestResult "20-DiskCleanup: Uses RS-6008 error code" ($mod20 -match 'Write-RackStackError.*RS-6008')
+    Write-TestResult "27-FailoverClustering: Uses RS-4007 error code" ($mod27 -match 'Write-RackStackError.*RS-4007')
+    Write-TestResult "27-FailoverClustering: Uses RS-4008 error code" ($mod27 -match 'Write-RackStackError.*RS-4008')
+    Write-TestResult "38-StorageManager: Uses RS-6006 error code" ($mod38 -match 'Write-RackStackError.*RS-6006')
+    Write-TestResult "38-StorageManager: Uses RS-6007 error code" ($mod38 -match 'Write-RackStackError.*RS-6007')
+    Write-TestResult "62-HyperVReplica: Uses RS-5008 error code" ($mod62 -match 'Write-RackStackError.*RS-5008')
+    Write-TestResult "63-ScheduledTasks: Uses RS-7006 error code" ($mod63 -match 'Write-RackStackError.*RS-7006')
+
+    # Error code registry: verify new codes exist
+    Write-TestResult "02-Logging: RS-1009 defined" ($mod02 -match '"RS-1009"')
+    Write-TestResult "02-Logging: RS-2012 defined" ($mod02 -match '"RS-2012"')
+    Write-TestResult "02-Logging: RS-3007 defined" ($mod02 -match '"RS-3007"')
+    Write-TestResult "02-Logging: RS-4007 defined" ($mod02 -match '"RS-4007"')
+    Write-TestResult "02-Logging: RS-4008 defined" ($mod02 -match '"RS-4008"')
+    Write-TestResult "02-Logging: RS-5008 defined" ($mod02 -match '"RS-5008"')
+    Write-TestResult "02-Logging: RS-6006 defined" ($mod02 -match '"RS-6006"')
+    Write-TestResult "02-Logging: RS-6007 defined" ($mod02 -match '"RS-6007"')
+    Write-TestResult "02-Logging: RS-6008 defined" ($mod02 -match '"RS-6008"')
+    Write-TestResult "02-Logging: RS-7006 defined" ($mod02 -match '"RS-7006"')
 
 } catch {
     Write-TestResult "Error code system tests" $false $_.Exception.Message

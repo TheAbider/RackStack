@@ -103,6 +103,7 @@ function Set-DefenderExclusions {
                         }.GetNewClosure() -UndoParams @{ Path = $customPath }
                     }
                     catch {
+                        Write-RackStackError -Code "RS-3007" -Detail "Defender exclusion failed for path '$customPath': $($_.Exception.Message)"
                         Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
                     }
                 } else {

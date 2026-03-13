@@ -671,6 +671,7 @@ function Import-ScheduledTaskXML {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-7006" -Detail "Scheduled task registration failed for '$taskName': $($_.Exception.Message)"
         Write-OutputColor "  Error importing task: $_" -color "Error"
         if ($_.Exception.Message -match 'already exists') {
             Write-OutputColor "  Tip: A task with this name already exists. Use a different name or delete the existing task first." -color "Warning"

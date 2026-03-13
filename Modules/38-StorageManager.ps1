@@ -564,6 +564,7 @@ function Initialize-NewDisk {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-6006" -Detail "Disk $($disk.Number) initialization failed ($partitionStyle): $($_.Exception.Message)"
         Write-OutputColor "  Failed to initialize disk: $_" -color "Error"
     }
 }
@@ -870,6 +871,7 @@ function New-DiskPartition {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-6007" -Detail "Partition creation failed on Disk $($disk.Number): $($_.Exception.Message)"
         Write-OutputColor "  Failed to create partition: $_" -color "Error"
     }
 }

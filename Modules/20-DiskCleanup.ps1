@@ -100,6 +100,7 @@ function Start-DiskCleanup {
                     }
                 }
                 catch {
+                    Write-RackStackError -Code "RS-6008" -Detail "Disk Cleanup tool failed to launch: $($_.Exception.Message)"
                     Write-OutputColor "  Failed to launch Disk Cleanup: $_" -color "Error"
                 }
             }

@@ -249,6 +249,7 @@ $script:ErrorCodes = @{
     "RS-1006" = @{ Message = "Configuration directory inaccessible"; Category = "Core" }
     "RS-1007" = @{ Message = "Invalid CLI parameter"; Category = "Core" }
     "RS-1008" = @{ Message = "Batch config profile parse error"; Category = "Core" }
+    "RS-1009" = @{ Message = "Windows Update operation failed"; Category = "Core" }
 
     # Networking (2000-2999)
     "RS-2001" = @{ Message = "No physical network adapters found"; Category = "Network" }
@@ -262,6 +263,7 @@ $script:ErrorCodes = @{
     "RS-2009" = @{ Message = "Domain join failed"; Category = "Network" }
     "RS-2010" = @{ Message = "NTP synchronization failed"; Category = "Network" }
     "RS-2011" = @{ Message = "Network connectivity test failed"; Category = "Network" }
+    "RS-2012" = @{ Message = "Remote Desktop configuration failed"; Category = "Network" }
 
     # Security (3000-3999)
     "RS-3001" = @{ Message = "Firewall profile configuration failed"; Category = "Security" }
@@ -270,6 +272,7 @@ $script:ErrorCodes = @{
     "RS-3004" = @{ Message = "Defender exclusion path not found"; Category = "Security" }
     "RS-3005" = @{ Message = "BitLocker encryption failed"; Category = "Security" }
     "RS-3006" = @{ Message = "Credential validation failed"; Category = "Security" }
+    "RS-3007" = @{ Message = "Defender exclusion operation failed"; Category = "Security" }
 
     # Roles / Features (4000-4999)
     "RS-4001" = @{ Message = "Hyper-V role not installed"; Category = "Roles" }
@@ -278,6 +281,8 @@ $script:ErrorCodes = @{
     "RS-4004" = @{ Message = "Failover Clustering validation failed"; Category = "Roles" }
     "RS-4005" = @{ Message = "Deduplication not supported on this OS"; Category = "Roles" }
     "RS-4006" = @{ Message = "Storage Replica requires Server 2016+"; Category = "Roles" }
+    "RS-4007" = @{ Message = "Cluster creation failed"; Category = "Roles" }
+    "RS-4008" = @{ Message = "Cluster node operation failed"; Category = "Roles" }
 
     # VM Pipeline (5000-5999)
     "RS-5001" = @{ Message = "VHD download or copy failed"; Category = "VM" }
@@ -287,6 +292,7 @@ $script:ErrorCodes = @{
     "RS-5005" = @{ Message = "VM checkpoint operation failed"; Category = "VM" }
     "RS-5006" = @{ Message = "VM export or import failed"; Category = "VM" }
     "RS-5007" = @{ Message = "Host storage path not found"; Category = "VM" }
+    "RS-5008" = @{ Message = "Hyper-V Replica operation failed"; Category = "VM" }
 
     # Storage / Cluster (6000-6999)
     "RS-6001" = @{ Message = "No iSCSI sessions found"; Category = "Storage" }
@@ -294,6 +300,9 @@ $script:ErrorCodes = @{
     "RS-6003" = @{ Message = "Storage backend initialization failed"; Category = "Storage" }
     "RS-6004" = @{ Message = "Disk initialization failed"; Category = "Storage" }
     "RS-6005" = @{ Message = "Cluster shared volume unavailable"; Category = "Storage" }
+    "RS-6006" = @{ Message = "Disk operation failed"; Category = "Storage" }
+    "RS-6007" = @{ Message = "Partition operation failed"; Category = "Storage" }
+    "RS-6008" = @{ Message = "Disk cleanup operation failed"; Category = "Storage" }
 
     # Configuration / Export (7000-7999)
     "RS-7001" = @{ Message = "Configuration export failed"; Category = "Config" }
@@ -301,6 +310,7 @@ $script:ErrorCodes = @{
     "RS-7003" = @{ Message = "Server role template apply failed"; Category = "Config" }
     "RS-7004" = @{ Message = "Scheduled task creation failed"; Category = "Config" }
     "RS-7005" = @{ Message = "Hyper-V Replica configuration failed"; Category = "Config" }
+    "RS-7006" = @{ Message = "Scheduled task operation failed"; Category = "Config" }
 
     # Agent / External (8000-8999)
     "RS-8001" = @{ Message = "Agent installer not found"; Category = "Agent" }

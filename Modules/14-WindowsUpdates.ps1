@@ -237,6 +237,7 @@ function Install-WindowsUpdates {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-1009" -Detail "Windows Update operation failed: $($_.Exception.Message)"
         Write-OutputColor "  Failed to install updates: $_" -color "Error"
         Write-OutputColor "  Tip: Try running Windows Update manually via Settings." -color "Warning"
     }
