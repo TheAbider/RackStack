@@ -205,6 +205,7 @@ function Invoke-PortTest {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     }
     catch {
+        Write-RackStackError -Code "RS-2013" -Detail "$_"
         Write-OutputColor "  Port test failed: $($_.Exception.Message)" -color "Error"
     }
     Write-PressEnter
@@ -249,6 +250,7 @@ function Invoke-TraceRoute {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     }
     catch {
+        Write-RackStackError -Code "RS-2014" -Detail "$_"
         Write-OutputColor "  Trace route failed: $($_.Exception.Message)" -color "Error"
     }
     Write-PressEnter

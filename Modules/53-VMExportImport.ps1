@@ -210,6 +210,7 @@ function Export-VMWizard {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-5006" -Detail "$_"
         Write-OutputColor "  Error exporting VM: $_" -color "Error"
     }
     finally {
@@ -339,6 +340,7 @@ function Import-VMWizard {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-5006" -Detail "$_"
         Write-OutputColor "  Error importing VM: $_" -color "Error"
     }
 }

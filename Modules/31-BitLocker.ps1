@@ -249,6 +249,7 @@ function Show-BitLockerManagement {
                             }
                         }
                         catch {
+                            Write-RackStackError -Code "RS-3005" -Detail "$_"
                             Write-OutputColor "  Failed: $_" -color "Error"
                         }
                     }
@@ -343,6 +344,7 @@ function Show-BitLockerManagement {
                         }
                     }
                     catch {
+                        Write-RackStackError -Code "RS-3008" -Detail "$_"
                         Write-OutputColor "  Failed: $_" -color "Error"
                     }
                 } else {

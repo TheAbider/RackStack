@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.26.0
+
+- **Improvement:** Error code coverage expanded — 12 new error codes (RS-2013, RS-2014, RS-3008, RS-4009, RS-5009, RS-5010, RS-6009, RS-6010, RS-6011, RS-7007) and 18 integration points across 10 additional modules: BitLocker, Host Storage, VHD Management, Offline VHD, Cluster Dashboard, VM Checkpoints, VM Export/Import, Network Diagnostics, Storage Backends, Active Directory. Total: 68 error codes across 28 modules.
+- 65 modules, 2673 tests
+
 ## v1.25.1
 
 - **Improvement:** README updated with Inventory CLI action — usage example and action reference list now includes `-Action Inventory` for CMDB/asset management workflows.

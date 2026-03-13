@@ -263,6 +263,7 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
         return $true
     }
     catch {
+        Write-RackStackError -Code "RS-5009" -Detail "Mount-VHD: $_"
         Write-OutputColor "  Error during offline customization: $_" -color "Error"
         return $false
     }
@@ -280,6 +281,7 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
                 Start-Sleep -Seconds 3
                 reg unload "HKLM\OFFLINE_SYSTEM" 2>$null
                 if ($LASTEXITCODE -ne 0) {
+                    Write-RackStackError -Code "RS-5010" -Detail "SYSTEM hive unload failed after retry"
                     Write-OutputColor "  ERROR: SYSTEM hive still locked. Run 'reg unload HKLM\OFFLINE_SYSTEM' manually." -color "Error"
                 }
             }

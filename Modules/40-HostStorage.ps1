@@ -357,6 +357,7 @@ function Initialize-HostStorage {
                 Write-OutputColor "  Created: $folder" -color "Success"
             }
             catch {
+                Write-RackStackError -Code "RS-6004" -Detail "$_"
                 Write-OutputColor "  Failed to create: $folder - $_" -color "Error"
             }
         }
@@ -413,6 +414,7 @@ function Initialize-HostStorage {
         }
     }
     catch {
+        Write-RackStackError -Code "RS-6011" -Detail "$_"
         Write-OutputColor "  Failed to set Hyper-V defaults: $_" -color "Error"
         Write-OutputColor "  You can set these manually in Hyper-V Settings." -color "Info"
     }

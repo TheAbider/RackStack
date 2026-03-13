@@ -506,6 +506,7 @@ function Show-ReplicationMonitor {
         Import-Module ActiveDirectory -ErrorAction Stop
     }
     catch {
+        Write-RackStackError -Code "RS-7007" -Detail "$_"
         Write-OutputColor "  Active Directory module not available." -color "Error"
         Write-OutputColor "  This server may not be a Domain Controller." -color "Warning"
         Write-PressEnter
@@ -795,6 +796,7 @@ function Install-NewForest {
         Test-ADDSReplicationHealth -DomainName $domainName
     }
     catch {
+        Write-RackStackError -Code "RS-7002" -Detail "$_"
         Write-OutputColor "  Failed to promote Domain Controller: $_" -color "Error"
         Add-SessionChange -Category "AD DS" -Description "DC promotion failed: New forest $domainName - $_"
         Clear-MenuCache

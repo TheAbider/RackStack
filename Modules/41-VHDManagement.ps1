@@ -439,6 +439,7 @@ function Copy-VHDForVM {
         }
     }
     catch {
+        Write-RackStackError -Code "RS-5009" -Detail "$_"
         Write-OutputColor "  Error during VHD copy/convert: $_" -color "Error"
         return $null
     }

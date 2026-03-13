@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.25.1
+    Automated Test Runner for RackStack v1.26.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9507,6 +9507,47 @@ try {
     Write-TestResult "38-StorageManager: Uses RS-6007 error code" ($mod38 -match 'Write-RackStackError.*RS-6007')
     Write-TestResult "62-HyperVReplica: Uses RS-5008 error code" ($mod62 -match 'Write-RackStackError.*RS-5008')
     Write-TestResult "63-ScheduledTasks: Uses RS-7006 error code" ($mod63 -match 'Write-RackStackError.*RS-7006')
+
+    # v1.26.0: error code registry expansion (12 new codes)
+    Write-TestResult "02-Logging: RS-2013 network port test code" ($mod02 -match '"RS-2013"')
+    Write-TestResult "02-Logging: RS-2014 traceroute code" ($mod02 -match '"RS-2014"')
+    Write-TestResult "02-Logging: RS-3008 BitLocker key backup code" ($mod02 -match '"RS-3008"')
+    Write-TestResult "02-Logging: RS-4009 cluster dashboard code" ($mod02 -match '"RS-4009"')
+    Write-TestResult "02-Logging: RS-5009 VHD mount/create code" ($mod02 -match '"RS-5009"')
+    Write-TestResult "02-Logging: RS-5010 registry hive code" ($mod02 -match '"RS-5010"')
+    Write-TestResult "02-Logging: RS-6009 storage backend detection code" ($mod02 -match '"RS-6009"')
+    Write-TestResult "02-Logging: RS-6010 disk rescan code" ($mod02 -match '"RS-6010"')
+    Write-TestResult "02-Logging: RS-6011 volume format code" ($mod02 -match '"RS-6011"')
+    Write-TestResult "02-Logging: RS-7007 AD prerequisite code" ($mod02 -match '"RS-7007"')
+
+    # v1.26.0: error code integrations (10 more modules)
+    $mod31 = Get-Content -LiteralPath (Join-Path $modulesPath "31-BitLocker.ps1") -Raw -ErrorAction Stop
+    $mod40 = Get-Content -LiteralPath (Join-Path $modulesPath "40-HostStorage.ps1") -Raw -ErrorAction Stop
+    $mod41 = Get-Content -LiteralPath (Join-Path $modulesPath "41-VHDManagement.ps1") -Raw -ErrorAction Stop
+    $mod43 = Get-Content -LiteralPath (Join-Path $modulesPath "43-OfflineVHD.ps1") -Raw -ErrorAction Stop
+    $mod51 = Get-Content -LiteralPath (Join-Path $modulesPath "51-ClusterDashboard.ps1") -Raw -ErrorAction Stop
+    $mod52 = Get-Content -LiteralPath (Join-Path $modulesPath "52-VMCheckpoints.ps1") -Raw -ErrorAction Stop
+    $mod53 = Get-Content -LiteralPath (Join-Path $modulesPath "53-VMExportImport.ps1") -Raw -ErrorAction Stop
+    $mod58 = Get-Content -LiteralPath (Join-Path $modulesPath "58-NetworkDiagnostics.ps1") -Raw -ErrorAction Stop
+    $mod59 = Get-Content -LiteralPath (Join-Path $modulesPath "59-StorageBackends.ps1") -Raw -ErrorAction Stop
+    $mod61 = Get-Content -LiteralPath (Join-Path $modulesPath "61-ActiveDirectory.ps1") -Raw -ErrorAction Stop
+
+    Write-TestResult "31-BitLocker: Uses RS-3005 error code" ($mod31 -match 'Write-RackStackError.*RS-3005')
+    Write-TestResult "31-BitLocker: Uses RS-3008 error code" ($mod31 -match 'Write-RackStackError.*RS-3008')
+    Write-TestResult "40-HostStorage: Uses RS-6004 error code" ($mod40 -match 'Write-RackStackError.*RS-6004')
+    Write-TestResult "40-HostStorage: Uses RS-6011 error code" ($mod40 -match 'Write-RackStackError.*RS-6011')
+    Write-TestResult "41-VHDManagement: Uses RS-5009 error code" ($mod41 -match 'Write-RackStackError.*RS-5009')
+    Write-TestResult "43-OfflineVHD: Uses RS-5009 error code" ($mod43 -match 'Write-RackStackError.*RS-5009')
+    Write-TestResult "43-OfflineVHD: Uses RS-5010 error code" ($mod43 -match 'Write-RackStackError.*RS-5010')
+    Write-TestResult "51-ClusterDashboard: Uses RS-4009 error code" ($mod51 -match 'Write-RackStackError.*RS-4009')
+    Write-TestResult "52-VMCheckpoints: Uses RS-5005 error code" ($mod52 -match 'Write-RackStackError.*RS-5005')
+    Write-TestResult "53-VMExportImport: Uses RS-5006 error code" ($mod53 -match 'Write-RackStackError.*RS-5006')
+    Write-TestResult "58-NetworkDiagnostics: Uses RS-2013 error code" ($mod58 -match 'Write-RackStackError.*RS-2013')
+    Write-TestResult "58-NetworkDiagnostics: Uses RS-2014 error code" ($mod58 -match 'Write-RackStackError.*RS-2014')
+    Write-TestResult "59-StorageBackends: Uses RS-6009 error code" ($mod59 -match 'Write-RackStackError.*RS-6009')
+    Write-TestResult "59-StorageBackends: Uses RS-6010 error code" ($mod59 -match 'Write-RackStackError.*RS-6010')
+    Write-TestResult "61-ActiveDirectory: Uses RS-7002 error code" ($mod61 -match 'Write-RackStackError.*RS-7002')
+    Write-TestResult "61-ActiveDirectory: Uses RS-7007 error code" ($mod61 -match 'Write-RackStackError.*RS-7007')
 
     # Error code registry: verify new codes exist
     Write-TestResult "02-Logging: RS-1009 defined" ($mod02 -match '"RS-1009"')

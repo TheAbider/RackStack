@@ -220,6 +220,7 @@ function New-VMCheckpointWizard {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-5005" -Detail "$_"
         Write-OutputColor "  Error creating checkpoint: $_" -color "Error"
     }
 }
@@ -299,6 +300,7 @@ function Restore-VMCheckpointWizard {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-5005" -Detail "$_"
         Write-OutputColor "  Error restoring checkpoint: $_" -color "Error"
     }
 }

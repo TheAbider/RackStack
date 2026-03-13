@@ -264,6 +264,7 @@ function Invoke-FCScan {
         Write-OutputColor "  Found $($fcDisks.Count) FC disk(s)." -color "Info"
     }
     catch {
+        Write-RackStackError -Code "RS-6010" -Detail "$_"
         Write-OutputColor "  Rescan failed: $_" -color "Error"
     }
 }
@@ -498,6 +499,7 @@ function Enable-S2DOnCluster {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-6009" -Detail "$_"
         Write-OutputColor "  Failed to enable S2D: $_" -color "Error"
     }
 }

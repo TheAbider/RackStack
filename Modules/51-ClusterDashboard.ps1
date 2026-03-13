@@ -199,6 +199,7 @@ function Start-ClusterNodeDrain {
         Clear-MenuCache
     }
     catch {
+        Write-RackStackError -Code "RS-4009" -Detail "$_"
         Write-OutputColor "  Error draining node: $_" -color "Error"
     }
 }
