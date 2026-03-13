@@ -1462,4 +1462,586 @@ function Start-MetricCollection {
     Write-OutputColor "  Collection complete: $collected snapshot(s) saved." -color "Success"
     Add-SessionChange -Category "Metrics" -Description "Collected $collected performance snapshots over $DurationMinutes minutes"
 }
+
+# Fleet Aggregate — reads JSON outputs from previous CLI actions and produces a summary report
+function Invoke-FleetAggregate {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InputPath   # Directory of JSON files or single JSON array file
+    )
+
+    # Load JSON reports
+    $reports = [System.Collections.Generic.List[object]]::new()
+
+    if (Test-Path -LiteralPath $InputPath -PathType Container) {
+        # Directory — read all .json files
+        $jsonFiles = @(Get-ChildItem -LiteralPath $InputPath -Filter "*.json" -File)
+        if ($jsonFiles.Count -eq 0) {
+            Write-OutputColor "  No JSON files found in: $InputPath" -color "Error"
+            return $null
+        }
+        foreach ($file in $jsonFiles) {
+            try {
+                $content = Get-Content -LiteralPath $file.FullName -Raw
+                $parsed = $content | ConvertFrom-Json
+                # Could be a single report or an array
+                if ($parsed -is [System.Array]) {
+                    foreach ($item in $parsed) { $reports.Add($item) }
+                } else {
+                    $reports.Add($parsed)
+                }
+            }
+            catch {
+                Write-OutputColor "  WARNING: Skipping invalid JSON: $($file.Name)" -color "Warning"
+            }
+        }
+    }
+    elseif (Test-Path -LiteralPath $InputPath -PathType Leaf) {
+        # Single file — could be one report or an array
+        try {
+            $content = Get-Content -LiteralPath $InputPath -Raw
+            $parsed = $content | ConvertFrom-Json
+            if ($parsed -is [System.Array]) {
+                foreach ($item in $parsed) { $reports.Add($item) }
+            } else {
+                $reports.Add($parsed)
+            }
+        }
+        catch {
+            Write-OutputColor "  ERROR: Failed to parse JSON: $InputPath" -color "Error"
+            return $null
+        }
+    }
+    else {
+        Write-OutputColor "  ERROR: Path not found: $InputPath" -color "Error"
+        return $null
+    }
+
+    if ($reports.Count -eq 0) {
+        Write-OutputColor "  No valid reports found." -color "Error"
+        return $null
+    }
+
+    # Group by action type
+    $grouped = @{}
+    foreach ($report in $reports) {
+        $action = $null
+        if ($null -ne $report.Action) { $action = [string]$report.Action }
+        if (-not $action) { $action = 'Unknown' }
+        if (-not $grouped.ContainsKey($action)) {
+            $grouped[$action] = [System.Collections.Generic.List[object]]::new()
+        }
+        $grouped[$action].Add($report)
+    }
+
+    # Build aggregation result
+    $result = @{
+        TotalReports = $reports.Count
+        ActionTypes  = @($grouped.Keys | Sort-Object)
+        Hosts        = @($reports | ForEach-Object { $_.Hostname } | Where-Object { $_ } | Select-Object -Unique | Sort-Object)
+        Aggregations = @{}
+    }
+
+    foreach ($action in @($grouped.Keys | Sort-Object)) {
+        $items = $grouped[$action]
+        $agg = @{ Count = $items.Count; Hosts = @($items | ForEach-Object { $_.Hostname } | Where-Object { $_ } | Select-Object -Unique | Sort-Object) }
+
+        switch ($action) {
+            'HealthCheck' {
+                # Count health statuses from Report.OverallHealth or Report.Health
+                $statuses = @{ OK = 0; Warning = 0; Critical = 0; Unknown = 0 }
+                foreach ($r in $items) {
+                    $health = $null
+                    if ($null -ne $r.Report -and $null -ne $r.Report.OverallHealth) { $health = $r.Report.OverallHealth }
+                    elseif ($null -ne $r.Report -and $null -ne $r.Report.Health) { $health = $r.Report.Health }
+                    elseif ($null -ne $r.Health) { $health = $r.Health }
+                    if ($null -ne $health -and $statuses.ContainsKey([string]$health)) {
+                        $statuses[[string]$health]++
+                    } else {
+                        $statuses['Unknown']++
+                    }
+                }
+                $agg.HealthStatuses = $statuses
+            }
+            'Harden' {
+                # Aggregate scores
+                $scores = @($items | ForEach-Object { $_.Score } | Where-Object { $null -ne $_ })
+                if ($scores.Count -gt 0) {
+                    $agg.ScoreMin = ($scores | Measure-Object -Minimum).Minimum
+                    $agg.ScoreMax = ($scores | Measure-Object -Maximum).Maximum
+                    $agg.ScoreAvg = [math]::Round(($scores | Measure-Object -Average).Average, 1)
+                }
+                # Common failures across hosts
+                $failureCounts = @{}
+                foreach ($r in $items) {
+                    if ($null -ne $r.Checks) {
+                        foreach ($chk in @($r.Checks)) {
+                            if ($chk.Status -eq 'Fail') {
+                                $key = "$($chk.Category): $($chk.Name)"
+                                if (-not $failureCounts.ContainsKey($key)) { $failureCounts[$key] = 0 }
+                                $failureCounts[$key]++
+                            }
+                        }
+                    }
+                }
+                $agg.CommonFailures = @($failureCounts.GetEnumerator() | Sort-Object -Property Value -Descending | Select-Object -First 10 | ForEach-Object {
+                    @{ Check = $_.Key; FailCount = $_.Value }
+                })
+            }
+            'Compliance' {
+                # Aggregate readiness scores
+                $scores = @($items | Where-Object { $null -ne $_.Readiness -and $null -ne $_.Readiness.Score } | ForEach-Object { $_.Readiness.Score })
+                if ($scores.Count -gt 0) {
+                    $agg.ReadinessMin = ($scores | Measure-Object -Minimum).Minimum
+                    $agg.ReadinessMax = ($scores | Measure-Object -Maximum).Maximum
+                    $agg.ReadinessAvg = [math]::Round(($scores | Measure-Object -Average).Average, 1)
+                }
+                $driftCounts = @($items | Where-Object { $null -ne $_.Drift } | ForEach-Object { $_.Drift.DriftCount } | Where-Object { $null -ne $_ })
+                if ($driftCounts.Count -gt 0) {
+                    $agg.TotalDriftItems = ($driftCounts | Measure-Object -Sum).Sum
+                    $agg.HostsWithDrift = @($items | Where-Object { $null -ne $_.Drift -and $_.Drift.DriftCount -gt 0 }).Count
+                }
+            }
+            'Inventory' {
+                # OS and domain distribution
+                $osCounts = @{}
+                $domainCounts = @{}
+                $roleCounts = @{}
+                foreach ($r in $items) {
+                    $inv = $r.Inventory
+                    if ($null -eq $inv) { continue }
+                    # OS
+                    $os = if ($null -ne $inv.OS -and $null -ne $inv.OS.Caption) { $inv.OS.Caption } elseif ($null -ne $inv.OperatingSystem) { [string]$inv.OperatingSystem } else { 'Unknown' }
+                    if (-not $osCounts.ContainsKey($os)) { $osCounts[$os] = 0 }
+                    $osCounts[$os]++
+                    # Domain
+                    $dom = if ($null -ne $inv.Domain) { [string]$inv.Domain } else { 'Unknown' }
+                    if (-not $domainCounts.ContainsKey($dom)) { $domainCounts[$dom] = 0 }
+                    $domainCounts[$dom]++
+                    # Roles
+                    $roles = $null
+                    if ($null -ne $inv.Roles) { $roles = @($inv.Roles) }
+                    elseif ($null -ne $inv.InstalledRoles) { $roles = @($inv.InstalledRoles) }
+                    if ($null -ne $roles) {
+                        foreach ($role in $roles) {
+                            $roleName = if ($role -is [string]) { $role } elseif ($null -ne $role.Name) { $role.Name } else { [string]$role }
+                            if (-not $roleCounts.ContainsKey($roleName)) { $roleCounts[$roleName] = 0 }
+                            $roleCounts[$roleName]++
+                        }
+                    }
+                }
+                $agg.OSDistribution = @($osCounts.GetEnumerator() | Sort-Object -Property Value -Descending | ForEach-Object { @{ OS = $_.Key; Count = $_.Value } })
+                $agg.DomainDistribution = @($domainCounts.GetEnumerator() | Sort-Object -Property Value -Descending | ForEach-Object { @{ Domain = $_.Key; Count = $_.Value } })
+                $agg.RoleDistribution = @($roleCounts.GetEnumerator() | Sort-Object -Property Value -Descending | Select-Object -First 15 | ForEach-Object { @{ Role = $_.Key; Count = $_.Value } })
+            }
+            'Snapshot' {
+                # Aggregate CPU, memory, disk averages
+                $cpuValues = [System.Collections.Generic.List[double]]::new()
+                $memValues = [System.Collections.Generic.List[double]]::new()
+                $diskValues = [System.Collections.Generic.List[double]]::new()
+                foreach ($r in $items) {
+                    $snap = $r.Snapshot
+                    if ($null -eq $snap) { $snap = $r }
+                    if ($null -ne $snap.CPU -and $null -ne $snap.CPU.UsagePercent) { $cpuValues.Add([double]$snap.CPU.UsagePercent) }
+                    elseif ($null -ne $snap.CPUPercent) { $cpuValues.Add([double]$snap.CPUPercent) }
+                    if ($null -ne $snap.Memory -and $null -ne $snap.Memory.UsedPercent) { $memValues.Add([double]$snap.Memory.UsedPercent) }
+                    elseif ($null -ne $snap.MemoryPercent) { $memValues.Add([double]$snap.MemoryPercent) }
+                    if ($null -ne $snap.Disk) {
+                        foreach ($d in @($snap.Disk)) {
+                            if ($null -ne $d.UsedPercent) { $diskValues.Add([double]$d.UsedPercent) }
+                        }
+                    }
+                }
+                if ($cpuValues.Count -gt 0) {
+                    $agg.CPU = @{
+                        Avg = [math]::Round(($cpuValues | Measure-Object -Average).Average, 1)
+                        Max = [math]::Round(($cpuValues | Measure-Object -Maximum).Maximum, 1)
+                        Min = [math]::Round(($cpuValues | Measure-Object -Minimum).Minimum, 1)
+                    }
+                }
+                if ($memValues.Count -gt 0) {
+                    $agg.Memory = @{
+                        Avg = [math]::Round(($memValues | Measure-Object -Average).Average, 1)
+                        Max = [math]::Round(($memValues | Measure-Object -Maximum).Maximum, 1)
+                        Min = [math]::Round(($memValues | Measure-Object -Minimum).Minimum, 1)
+                    }
+                }
+                if ($diskValues.Count -gt 0) {
+                    $agg.Disk = @{
+                        Avg = [math]::Round(($diskValues | Measure-Object -Average).Average, 1)
+                        Max = [math]::Round(($diskValues | Measure-Object -Maximum).Maximum, 1)
+                    }
+                }
+            }
+            'Remediate' {
+                # Aggregate fix/skip/fail counts
+                $totalFixed = 0; $totalSkipped = 0; $totalFailed = 0; $totalManual = 0; $rebootCount = 0
+                foreach ($r in $items) {
+                    $sum = $r.Summary
+                    if ($null -eq $sum) { continue }
+                    if ($null -ne $sum.Fixed)   { $totalFixed   += $sum.Fixed }
+                    if ($null -ne $sum.Skipped) { $totalSkipped += $sum.Skipped }
+                    if ($null -ne $sum.Failed)  { $totalFailed  += $sum.Failed }
+                    if ($null -ne $sum.Manual)  { $totalManual  += $sum.Manual }
+                    if ($r.RebootRequired -eq $true) { $rebootCount++ }
+                }
+                $agg.TotalFixed = $totalFixed
+                $agg.TotalSkipped = $totalSkipped
+                $agg.TotalFailed = $totalFailed
+                $agg.TotalManual = $totalManual
+                $agg.HostsNeedingReboot = $rebootCount
+            }
+        }
+
+        $result.Aggregations[$action] = $agg
+    }
+
+    return $result
+}
+
+# Display fleet aggregate report to console
+function Show-FleetAggregateReport {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Result
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ── Fleet Aggregate Report ──" -color "Info"
+    Write-OutputColor "  Total reports:  $($Result.TotalReports)" -color "Info"
+    Write-OutputColor "  Unique hosts:   $($Result.Hosts.Count)" -color "Info"
+    Write-OutputColor "  Action types:   $($Result.ActionTypes -join ', ')" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    foreach ($action in $Result.ActionTypes) {
+        $agg = $Result.Aggregations[$action]
+        Write-OutputColor "  ── $action ($($agg.Count) report(s), $($agg.Hosts.Count) host(s)) ──" -color "Info"
+
+        switch ($action) {
+            'HealthCheck' {
+                $s = $agg.HealthStatuses
+                Write-OutputColor "    OK: $($s.OK)  Warning: $($s.Warning)  Critical: $($s.Critical)  Unknown: $($s.Unknown)" -color $(if ($s.Critical -gt 0) { 'Error' } elseif ($s.Warning -gt 0) { 'Warning' } else { 'Success' })
+            }
+            'Harden' {
+                if ($null -ne $agg.ScoreAvg) {
+                    Write-OutputColor "    Score  — Avg: $($agg.ScoreAvg)%  Min: $($agg.ScoreMin)%  Max: $($agg.ScoreMax)%" -color $(if ($agg.ScoreAvg -ge 70) { 'Success' } elseif ($agg.ScoreAvg -ge 40) { 'Warning' } else { 'Error' })
+                }
+                if ($agg.CommonFailures.Count -gt 0) {
+                    Write-OutputColor "    Top failures:" -color "Warning"
+                    foreach ($f in $agg.CommonFailures) {
+                        Write-OutputColor "      $($f.FailCount)x  $($f.Check)" -color "Warning"
+                    }
+                }
+            }
+            'Compliance' {
+                if ($null -ne $agg.ReadinessAvg) {
+                    Write-OutputColor "    Readiness — Avg: $($agg.ReadinessAvg)%  Min: $($agg.ReadinessMin)%  Max: $($agg.ReadinessMax)%" -color $(if ($agg.ReadinessAvg -ge 80) { 'Success' } elseif ($agg.ReadinessAvg -ge 50) { 'Warning' } else { 'Error' })
+                }
+                if ($null -ne $agg.TotalDriftItems) {
+                    Write-OutputColor "    Drift — $($agg.TotalDriftItems) total item(s) across $($agg.HostsWithDrift) host(s)" -color $(if ($agg.TotalDriftItems -eq 0) { 'Success' } else { 'Warning' })
+                }
+            }
+            'Inventory' {
+                if ($agg.OSDistribution.Count -gt 0) {
+                    Write-OutputColor "    OS distribution:" -color "Info"
+                    foreach ($os in $agg.OSDistribution) { Write-OutputColor "      $($os.Count)x  $($os.OS)" -color "Info" }
+                }
+                if ($agg.DomainDistribution.Count -gt 0) {
+                    Write-OutputColor "    Domains:" -color "Info"
+                    foreach ($dom in $agg.DomainDistribution) { Write-OutputColor "      $($dom.Count)x  $($dom.Domain)" -color "Info" }
+                }
+                if ($agg.RoleDistribution.Count -gt 0) {
+                    Write-OutputColor "    Top roles:" -color "Info"
+                    foreach ($role in $agg.RoleDistribution) { Write-OutputColor "      $($role.Count)x  $($role.Role)" -color "Info" }
+                }
+            }
+            'Snapshot' {
+                if ($null -ne $agg.CPU) {
+                    Write-OutputColor "    CPU    — Avg: $($agg.CPU.Avg)%  Min: $($agg.CPU.Min)%  Max: $($agg.CPU.Max)%" -color $(if ($agg.CPU.Avg -ge 80) { 'Warning' } else { 'Success' })
+                }
+                if ($null -ne $agg.Memory) {
+                    Write-OutputColor "    Memory — Avg: $($agg.Memory.Avg)%  Min: $($agg.Memory.Min)%  Max: $($agg.Memory.Max)%" -color $(if ($agg.Memory.Avg -ge 85) { 'Warning' } else { 'Success' })
+                }
+                if ($null -ne $agg.Disk) {
+                    Write-OutputColor "    Disk   — Avg: $($agg.Disk.Avg)%  Max: $($agg.Disk.Max)%" -color $(if ($agg.Disk.Max -ge 90) { 'Warning' } else { 'Success' })
+                }
+            }
+            'Remediate' {
+                Write-OutputColor "    Fixed: $($agg.TotalFixed)  Skipped: $($agg.TotalSkipped)  Failed: $($agg.TotalFailed)  Manual: $($agg.TotalManual)" -color $(if ($agg.TotalFailed -gt 0) { 'Warning' } else { 'Success' })
+                if ($agg.HostsNeedingReboot -gt 0) {
+                    Write-OutputColor "    $($agg.HostsNeedingReboot) host(s) need reboot" -color "Warning"
+                }
+            }
+            default {
+                Write-OutputColor "    $($agg.Count) report(s) — no specific aggregation for this action type" -color "Info"
+            }
+        }
+        Write-OutputColor "" -color "Info"
+    }
+}
+
+# Fleet Compare — side-by-side comparison of two JSON outputs from previous CLI actions
+function Invoke-FleetCompare {
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePathA,
+
+        [Parameter(Mandatory)]
+        [string]$FilePathB
+    )
+
+    # Load both JSON files
+    $reportA = $null
+    $reportB = $null
+    try {
+        $reportA = Get-Content -LiteralPath $FilePathA -Raw | ConvertFrom-Json
+    }
+    catch {
+        Write-OutputColor "  ERROR: Failed to parse: $(Split-Path $FilePathA -Leaf)" -color "Error"
+        return $null
+    }
+    try {
+        $reportB = Get-Content -LiteralPath $FilePathB -Raw | ConvertFrom-Json
+    }
+    catch {
+        Write-OutputColor "  ERROR: Failed to parse: $(Split-Path $FilePathB -Leaf)" -color "Error"
+        return $null
+    }
+
+    $hostA = if ($null -ne $reportA.Hostname) { [string]$reportA.Hostname } else { Split-Path $FilePathA -Leaf }
+    $hostB = if ($null -ne $reportB.Hostname) { [string]$reportB.Hostname } else { Split-Path $FilePathB -Leaf }
+    $actionA = if ($null -ne $reportA.Action) { [string]$reportA.Action } else { 'Unknown' }
+    $actionB = if ($null -ne $reportB.Action) { [string]$reportB.Action } else { 'Unknown' }
+
+    if ($actionA -ne $actionB) {
+        Write-OutputColor "  WARNING: Action mismatch ($actionA vs $actionB) — using generic comparison" -color "Warning"
+    }
+
+    $diffs = [System.Collections.Generic.List[object]]::new()
+
+    # Helper to add a comparison item
+    $addItem = {
+        param([string]$Property, $ValueA, $ValueB)
+        $strA = if ($null -ne $ValueA) { "$ValueA" } else { "(none)" }
+        $strB = if ($null -ne $ValueB) { "$ValueB" } else { "(none)" }
+        $diffs.Add(@{
+            Property = $Property
+            HostA    = $strA
+            HostB    = $strB
+            Match    = ($strA -eq $strB)
+        })
+    }
+
+    $action = if ($actionA -eq $actionB) { $actionA } else { 'Mixed' }
+
+    switch ($action) {
+        'Inventory' {
+            $invA = $reportA.Inventory
+            $invB = $reportB.Inventory
+            # OS
+            $osA = if ($null -ne $invA -and $null -ne $invA.OS) { $invA.OS.Caption } else { $null }
+            $osB = if ($null -ne $invB -and $null -ne $invB.OS) { $invB.OS.Caption } else { $null }
+            & $addItem 'OS' $osA $osB
+            $osVerA = if ($null -ne $invA -and $null -ne $invA.OS) { $invA.OS.Version } else { $null }
+            $osVerB = if ($null -ne $invB -and $null -ne $invB.OS) { $invB.OS.Version } else { $null }
+            & $addItem 'OS Version' $osVerA $osVerB
+            # Domain
+            $domA = if ($null -ne $invA -and $null -ne $invA.System) { $invA.System.Domain } elseif ($null -ne $invA) { $invA.Domain } else { $null }
+            $domB = if ($null -ne $invB -and $null -ne $invB.System) { $invB.System.Domain } elseif ($null -ne $invB) { $invB.Domain } else { $null }
+            & $addItem 'Domain' $domA $domB
+            # Manufacturer/Model
+            $mfgA = if ($null -ne $invA -and $null -ne $invA.System) { $invA.System.Manufacturer } else { $null }
+            $mfgB = if ($null -ne $invB -and $null -ne $invB.System) { $invB.System.Manufacturer } else { $null }
+            & $addItem 'Manufacturer' $mfgA $mfgB
+            $mdlA = if ($null -ne $invA -and $null -ne $invA.System) { $invA.System.Model } else { $null }
+            $mdlB = if ($null -ne $invB -and $null -ne $invB.System) { $invB.System.Model } else { $null }
+            & $addItem 'Model' $mdlA $mdlB
+            # CPU
+            $cpuA = if ($null -ne $invA -and $null -ne $invA.CPU) { $invA.CPU.Name } else { $null }
+            $cpuB = if ($null -ne $invB -and $null -ne $invB.CPU) { $invB.CPU.Name } else { $null }
+            & $addItem 'CPU' $cpuA $cpuB
+            $coresA = if ($null -ne $invA -and $null -ne $invA.CPU) { $invA.CPU.Cores } else { $null }
+            $coresB = if ($null -ne $invB -and $null -ne $invB.CPU) { $invB.CPU.Cores } else { $null }
+            & $addItem 'CPU Cores' $coresA $coresB
+            # Memory
+            $memA = if ($null -ne $invA) { $invA.MemoryGB } else { $null }
+            $memB = if ($null -ne $invB) { $invB.MemoryGB } else { $null }
+            & $addItem 'Memory (GB)' $memA $memB
+            # Roles
+            if ($null -ne $invA -and $null -ne $invA.Roles) {
+                $roleProps = @('HyperV', 'FailoverClustering', 'MPIO')
+                foreach ($rp in $roleProps) {
+                    $rvA = if ($null -ne $invA.Roles.PSObject.Properties[$rp]) { $invA.Roles.$rp } else { $null }
+                    $rvB = if ($null -ne $invB -and $null -ne $invB.Roles -and $null -ne $invB.Roles.PSObject.Properties[$rp]) { $invB.Roles.$rp } else { $null }
+                    & $addItem "Role: $rp" $rvA $rvB
+                }
+            }
+            # Volume count
+            $volsA = if ($null -ne $invA -and $null -ne $invA.Volumes) { @($invA.Volumes).Count } else { 0 }
+            $volsB = if ($null -ne $invB -and $null -ne $invB.Volumes) { @($invB.Volumes).Count } else { 0 }
+            & $addItem 'Volume Count' $volsA $volsB
+        }
+        'Snapshot' {
+            # CPU
+            $cpuA = if ($null -ne $reportA.Snapshot -and $null -ne $reportA.Snapshot.CPU) { $reportA.Snapshot.CPU.UsagePercent } elseif ($null -ne $reportA.CPUPercent) { $reportA.CPUPercent } else { $null }
+            $cpuB = if ($null -ne $reportB.Snapshot -and $null -ne $reportB.Snapshot.CPU) { $reportB.Snapshot.CPU.UsagePercent } elseif ($null -ne $reportB.CPUPercent) { $reportB.CPUPercent } else { $null }
+            $cpuItem = @{ Property = 'CPU%'; HostA = "$(if ($null -ne $cpuA) { $cpuA } else { '(none)' })"; HostB = "$(if ($null -ne $cpuB) { $cpuB } else { '(none)' })"; Match = ("$cpuA" -eq "$cpuB") }
+            if ($null -ne $cpuA -and $null -ne $cpuB) { $cpuItem.Delta = [math]::Round([double]$cpuB - [double]$cpuA, 1) }
+            $diffs.Add($cpuItem)
+            # Memory
+            $memA = if ($null -ne $reportA.Snapshot -and $null -ne $reportA.Snapshot.Memory) { $reportA.Snapshot.Memory.UsedPercent } elseif ($null -ne $reportA.MemoryPercent) { $reportA.MemoryPercent } else { $null }
+            $memB = if ($null -ne $reportB.Snapshot -and $null -ne $reportB.Snapshot.Memory) { $reportB.Snapshot.Memory.UsedPercent } elseif ($null -ne $reportB.MemoryPercent) { $reportB.MemoryPercent } else { $null }
+            $memItem = @{ Property = 'Memory%'; HostA = "$(if ($null -ne $memA) { $memA } else { '(none)' })"; HostB = "$(if ($null -ne $memB) { $memB } else { '(none)' })"; Match = ("$memA" -eq "$memB") }
+            if ($null -ne $memA -and $null -ne $memB) { $memItem.Delta = [math]::Round([double]$memB - [double]$memA, 1) }
+            $diffs.Add($memItem)
+            # Disks
+            $disksA = @()
+            $disksB = @()
+            if ($null -ne $reportA.Snapshot -and $null -ne $reportA.Snapshot.Disk) { $disksA = @($reportA.Snapshot.Disk) }
+            if ($null -ne $reportB.Snapshot -and $null -ne $reportB.Snapshot.Disk) { $disksB = @($reportB.Snapshot.Disk) }
+            $allDrives = @($disksA | ForEach-Object { $_.Drive }) + @($disksB | ForEach-Object { $_.Drive }) | Where-Object { $_ } | Select-Object -Unique | Sort-Object
+            foreach ($drv in $allDrives) {
+                $dA = $disksA | Where-Object { $_.Drive -eq $drv } | Select-Object -First 1
+                $dB = $disksB | Where-Object { $_.Drive -eq $drv } | Select-Object -First 1
+                $pctA = if ($null -ne $dA) { $dA.UsedPercent } else { $null }
+                $pctB = if ($null -ne $dB) { $dB.UsedPercent } else { $null }
+                $diskItem = @{ Property = "Disk $drv Used%"; HostA = "$(if ($null -ne $pctA) { $pctA } else { '(none)' })"; HostB = "$(if ($null -ne $pctB) { $pctB } else { '(none)' })"; Match = ("$pctA" -eq "$pctB") }
+                if ($null -ne $pctA -and $null -ne $pctB) { $diskItem.Delta = [math]::Round([double]$pctB - [double]$pctA, 1) }
+                $diffs.Add($diskItem)
+            }
+        }
+        'Harden' {
+            # Scores
+            & $addItem 'Score' $reportA.Score $reportB.Score
+            $passA = if ($null -ne $reportA.Summary) { $reportA.Summary.Passed } else { $null }
+            $passB = if ($null -ne $reportB.Summary) { $reportB.Summary.Passed } else { $null }
+            & $addItem 'Passed' $passA $passB
+            $failA = if ($null -ne $reportA.Summary) { $reportA.Summary.Failed } else { $null }
+            $failB = if ($null -ne $reportB.Summary) { $reportB.Summary.Failed } else { $null }
+            & $addItem 'Failed' $failA $failB
+            # Per-check comparison
+            $checksA = @{}
+            $checksB = @{}
+            if ($null -ne $reportA.Checks) {
+                foreach ($chk in @($reportA.Checks)) {
+                    $key = "$($chk.Category): $($chk.Name)"
+                    $checksA[$key] = $chk.Status
+                }
+            }
+            if ($null -ne $reportB.Checks) {
+                foreach ($chk in @($reportB.Checks)) {
+                    $key = "$($chk.Category): $($chk.Name)"
+                    $checksB[$key] = $chk.Status
+                }
+            }
+            $allKeys = @($checksA.Keys) + @($checksB.Keys) | Select-Object -Unique | Sort-Object
+            foreach ($key in $allKeys) {
+                $sA = if ($checksA.ContainsKey($key)) { $checksA[$key] } else { '(absent)' }
+                $sB = if ($checksB.ContainsKey($key)) { $checksB[$key] } else { '(absent)' }
+                $diffs.Add(@{
+                    Property = $key
+                    HostA    = $sA
+                    HostB    = $sB
+                    Match    = ($sA -eq $sB)
+                })
+            }
+        }
+        'Compliance' {
+            $scoreA = if ($null -ne $reportA.Readiness) { $reportA.Readiness.Score } else { $null }
+            $scoreB = if ($null -ne $reportB.Readiness) { $reportB.Readiness.Score } else { $null }
+            & $addItem 'Readiness Score' $scoreA $scoreB
+            $passA = if ($null -ne $reportA.Readiness) { $reportA.Readiness.Passed } else { $null }
+            $passB = if ($null -ne $reportB.Readiness) { $reportB.Readiness.Passed } else { $null }
+            & $addItem 'Readiness Passed' $passA $passB
+            $driftA = if ($null -ne $reportA.Drift) { $reportA.Drift.DriftCount } else { 0 }
+            $driftB = if ($null -ne $reportB.Drift) { $reportB.Drift.DriftCount } else { 0 }
+            & $addItem 'Drift Count' $driftA $driftB
+        }
+        'HealthCheck' {
+            $healthA = if ($null -ne $reportA.Report) { $reportA.Report.OverallHealth } else { $null }
+            $healthB = if ($null -ne $reportB.Report) { $reportB.Report.OverallHealth } else { $null }
+            & $addItem 'Health Status' $healthA $healthB
+            $issA = if ($null -ne $reportA.Report) { $reportA.Report.IssueCount } else { $null }
+            $issB = if ($null -ne $reportB.Report) { $reportB.Report.IssueCount } else { $null }
+            & $addItem 'Issue Count' $issA $issB
+        }
+        default {
+            # Generic: compare top-level properties (excluding metadata)
+            $skipKeys = @('Tool', 'Version', 'Action', 'Timestamp', 'Hostname')
+            $propsA = @()
+            $propsB = @()
+            if ($null -ne $reportA.PSObject) { $propsA = @($reportA.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys } | ForEach-Object { $_.Name }) }
+            if ($null -ne $reportB.PSObject) { $propsB = @($reportB.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys } | ForEach-Object { $_.Name }) }
+            $allProps = @($propsA) + @($propsB) | Select-Object -Unique | Sort-Object
+            foreach ($prop in $allProps) {
+                $vA = if ($null -ne $reportA.PSObject.Properties[$prop]) { ($reportA.$prop | ConvertTo-Json -Compress -Depth 5) } else { $null }
+                $vB = if ($null -ne $reportB.PSObject.Properties[$prop]) { ($reportB.$prop | ConvertTo-Json -Compress -Depth 5) } else { $null }
+                $strA = if ($null -ne $vA) { if ($vA.Length -gt 60) { $vA.Substring(0, 57) + '...' } else { $vA } } else { '(none)' }
+                $strB = if ($null -ne $vB) { if ($vB.Length -gt 60) { $vB.Substring(0, 57) + '...' } else { $vB } } else { '(none)' }
+                $diffs.Add(@{
+                    Property = $prop
+                    HostA    = $strA
+                    HostB    = $strB
+                    Match    = ($vA -eq $vB)
+                })
+            }
+        }
+    }
+
+    $matched = @($diffs | Where-Object { $_.Match }).Count
+    $different = @($diffs | Where-Object { -not $_.Match }).Count
+
+    return @{
+        HostA      = $hostA
+        HostB      = $hostB
+        Action     = $action
+        TimestampA = $reportA.Timestamp
+        TimestampB = $reportB.Timestamp
+        Differences = @($diffs)
+        Summary    = @{
+            Total     = $diffs.Count
+            Matched   = $matched
+            Different = $different
+        }
+    }
+}
+
+# Display fleet compare report to console
+function Show-FleetCompareReport {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Result
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ── Fleet Compare Report ──" -color "Info"
+    Write-OutputColor "  Host A: $($Result.HostA)$(if ($Result.TimestampA) { " ($($Result.TimestampA))" })" -color "Info"
+    Write-OutputColor "  Host B: $($Result.HostB)$(if ($Result.TimestampB) { " ($($Result.TimestampB))" })" -color "Info"
+    Write-OutputColor "  Action: $($Result.Action)" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Table header
+    $propW = 26; $valW = 22; $statW = 6
+    $headerLine = "  $('Property'.PadRight($propW))  $('Host A'.PadRight($valW))  $('Host B'.PadRight($valW))  Status"
+    $divider = "  $('-' * $propW)  $('-' * $valW)  $('-' * $valW)  $('-' * $statW)"
+    Write-OutputColor $headerLine -color "Info"
+    Write-OutputColor $divider -color "Info"
+
+    foreach ($item in $Result.Differences) {
+        $prop = if ($item.Property.Length -gt $propW) { $item.Property.Substring(0, $propW - 2) + '..' } else { $item.Property.PadRight($propW) }
+        $vA = if ($item.HostA.Length -gt $valW) { $item.HostA.Substring(0, $valW - 2) + '..' } else { $item.HostA.PadRight($valW) }
+        $vB = if ($item.HostB.Length -gt $valW) { $item.HostB.Substring(0, $valW - 2) + '..' } else { $item.HostB.PadRight($valW) }
+        $status = if ($item.Match) { '  OK  ' } else { ' DIFF ' }
+        $color = if ($item.Match) { 'Success' } else { 'Error' }
+        $deltaStr = ''
+        if ($null -ne $item.Delta) { $deltaStr = "  ($($item.Delta))" }
+        Write-OutputColor "  $prop  $vA  $vB  $status$deltaStr" -color $color
+    }
+
+    Write-OutputColor "" -color "Info"
+    $s = $Result.Summary
+    $sumColor = if ($s.Different -eq 0) { 'Success' } elseif ($s.Different -le 3) { 'Warning' } else { 'Error' }
+    Write-OutputColor "  Summary: $($s.Total) compared, $($s.Matched) match, $($s.Different) different" -color $sumColor
+    Write-OutputColor "" -color "Info"
+}
 #endregion

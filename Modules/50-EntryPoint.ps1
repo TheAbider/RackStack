@@ -548,6 +548,95 @@ function Invoke-CLIAction {
                 $global:RebootNeeded = $true
             }
         }
+        'Aggregate' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config <path> is required for Aggregate." -color "Error"
+                Write-OutputColor "  Provide a directory of JSON files or a single JSON array file." -color "Info"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $script:CLIConfig)) {
+                Write-OutputColor "  ERROR: Path not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  Aggregating fleet reports from: $($script:CLIConfig)" -color "Info"
+            Write-OutputColor "" -color "Info"
+            $aggResult = Invoke-FleetAggregate -InputPath $script:CLIConfig
+
+            if ($null -eq $aggResult) {
+                Write-OutputColor "  Aggregation failed — no valid reports found." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Show-FleetAggregateReport -Result $aggResult
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool         = $script:ToolFullName
+                    Version      = $script:ScriptVersion
+                    Action       = 'Aggregate'
+                    Timestamp    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    TotalReports = $aggResult.TotalReports
+                    Hosts        = $aggResult.Hosts
+                    ActionTypes  = $aggResult.ActionTypes
+                    Aggregations = $aggResult.Aggregations
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'Compare' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config is required for Compare." -color "Error"
+                Write-OutputColor "  Usage: RackStack.exe -Action Compare -Config `"fileA.json,fileB.json`"" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            $comparePaths = @($script:CLIConfig -split ',', 2)
+            if ($comparePaths.Count -lt 2) {
+                Write-OutputColor "  ERROR: Compare requires two file paths separated by comma." -color "Error"
+                Write-OutputColor "  Usage: -Config `"path\fileA.json,path\fileB.json`"" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            $pathA = $comparePaths[0].Trim()
+            $pathB = $comparePaths[1].Trim()
+
+            if (-not (Test-Path -LiteralPath $pathA)) {
+                Write-OutputColor "  ERROR: File not found: $pathA" -color "Error"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $pathB)) {
+                Write-OutputColor "  ERROR: File not found: $pathB" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  Comparing: $(Split-Path $pathA -Leaf) vs $(Split-Path $pathB -Leaf)" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $compareResult = Invoke-FleetCompare -FilePathA $pathA -FilePathB $pathB
+
+            if ($null -eq $compareResult) {
+                Write-OutputColor "  Comparison failed." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Show-FleetCompareReport -Result $compareResult
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool        = $script:ToolFullName
+                    Version     = $script:ScriptVersion
+                    Action      = 'Compare'
+                    Timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    HostA       = $compareResult.HostA
+                    HostB       = $compareResult.HostB
+                    CompareType = $compareResult.Action
+                    Summary     = $compareResult.Summary
+                    Differences = @($compareResult.Differences)
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

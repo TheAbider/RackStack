@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.32.0
+
+- **New Feature:** Aggregate CLI action — `RackStack.exe -Action Aggregate -Config <directory> -OutputFormat JSON` reads a directory of JSON output files from previous CLI runs and produces a fleet-wide summary report. Auto-detects action types and aggregates per-type: HealthCheck (health status counts), Harden (avg/min/max scores + top 10 common failures), Compliance (readiness score stats + drift counts), Inventory (OS/domain/role distribution), Snapshot (CPU/memory/disk averages), Remediate (fix/skip/fail totals + reboot count). Supports single JSON array files as well as directories. Console and JSON output (54-HTMLReports, 50-EntryPoint).
+- **New Feature:** Compare CLI action — `RackStack.exe -Action Compare -Config "fileA.json,fileB.json" -OutputFormat JSON` performs side-by-side comparison of two JSON outputs from previous CLI runs. Supports action-specific comparison for Inventory (OS, domain, hardware, roles, volumes), Snapshot (CPU/memory/disk with delta calculations), Harden (scores + per-check status diff), Compliance (readiness scores + drift), and HealthCheck (health status + issues). Generic fallback for any action type. Color-coded console table with match/diff indicators and JSON output with property-level differences (54-HTMLReports, 50-EntryPoint).
+- 65 modules, 2801 tests
+
 ## v1.31.0
 
 - **New Feature:** Remediate CLI action — `RackStack.exe -Action Remediate -Config <baseline.json> -OutputFormat JSON` automatically fixes configuration drift by comparing current state to a saved baseline and applying corrections. Supports timezone, power plan, RDP, WinRM, DNS, IP address/gateway, Windows features (Hyper-V, MPIO, Failover Clustering), and hostname remediation. Domain join flagged as manual (requires credentials). Feature uninstall skipped (destructive). Reports fixed/failed/skipped/manual counts with reboot indicator. Full JSON output for automation pipelines (45-ConfigExport, 50-EntryPoint).

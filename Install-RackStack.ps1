@@ -36,7 +36,7 @@
 #>
 
 param(
-    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate')]
+    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate', 'Aggregate', 'Compare')]
     [string]$Action = 'QuickScan',
 
     [ValidateSet('Light', 'Standard', 'Aggressive')]
