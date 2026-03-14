@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.55.0
+    Automated Test Runner for RackStack v1.56.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10786,6 +10786,48 @@ try {
     # v1.55.0: JSON depth consistency + auto-quiet
     Write-TestResult "50-EntryPoint: no ConvertTo-Json -Depth 5 (all -Depth 10)" (-not ($mod50 -match 'ConvertTo-Json -Depth 5'))
     Write-TestResult "00-Initialization: JSON mode auto-enables Quiet" ($_testInitContent -match "OutputFormat\s*-eq\s*'JSON'[\s\S]{0,50}true")
+
+    # TempAudit CLI action tests (v1.56.0)
+    Write-TestResult "Header: TempAudit in ValidateSet" ($headerContent -match "ValidateSet.*TempAudit")
+    Write-TestResult "50-EntryPoint: TempAudit case exists" ($mod50 -match "'TempAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: TempAudit checks Windows Temp" ($mod50 -match "'TempAudit'[\s\S]{0,1500}Windows Temp")
+    Write-TestResult "50-EntryPoint: TempAudit checks WU Download" ($mod50 -match "'TempAudit'[\s\S]{0,2000}SoftwareDistribution")
+    Write-TestResult "50-EntryPoint: TempAudit calculates reclaimable" ($mod50 -match "'TempAudit'[\s\S]{0,5000}totalReclaimGB")
+    Write-TestResult "50-EntryPoint: TempAudit JSON output" ($mod50 -match "'TempAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: TempAudit Action field" ($mod50 -match "Action\s*=\s*'TempAudit'")
+
+    # UpdatePolicyAudit CLI action tests (v1.56.0)
+    Write-TestResult "Header: UpdatePolicyAudit in ValidateSet" ($headerContent -match "ValidateSet.*UpdatePolicyAudit")
+    Write-TestResult "50-EntryPoint: UpdatePolicyAudit case exists" ($mod50 -match "'UpdatePolicyAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: UpdatePolicyAudit checks AU registry" ($mod50 -match "'UpdatePolicyAudit'[\s\S]{0,1500}WindowsUpdate[\s\S]{0,200}AU")
+    Write-TestResult "50-EntryPoint: UpdatePolicyAudit checks WSUS" ($mod50 -match "'UpdatePolicyAudit'[\s\S]{0,3000}WUServer")
+    Write-TestResult "50-EntryPoint: UpdatePolicyAudit checks wuauserv" ($mod50 -match "'UpdatePolicyAudit'[\s\S]{0,4000}wuauserv")
+    Write-TestResult "50-EntryPoint: UpdatePolicyAudit JSON output" ($mod50 -match "'UpdatePolicyAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: UpdatePolicyAudit Action field" ($mod50 -match "Action\s*=\s*'UpdatePolicyAudit'")
+
+    # IISAudit CLI action tests (v1.56.0)
+    Write-TestResult "Header: IISAudit in ValidateSet" ($headerContent -match "ValidateSet.*IISAudit")
+    Write-TestResult "50-EntryPoint: IISAudit case exists" ($mod50 -match "'IISAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: IISAudit imports WebAdministration" ($mod50 -match "'IISAudit'[\s\S]{0,1000}WebAdministration")
+    Write-TestResult "50-EntryPoint: IISAudit queries Get-Website" ($mod50 -match "'IISAudit'[\s\S]{0,2000}Get-Website")
+    Write-TestResult "50-EntryPoint: IISAudit queries app pools" ($mod50 -match "'IISAudit'[\s\S]{0,3000}AppPools")
+    Write-TestResult "50-EntryPoint: IISAudit JSON has Sites" ($mod50 -match "'IISAudit'[\s\S]{0,7000}Sites\s*=")
+    Write-TestResult "50-EntryPoint: IISAudit JSON output" ($mod50 -match "'IISAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: IISAudit Action field" ($mod50 -match "Action\s*=\s*'IISAudit'")
+
+    # SSHAudit CLI action tests (v1.56.0)
+    Write-TestResult "Header: SSHAudit in ValidateSet" ($headerContent -match "ValidateSet.*SSHAudit")
+    Write-TestResult "50-EntryPoint: SSHAudit case exists" ($mod50 -match "'SSHAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: SSHAudit checks sshd service" ($mod50 -match "'SSHAudit'[\s\S]{0,1000}sshd")
+    Write-TestResult "50-EntryPoint: SSHAudit checks sshd_config" ($mod50 -match "'SSHAudit'[\s\S]{0,2000}sshd_config")
+    Write-TestResult "50-EntryPoint: SSHAudit checks authorized_keys" ($mod50 -match "'SSHAudit'[\s\S]{0,4000}authorized_keys")
+    Write-TestResult "50-EntryPoint: SSHAudit JSON has Config" ($mod50 -match "'SSHAudit'[\s\S]{0,7000}Config\s*=")
+    Write-TestResult "50-EntryPoint: SSHAudit JSON output" ($mod50 -match "'SSHAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: SSHAudit Action field" ($mod50 -match "Action\s*=\s*'SSHAudit'")
+
+    # -ListActions table completeness (v1.56.0)
+    Write-TestResult "50-EntryPoint: ListActions includes TempAudit" ($mod50 -match "actionList[\s\S]{0,8000}TempAudit")
+    Write-TestResult "50-EntryPoint: ListActions includes SSHAudit" ($mod50 -match "actionList[\s\S]{0,8000}SSHAudit")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

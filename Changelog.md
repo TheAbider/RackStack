@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.56.0
+
+- **New Feature:** TempAudit CLI action — `RackStack.exe -Action TempAudit -OutputFormat JSON` analyzes reclaimable disk space across 10 temp categories (Windows Temp, User Temp, WU cache, Prefetch, CBS logs, DISM logs, IIS logs, crash dumps, error reports). Shows size per category. Flags >5GB total reclaimable (50-EntryPoint).
+- **New Feature:** UpdatePolicyAudit CLI action — `RackStack.exe -Action UpdatePolicyAudit -OutputFormat JSON` audits Windows Update policy configuration. Reports auto-update mode, WSUS server, feature update deferral days, auto-reboot suppression, and WU service status (50-EntryPoint).
+- **New Feature:** IISAudit CLI action — `RackStack.exe -Action IISAudit -OutputFormat JSON` audits IIS web server configuration. Inventories sites with state, bindings, physical paths, and app pool assignment. Reports app pools with managed runtime and pipeline mode. Flags stopped sites/pools. Exits code 1 when issues detected (50-EntryPoint).
+- **New Feature:** SSHAudit CLI action — `RackStack.exe -Action SSHAudit -OutputFormat JSON` audits OpenSSH server configuration. Reports service status, sshd_config settings, and authorized keys count. Flags stopped SSH service and insecure settings. Exits code 1 when issues detected (50-EntryPoint).
+- 65 modules, 3615 tests
+
 ## v1.55.0
 
 - **Fix:** JSON mode now automatically enables quiet mode — `-OutputFormat JSON` suppresses all console box-drawing output, ensuring clean machine-readable stdout for Ansible, RMM, and pipeline consumers (00-Initialization).

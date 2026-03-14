@@ -213,6 +213,10 @@ function Assert-Elevation {
                 @{ Action = 'CrashAudit';       Description = 'BSOD/crash dump history' }
                 @{ Action = 'LocalGroupAudit';  Description = 'Local groups + membership' }
                 @{ Action = 'WMIAudit';         Description = 'WMI repository health' }
+                @{ Action = 'TempAudit';        Description = 'Temp file + reclaimable space analysis' }
+                @{ Action = 'UpdatePolicyAudit'; Description = 'Windows Update policy + WSUS config' }
+                @{ Action = 'IISAudit';         Description = 'IIS sites + app pools' }
+                @{ Action = 'SSHAudit';         Description = 'OpenSSH server config + keys' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -5463,6 +5467,314 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($wmiIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TempAudit' {
+            Write-OutputColor "  Auditing temporary files..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $tempIssues = 0
+            $categories = @()
+
+            $tempPaths = @(
+                @{ Name = 'Windows Temp';     Path = "$env:SystemRoot\Temp" }
+                @{ Name = 'User Temp';        Path = $env:TEMP }
+                @{ Name = 'WU Download';      Path = "$env:SystemRoot\SoftwareDistribution\Download" }
+                @{ Name = 'WU DataStore';     Path = "$env:SystemRoot\SoftwareDistribution\DataStore\Logs" }
+                @{ Name = 'Prefetch';         Path = "$env:SystemRoot\Prefetch" }
+                @{ Name = 'CBS Logs';         Path = "$env:SystemRoot\Logs\CBS" }
+                @{ Name = 'DISM Logs';        Path = "$env:SystemRoot\Logs\DISM" }
+                @{ Name = 'IIS Logs';         Path = "$env:SystemDrive\inetpub\logs\LogFiles" }
+                @{ Name = 'Crash Dumps';      Path = "$env:SystemRoot\Minidump" }
+                @{ Name = 'Error Reports';    Path = "$env:ProgramData\Microsoft\Windows\WER\ReportQueue" }
+            )
+
+            $totalReclaimMB = 0
+            foreach ($tp in $tempPaths) {
+                $sizeMB = 0
+                $fileCount = 0
+                $exists = Test-Path -LiteralPath $tp.Path -ErrorAction SilentlyContinue
+                if ($exists) {
+                    try {
+                        $items = Get-ChildItem -LiteralPath $tp.Path -Recurse -Force -ErrorAction SilentlyContinue
+                        $fileCount = @($items | Where-Object { -not $_.PSIsContainer }).Count
+                        $sizeMB = [math]::Round(($items | Where-Object { -not $_.PSIsContainer } | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum / 1MB, 1)
+                    } catch { }
+                }
+                $totalReclaimMB += $sizeMB
+                $categories += @{ Name = $tp.Name; Path = $tp.Path; Exists = $exists; SizeMB = $sizeMB; Files = $fileCount }
+            }
+
+            $totalReclaimGB = [math]::Round($totalReclaimMB / 1024, 2)
+            if ($totalReclaimGB -gt 5) { $tempIssues++ }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  TEMP AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($c in ($categories | Where-Object { $_.Exists -and $_.SizeMB -gt 0 } | Sort-Object SizeMB -Descending)) {
+                $line = "  $($c.Name.PadRight(20)) $("$($c.SizeMB)MB".PadRight(12)) $($c.Files) files"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = if ($c.SizeMB -gt 1024) { "Warning" } else { "Info" }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Reclaimable: ${totalReclaimGB}GB   Issues: $tempIssues".PadRight(72))│" -color $(if ($tempIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'TempAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ ReclaimableGB = $totalReclaimGB; Categories = @($categories | Where-Object { $_.Exists }).Count; Issues = $tempIssues }
+                    Categories = $categories
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($tempIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'UpdatePolicyAudit' {
+            Write-OutputColor "  Auditing Windows Update policy..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $upIssues = 0
+
+            # Auto Update settings
+            $auPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
+            $wuPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+            $autoUpdate = 'Not configured (OS defaults)'
+            $wsusServer = ''
+            $deferDays = 0
+            $noAutoReboot = $false
+
+            try {
+                if (Test-Path $auPath) {
+                    $auReg = Get-ItemProperty -Path $auPath -ErrorAction SilentlyContinue
+                    if ($null -ne $auReg) {
+                        $auOption = if ($null -ne $auReg.AUOptions) { $auReg.AUOptions } else { 0 }
+                        $autoUpdate = switch ($auOption) {
+                            2 { 'Notify before download' }
+                            3 { 'Auto download, notify install' }
+                            4 { 'Auto download and install' }
+                            5 { 'Allow local admin to choose' }
+                            default { "Not configured ($auOption)" }
+                        }
+                        if ($null -ne $auReg.NoAutoRebootWithLoggedOnUsers) { $noAutoReboot = $auReg.NoAutoRebootWithLoggedOnUsers -eq 1 }
+                    }
+                }
+                if (Test-Path $wuPath) {
+                    $wuReg = Get-ItemProperty -Path $wuPath -ErrorAction SilentlyContinue
+                    if ($null -ne $wuReg) {
+                        if ($null -ne $wuReg.WUServer) { $wsusServer = $wuReg.WUServer }
+                        if ($null -ne $wuReg.DeferFeatureUpdatesPeriodInDays) { $deferDays = $wuReg.DeferFeatureUpdatesPeriodInDays }
+                    }
+                }
+            } catch { }
+
+            # Windows Update service
+            $wuService = $null
+            $wuRunning = $false
+            try {
+                $wuService = Get-Service -Name wuauserv -ErrorAction Stop
+                $wuRunning = $wuService.Status -eq 'Running'
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  UPDATE POLICY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $svcColor = if ($wuRunning) { "Success" } else { "Warning" }
+            Write-OutputColor "  │$("  WU Service:       $(if ($wuRunning) { 'Running' } else { 'Stopped' })".PadRight(72))│" -color $svcColor
+            Write-OutputColor "  │$("  Auto Update:      $autoUpdate".PadRight(72))│" -color "Info"
+            if ($wsusServer) { Write-OutputColor "  │$("  WSUS Server:      $wsusServer".PadRight(72))│" -color "Info" }
+            if ($deferDays -gt 0) { Write-OutputColor "  │$("  Feature Deferral: $deferDays days".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  No Auto Reboot:   $noAutoReboot".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $upIssues".PadRight(72))│" -color $(if ($upIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'UpdatePolicyAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ WUServiceRunning = $wuRunning; AutoUpdatePolicy = $autoUpdate; WSUSServer = $wsusServer; FeatureDeferralDays = $deferDays; NoAutoReboot = $noAutoReboot; Issues = $upIssues }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($upIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'IISAudit' {
+            Write-OutputColor "  Auditing IIS configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $iisIssues = 0
+            $sites = @()
+            $appPools = @()
+            $iisInstalled = $false
+
+            try {
+                Import-Module WebAdministration -ErrorAction Stop
+                $iisInstalled = $true
+
+                # Sites
+                $iisSites = @(Get-Website -ErrorAction Stop)
+                foreach ($s in $iisSites) {
+                    $bindings = @($s.Bindings.Collection | ForEach-Object { "$($_.protocol)/$($_.bindingInformation)" })
+                    $health = 'OK'
+                    if ($s.State -ne 'Started') { $health = 'WARN'; $iisIssues++ }
+                    $sites += @{
+                        Name     = $s.Name
+                        State    = "$($s.State)"
+                        PhysPath = $s.PhysicalPath
+                        Bindings = $bindings
+                        AppPool  = $s.ApplicationPool
+                        Health   = $health
+                    }
+                }
+
+                # App Pools
+                $iisAppPools = @(Get-ChildItem IIS:\AppPools -ErrorAction Stop)
+                foreach ($ap in $iisAppPools) {
+                    $health = 'OK'
+                    if ($ap.State -ne 'Started') { $health = 'WARN'; $iisIssues++ }
+                    $appPools += @{
+                        Name           = $ap.Name
+                        State          = "$($ap.State)"
+                        ManagedRuntime = "$($ap.ManagedRuntimeVersion)"
+                        PipelineMode   = "$($ap.ManagedPipelineMode)"
+                        Health         = $health
+                    }
+                }
+            } catch {
+                $iisInstalled = $false
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  IIS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (-not $iisInstalled) {
+                Write-OutputColor "  │$("  IIS is not installed on this system".PadRight(72))│" -color "Info"
+            } else {
+                if (@($sites).Count -gt 0) {
+                    Write-OutputColor "  │$("  SITES ($(@($sites).Count))".PadRight(72))│" -color "Info"
+                    foreach ($s in $sites) {
+                        $sName = if ($s.Name.Length -gt 30) { $s.Name.Substring(0, 27) + "..." } else { $s.Name }
+                        $line = "  $($sName.PadRight(32)) $($s.State)  [$($s.Health)]"
+                        $color = if ($s.Health -eq 'OK') { 'Success' } else { 'Warning' }
+                        Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                    }
+                }
+                if (@($appPools).Count -gt 0) {
+                    Write-OutputColor "  │$("  APP POOLS ($(@($appPools).Count))".PadRight(72))│" -color "Info"
+                    foreach ($ap in $appPools) {
+                        $apName = if ($ap.Name.Length -gt 30) { $ap.Name.Substring(0, 27) + "..." } else { $ap.Name }
+                        $line = "  $($apName.PadRight(32)) $($ap.State)  $($ap.ManagedRuntime)  [$($ap.Health)]"
+                        $color = if ($ap.Health -eq 'OK') { 'Success' } else { 'Warning' }
+                        Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                    }
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Sites: $(@($sites).Count)   App Pools: $(@($appPools).Count)   Issues: $iisIssues".PadRight(72))│" -color $(if ($iisIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'IISAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ IISInstalled = $iisInstalled; Sites = @($sites).Count; AppPools = @($appPools).Count; Issues = $iisIssues }
+                    Sites = $sites; AppPools = $appPools
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($iisIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SSHAudit' {
+            Write-OutputColor "  Auditing OpenSSH configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $sshIssues = 0
+            $sshInstalled = $false
+            $sshRunning = $false
+            $sshConfig = @{}
+
+            # Check if OpenSSH Server is installed
+            try {
+                $sshSvc = Get-Service -Name sshd -ErrorAction Stop
+                $sshInstalled = $true
+                $sshRunning = $sshSvc.Status -eq 'Running'
+                if (-not $sshRunning) { $sshIssues++ }
+                $sshConfig['StartType'] = "$($sshSvc.StartType)"
+            } catch {
+                $sshInstalled = $false
+            }
+
+            # SSH config file
+            $configPath = "$env:ProgramData\ssh\sshd_config"
+            $configExists = Test-Path -LiteralPath $configPath
+            $configSettings = @()
+            if ($configExists) {
+                try {
+                    $configLines = Get-Content -LiteralPath $configPath -ErrorAction Stop | Where-Object { $_ -match '^\s*\w' -and $_ -notmatch '^\s*#' }
+                    foreach ($line in $configLines) {
+                        if ($line -match '^\s*(\S+)\s+(.+)$') {
+                            $regexMatches = $Matches
+                            $configSettings += @{ Setting = $regexMatches[1]; Value = $regexMatches[2].Trim() }
+                        }
+                    }
+
+                    # Security checks
+                    $rootLogin = $configSettings | Where-Object { $_.Setting -eq 'PermitRootLogin' } | Select-Object -First 1
+                    if ($null -ne $rootLogin -and $rootLogin.Value -eq 'yes') { $sshIssues++ }
+                    $pwdAuth = $configSettings | Where-Object { $_.Setting -eq 'PasswordAuthentication' } | Select-Object -First 1
+                    $pubkeyAuth = $configSettings | Where-Object { $_.Setting -eq 'PubkeyAuthentication' } | Select-Object -First 1
+                } catch { }
+            }
+
+            # Authorized keys
+            $authKeysCount = 0
+            $adminAuthKeys = "$env:ProgramData\ssh\administrators_authorized_keys"
+            if (Test-Path -LiteralPath $adminAuthKeys) {
+                try {
+                    $authKeysCount = @(Get-Content -LiteralPath $adminAuthKeys -ErrorAction Stop | Where-Object { $_ -match '\S' }).Count
+                } catch { }
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SSH AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (-not $sshInstalled) {
+                Write-OutputColor "  │$("  OpenSSH Server: Not installed".PadRight(72))│" -color "Info"
+            } else {
+                $svcColor = if ($sshRunning) { "Success" } else { "Warning" }
+                Write-OutputColor "  │$("  Service:         $(if ($sshRunning) { 'Running' } else { 'Stopped' }) ($($sshConfig['StartType']))".PadRight(72))│" -color $svcColor
+                Write-OutputColor "  │$("  Config File:     $(if ($configExists) { 'Present' } else { 'Missing' })".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Config Settings:  $(@($configSettings).Count) active".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Admin Auth Keys: $authKeysCount".PadRight(72))│" -color "Info"
+                if (@($configSettings).Count -gt 0) {
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    foreach ($cs in ($configSettings | Select-Object -First 15)) {
+                        $line = "  $($cs.Setting.PadRight(28)) $($cs.Value)"
+                        if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                        Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+                    }
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $sshIssues".PadRight(72))│" -color $(if ($sshIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SSHAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ SSHInstalled = $sshInstalled; SSHRunning = $sshRunning; ConfigExists = $configExists; ConfigSettings = @($configSettings).Count; AuthorizedKeys = $authKeysCount; Issues = $sshIssues }
+                    Config = $configSettings
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($sshIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
