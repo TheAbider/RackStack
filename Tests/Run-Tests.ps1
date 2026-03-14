@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.44.0
+    Automated Test Runner for RackStack v1.45.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10398,6 +10398,42 @@ try {
     Write-TestResult "50-EntryPoint: TaskAudit Action field" ($mod50 -match "Action\s*=\s*'TaskAudit'")
     Write-TestResult "50-EntryPoint: TaskAudit empty list message" ($mod50 -match "'TaskAudit'[\s\S]{0,8000}No non-Microsoft scheduled tasks found")
     Write-TestResult "50-EntryPoint: TaskAudit safe @() count wrapping" ($mod50 -match "'TaskAudit'[\s\S]{0,10000}@\(.tasks\)\.Count")
+
+    # DiskAudit CLI action tests (v1.45.0)
+    Write-TestResult "Header: DiskAudit in ValidateSet" ($headerContent -match "ValidateSet.*DiskAudit")
+    Write-TestResult "Install-RackStack: DiskAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*DiskAudit")
+    Write-TestResult "50-EntryPoint: DiskAudit case exists" ($mod50 -match "'DiskAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: DiskAudit queries Get-PhysicalDisk" ($mod50 -match "'DiskAudit'[\s\S]{0,1000}Get-PhysicalDisk")
+    Write-TestResult "50-EntryPoint: DiskAudit queries Win32_LogicalDisk" ($mod50 -match "'DiskAudit'[\s\S]{0,3000}Win32_LogicalDisk")
+    Write-TestResult "50-EntryPoint: DiskAudit checks HealthStatus" ($mod50 -match "'DiskAudit'[\s\S]{0,2000}HealthStatus")
+    Write-TestResult "50-EntryPoint: DiskAudit checks free space percent" ($mod50 -match "'DiskAudit'[\s\S]{0,4000}pctFree\s*-lt\s*10")
+    Write-TestResult "50-EntryPoint: DiskAudit critical threshold at 5%" ($mod50 -match "'DiskAudit'[\s\S]{0,5000}pctFree\s*-lt\s*5")
+    Write-TestResult "50-EntryPoint: DiskAudit JSON has PhysicalDisks" ($mod50 -match "'DiskAudit'[\s\S]{0,9000}PhysicalDisks\s*=")
+    Write-TestResult "50-EntryPoint: DiskAudit JSON has Volumes" ($mod50 -match "'DiskAudit'[\s\S]{0,9000}Volumes\s*=")
+    Write-TestResult "50-EntryPoint: DiskAudit JSON has Summary" ($mod50 -match "'DiskAudit'[\s\S]{0,8000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: DiskAudit JSON output" ($mod50 -match "'DiskAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: DiskAudit exits 1 on issues" ($mod50 -match "'DiskAudit'[\s\S]{0,10000}diskIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: DiskAudit Action field" ($mod50 -match "Action\s*=\s*'DiskAudit'")
+    Write-TestResult "50-EntryPoint: DiskAudit safe @() count wrapping" ($mod50 -match "'DiskAudit'[\s\S]{0,9000}@\(.physicalDisks\)\.Count")
+    Write-TestResult "50-EntryPoint: DiskAudit physical disk warning" ($mod50 -match "'DiskAudit'[\s\S]{0,2000}Could not query physical disks")
+
+    # TLSAudit CLI action tests (v1.45.0)
+    Write-TestResult "Header: TLSAudit in ValidateSet" ($headerContent -match "ValidateSet.*TLSAudit")
+    Write-TestResult "Install-RackStack: TLSAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*TLSAudit")
+    Write-TestResult "50-EntryPoint: TLSAudit case exists" ($mod50 -match "'TLSAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: TLSAudit checks SCHANNEL registry" ($mod50 -match "'TLSAudit'[\s\S]{0,1500}SCHANNEL[\s\S]{0,200}Protocols")
+    Write-TestResult "50-EntryPoint: TLSAudit checks SSL 2.0" ($mod50 -match "'TLSAudit'[\s\S]{0,2000}SSL 2\.0")
+    Write-TestResult "50-EntryPoint: TLSAudit checks TLS 1.0" ($mod50 -match "'TLSAudit'[\s\S]{0,2000}TLS 1\.0")
+    Write-TestResult "50-EntryPoint: TLSAudit checks TLS 1.2" ($mod50 -match "'TLSAudit'[\s\S]{0,2000}TLS 1\.2")
+    Write-TestResult "50-EntryPoint: TLSAudit checks TLS 1.3" ($mod50 -match "'TLSAudit'[\s\S]{0,2000}TLS 1\.3")
+    Write-TestResult "50-EntryPoint: TLSAudit checks .NET strong crypto" ($mod50 -match "'TLSAudit'[\s\S]{0,6000}SchUseStrongCrypto")
+    Write-TestResult "50-EntryPoint: TLSAudit checks Server subkey" ($mod50 -match "'TLSAudit'[\s\S]{0,3000}Server")
+    Write-TestResult "50-EntryPoint: TLSAudit checks Client subkey" ($mod50 -match "'TLSAudit'[\s\S]{0,3000}Client")
+    Write-TestResult "50-EntryPoint: TLSAudit JSON has Protocols" ($mod50 -match "'TLSAudit'[\s\S]{0,9000}Protocols\s*=")
+    Write-TestResult "50-EntryPoint: TLSAudit JSON has Summary" ($mod50 -match "'TLSAudit'[\s\S]{0,8000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: TLSAudit JSON output" ($mod50 -match "'TLSAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: TLSAudit exits 1 on issues" ($mod50 -match "'TLSAudit'[\s\S]{0,10000}tlsIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: TLSAudit Action field" ($mod50 -match "Action\s*=\s*'TLSAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

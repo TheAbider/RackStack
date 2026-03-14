@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.45.0
+
+- **New Feature:** DiskAudit CLI action — `RackStack.exe -Action DiskAudit -OutputFormat JSON` audits physical disk health and volume utilization. Reports disk health status, operational status, media type, and size. Flags volumes with less than 10% free space as warnings and less than 5% as critical. Exits code 1 when disk issues detected (50-EntryPoint).
+- **New Feature:** TLSAudit CLI action — `RackStack.exe -Action TLSAudit -OutputFormat JSON` audits TLS/SSL protocol configuration via SCHANNEL registry. Checks SSL 2.0/3.0 and TLS 1.0/1.1/1.2/1.3 server and client status. Flags insecure protocols (SSL/TLS 1.0/1.1) enabled as warnings, disabled TLS 1.2/1.3 as critical. Also checks .NET Framework strong crypto settings. Exits code 1 when TLS issues detected (50-EntryPoint).
+- 65 modules, 3285 tests
+
 ## v1.44.0
 
 - **New Feature:** FirewallAudit CLI action — `RackStack.exe -Action FirewallAudit -OutputFormat JSON` audits Windows Firewall configuration: profile status (Domain/Private/Public), rule counts by direction and action, top inbound allow groups. Flags disabled profiles and permissive Public profile settings. Exits code 1 when firewall issues detected (50-EntryPoint).

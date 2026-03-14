@@ -2968,6 +2968,253 @@ function Invoke-CLIAction {
 
             if ($failedCount -gt 0) { [Environment]::Exit(1) }
         }
+        'DiskAudit' {
+            Write-OutputColor "  Auditing disk health and utilization..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $diskIssues = 0
+            $volumes = @()
+            $physicalDisks = @()
+
+            # Physical disk health
+            try {
+                $pDisks = @(Get-PhysicalDisk -ErrorAction Stop)
+                foreach ($d in $pDisks) {
+                    $health = 'OK'
+                    if ($d.HealthStatus -ne 'Healthy') { $health = 'FAIL'; $diskIssues++ }
+                    if ($d.OperationalStatus -ne 'OK') { $health = 'FAIL'; if ($d.HealthStatus -eq 'Healthy') { $diskIssues++ } }
+                    $sizeGB = [math]::Round($d.Size / 1GB, 1)
+                    $physicalDisks += @{
+                        DeviceId          = $d.DeviceId
+                        FriendlyName      = $d.FriendlyName
+                        MediaType         = "$($d.MediaType)"
+                        BusType           = "$($d.BusType)"
+                        SizeGB            = $sizeGB
+                        HealthStatus      = "$($d.HealthStatus)"
+                        OperationalStatus = "$($d.OperationalStatus)"
+                        Health            = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query physical disks: $($_.Exception.Message)" -color "Warning"
+            }
+
+            # Volume utilization
+            try {
+                $vols = @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop)
+                foreach ($v in $vols) {
+                    $totalGB = [math]::Round($v.Size / 1GB, 1)
+                    $freeGB = [math]::Round($v.FreeSpace / 1GB, 1)
+                    $usedGB = [math]::Round(($v.Size - $v.FreeSpace) / 1GB, 1)
+                    $pctFree = if ($v.Size -gt 0) { [math]::Round(($v.FreeSpace / $v.Size) * 100, 1) } else { 0 }
+                    $status = 'OK'
+                    if ($pctFree -lt 10) { $status = 'WARN'; $diskIssues++ }
+                    if ($pctFree -lt 5) { $status = 'CRITICAL' }
+                    $volumes += @{
+                        Drive    = $v.DeviceID
+                        Label    = $v.VolumeName
+                        TotalGB  = $totalGB
+                        UsedGB   = $usedGB
+                        FreeGB   = $freeGB
+                        PctFree  = $pctFree
+                        Status   = $status
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query volumes: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  DISK AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($physicalDisks).Count -gt 0) {
+                Write-OutputColor "  │$("  PHYSICAL DISKS".PadRight(72))│" -color "Info"
+                foreach ($d in $physicalDisks) {
+                    $line = "  $($d.FriendlyName)"
+                    if ($line.Length -gt 35) { $line = $line.Substring(0, 32) + "..." }
+                    $line = "$($line.PadRight(36)) $($d.SizeGB)GB  $($d.MediaType)  [$($d.Health)]"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = if ($d.Health -eq 'OK') { 'Success' } else { 'Error' }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                }
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            }
+            Write-OutputColor "  │$("  VOLUMES".PadRight(72))│" -color "Info"
+            foreach ($v in $volumes) {
+                $label = if ($v.Label) { " ($($v.Label))" } else { "" }
+                $line = "  $($v.Drive)$label"
+                if ($line.Length -gt 20) { $line = $line.Substring(0, 17) + "..." }
+                $line = "$($line.PadRight(22)) $($v.UsedGB)/$($v.TotalGB)GB  Free: $($v.PctFree)%  [$($v.Status)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = switch ($v.Status) { 'OK' { 'Success' } 'WARN' { 'Warning' } 'CRITICAL' { 'Error' } default { 'Info' } }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Disks: $(@($physicalDisks).Count)   Volumes: $(@($volumes).Count)   Issues: $diskIssues"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($diskIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'DiskAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        PhysicalDisks = @($physicalDisks).Count
+                        Volumes       = @($volumes).Count
+                        Issues        = $diskIssues
+                    }
+                    PhysicalDisks = $physicalDisks
+                    Volumes       = $volumes
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($diskIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TLSAudit' {
+            Write-OutputColor "  Auditing TLS/SSL configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $tlsIssues = 0
+            $protocols = @()
+            $regBase = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols'
+
+            $protocolList = @(
+                @{ Name = 'SSL 2.0';  Secure = $false }
+                @{ Name = 'SSL 3.0';  Secure = $false }
+                @{ Name = 'TLS 1.0'; Secure = $false }
+                @{ Name = 'TLS 1.1'; Secure = $false }
+                @{ Name = 'TLS 1.2'; Secure = $true }
+                @{ Name = 'TLS 1.3'; Secure = $true }
+            )
+
+            foreach ($proto in $protocolList) {
+                $name = $proto.Name
+                $serverPath = "$regBase\$name\Server"
+                $clientPath = "$regBase\$name\Client"
+
+                $serverEnabled = $null
+                $clientEnabled = $null
+
+                # Check Server subkey
+                if (Test-Path $serverPath) {
+                    $serverReg = Get-ItemProperty -Path $serverPath -ErrorAction SilentlyContinue
+                    if ($null -ne $serverReg -and $null -ne $serverReg.Enabled) {
+                        $serverEnabled = $serverReg.Enabled -ne 0
+                    } elseif ($null -ne $serverReg -and $null -ne $serverReg.DisabledByDefault) {
+                        $serverEnabled = $serverReg.DisabledByDefault -eq 0
+                    }
+                }
+
+                # Check Client subkey
+                if (Test-Path $clientPath) {
+                    $clientReg = Get-ItemProperty -Path $clientPath -ErrorAction SilentlyContinue
+                    if ($null -ne $clientReg -and $null -ne $clientReg.Enabled) {
+                        $clientEnabled = $clientReg.Enabled -ne 0
+                    } elseif ($null -ne $clientReg -and $null -ne $clientReg.DisabledByDefault) {
+                        $clientEnabled = $clientReg.DisabledByDefault -eq 0
+                    }
+                }
+
+                # Determine effective status
+                # If registry keys don't exist, Windows uses defaults:
+                # SSL 2.0/3.0: disabled by default on modern Windows
+                # TLS 1.0/1.1: enabled by default (but deprecated)
+                # TLS 1.2/1.3: enabled by default
+                $effectiveServer = if ($null -ne $serverEnabled) { $serverEnabled } else {
+                    # Default behavior for unset protocols
+                    switch ($name) {
+                        'SSL 2.0' { $false }
+                        'SSL 3.0' { $false }
+                        default { $true }
+                    }
+                }
+                $effectiveClient = if ($null -ne $clientEnabled) { $clientEnabled } else {
+                    switch ($name) {
+                        'SSL 2.0' { $false }
+                        'SSL 3.0' { $false }
+                        default { $true }
+                    }
+                }
+
+                $status = 'OK'
+                $configured = $null -ne $serverEnabled -or $null -ne $clientEnabled
+
+                if (-not $proto.Secure -and ($effectiveServer -or $effectiveClient)) {
+                    $status = if ($name -match 'SSL') { 'CRITICAL' } else { 'WARN' }
+                    $tlsIssues++
+                }
+                if ($proto.Secure -and -not $effectiveServer -and -not $effectiveClient) {
+                    $status = 'CRITICAL'; $tlsIssues++
+                }
+
+                $protocols += @{
+                    Protocol      = $name
+                    ServerEnabled = $effectiveServer
+                    ClientEnabled = $effectiveClient
+                    Configured    = $configured
+                    Secure        = $proto.Secure
+                    Status        = $status
+                }
+            }
+
+            # Check .NET strong crypto settings
+            $netFx64 = 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319'
+            $netFx32 = 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319'
+            $strongCrypto64 = $false
+            $strongCrypto32 = $false
+            try {
+                $reg64 = Get-ItemProperty -Path $netFx64 -ErrorAction SilentlyContinue
+                if ($null -ne $reg64 -and $null -ne $reg64.SchUseStrongCrypto) { $strongCrypto64 = $reg64.SchUseStrongCrypto -eq 1 }
+                $reg32 = Get-ItemProperty -Path $netFx32 -ErrorAction SilentlyContinue
+                if ($null -ne $reg32 -and $null -ne $reg32.SchUseStrongCrypto) { $strongCrypto32 = $reg32.SchUseStrongCrypto -eq 1 }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  TLS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($p in $protocols) {
+                $serverStr = if ($p.ServerEnabled) { "On" } else { "Off" }
+                $clientStr = if ($p.ClientEnabled) { "On" } else { "Off" }
+                $cfgStr = if ($p.Configured) { "Explicit" } else { "Default" }
+                $line = "  $($p.Protocol.PadRight(10)) Server: $($serverStr.PadRight(5)) Client: $($clientStr.PadRight(5)) ($cfgStr)  [$($p.Status)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = switch ($p.Status) { 'OK' { 'Success' } 'WARN' { 'Warning' } 'CRITICAL' { 'Error' } default { 'Info' } }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $scLine = "  .NET Strong Crypto: x64=$(if ($strongCrypto64) { 'Yes' } else { 'No' })  x86=$(if ($strongCrypto32) { 'Yes' } else { 'No' })"
+            $scColor = if ($strongCrypto64 -and $strongCrypto32) { "Success" } else { "Warning" }
+            Write-OutputColor "  │$($scLine.PadRight(72))│" -color $scColor
+            $summaryLine = "  Issues: $tlsIssues"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($tlsIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'TLSAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        Issues            = $tlsIssues
+                        StrongCrypto64    = $strongCrypto64
+                        StrongCrypto32    = $strongCrypto32
+                    }
+                    Protocols = $protocols
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($tlsIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
