@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.46.0
+    Automated Test Runner for RackStack v1.47.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10468,6 +10468,35 @@ try {
     Write-TestResult "50-EntryPoint: DriverAudit JSON output" ($mod50 -match "'DriverAudit'[\s\S]{0,10000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: DriverAudit exits 1 on issues" ($mod50 -match "'DriverAudit'[\s\S]{0,10000}driverIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: DriverAudit Action field" ($mod50 -match "Action\s*=\s*'DriverAudit'")
+
+    # TimeAudit CLI action tests (v1.47.0)
+    Write-TestResult "Header: TimeAudit in ValidateSet" ($headerContent -match "ValidateSet.*TimeAudit")
+    Write-TestResult "Install-RackStack: TimeAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*TimeAudit")
+    Write-TestResult "50-EntryPoint: TimeAudit case exists" ($mod50 -match "'TimeAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: TimeAudit checks W32Time service" ($mod50 -match "'TimeAudit'[\s\S]{0,1000}W32Time")
+    Write-TestResult "50-EntryPoint: TimeAudit queries w32tm status" ($mod50 -match "'TimeAudit'[\s\S]{0,2000}w32tm /query /status")
+    Write-TestResult "50-EntryPoint: TimeAudit checks NTP source" ($mod50 -match "'TimeAudit'[\s\S]{0,3000}NTPSource")
+    Write-TestResult "50-EntryPoint: TimeAudit checks NTP type registry" ($mod50 -match "'TimeAudit'[\s\S]{0,4000}W32Time[\s\S]{0,200}Parameters")
+    Write-TestResult "50-EntryPoint: TimeAudit checks time drift" ($mod50 -match "'TimeAudit'[\s\S]{0,5000}stripchart")
+    Write-TestResult "50-EntryPoint: TimeAudit drift thresholds" ($mod50 -match "'TimeAudit'[\s\S]{0,6000}driftMs[\s\S]{0,300}1000[\s\S]{0,300}5000")
+    Write-TestResult "50-EntryPoint: TimeAudit JSON has Summary" ($mod50 -match "'TimeAudit'[\s\S]{0,8000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: TimeAudit JSON output" ($mod50 -match "'TimeAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: TimeAudit exits 1 on issues" ($mod50 -match "'TimeAudit'[\s\S]{0,9000}timeIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: TimeAudit Action field" ($mod50 -match "Action\s*=\s*'TimeAudit'")
+
+    # BootAudit CLI action tests (v1.47.0)
+    Write-TestResult "Header: BootAudit in ValidateSet" ($headerContent -match "ValidateSet.*BootAudit")
+    Write-TestResult "Install-RackStack: BootAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*BootAudit")
+    Write-TestResult "50-EntryPoint: BootAudit case exists" ($mod50 -match "'BootAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: BootAudit checks Secure Boot" ($mod50 -match "'BootAudit'[\s\S]{0,1500}Confirm-SecureBootUEFI")
+    Write-TestResult "50-EntryPoint: BootAudit checks firmware type" ($mod50 -match "'BootAudit'[\s\S]{0,3000}firmwareType[\s\S]{0,200}UEFI")
+    Write-TestResult "50-EntryPoint: BootAudit checks pending reboot" ($mod50 -match "'BootAudit'[\s\S]{0,4000}RebootPending")
+    Write-TestResult "50-EntryPoint: BootAudit checks uptime threshold" ($mod50 -match "'BootAudit'[\s\S]{0,5000}uptimeDays\s*-gt\s*90")
+    Write-TestResult "50-EntryPoint: BootAudit checks DEP" ($mod50 -match "'BootAudit'[\s\S]{0,6000}DataExecutionPrevention")
+    Write-TestResult "50-EntryPoint: BootAudit JSON has Summary" ($mod50 -match "'BootAudit'[\s\S]{0,8000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: BootAudit JSON output" ($mod50 -match "'BootAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: BootAudit exits 1 on issues" ($mod50 -match "'BootAudit'[\s\S]{0,9000}bootIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: BootAudit Action field" ($mod50 -match "Action\s*=\s*'BootAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

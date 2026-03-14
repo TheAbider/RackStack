@@ -3400,6 +3400,210 @@ function Invoke-CLIAction {
 
             if ($driverIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'TimeAudit' {
+            Write-OutputColor "  Auditing time configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $timeIssues = 0
+
+            # W32Time service status
+            $w32timeSvc = $null
+            $w32timeRunning = $false
+            try {
+                $w32timeSvc = Get-Service -Name W32Time -ErrorAction Stop
+                $w32timeRunning = $w32timeSvc.Status -eq 'Running'
+                if (-not $w32timeRunning) { $timeIssues++ }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query W32Time service: $($_.Exception.Message)" -color "Warning"
+                $timeIssues++
+            }
+
+            # NTP configuration
+            $ntpSource = "Unknown"
+            $lastSync = "Unknown"
+            $ntpType = "Unknown"
+            try {
+                $w32tmOutput = & w32tm /query /status 2>&1
+                $w32tmStr = $w32tmOutput -join "`n"
+                if ($w32tmStr -match 'Source:\s*(.+)') { $regexMatches = $Matches; $ntpSource = $regexMatches[1].Trim() }
+                if ($w32tmStr -match 'Last Successful Sync Time:\s*(.+)') { $regexMatches = $Matches; $lastSync = $regexMatches[1].Trim() }
+            } catch { }
+
+            try {
+                $ntpReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -ErrorAction SilentlyContinue
+                if ($null -ne $ntpReg -and $null -ne $ntpReg.Type) { $ntpType = $ntpReg.Type }
+                if ($ntpType -eq 'NoSync') { $timeIssues++ }
+            } catch { }
+
+            # Time drift check
+            $driftMs = $null
+            $driftStatus = 'Unknown'
+            try {
+                $w32tmStrip = & w32tm /stripchart /computer:time.windows.com /dataonly /samples:1 2>&1
+                $stripStr = $w32tmStrip -join "`n"
+                if ($stripStr -match '([+-]?\d+\.?\d*s)') {
+                    $regexMatches = $Matches; $driftStr = $regexMatches[1] -replace 's$', ''
+                    $driftMs = [math]::Abs([double]$driftStr) * 1000
+                    $driftStatus = if ($driftMs -lt 1000) { 'OK' } elseif ($driftMs -lt 5000) { 'WARN' } else { 'CRITICAL' }
+                    if ($driftStatus -ne 'OK') { $timeIssues++ }
+                }
+            } catch { }
+
+            # Boot time
+            $bootTime = $null
+            $uptimeDays = $null
+            try {
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $bootTime = $os.LastBootUpTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                $uptimeDays = [math]::Round(((Get-Date) - $os.LastBootUpTime).TotalDays, 1)
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  TIME AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $svcColor = if ($w32timeRunning) { "Success" } else { "Error" }
+            $svcStatus = if ($w32timeRunning) { "Running" } else { "Stopped" }
+            Write-OutputColor "  │$("  W32Time Service: $svcStatus".PadRight(72))│" -color $svcColor
+            Write-OutputColor "  │$("  NTP Source:      $ntpSource".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  NTP Type:        $ntpType".PadRight(72))│" -color $(if ($ntpType -eq 'NoSync') { "Error" } else { "Info" })
+            Write-OutputColor "  │$("  Last Sync:       $lastSync".PadRight(72))│" -color "Info"
+            if ($null -ne $driftMs) {
+                $driftColor = switch ($driftStatus) { 'OK' { 'Success' } 'WARN' { 'Warning' } 'CRITICAL' { 'Error' } default { 'Info' } }
+                Write-OutputColor "  │$("  Time Drift:      $([math]::Round($driftMs, 0))ms [$driftStatus]".PadRight(72))│" -color $driftColor
+            }
+            if ($null -ne $bootTime) {
+                Write-OutputColor "  │$("  Boot Time:       $bootTime (${uptimeDays}d uptime)".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $timeIssues".PadRight(72))│" -color $(if ($timeIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'TimeAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        W32TimeRunning = $w32timeRunning
+                        NTPSource      = $ntpSource
+                        NTPType        = $ntpType
+                        LastSync       = $lastSync
+                        DriftMs        = $driftMs
+                        DriftStatus    = $driftStatus
+                        BootTime       = $bootTime
+                        UptimeDays     = $uptimeDays
+                        Issues         = $timeIssues
+                    }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($timeIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'BootAudit' {
+            Write-OutputColor "  Auditing boot configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $bootIssues = 0
+
+            # Secure Boot status
+            $secureBoot = $null
+            try {
+                $secureBoot = Confirm-SecureBootUEFI -ErrorAction Stop
+            } catch {
+                # Not supported on BIOS systems — not an issue, just informational
+                $secureBoot = $null
+            }
+
+            # UEFI vs BIOS
+            $firmwareType = "Unknown"
+            try {
+                $env:firmware_type_check = $null
+                $fwReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State' -ErrorAction SilentlyContinue
+                if ($null -ne $fwReg) {
+                    $firmwareType = "UEFI"
+                } else {
+                    # Check bcdedit for firmware type
+                    $bcdOutput = & bcdedit /enum firmware 2>&1
+                    $bcdStr = $bcdOutput -join "`n"
+                    $firmwareType = if ($bcdStr -match 'firmware') { "UEFI" } else { "BIOS" }
+                }
+            } catch {
+                $firmwareType = "Unknown"
+            }
+
+            # Boot time and uptime
+            $bootTime = $null
+            $uptimeDays = $null
+            try {
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $bootTime = $os.LastBootUpTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                $uptimeDays = [math]::Round(((Get-Date) - $os.LastBootUpTime).TotalDays, 1)
+                if ($uptimeDays -gt 90) { $bootIssues++ }
+            } catch { }
+
+            # Pending reboot check
+            $pendingReboot = $false
+            try {
+                $cbsReboot = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+                $wuReboot = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+                $pfro = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction SilentlyContinue
+                $pendingReboot = $cbsReboot -or $wuReboot -or ($null -ne $pfro)
+                if ($pendingReboot) { $bootIssues++ }
+            } catch { }
+
+            # DEP (Data Execution Prevention) status
+            $depEnabled = $false
+            try {
+                $depReg = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $depEnabled = $depReg.DataExecutionPrevention_Available -eq $true
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  BOOT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Firmware:       $firmwareType".PadRight(72))│" -color $(if ($firmwareType -eq 'UEFI') { "Success" } else { "Info" })
+            $sbStr = if ($null -eq $secureBoot) { "N/A (BIOS)" } elseif ($secureBoot) { "Enabled" } else { "Disabled" }
+            $sbColor = if ($null -eq $secureBoot) { "Info" } elseif ($secureBoot) { "Success" } else { "Warning" }
+            Write-OutputColor "  │$("  Secure Boot:    $sbStr".PadRight(72))│" -color $sbColor
+            Write-OutputColor "  │$("  DEP:            $(if ($depEnabled) { 'Available' } else { 'Unavailable' })".PadRight(72))│" -color $(if ($depEnabled) { "Success" } else { "Warning" })
+            if ($null -ne $bootTime) {
+                $uptimeColor = if ($uptimeDays -gt 90) { "Warning" } else { "Success" }
+                Write-OutputColor "  │$("  Boot Time:      $bootTime".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Uptime:         ${uptimeDays} days".PadRight(72))│" -color $uptimeColor
+            }
+            $rebootColor = if ($pendingReboot) { "Warning" } else { "Success" }
+            Write-OutputColor "  │$("  Pending Reboot: $(if ($pendingReboot) { 'Yes' } else { 'No' })".PadRight(72))│" -color $rebootColor
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $bootIssues".PadRight(72))│" -color $(if ($bootIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'BootAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        FirmwareType  = $firmwareType
+                        SecureBoot    = $secureBoot
+                        DEPAvailable  = $depEnabled
+                        BootTime      = $bootTime
+                        UptimeDays    = $uptimeDays
+                        PendingReboot = $pendingReboot
+                        Issues        = $bootIssues
+                    }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($bootIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

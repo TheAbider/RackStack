@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.47.0
+
+- **New Feature:** TimeAudit CLI action — `RackStack.exe -Action TimeAudit -OutputFormat JSON` audits time synchronization configuration. Checks W32Time service status, NTP source and type, last sync time, and measures time drift against time.windows.com. Flags drift over 1s as warning, over 5s as critical. Exits code 1 when time issues detected (50-EntryPoint).
+- **New Feature:** BootAudit CLI action — `RackStack.exe -Action BootAudit -OutputFormat JSON` audits boot configuration and system posture. Reports firmware type (UEFI/BIOS), Secure Boot status, DEP availability, boot time, uptime (flags >90 days), and pending reboot detection. Exits code 1 when boot issues detected (50-EntryPoint).
+- 65 modules, 3340 tests
+
 ## v1.46.0
 
 - **New Feature:** SMBAudit CLI action — `RackStack.exe -Action SMBAudit -OutputFormat JSON` audits SMB protocol configuration and share security. Checks SMBv1 status (flags if enabled), signing requirements, and encryption settings. Inventories non-administrative shares and flags those with Everyone Full Control. Exits code 1 when SMB issues detected (50-EntryPoint).
