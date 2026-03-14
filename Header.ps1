@@ -30,7 +30,7 @@
     7h3 4b1d3r
 
 .VERSION
-    1.53.0
+    1.54.0
 
 .LAST UPDATED
     03/13/2026
@@ -1401,6 +1401,15 @@ param(
     [switch]$Silent,
 
     [ValidateSet('Console', 'JSON')]
-    [string]$OutputFormat = 'Console'
+    [string]$OutputFormat = 'Console',
+
+    # Show version and exit
+    [switch]$Version,
+
+    # List all available CLI actions and exit
+    [switch]$ListActions,
+
+    # Suppress console box-drawing output (only emit JSON when -OutputFormat JSON)
+    [switch]$Quiet
 )
 

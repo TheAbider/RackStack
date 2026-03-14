@@ -160,7 +160,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.53.0"
+$script:ScriptVersion = "1.54.0"
 $script:ScriptStartTime = Get-Date
 
 # CLI headless mode parameters (populated from param block in monolithic/exe)
@@ -171,6 +171,9 @@ $script:CLIConfig   = if ($Config)  { $Config }  else { $null }
 $script:CLISilent   = if ($Silent)  { [bool]$Silent } else { $false }
 $script:HeadlessMode = if ($Action) { $true } else { $false }
 $script:CLIOutputFormat = if ($OutputFormat) { $OutputFormat } else { 'Console' }
+$script:CLIVersion  = if ($Version) { [bool]$Version } else { $false }
+$script:CLIListActions = if ($ListActions) { [bool]$ListActions } else { $false }
+$script:CLIQuiet    = if ($Quiet) { [bool]$Quiet } else { $false }
 
 # OS version detection (for feature compatibility)
 # 2012/2012 R2 lack SET, Storage Replica, Defender PowerShell module

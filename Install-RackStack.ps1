@@ -47,6 +47,12 @@ param(
     [ValidateSet('Console', 'JSON')]
     [string]$OutputFormat = 'Console',
 
+    [switch]$Version,
+
+    [switch]$ListActions,
+
+    [switch]$Quiet,
+
     [string]$InstallPath = 'C:\Temp\RackStack',
 
     [switch]$NoRun

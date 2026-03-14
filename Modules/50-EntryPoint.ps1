@@ -99,6 +99,7 @@ function Assert-Elevation {
             if ($script:CLIProfile -ne 'Standard') { $elevateArgs += " -Tier $($script:CLIProfile)" }
             if ($script:CLIConfig)  { $elevateArgs += " -Config `"$($script:CLIConfig)`"" }
             if ($script:CLISilent)  { $elevateArgs += " -Silent" }
+            if ($script:CLIQuiet)   { $elevateArgs += " -Quiet" }
             if ($script:CLIOutputFormat -ne 'Console') { $elevateArgs += " -OutputFormat $($script:CLIOutputFormat)" }
             Start-Process powershell -ArgumentList $elevateArgs -Verb RunAs -ErrorAction Stop
         }
@@ -144,6 +145,88 @@ function Assert-Elevation {
             }
         }
 
+        # CLI quick flags: -Version and -ListActions exit immediately
+        if ($script:CLIVersion) {
+            Write-Output "$($script:ToolFullName) v$($script:ScriptVersion)"
+            [Environment]::Exit(0)
+        }
+        if ($script:CLIListActions) {
+            $actionList = @(
+                @{ Action = 'Cleanup';          Description = 'Disk cleanup (Light/Standard/Aggressive)' }
+                @{ Action = 'Debloat';          Description = 'Remove bloatware and telemetry' }
+                @{ Action = 'HealthCheck';      Description = 'System health report' }
+                @{ Action = 'QuickScan';        Description = 'Health + disk + debloat analysis' }
+                @{ Action = 'Inventory';        Description = 'Server inventory for CMDB' }
+                @{ Action = 'DriftCheck';       Description = 'Configuration drift detection' }
+                @{ Action = 'Snapshot';         Description = 'Performance metric capture' }
+                @{ Action = 'Compliance';       Description = 'Unified health + readiness + drift report' }
+                @{ Action = 'Harden';           Description = 'CIS-lite security hardening audit' }
+                @{ Action = 'Remediate';        Description = 'Auto-fix drifted settings' }
+                @{ Action = 'Aggregate';        Description = 'Fleet-wide report aggregation' }
+                @{ Action = 'Compare';          Description = 'Side-by-side host comparison' }
+                @{ Action = 'Export';            Description = 'Comprehensive server profile export' }
+                @{ Action = 'Trend';            Description = 'Performance trend analysis' }
+                @{ Action = 'CertCheck';        Description = 'Certificate expiry audit' }
+                @{ Action = 'ReportHTML';       Description = 'Generate HTML reports' }
+                @{ Action = 'ListeningPorts';   Description = 'TCP listening port inventory' }
+                @{ Action = 'SoftwareList';     Description = 'Installed software audit' }
+                @{ Action = 'Uptime';           Description = 'Uptime + reboot history' }
+                @{ Action = 'ServiceAudit';     Description = 'Key service status audit' }
+                @{ Action = 'EventAudit';       Description = 'Critical/error event log summary' }
+                @{ Action = 'NetInfo';          Description = 'Network adapter configuration' }
+                @{ Action = 'ScheduledExport';  Description = 'Automated export scheduling' }
+                @{ Action = 'ValidateConfig';   Description = 'Batch config file validation' }
+                @{ Action = 'Watch';            Description = 'Threshold-based monitoring gate' }
+                @{ Action = 'Query';            Description = 'Search fleet export archive' }
+                @{ Action = 'Diff';             Description = 'Full-profile change detection' }
+                @{ Action = 'Baseline';         Description = 'Capture known-good profile' }
+                @{ Action = 'Alert';            Description = 'Webhook/email/event log alerting' }
+                @{ Action = 'FleetScan';        Description = 'Run any action across fleet via WinRM' }
+                @{ Action = 'PatchStatus';      Description = 'Patch currency + pending reboot' }
+                @{ Action = 'UserAudit';        Description = 'Local account security hygiene' }
+                @{ Action = 'FirewallAudit';    Description = 'Firewall profile + rule analysis' }
+                @{ Action = 'TaskAudit';        Description = 'Scheduled task health check' }
+                @{ Action = 'DiskAudit';        Description = 'Physical disk + volume utilization' }
+                @{ Action = 'TLSAudit';         Description = 'TLS/SSL protocol configuration' }
+                @{ Action = 'SMBAudit';         Description = 'SMB protocol + share security' }
+                @{ Action = 'DriverAudit';      Description = 'Driver signing audit' }
+                @{ Action = 'TimeAudit';        Description = 'NTP sync + time drift detection' }
+                @{ Action = 'BootAudit';        Description = 'Firmware + secure boot + reboot status' }
+                @{ Action = 'GPOAudit';         Description = 'Applied Group Policy inventory' }
+                @{ Action = 'MemoryAudit';      Description = 'RAM + DIMM + page file audit' }
+                @{ Action = 'ProcessAudit';     Description = 'Top CPU/memory + unsigned processes' }
+                @{ Action = 'BackupAudit';      Description = 'VSS writers + shadow copies + WSB' }
+                @{ Action = 'ShareAudit';       Description = 'SMB + NTFS share permissions' }
+                @{ Action = 'DNSAudit';         Description = 'DNS config + resolution tests' }
+                @{ Action = 'PowerAudit';       Description = 'Power plan + sleep configuration' }
+                @{ Action = 'RegistryAudit';    Description = 'Security hardening baseline' }
+                @{ Action = 'ProfileAudit';     Description = 'User profile size + staleness' }
+                @{ Action = 'HyperVAudit';      Description = 'VM inventory + checkpoints + replication' }
+                @{ Action = 'NetworkAudit';     Description = 'Adapter config + IP + routing' }
+                @{ Action = 'StorageAudit';     Description = 'Storage pools + virtual disks' }
+                @{ Action = 'FeatureAudit';     Description = 'Installed roles + features' }
+                @{ Action = 'AutoStartAudit';   Description = 'Registry Run keys + startup + services' }
+                @{ Action = 'BIOSAudit';        Description = 'BIOS/firmware + serial numbers' }
+                @{ Action = 'ClusterAudit';     Description = 'Failover cluster nodes + resources' }
+                @{ Action = 'AuditPolicyAudit'; Description = 'Windows security audit policies' }
+                @{ Action = 'EnvAudit';         Description = 'Environment variables + PATH analysis' }
+                @{ Action = 'CrashAudit';       Description = 'BSOD/crash dump history' }
+                @{ Action = 'LocalGroupAudit';  Description = 'Local groups + membership' }
+                @{ Action = 'WMIAudit';         Description = 'WMI repository health' }
+                @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
+            )
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                Write-Output ($actionList | ConvertTo-Json -Depth 5)
+            } else {
+                Write-OutputColor "  $($script:ToolFullName) v$($script:ScriptVersion) - Available Actions ($(@($actionList).Count))" -color "Info"
+                Write-OutputColor "" -color "Info"
+                foreach ($a in $actionList) {
+                    Write-OutputColor "  $($a.Action.PadRight(22)) $($a.Description)" -color "Info"
+                }
+            }
+            [Environment]::Exit(0)
+        }
+
         # CLI headless mode: dispatch action instead of interactive menu
         if ($script:HeadlessMode) {
             Invoke-CLIAction
@@ -159,20 +242,22 @@ function Assert-Elevation {
 
 # CLI headless mode action dispatcher
 function Invoke-CLIAction {
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor ("=" * 65) -color "Info"
-    Write-OutputColor "  $($script:ToolFullName.ToUpper()) v$($script:ScriptVersion) - CLI MODE" -color "Info"
-    Write-OutputColor ("=" * 65) -color "Info"
-    Write-OutputColor "  Action:  $($script:CLIAction)" -color "Info"
-    Write-OutputColor "  Profile: $($script:CLIProfile)" -color "Info"
-    if ($script:CLISilent) {
-        Write-OutputColor "  Mode:    Silent (prompts auto-confirmed)" -color "Info"
-    }
-    if ($script:CLIOutputFormat -eq 'JSON') {
-        Write-OutputColor "  Output: JSON" -color "Info"
+    if (-not $script:CLIQuiet) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor ("=" * 65) -color "Info"
+        Write-OutputColor "  $($script:ToolFullName.ToUpper()) v$($script:ScriptVersion) - CLI MODE" -color "Info"
+        Write-OutputColor ("=" * 65) -color "Info"
+        Write-OutputColor "  Action:  $($script:CLIAction)" -color "Info"
+        Write-OutputColor "  Profile: $($script:CLIProfile)" -color "Info"
+        if ($script:CLISilent) {
+            Write-OutputColor "  Mode:    Silent (prompts auto-confirmed)" -color "Info"
+        }
+        if ($script:CLIOutputFormat -eq 'JSON') {
+            Write-OutputColor "  Output: JSON" -color "Info"
+            Write-OutputColor "" -color "Info"
+        }
         Write-OutputColor "" -color "Info"
     }
-    Write-OutputColor "" -color "Info"
 
     switch ($script:CLIAction) {
         'Cleanup' {

@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.54.0
+
+- **New Feature:** `-ListActions` CLI flag — `RackStack.exe -ListActions` enumerates all 62 available CLI actions with descriptions. Supports `-OutputFormat JSON` for machine-readable action discovery, perfect for Ansible/RMM dynamic inventory (50-EntryPoint).
+- **New Feature:** `-Version` CLI flag — `RackStack.exe -Version` prints version string and exits. Useful for automation version checks and deployment verification (50-EntryPoint).
+- **New Feature:** `-Quiet` CLI flag — `RackStack.exe -Action DiskAudit -OutputFormat JSON -Quiet` suppresses console box-drawing output, emitting only JSON. Ideal for automation pipelines that parse stdout (50-EntryPoint).
+- 65 modules, 3581 tests
+
 ## v1.53.0
 
 - **New Feature:** EnvAudit CLI action — `RackStack.exe -Action EnvAudit -OutputFormat JSON` audits system environment variables and performs PATH analysis. Detects missing directories, duplicate entries, and excessive PATH length. Exits code 1 when PATH issues detected (50-EntryPoint).

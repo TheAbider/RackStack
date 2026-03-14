@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.53.0
+    Automated Test Runner for RackStack v1.54.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10766,6 +10766,22 @@ try {
     Write-TestResult "50-EntryPoint: WMIAudit JSON output" ($mod50 -match "'WMIAudit'[\s\S]{0,8000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: WMIAudit exits 1 on issues" ($mod50 -match "'WMIAudit'[\s\S]{0,8000}wmiIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: WMIAudit Action field" ($mod50 -match "Action\s*=\s*'WMIAudit'")
+
+    # CLI infrastructure tests (v1.54.0)
+    Write-TestResult "Header: -Version switch in param block" ($headerContent -match '\[switch\]\$Version')
+    Write-TestResult "Header: -ListActions switch in param block" ($headerContent -match '\[switch\]\$ListActions')
+    Write-TestResult "Header: -Quiet switch in param block" ($headerContent -match '\[switch\]\$Quiet')
+    Write-TestResult "00-Initialization: CLIVersion variable" ($_testInitContent -match 'CLIVersion')
+    Write-TestResult "00-Initialization: CLIListActions variable" ($_testInitContent -match 'CLIListActions')
+    Write-TestResult "00-Initialization: CLIQuiet variable" ($_testInitContent -match 'CLIQuiet')
+    Write-TestResult "50-EntryPoint: -Version handler" ($mod50 -match 'CLIVersion[\s\S]{0,200}Exit\(0\)')
+    Write-TestResult "50-EntryPoint: -ListActions handler" ($mod50 -match 'CLIListActions[\s\S]{0,200}actionList')
+    Write-TestResult "50-EntryPoint: -ListActions JSON support" ($mod50 -match 'actionList[\s\S]{0,5000}ConvertTo-Json')
+    Write-TestResult "50-EntryPoint: -Quiet suppresses banner" ($mod50 -match 'CLIQuiet[\s\S]{0,200}CLI MODE')
+    Write-TestResult "50-EntryPoint: -Quiet elevation passthrough" ($mod50 -match 'CLIQuiet[\s\S]{0,100}-Quiet')
+    Write-TestResult "Install-RackStack: -Version in param block" ($bootstrapContent -match '\[switch\]\$Version')
+    Write-TestResult "Install-RackStack: -ListActions in param block" ($bootstrapContent -match '\[switch\]\$ListActions')
+    Write-TestResult "Install-RackStack: -Quiet in param block" ($bootstrapContent -match '\[switch\]\$Quiet')
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
