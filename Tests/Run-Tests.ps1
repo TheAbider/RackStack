@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.49.0
+    Automated Test Runner for RackStack v1.50.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10559,6 +10559,72 @@ try {
     Write-TestResult "50-EntryPoint: BackupAudit JSON output" ($mod50 -match "'BackupAudit'[\s\S]{0,10000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: BackupAudit exits 1 on issues" ($mod50 -match "'BackupAudit'[\s\S]{0,10000}backupIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: BackupAudit Action field" ($mod50 -match "Action\s*=\s*'BackupAudit'")
+
+    # ShareAudit CLI action tests (v1.50.0)
+    Write-TestResult "Header: ShareAudit in ValidateSet" ($headerContent -match "ValidateSet.*ShareAudit")
+    Write-TestResult "Install-RackStack: ShareAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*ShareAudit")
+    Write-TestResult "50-EntryPoint: ShareAudit case exists" ($mod50 -match "'ShareAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: ShareAudit queries Get-SmbShare" ($mod50 -match "'ShareAudit'[\s\S]{0,1000}Get-SmbShare")
+    Write-TestResult "50-EntryPoint: ShareAudit queries share access" ($mod50 -match "'ShareAudit'[\s\S]{0,3000}Get-SmbShareAccess")
+    Write-TestResult "50-EntryPoint: ShareAudit queries NTFS ACL" ($mod50 -match "'ShareAudit'[\s\S]{0,4000}Get-Acl")
+    Write-TestResult "50-EntryPoint: ShareAudit checks Everyone FullControl" ($mod50 -match "'ShareAudit'[\s\S]{0,5000}Everyone[\s\S]{0,200}FullControl")
+    Write-TestResult "50-EntryPoint: ShareAudit empty shares message" ($mod50 -match "'ShareAudit'[\s\S]{0,7000}No non-administrative shares found")
+    Write-TestResult "50-EntryPoint: ShareAudit JSON has Shares" ($mod50 -match "'ShareAudit'[\s\S]{0,9000}Shares\s*=")
+    Write-TestResult "50-EntryPoint: ShareAudit JSON output" ($mod50 -match "'ShareAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ShareAudit exits 1 on issues" ($mod50 -match "'ShareAudit'[\s\S]{0,10000}shareIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: ShareAudit Action field" ($mod50 -match "Action\s*=\s*'ShareAudit'")
+
+    # DNSAudit CLI action tests (v1.50.0)
+    Write-TestResult "Header: DNSAudit in ValidateSet" ($headerContent -match "ValidateSet.*DNSAudit")
+    Write-TestResult "Install-RackStack: DNSAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*DNSAudit")
+    Write-TestResult "50-EntryPoint: DNSAudit case exists" ($mod50 -match "'DNSAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: DNSAudit queries Get-DnsClientServerAddress" ($mod50 -match "'DNSAudit'[\s\S]{0,1000}Get-DnsClientServerAddress")
+    Write-TestResult "50-EntryPoint: DNSAudit checks suffix search list" ($mod50 -match "'DNSAudit'[\s\S]{0,3000}SuffixSearchList")
+    Write-TestResult "50-EntryPoint: DNSAudit tests resolution" ($mod50 -match "'DNSAudit'[\s\S]{0,4000}Resolve-DnsName")
+    Write-TestResult "50-EntryPoint: DNSAudit JSON has Adapters" ($mod50 -match "'DNSAudit'[\s\S]{0,8000}Adapters\s*=")
+    Write-TestResult "50-EntryPoint: DNSAudit JSON has ResolutionTests" ($mod50 -match "'DNSAudit'[\s\S]{0,8000}ResolutionTests\s*=")
+    Write-TestResult "50-EntryPoint: DNSAudit JSON output" ($mod50 -match "'DNSAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: DNSAudit exits 1 on issues" ($mod50 -match "'DNSAudit'[\s\S]{0,9000}dnsIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: DNSAudit Action field" ($mod50 -match "Action\s*=\s*'DNSAudit'")
+
+    # PowerAudit CLI action tests (v1.50.0)
+    Write-TestResult "Header: PowerAudit in ValidateSet" ($headerContent -match "ValidateSet.*PowerAudit")
+    Write-TestResult "Install-RackStack: PowerAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*PowerAudit")
+    Write-TestResult "50-EntryPoint: PowerAudit case exists" ($mod50 -match "'PowerAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: PowerAudit queries powercfg" ($mod50 -match "'PowerAudit'[\s\S]{0,1000}powercfg /getactivescheme")
+    Write-TestResult "50-EntryPoint: PowerAudit checks High Performance" ($mod50 -match "'PowerAudit'[\s\S]{0,2000}High.*erformance")
+    Write-TestResult "50-EntryPoint: PowerAudit checks sleep settings" ($mod50 -match "'PowerAudit'[\s\S]{0,3000}STANDBYIDLE")
+    Write-TestResult "50-EntryPoint: PowerAudit checks hibernate" ($mod50 -match "'PowerAudit'[\s\S]{0,4000}availablesleepstates")
+    Write-TestResult "50-EntryPoint: PowerAudit JSON output" ($mod50 -match "'PowerAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: PowerAudit exits 1 on issues" ($mod50 -match "'PowerAudit'[\s\S]{0,8000}powerIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: PowerAudit Action field" ($mod50 -match "Action\s*=\s*'PowerAudit'")
+
+    # RegistryAudit CLI action tests (v1.50.0)
+    Write-TestResult "Header: RegistryAudit in ValidateSet" ($headerContent -match "ValidateSet.*RegistryAudit")
+    Write-TestResult "Install-RackStack: RegistryAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*RegistryAudit")
+    Write-TestResult "50-EntryPoint: RegistryAudit case exists" ($mod50 -match "'RegistryAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: RegistryAudit checks UAC" ($mod50 -match "'RegistryAudit'[\s\S]{0,2000}EnableLUA")
+    Write-TestResult "50-EntryPoint: RegistryAudit checks RDP NLA" ($mod50 -match "'RegistryAudit'[\s\S]{0,3000}UserAuthentication")
+    Write-TestResult "50-EntryPoint: RegistryAudit checks WDigest" ($mod50 -match "'RegistryAudit'[\s\S]{0,4000}UseLogonCredential")
+    Write-TestResult "50-EntryPoint: RegistryAudit checks LSASS" ($mod50 -match "'RegistryAudit'[\s\S]{0,4000}RunAsPPL")
+    Write-TestResult "50-EntryPoint: RegistryAudit checks LM Hash" ($mod50 -match "'RegistryAudit'[\s\S]{0,5000}NoLMHash")
+    Write-TestResult "50-EntryPoint: RegistryAudit JSON has Checks" ($mod50 -match "'RegistryAudit'[\s\S]{0,8000}Checks\s*=")
+    Write-TestResult "50-EntryPoint: RegistryAudit JSON output" ($mod50 -match "'RegistryAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: RegistryAudit exits 1 on issues" ($mod50 -match "'RegistryAudit'[\s\S]{0,9000}regIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: RegistryAudit Action field" ($mod50 -match "Action\s*=\s*'RegistryAudit'")
+
+    # ProfileAudit CLI action tests (v1.50.0)
+    Write-TestResult "Header: ProfileAudit in ValidateSet" ($headerContent -match "ValidateSet.*ProfileAudit")
+    Write-TestResult "Install-RackStack: ProfileAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*ProfileAudit")
+    Write-TestResult "50-EntryPoint: ProfileAudit case exists" ($mod50 -match "'ProfileAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: ProfileAudit queries Win32_UserProfile" ($mod50 -match "'ProfileAudit'[\s\S]{0,1000}Win32_UserProfile")
+    Write-TestResult "50-EntryPoint: ProfileAudit checks stale threshold" ($mod50 -match "'ProfileAudit'[\s\S]{0,3000}staleDays\s*-gt\s*180")
+    Write-TestResult "50-EntryPoint: ProfileAudit checks large threshold" ($mod50 -match "'ProfileAudit'[\s\S]{0,4000}sizeMB\s*-gt\s*5120")
+    Write-TestResult "50-EntryPoint: ProfileAudit calculates total size" ($mod50 -match "'ProfileAudit'[\s\S]{0,5000}totalSizeGB")
+    Write-TestResult "50-EntryPoint: ProfileAudit JSON has Profiles" ($mod50 -match "'ProfileAudit'[\s\S]{0,8000}Profiles\s*=")
+    Write-TestResult "50-EntryPoint: ProfileAudit JSON output" ($mod50 -match "'ProfileAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ProfileAudit exits 1 on issues" ($mod50 -match "'ProfileAudit'[\s\S]{0,9000}profileIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: ProfileAudit Action field" ($mod50 -match "Action\s*=\s*'ProfileAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

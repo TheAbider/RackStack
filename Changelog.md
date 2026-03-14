@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.50.0
+
+- **New Feature:** ShareAudit CLI action — `RackStack.exe -Action ShareAudit -OutputFormat JSON` audits file share permissions. Enumerates non-administrative SMB shares with both SMB share-level and NTFS filesystem ACLs. Flags shares with Everyone Full Control. Exits code 1 when permission issues detected (50-EntryPoint).
+- **New Feature:** DNSAudit CLI action — `RackStack.exe -Action DNSAudit -OutputFormat JSON` audits DNS client configuration. Reports DNS server addresses per adapter, suffix search lists, and performs live resolution tests against dns.msftncsi.com and time.windows.com. Exits code 1 when resolution failures detected (50-EntryPoint).
+- **New Feature:** PowerAudit CLI action — `RackStack.exe -Action PowerAudit -OutputFormat JSON` audits power configuration. Reports active power plan, sleep timeouts (AC/DC), and hibernate availability. Flags non-High Performance plans on servers. Exits code 1 when power issues detected (50-EntryPoint).
+- **New Feature:** RegistryAudit CLI action — `RackStack.exe -Action RegistryAudit -OutputFormat JSON` audits 10 security-critical registry settings against CIS-like baselines. Checks UAC, RDP NLA, AutoPlay, WDigest, LSASS protection, LM hash storage, anonymous SID restrictions, and NTLM minimum security. Exits code 1 when security issues detected (50-EntryPoint).
+- **New Feature:** ProfileAudit CLI action — `RackStack.exe -Action ProfileAudit -OutputFormat JSON` audits user profiles. Reports disk usage per profile, last use date, loaded status, and flags stale profiles (>180 days) and large profiles (>5GB). Exits code 1 when profile issues detected (50-EntryPoint).
+- 65 modules, 3450 tests
+
 ## v1.49.0
 
 - **New Feature:** ProcessAudit CLI action — `RackStack.exe -Action ProcessAudit -OutputFormat JSON` audits running processes. Reports top 10 CPU and memory consumers, and scans running executables for valid Authenticode signatures. Lists unsigned or invalidly signed processes. Exits code 1 when unsigned processes detected (50-EntryPoint).

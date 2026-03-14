@@ -4070,6 +4070,395 @@ function Invoke-CLIAction {
 
             if ($backupIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'ShareAudit' {
+            Write-OutputColor "  Auditing file share permissions..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $shareIssues = 0
+            $shareResults = @()
+
+            try {
+                $shares = @(Get-SmbShare -ErrorAction Stop | Where-Object { $_.Name -notmatch '^\$' -and $_.Name -ne 'IPC$' -and $_.Special -ne $true })
+                foreach ($s in $shares) {
+                    $ntfsPerms = @()
+                    $smbPerms = @()
+                    $status = 'OK'
+
+                    # SMB share permissions
+                    try {
+                        $smbAccess = @(Get-SmbShareAccess -Name $s.Name -ErrorAction Stop)
+                        foreach ($a in $smbAccess) {
+                            $smbPerms += @{ Account = $a.AccountName; Right = "$($a.AccessRight)"; Type = "$($a.AccessControlType)" }
+                            if ($a.AccountName -match 'Everyone' -and "$($a.AccessRight)" -eq 'Full' -and "$($a.AccessControlType)" -eq 'Allow') {
+                                $status = 'WARN'; $shareIssues++
+                            }
+                        }
+                    } catch { }
+
+                    # NTFS permissions on share path
+                    if ($s.Path -and (Test-Path -LiteralPath $s.Path)) {
+                        try {
+                            $acl = Get-Acl -Path $s.Path -ErrorAction Stop
+                            foreach ($ace in $acl.Access) {
+                                $ntfsPerms += @{
+                                    Account = "$($ace.IdentityReference)"
+                                    Rights  = "$($ace.FileSystemRights)"
+                                    Type    = "$($ace.AccessControlType)"
+                                    Inherited = $ace.IsInherited
+                                }
+                                if ("$($ace.IdentityReference)" -match 'Everyone' -and "$($ace.FileSystemRights)" -match 'FullControl' -and "$($ace.AccessControlType)" -eq 'Allow') {
+                                    if ($status -eq 'OK') { $status = 'WARN'; $shareIssues++ }
+                                }
+                            }
+                        } catch { }
+                    }
+
+                    $shareResults += @{
+                        Name        = $s.Name
+                        Path        = $s.Path
+                        Description = $s.Description
+                        Status      = $status
+                        SMBPerms    = $smbPerms
+                        NTFSPerms   = $ntfsPerms
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not enumerate shares: $($_.Exception.Message)" -color "Warning"
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SHARE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($shareResults).Count -eq 0) {
+                Write-OutputColor "  │$("  (No non-administrative shares found)".PadRight(72))│" -color "Info"
+            } else {
+                foreach ($s in $shareResults) {
+                    $sName = if ($s.Name.Length -gt 20) { $s.Name.Substring(0, 17) + "..." } else { $s.Name }
+                    $sPath = if ($s.Path.Length -gt 35) { $s.Path.Substring(0, 32) + "..." } else { $s.Path }
+                    $line = "  $($sName.PadRight(22)) $sPath  [$($s.Status)]"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = if ($s.Status -eq 'OK') { 'Success' } else { 'Warning' }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                    Write-OutputColor "  │$("    SMB: $(@($s.SMBPerms).Count) ACEs   NTFS: $(@($s.NTFSPerms).Count) ACEs".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Shares: $(@($shareResults).Count)   Issues: $shareIssues".PadRight(72))│" -color $(if ($shareIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ShareAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Shares = @($shareResults).Count; Issues = $shareIssues }
+                    Shares = $shareResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($shareIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DNSAudit' {
+            Write-OutputColor "  Auditing DNS configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $dnsIssues = 0
+            $adapters = @()
+
+            try {
+                $dnsClients = @(Get-DnsClientServerAddress -ErrorAction Stop | Where-Object { $_.ServerAddresses.Count -gt 0 -and $_.AddressFamily -eq 2 })
+                $seen = @{}
+                foreach ($dc in $dnsClients) {
+                    $key = "$($dc.InterfaceAlias)"
+                    if ($seen.ContainsKey($key)) { continue }
+                    $seen[$key] = $true
+                    $adapters += @{
+                        Interface   = $dc.InterfaceAlias
+                        DNSServers  = $dc.ServerAddresses
+                        Status      = 'OK'
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query DNS config: $($_.Exception.Message)" -color "Warning"
+            }
+
+            # DNS suffix search list
+            $suffixList = @()
+            try {
+                $dnsClient = Get-DnsClient -ErrorAction SilentlyContinue | Select-Object -First 1
+                $suffixSearch = Get-DnsClientGlobalSetting -ErrorAction SilentlyContinue
+                if ($null -ne $suffixSearch) { $suffixList = @($suffixSearch.SuffixSearchList) }
+            } catch { }
+
+            # Resolution tests
+            $resTests = @()
+            $testTargets = @('dns.msftncsi.com', 'time.windows.com')
+            foreach ($target in $testTargets) {
+                $resolved = $false
+                $resolvedIP = ''
+                try {
+                    $result = Resolve-DnsName -Name $target -Type A -ErrorAction Stop | Select-Object -First 1
+                    $resolved = $true
+                    $resolvedIP = "$($result.IPAddress)"
+                } catch { $dnsIssues++ }
+                $resTests += @{ Target = $target; Resolved = $resolved; IP = $resolvedIP }
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  DNS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($a in $adapters) {
+                $servers = ($a.DNSServers -join ', ')
+                if ($servers.Length -gt 45) { $servers = $servers.Substring(0, 42) + "..." }
+                $line = "  $($a.Interface): $servers"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+            }
+            if (@($suffixList).Count -gt 0) {
+                Write-OutputColor "  │$("  Suffix Search: $($suffixList -join ', ')".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($t in $resTests) {
+                $rColor = if ($t.Resolved) { "Success" } else { "Error" }
+                $rStatus = if ($t.Resolved) { "OK ($($t.IP))" } else { "FAIL" }
+                Write-OutputColor "  │$("  Resolve $($t.Target): $rStatus".PadRight(72))│" -color $rColor
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $dnsIssues".PadRight(72))│" -color $(if ($dnsIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DNSAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Adapters = @($adapters).Count; SuffixCount = @($suffixList).Count; ResolutionTests = @($resTests).Count; Issues = $dnsIssues }
+                    Adapters = $adapters; SuffixSearchList = $suffixList; ResolutionTests = $resTests
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($dnsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'PowerAudit' {
+            Write-OutputColor "  Auditing power configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $powerIssues = 0
+
+            # Active power plan
+            $activePlan = "Unknown"
+            $planGuid = ""
+            try {
+                $plans = & powercfg /getactivescheme 2>&1
+                $planStr = $plans -join " "
+                if ($planStr -match 'Power Scheme GUID:\s*(\S+)\s*\(([^)]+)\)') {
+                    $regexMatches = $Matches; $planGuid = $regexMatches[1]; $activePlan = $regexMatches[2]
+                }
+                if ($activePlan -notmatch 'High [Pp]erformance') { $powerIssues++ }
+            } catch { }
+
+            # Sleep/Hibernate settings
+            $sleepAC = "Unknown"; $sleepDC = "Unknown"
+            $hibernateEnabled = $false
+            try {
+                $sleepOutput = & powercfg /query $planGuid SUB_SLEEP STANDBYIDLE 2>&1
+                $sleepStr = $sleepOutput -join "`n"
+                if ($sleepStr -match 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') {
+                    $regexMatches = $Matches; $sleepAC = [int]("0x" + $regexMatches[1])
+                    $sleepAC = if ($sleepAC -eq 0) { "Never" } else { "$($sleepAC)s" }
+                }
+                if ($sleepStr -match 'Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)') {
+                    $regexMatches = $Matches; $sleepDC = [int]("0x" + $regexMatches[1])
+                    $sleepDC = if ($sleepDC -eq 0) { "Never" } else { "$($sleepDC)s" }
+                }
+            } catch { }
+
+            try {
+                $hibOutput = & powercfg /availablesleepstates 2>&1
+                $hibStr = $hibOutput -join "`n"
+                $hibernateEnabled = $hibStr -match 'Hibernate'
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  POWER AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $planColor = if ($activePlan -match 'High [Pp]erformance') { "Success" } else { "Warning" }
+            Write-OutputColor "  │$("  Active Plan:    $activePlan".PadRight(72))│" -color $planColor
+            Write-OutputColor "  │$("  Sleep (AC):     $sleepAC".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Sleep (DC):     $sleepDC".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Hibernate:      $(if ($hibernateEnabled) { 'Available' } else { 'Disabled' })".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $powerIssues".PadRight(72))│" -color $(if ($powerIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PowerAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ ActivePlan = $activePlan; PlanGUID = $planGuid; SleepAC = $sleepAC; SleepDC = $sleepDC; HibernateAvailable = $hibernateEnabled; Issues = $powerIssues }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($powerIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'RegistryAudit' {
+            Write-OutputColor "  Auditing security registry settings..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $regIssues = 0
+            $checks = @()
+
+            # Security baseline registry checks
+            $baselineChecks = @(
+                @{ Name = 'UAC Enabled';           Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Key = 'EnableLUA';                  Expected = 1;  Critical = $true }
+                @{ Name = 'UAC Prompt Admin';       Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Key = 'ConsentPromptBehaviorAdmin'; Expected = 2;  Critical = $false }
+                @{ Name = 'RDP NLA Required';       Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'; Key = 'UserAuthentication'; Expected = 1; Critical = $true }
+                @{ Name = 'AutoPlay Disabled';      Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Key = 'NoDriveTypeAutoRun'; Expected = 255; Critical = $false }
+                @{ Name = 'WDigest Disabled';       Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest'; Key = 'UseLogonCredential'; Expected = 0; Critical = $true }
+                @{ Name = 'LSASS Protection';       Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'; Key = 'RunAsPPL'; Expected = 1; Critical = $true }
+                @{ Name = 'Remote Registry Disabled'; Path = 'HKLM:\SYSTEM\CurrentControlSet\Services\RemoteRegistry'; Key = 'Start'; Expected = 4; Critical = $false }
+                @{ Name = 'LM Hash Storage Disabled'; Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'; Key = 'NoLMHash'; Expected = 1; Critical = $true }
+                @{ Name = 'Anonymous SID Disabled'; Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'; Key = 'RestrictAnonymousSAM'; Expected = 1; Critical = $false }
+                @{ Name = 'NTLM Min Server Sec';    Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0'; Key = 'NTLMMinServerSec'; Expected = 537395200; Critical = $false }
+            )
+
+            foreach ($check in $baselineChecks) {
+                $actual = $null
+                $exists = $false
+                $pass = $false
+
+                try {
+                    if (Test-Path $check.Path) {
+                        $reg = Get-ItemProperty -Path $check.Path -ErrorAction SilentlyContinue
+                        if ($null -ne $reg -and ($reg.PSObject.Properties.Name -contains $check.Key)) {
+                            $exists = $true
+                            $actual = $reg.($check.Key)
+                            $pass = $actual -eq $check.Expected
+                        }
+                    }
+                } catch { }
+
+                $status = if ($pass) { 'OK' } elseif ($check.Critical) { 'CRITICAL'; $regIssues++ } else { 'WARN'; $regIssues++ }
+
+                $checks += @{
+                    Name     = $check.Name
+                    Path     = $check.Path
+                    Key      = $check.Key
+                    Expected = $check.Expected
+                    Actual   = $actual
+                    Exists   = $exists
+                    Status   = $status
+                }
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  REGISTRY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($c in $checks) {
+                $actualStr = if ($null -eq $c.Actual) { "(not set)" } else { "$($c.Actual)" }
+                $line = "  $($c.Name.PadRight(28)) $($actualStr.PadRight(12)) [$($c.Status)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = switch ($c.Status) { 'OK' { 'Success' } 'WARN' { 'Warning' } 'CRITICAL' { 'Error' } default { 'Info' } }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $passed = @($checks | Where-Object { $_.Status -eq 'OK' }).Count
+            Write-OutputColor "  │$("  Passed: $passed/$(@($checks).Count)   Issues: $regIssues".PadRight(72))│" -color $(if ($regIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'RegistryAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ TotalChecks = @($checks).Count; Passed = $passed; Issues = $regIssues }
+                    Checks = $checks
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($regIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ProfileAudit' {
+            Write-OutputColor "  Auditing user profiles..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $profileIssues = 0
+            $profileResults = @()
+
+            try {
+                $profiles = @(Get-CimInstance -ClassName Win32_UserProfile -ErrorAction Stop | Where-Object { -not $_.Special -and $_.LocalPath -notmatch 'systemprofile|LocalService|NetworkService' })
+                foreach ($p in $profiles) {
+                    $sizeMB = 0
+                    $lastUse = $null
+                    $staleDays = 0
+                    $health = 'OK'
+
+                    if ($null -ne $p.LastUseTime) {
+                        $lastUse = $p.LastUseTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                        $staleDays = [math]::Round(((Get-Date) - $p.LastUseTime).TotalDays, 0)
+                    }
+
+                    # Profile size
+                    if (Test-Path -LiteralPath $p.LocalPath) {
+                        try {
+                            $dirInfo = Get-ChildItem -LiteralPath $p.LocalPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
+                            $sizeMB = [math]::Round($dirInfo.Sum / 1MB, 1)
+                        } catch { }
+                    }
+
+                    if ($staleDays -gt 180) { $health = 'STALE'; $profileIssues++ }
+                    if ($sizeMB -gt 5120) { $health = 'LARGE'; $profileIssues++ }
+
+                    $username = $p.LocalPath.Split('\')[-1]
+                    $profileResults += @{
+                        Username   = $username
+                        Path       = $p.LocalPath
+                        SizeMB     = $sizeMB
+                        LastUsed   = $lastUse
+                        StaleDays  = $staleDays
+                        Loaded     = $p.Loaded
+                        Health     = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query profiles: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $totalSizeMB = ($profileResults | ForEach-Object { $_.SizeMB } | Measure-Object -Sum).Sum
+            $totalSizeGB = [math]::Round($totalSizeMB / 1024, 1)
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PROFILE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($p in ($profileResults | Sort-Object SizeMB -Descending)) {
+                $uName = if ($p.Username.Length -gt 18) { $p.Username.Substring(0, 15) + "..." } else { $p.Username }
+                $loaded = if ($p.Loaded) { "Active" } else { "" }
+                $line = "  $($uName.PadRight(20)) $("$($p.SizeMB)MB".PadRight(12)) $("$($p.StaleDays)d".PadRight(8)) $loaded  [$($p.Health)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = switch ($p.Health) { 'OK' { 'Success' } 'STALE' { 'Warning' } 'LARGE' { 'Warning' } default { 'Info' } }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $staleCount = @($profileResults | Where-Object { $_.Health -eq 'STALE' }).Count
+            $largeCount = @($profileResults | Where-Object { $_.Health -eq 'LARGE' }).Count
+            $summaryLine = "  Profiles: $(@($profileResults).Count)   Total: ${totalSizeGB}GB   Stale: $staleCount   Large: $largeCount"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($profileIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ProfileAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ TotalProfiles = @($profileResults).Count; TotalSizeGB = $totalSizeGB; Stale = $staleCount; Large = $largeCount; Issues = $profileIssues }
+                    Profiles = $profileResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($profileIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
