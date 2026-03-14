@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.51.0
+
+- **New Feature:** HyperVAudit CLI action — `RackStack.exe -Action HyperVAudit -OutputFormat JSON` audits Hyper-V infrastructure. Reports VM states, memory allocation, checkpoint counts (flags >3), and replication health. Exits code 1 when VM issues detected (50-EntryPoint).
+- **New Feature:** NetworkAudit CLI action — `RackStack.exe -Action NetworkAudit -OutputFormat JSON` performs comprehensive network audit. Reports active adapter config with IP addresses, MAC, link speed, driver version, and default routes. Flags 100Mbps links on servers. Exits code 1 when network issues detected (50-EntryPoint).
+- **New Feature:** StorageAudit CLI action — `RackStack.exe -Action StorageAudit -OutputFormat JSON` audits Storage Spaces configuration. Reports storage pool health, allocated capacity, and virtual disk resiliency settings. Flags degraded pools and virtual disks. Exits code 1 when storage issues detected (50-EntryPoint).
+- **New Feature:** FeatureAudit CLI action — `RackStack.exe -Action FeatureAudit -OutputFormat JSON` inventories installed Windows features. Categorizes as Roles, Role Services, and Features with counts. Falls back to Get-WindowsOptionalFeature on client OS (50-EntryPoint).
+- 65 modules, 3490 tests
+
 ## v1.50.0
 
 - **New Feature:** ShareAudit CLI action — `RackStack.exe -Action ShareAudit -OutputFormat JSON` audits file share permissions. Enumerates non-administrative SMB shares with both SMB share-level and NTFS filesystem ACLs. Flags shares with Everyone Full Control. Exits code 1 when permission issues detected (50-EntryPoint).

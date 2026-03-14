@@ -4459,6 +4459,331 @@ function Invoke-CLIAction {
             }
             if ($profileIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'HyperVAudit' {
+            Write-OutputColor "  Auditing Hyper-V configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $hvIssues = 0
+            $vmResults = @()
+            $hvInstalled = $false
+
+            # Check if Hyper-V is installed
+            try {
+                $hvFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -ErrorAction SilentlyContinue
+                if ($null -eq $hvFeature) { $hvFeature = Get-WindowsFeature -Name Hyper-V -ErrorAction SilentlyContinue }
+                $hvInstalled = ($null -ne $hvFeature -and ($hvFeature.State -eq 'Enabled' -or $hvFeature.Installed -eq $true))
+            } catch { }
+
+            if (-not $hvInstalled) {
+                Write-OutputColor "  Hyper-V is not installed on this system." -color "Info"
+            } else {
+                try {
+                    $vms = @(Get-VM -ErrorAction Stop)
+                    foreach ($vm in $vms) {
+                        $health = 'OK'
+                        if ($vm.State -ne 'Running' -and $vm.State -ne 'Off') { $health = 'WARN'; $hvIssues++ }
+
+                        $checkpoints = @(Get-VMCheckpoint -VMName $vm.Name -ErrorAction SilentlyContinue)
+                        if (@($checkpoints).Count -gt 3) { $health = 'WARN'; $hvIssues++ }
+
+                        $repl = $null
+                        try {
+                            $replObj = Get-VMReplication -VMName $vm.Name -ErrorAction SilentlyContinue
+                            if ($null -ne $replObj) {
+                                $repl = @{ State = "$($replObj.State)"; Health = "$($replObj.Health)"; Mode = "$($replObj.Mode)" }
+                                if ("$($replObj.Health)" -ne 'Normal' -and "$($replObj.Health)" -ne '') { $hvIssues++ }
+                            }
+                        } catch { }
+
+                        $vmResults += @{
+                            Name        = $vm.Name
+                            State       = "$($vm.State)"
+                            CPUCount    = $vm.ProcessorCount
+                            MemoryMB    = [math]::Round($vm.MemoryAssigned / 1MB, 0)
+                            Uptime      = if ($vm.Uptime) { "$($vm.Uptime)" } else { "" }
+                            Checkpoints = @($checkpoints).Count
+                            Replication = $repl
+                            Health      = $health
+                        }
+                    }
+                } catch {
+                    Write-OutputColor "  ERROR: Failed to query VMs: $($_.Exception.Message)" -color "Error"
+                    [Environment]::Exit(1)
+                }
+            }
+
+            $running = @($vmResults | Where-Object { $_.State -eq 'Running' }).Count
+            $off = @($vmResults | Where-Object { $_.State -eq 'Off' }).Count
+            $other = @($vmResults).Count - $running - $off
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  HYPERV AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (-not $hvInstalled) {
+                Write-OutputColor "  │$("  Hyper-V: Not installed".PadRight(72))│" -color "Info"
+            } elseif (@($vmResults).Count -eq 0) {
+                Write-OutputColor "  │$("  (No virtual machines found)".PadRight(72))│" -color "Info"
+            } else {
+                foreach ($v in $vmResults) {
+                    $vName = if ($v.Name.Length -gt 25) { $v.Name.Substring(0, 22) + "..." } else { $v.Name }
+                    $chkStr = if ($v.Checkpoints -gt 0) { "Chk:$($v.Checkpoints)" } else { "" }
+                    $line = "  $($vName.PadRight(27)) $("$($v.State)".PadRight(10)) $("$($v.MemoryMB)MB".PadRight(10)) $chkStr  [$($v.Health)]"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = switch ($v.Health) { 'OK' { 'Success' } 'WARN' { 'Warning' } default { 'Info' } }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  VMs: $(@($vmResults).Count)   Running: $running   Off: $off   Other: $other   Issues: $hvIssues"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($hvIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'HyperVAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ HyperVInstalled = $hvInstalled; TotalVMs = @($vmResults).Count; Running = $running; Off = $off; Other = $other; Issues = $hvIssues }
+                    VMs = $vmResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($hvIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NetworkAudit' {
+            Write-OutputColor "  Auditing network configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $netIssues = 0
+            $adapterResults = @()
+
+            try {
+                $adapters = @(Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' })
+                foreach ($a in $adapters) {
+                    $ipConfig = @()
+                    try {
+                        $ips = @(Get-NetIPAddress -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | Where-Object { $_.AddressFamily -eq 'IPv4' -and $_.IPAddress -ne '127.0.0.1' })
+                        foreach ($ip in $ips) {
+                            $ipConfig += @{ Address = $ip.IPAddress; Prefix = $ip.PrefixLength; Type = "$($ip.PrefixOrigin)" }
+                        }
+                    } catch { }
+
+                    $gateway = ""
+                    try {
+                        $gw = Get-NetRoute -InterfaceIndex $a.ifIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1
+                        if ($null -ne $gw) { $gateway = $gw.NextHop }
+                    } catch { }
+
+                    $health = 'OK'
+                    if ($a.LinkSpeed -match '100\s*Mbps') { $health = 'WARN'; $netIssues++ }
+
+                    $adapterResults += @{
+                        Name       = $a.Name
+                        MacAddress = $a.MacAddress
+                        LinkSpeed  = "$($a.LinkSpeed)"
+                        DriverVer  = "$($a.DriverVersion)"
+                        IPs        = $ipConfig
+                        Gateway    = $gateway
+                        Health     = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query adapters: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            # Default route
+            $defaultRoutes = @()
+            try {
+                $routes = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue)
+                foreach ($r in $routes) { $defaultRoutes += @{ Interface = $r.InterfaceAlias; NextHop = $r.NextHop; Metric = $r.RouteMetric } }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  NETWORK AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($a in $adapterResults) {
+                $aName = if ($a.Name.Length -gt 20) { $a.Name.Substring(0, 17) + "..." } else { $a.Name }
+                $ipStr = if (@($a.IPs).Count -gt 0) { $a.IPs[0].Address } else { "No IP" }
+                $line = "  $($aName.PadRight(22)) $($ipStr.PadRight(16)) $($a.LinkSpeed)  [$($a.Health)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = if ($a.Health -eq 'OK') { 'Success' } else { 'Warning' }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            if (@($defaultRoutes).Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                foreach ($r in $defaultRoutes) {
+                    Write-OutputColor "  │$("  Route: $($r.Interface) -> $($r.NextHop) (metric $($r.Metric))".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Adapters: $(@($adapterResults).Count)   Routes: $(@($defaultRoutes).Count)   Issues: $netIssues".PadRight(72))│" -color $(if ($netIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NetworkAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Adapters = @($adapterResults).Count; DefaultRoutes = @($defaultRoutes).Count; Issues = $netIssues }
+                    Adapters = $adapterResults; DefaultRoutes = $defaultRoutes
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($netIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'StorageAudit' {
+            Write-OutputColor "  Auditing storage configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $storIssues = 0
+            $pools = @()
+            $vDisks = @()
+
+            # Storage Pools
+            try {
+                $storagePools = @(Get-StoragePool -ErrorAction Stop | Where-Object { $_.FriendlyName -ne 'Primordial' })
+                foreach ($sp in $storagePools) {
+                    $health = 'OK'
+                    if ("$($sp.HealthStatus)" -ne 'Healthy') { $health = 'FAIL'; $storIssues++ }
+                    if ("$($sp.OperationalStatus)" -ne 'OK') { $health = 'FAIL'; if ("$($sp.HealthStatus)" -eq 'Healthy') { $storIssues++ } }
+                    $pools += @{
+                        Name              = $sp.FriendlyName
+                        SizeGB            = [math]::Round($sp.Size / 1GB, 1)
+                        AllocatedGB       = [math]::Round($sp.AllocatedSize / 1GB, 1)
+                        HealthStatus      = "$($sp.HealthStatus)"
+                        OperationalStatus = "$($sp.OperationalStatus)"
+                        Health            = $health
+                    }
+                }
+            } catch { }
+
+            # Virtual Disks
+            try {
+                $virtualDisks = @(Get-VirtualDisk -ErrorAction Stop)
+                foreach ($vd in $virtualDisks) {
+                    $health = 'OK'
+                    if ("$($vd.HealthStatus)" -ne 'Healthy') { $health = 'FAIL'; $storIssues++ }
+                    if ("$($vd.OperationalStatus)" -ne 'OK') { $health = 'FAIL'; if ("$($vd.HealthStatus)" -eq 'Healthy') { $storIssues++ } }
+                    $vDisks += @{
+                        Name              = $vd.FriendlyName
+                        SizeGB            = [math]::Round($vd.Size / 1GB, 1)
+                        ResiliencyType    = "$($vd.ResiliencySettingName)"
+                        HealthStatus      = "$($vd.HealthStatus)"
+                        OperationalStatus = "$($vd.OperationalStatus)"
+                        Health            = $health
+                    }
+                }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  STORAGE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($pools).Count -eq 0 -and @($vDisks).Count -eq 0) {
+                Write-OutputColor "  │$("  (No storage pools or virtual disks configured)".PadRight(72))│" -color "Info"
+            } else {
+                if (@($pools).Count -gt 0) {
+                    Write-OutputColor "  │$("  STORAGE POOLS".PadRight(72))│" -color "Info"
+                    foreach ($p in $pools) {
+                        $line = "  $($p.Name.PadRight(25)) $($p.AllocatedGB)/$($p.SizeGB)GB  [$($p.Health)]"
+                        if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                        $color = if ($p.Health -eq 'OK') { 'Success' } else { 'Error' }
+                        Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                    }
+                }
+                if (@($vDisks).Count -gt 0) {
+                    Write-OutputColor "  │$("  VIRTUAL DISKS".PadRight(72))│" -color "Info"
+                    foreach ($v in $vDisks) {
+                        $line = "  $($v.Name.PadRight(25)) $($v.SizeGB)GB  $($v.ResiliencyType)  [$($v.Health)]"
+                        if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                        $color = if ($v.Health -eq 'OK') { 'Success' } else { 'Error' }
+                        Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                    }
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Pools: $(@($pools).Count)   VDisks: $(@($vDisks).Count)   Issues: $storIssues".PadRight(72))│" -color $(if ($storIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'StorageAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Pools = @($pools).Count; VirtualDisks = @($vDisks).Count; Issues = $storIssues }
+                    StoragePools = $pools; VirtualDisks = $vDisks
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($storIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'FeatureAudit' {
+            Write-OutputColor "  Auditing installed Windows features..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $featureIssues = 0
+            $featureResults = @()
+
+            try {
+                # Try Server features first
+                $features = @(Get-WindowsFeature -ErrorAction Stop | Where-Object { $_.Installed -eq $true })
+                foreach ($f in $features) {
+                    $featureResults += @{
+                        Name        = $f.Name
+                        DisplayName = $f.DisplayName
+                        FeatureType = "$($f.FeatureType)"
+                        Depth       = $f.Depth
+                    }
+                }
+            } catch {
+                # Fallback to client features
+                try {
+                    $features = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' })
+                    foreach ($f in $features) {
+                        $featureResults += @{
+                            Name        = $f.FeatureName
+                            DisplayName = $f.FeatureName
+                            FeatureType = "Optional"
+                            Depth       = 0
+                        }
+                    }
+                } catch {
+                    Write-OutputColor "  WARNING: Could not query features: $($_.Exception.Message)" -color "Warning"
+                }
+            }
+
+            # Categorize
+            $roles = @($featureResults | Where-Object { $_.FeatureType -eq 'Role' })
+            $roleServices = @($featureResults | Where-Object { $_.FeatureType -eq 'Role Service' })
+            $otherFeatures = @($featureResults | Where-Object { $_.FeatureType -ne 'Role' -and $_.FeatureType -ne 'Role Service' })
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  FEATURE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($roles).Count -gt 0) {
+                Write-OutputColor "  │$("  INSTALLED ROLES ($(@($roles).Count))".PadRight(72))│" -color "Info"
+                foreach ($r in $roles) {
+                    $rName = if ($r.DisplayName.Length -gt 65) { $r.DisplayName.Substring(0, 62) + "..." } else { $r.DisplayName }
+                    Write-OutputColor "  │$("  $rName".PadRight(72))│" -color "Success"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Roles: $(@($roles).Count)   Services: $(@($roleServices).Count)   Features: $(@($otherFeatures).Count)   Total: $(@($featureResults).Count)"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'FeatureAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Roles = @($roles).Count; RoleServices = @($roleServices).Count; Features = @($otherFeatures).Count; Total = @($featureResults).Count; Issues = $featureIssues }
+                    InstalledFeatures = $featureResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($featureIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

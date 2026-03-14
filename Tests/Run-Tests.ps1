@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.50.0
+    Automated Test Runner for RackStack v1.51.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10625,6 +10625,54 @@ try {
     Write-TestResult "50-EntryPoint: ProfileAudit JSON output" ($mod50 -match "'ProfileAudit'[\s\S]{0,9000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: ProfileAudit exits 1 on issues" ($mod50 -match "'ProfileAudit'[\s\S]{0,9000}profileIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: ProfileAudit Action field" ($mod50 -match "Action\s*=\s*'ProfileAudit'")
+
+    # HyperVAudit CLI action tests (v1.51.0)
+    Write-TestResult "Header: HyperVAudit in ValidateSet" ($headerContent -match "ValidateSet.*HyperVAudit")
+    Write-TestResult "Install-RackStack: HyperVAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*HyperVAudit")
+    Write-TestResult "50-EntryPoint: HyperVAudit case exists" ($mod50 -match "'HyperVAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: HyperVAudit queries Get-VM" ($mod50 -match "'HyperVAudit'[\s\S]{0,2000}Get-VM\s")
+    Write-TestResult "50-EntryPoint: HyperVAudit checks checkpoints" ($mod50 -match "'HyperVAudit'[\s\S]{0,3000}Get-VMCheckpoint")
+    Write-TestResult "50-EntryPoint: HyperVAudit checks replication" ($mod50 -match "'HyperVAudit'[\s\S]{0,4000}Get-VMReplication")
+    Write-TestResult "50-EntryPoint: HyperVAudit JSON has VMs" ($mod50 -match "'HyperVAudit'[\s\S]{0,8000}VMs\s*=")
+    Write-TestResult "50-EntryPoint: HyperVAudit JSON output" ($mod50 -match "'HyperVAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: HyperVAudit exits 1 on issues" ($mod50 -match "'HyperVAudit'[\s\S]{0,9000}hvIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: HyperVAudit Action field" ($mod50 -match "Action\s*=\s*'HyperVAudit'")
+
+    # NetworkAudit CLI action tests (v1.51.0)
+    Write-TestResult "Header: NetworkAudit in ValidateSet" ($headerContent -match "ValidateSet.*NetworkAudit")
+    Write-TestResult "Install-RackStack: NetworkAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*NetworkAudit")
+    Write-TestResult "50-EntryPoint: NetworkAudit case exists" ($mod50 -match "'NetworkAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: NetworkAudit queries Get-NetAdapter" ($mod50 -match "'NetworkAudit'[\s\S]{0,1000}Get-NetAdapter")
+    Write-TestResult "50-EntryPoint: NetworkAudit queries Get-NetIPAddress" ($mod50 -match "'NetworkAudit'[\s\S]{0,2000}Get-NetIPAddress")
+    Write-TestResult "50-EntryPoint: NetworkAudit queries default routes" ($mod50 -match "'NetworkAudit'[\s\S]{0,4000}Get-NetRoute[\s\S]{0,200}0\.0\.0\.0")
+    Write-TestResult "50-EntryPoint: NetworkAudit checks link speed" ($mod50 -match "'NetworkAudit'[\s\S]{0,3000}100.*Mbps")
+    Write-TestResult "50-EntryPoint: NetworkAudit JSON has Adapters" ($mod50 -match "'NetworkAudit'[\s\S]{0,8000}Adapters\s*=")
+    Write-TestResult "50-EntryPoint: NetworkAudit JSON output" ($mod50 -match "'NetworkAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: NetworkAudit exits 1 on issues" ($mod50 -match "'NetworkAudit'[\s\S]{0,9000}netIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: NetworkAudit Action field" ($mod50 -match "Action\s*=\s*'NetworkAudit'")
+
+    # StorageAudit CLI action tests (v1.51.0)
+    Write-TestResult "Header: StorageAudit in ValidateSet" ($headerContent -match "ValidateSet.*StorageAudit")
+    Write-TestResult "Install-RackStack: StorageAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*StorageAudit")
+    Write-TestResult "50-EntryPoint: StorageAudit case exists" ($mod50 -match "'StorageAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: StorageAudit queries Get-StoragePool" ($mod50 -match "'StorageAudit'[\s\S]{0,1000}Get-StoragePool")
+    Write-TestResult "50-EntryPoint: StorageAudit queries Get-VirtualDisk" ($mod50 -match "'StorageAudit'[\s\S]{0,3000}Get-VirtualDisk")
+    Write-TestResult "50-EntryPoint: StorageAudit checks health status" ($mod50 -match "'StorageAudit'[\s\S]{0,2000}HealthStatus")
+    Write-TestResult "50-EntryPoint: StorageAudit empty message" ($mod50 -match "'StorageAudit'[\s\S]{0,6000}No storage pools or virtual disks")
+    Write-TestResult "50-EntryPoint: StorageAudit JSON has StoragePools" ($mod50 -match "'StorageAudit'[\s\S]{0,8000}StoragePools\s*=")
+    Write-TestResult "50-EntryPoint: StorageAudit JSON output" ($mod50 -match "'StorageAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: StorageAudit exits 1 on issues" ($mod50 -match "'StorageAudit'[\s\S]{0,9000}storIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: StorageAudit Action field" ($mod50 -match "Action\s*=\s*'StorageAudit'")
+
+    # FeatureAudit CLI action tests (v1.51.0)
+    Write-TestResult "Header: FeatureAudit in ValidateSet" ($headerContent -match "ValidateSet.*FeatureAudit")
+    Write-TestResult "Install-RackStack: FeatureAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*FeatureAudit")
+    Write-TestResult "50-EntryPoint: FeatureAudit case exists" ($mod50 -match "'FeatureAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: FeatureAudit queries features" ($mod50 -match "'FeatureAudit'[\s\S]{0,1500}Get-WindowsFeature|Get-WindowsOptionalFeature")
+    Write-TestResult "50-EntryPoint: FeatureAudit categorizes roles" ($mod50 -match "'FeatureAudit'[\s\S]{0,4000}FeatureType[\s\S]{0,200}Role")
+    Write-TestResult "50-EntryPoint: FeatureAudit JSON has InstalledFeatures" ($mod50 -match "'FeatureAudit'[\s\S]{0,8000}InstalledFeatures\s*=")
+    Write-TestResult "50-EntryPoint: FeatureAudit JSON output" ($mod50 -match "'FeatureAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: FeatureAudit Action field" ($mod50 -match "Action\s*=\s*'FeatureAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
