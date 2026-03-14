@@ -3604,6 +3604,244 @@ function Invoke-CLIAction {
 
             if ($bootIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'GPOAudit' {
+            Write-OutputColor "  Auditing Group Policy configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $gpoIssues = 0
+            $gpoEntries = @()
+
+            # Check if domain-joined
+            $isDomainJoined = $false
+            try {
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $isDomainJoined = $cs.PartOfDomain -eq $true
+            } catch { }
+
+            if (-not $isDomainJoined) {
+                Write-OutputColor "  Not domain-joined — checking local policy only." -color "Info"
+            }
+
+            # Query applied GPOs via registry (works on all systems)
+            $gpoRegPaths = @(
+                @{ Scope = 'Machine'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\History' }
+                @{ Scope = 'User'; Path = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\History' }
+            )
+
+            foreach ($gpoReg in $gpoRegPaths) {
+                if (Test-Path $gpoReg.Path) {
+                    try {
+                        $subkeys = Get-ChildItem -Path $gpoReg.Path -ErrorAction SilentlyContinue
+                        foreach ($sk in $subkeys) {
+                            $innerKeys = Get-ChildItem -Path $sk.PSPath -ErrorAction SilentlyContinue
+                            foreach ($ik in $innerKeys) {
+                                $props = Get-ItemProperty -Path $ik.PSPath -ErrorAction SilentlyContinue
+                                if ($null -ne $props -and $null -ne $props.DisplayName) {
+                                    $gpoEntries += @{
+                                        Scope       = $gpoReg.Scope
+                                        DisplayName = $props.DisplayName
+                                        GPOName     = if ($null -ne $props.GPOName) { $props.GPOName } else { "" }
+                                        Extensions  = if ($null -ne $props.Extensions) { $props.Extensions } else { "" }
+                                        Link        = if ($null -ne $props.Link) { $props.Link } else { "" }
+                                        Status      = 'Applied'
+                                    }
+                                }
+                            }
+                        }
+                    } catch { }
+                }
+            }
+
+            # Deduplicate by DisplayName+Scope
+            $uniqueGPOs = @()
+            $seen = @{}
+            foreach ($g in $gpoEntries) {
+                $key = "$($g.Scope):$($g.DisplayName)"
+                if (-not $seen.ContainsKey($key)) {
+                    $seen[$key] = $true
+                    $uniqueGPOs += $g
+                }
+            }
+
+            # Last gpupdate time
+            $lastGPUpdate = "Unknown"
+            try {
+                $gpResult = & gpresult /scope computer /v 2>&1
+                $gpStr = $gpResult -join "`n"
+                if ($gpStr -match 'Last time Group Policy was applied:\s*(.+)') {
+                    $regexMatches = $Matches; $lastGPUpdate = $regexMatches[1].Trim()
+                }
+            } catch { }
+
+            $machineGPOs = @($uniqueGPOs | Where-Object { $_.Scope -eq 'Machine' })
+            $userGPOs = @($uniqueGPOs | Where-Object { $_.Scope -eq 'User' })
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  GPO AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Domain Joined: $isDomainJoined    Last GP Update: $lastGPUpdate".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($machineGPOs).Count -gt 0) {
+                Write-OutputColor "  │$("  MACHINE POLICIES ($(@($machineGPOs).Count))".PadRight(72))│" -color "Info"
+                foreach ($g in $machineGPOs) {
+                    $gpoName = if ($g.DisplayName.Length -gt 65) { $g.DisplayName.Substring(0, 62) + "..." } else { $g.DisplayName }
+                    Write-OutputColor "  │$("  $gpoName".PadRight(72))│" -color "Success"
+                }
+            }
+            if (@($userGPOs).Count -gt 0) {
+                Write-OutputColor "  │$("  USER POLICIES ($(@($userGPOs).Count))".PadRight(72))│" -color "Info"
+                foreach ($g in $userGPOs) {
+                    $gpoName = if ($g.DisplayName.Length -gt 65) { $g.DisplayName.Substring(0, 62) + "..." } else { $g.DisplayName }
+                    Write-OutputColor "  │$("  $gpoName".PadRight(72))│" -color "Success"
+                }
+            }
+            if (@($uniqueGPOs).Count -eq 0) {
+                Write-OutputColor "  │$("  (No applied Group Policies found)".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Machine: $(@($machineGPOs).Count)   User: $(@($userGPOs).Count)   Total: $(@($uniqueGPOs).Count)"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'GPOAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        DomainJoined  = $isDomainJoined
+                        LastGPUpdate  = $lastGPUpdate
+                        MachinePolicies = @($machineGPOs).Count
+                        UserPolicies    = @($userGPOs).Count
+                        TotalPolicies   = @($uniqueGPOs).Count
+                        Issues          = $gpoIssues
+                    }
+                    Policies  = $uniqueGPOs
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($gpoIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'MemoryAudit' {
+            Write-OutputColor "  Auditing memory configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $memIssues = 0
+
+            # Physical memory
+            $totalPhysicalGB = 0
+            $availableGB = 0
+            $usedGB = 0
+            $pctUsed = 0
+            try {
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $totalPhysicalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+                $availableGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+                $usedGB = [math]::Round($totalPhysicalGB - $availableGB, 1)
+                $pctUsed = if ($totalPhysicalGB -gt 0) { [math]::Round(($usedGB / $totalPhysicalGB) * 100, 1) } else { 0 }
+                if ($pctUsed -gt 90) { $memIssues++ }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query memory: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            # Memory DIMMs
+            $dimms = @()
+            try {
+                $physMem = @(Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction Stop)
+                foreach ($m in $physMem) {
+                    $dimms += @{
+                        BankLabel    = "$($m.BankLabel)"
+                        DeviceLocator = "$($m.DeviceLocator)"
+                        CapacityGB   = [math]::Round($m.Capacity / 1GB, 1)
+                        Speed        = $m.Speed
+                        Manufacturer = "$($m.Manufacturer)"
+                        PartNumber   = "$($m.PartNumber)".Trim()
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not enumerate DIMMs: $($_.Exception.Message)" -color "Warning"
+            }
+
+            # Page file
+            $pageFiles = @()
+            try {
+                $pf = @(Get-CimInstance -ClassName Win32_PageFileUsage -ErrorAction Stop)
+                foreach ($p in $pf) {
+                    $pfSizeMB = $p.AllocatedBaseSize
+                    $pfUsedMB = $p.CurrentUsage
+                    $pfPctUsed = if ($pfSizeMB -gt 0) { [math]::Round(($pfUsedMB / $pfSizeMB) * 100, 1) } else { 0 }
+                    $pfStatus = 'OK'
+                    if ($pfPctUsed -gt 80) { $pfStatus = 'WARN'; $memIssues++ }
+                    $pageFiles += @{
+                        Name     = $p.Name
+                        SizeMB   = $pfSizeMB
+                        UsedMB   = $pfUsedMB
+                        PctUsed  = $pfPctUsed
+                        Status   = $pfStatus
+                    }
+                }
+            } catch { }
+
+            $memStatus = if ($pctUsed -gt 90) { 'CRITICAL' } elseif ($pctUsed -gt 80) { 'WARN' } else { 'OK' }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  MEMORY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $memColor = switch ($memStatus) { 'OK' { 'Success' } 'WARN' { 'Warning' } 'CRITICAL' { 'Error' } default { 'Info' } }
+            Write-OutputColor "  │$("  Physical RAM:   ${usedGB}/${totalPhysicalGB} GB used (${pctUsed}%) [$memStatus]".PadRight(72))│" -color $memColor
+            Write-OutputColor "  │$("  Available:      ${availableGB} GB".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  DIMMs:          $(@($dimms).Count) installed".PadRight(72))│" -color "Info"
+            if (@($dimms).Count -gt 0) {
+                foreach ($d in $dimms) {
+                    $dimmLine = "    $($d.DeviceLocator): $($d.CapacityGB)GB @ $($d.Speed)MHz"
+                    if ($d.Manufacturer -and $d.Manufacturer -ne 'Unknown') { $dimmLine += " ($($d.Manufacturer))" }
+                    if ($dimmLine.Length -gt 70) { $dimmLine = $dimmLine.Substring(0, 67) + "..." }
+                    Write-OutputColor "  │$($dimmLine.PadRight(72))│" -color "Info"
+                }
+            }
+            if (@($pageFiles).Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                foreach ($pf in $pageFiles) {
+                    $pfColor = if ($pf.Status -eq 'OK') { 'Success' } else { 'Warning' }
+                    $pfLine = "  Page File: $($pf.Name)  $($pf.UsedMB)/$($pf.SizeMB)MB ($($pf.PctUsed)%) [$($pf.Status)]"
+                    if ($pfLine.Length -gt 72) { $pfLine = $pfLine.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($pfLine.PadRight(72))│" -color $pfColor
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $memIssues".PadRight(72))│" -color $(if ($memIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'MemoryAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        TotalGB     = $totalPhysicalGB
+                        UsedGB      = $usedGB
+                        AvailableGB = $availableGB
+                        PctUsed     = $pctUsed
+                        Status      = $memStatus
+                        DIMMs       = @($dimms).Count
+                        Issues      = $memIssues
+                    }
+                    DIMMs     = $dimms
+                    PageFiles = $pageFiles
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($memIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

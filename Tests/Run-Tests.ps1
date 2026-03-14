@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.47.0
+    Automated Test Runner for RackStack v1.48.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10497,6 +10497,38 @@ try {
     Write-TestResult "50-EntryPoint: BootAudit JSON output" ($mod50 -match "'BootAudit'[\s\S]{0,9000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: BootAudit exits 1 on issues" ($mod50 -match "'BootAudit'[\s\S]{0,9000}bootIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: BootAudit Action field" ($mod50 -match "Action\s*=\s*'BootAudit'")
+
+    # GPOAudit CLI action tests (v1.48.0)
+    Write-TestResult "Header: GPOAudit in ValidateSet" ($headerContent -match "ValidateSet.*GPOAudit")
+    Write-TestResult "Install-RackStack: GPOAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*GPOAudit")
+    Write-TestResult "50-EntryPoint: GPOAudit case exists" ($mod50 -match "'GPOAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: GPOAudit checks domain membership" ($mod50 -match "'GPOAudit'[\s\S]{0,1500}PartOfDomain")
+    Write-TestResult "50-EntryPoint: GPOAudit queries GP History registry" ($mod50 -match "'GPOAudit'[\s\S]{0,2000}Group Policy[\s\S]{0,200}History")
+    Write-TestResult "50-EntryPoint: GPOAudit checks Machine scope" ($mod50 -match "'GPOAudit'[\s\S]{0,3000}Scope\s*=\s*'Machine'")
+    Write-TestResult "50-EntryPoint: GPOAudit checks User scope" ($mod50 -match "'GPOAudit'[\s\S]{0,3000}Scope\s*=\s*'User'")
+    Write-TestResult "50-EntryPoint: GPOAudit deduplicates GPOs" ($mod50 -match "'GPOAudit'[\s\S]{0,5000}uniqueGPOs")
+    Write-TestResult "50-EntryPoint: GPOAudit queries gpresult" ($mod50 -match "'GPOAudit'[\s\S]{0,6000}gpresult")
+    Write-TestResult "50-EntryPoint: GPOAudit empty GPO message" ($mod50 -match "'GPOAudit'[\s\S]{0,8000}No applied Group Policies found")
+    Write-TestResult "50-EntryPoint: GPOAudit JSON has Policies" ($mod50 -match "'GPOAudit'[\s\S]{0,9000}Policies\s*=")
+    Write-TestResult "50-EntryPoint: GPOAudit JSON has Summary" ($mod50 -match "'GPOAudit'[\s\S]{0,9000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: GPOAudit JSON output" ($mod50 -match "'GPOAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: GPOAudit Action field" ($mod50 -match "Action\s*=\s*'GPOAudit'")
+
+    # MemoryAudit CLI action tests (v1.48.0)
+    Write-TestResult "Header: MemoryAudit in ValidateSet" ($headerContent -match "ValidateSet.*MemoryAudit")
+    Write-TestResult "Install-RackStack: MemoryAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*MemoryAudit")
+    Write-TestResult "50-EntryPoint: MemoryAudit case exists" ($mod50 -match "'MemoryAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: MemoryAudit queries Win32_OperatingSystem" ($mod50 -match "'MemoryAudit'[\s\S]{0,1500}Win32_OperatingSystem")
+    Write-TestResult "50-EntryPoint: MemoryAudit queries Win32_PhysicalMemory" ($mod50 -match "'MemoryAudit'[\s\S]{0,3000}Win32_PhysicalMemory")
+    Write-TestResult "50-EntryPoint: MemoryAudit checks utilization threshold" ($mod50 -match "'MemoryAudit'[\s\S]{0,3000}pctUsed\s*-gt\s*90")
+    Write-TestResult "50-EntryPoint: MemoryAudit queries page file" ($mod50 -match "'MemoryAudit'[\s\S]{0,5000}Win32_PageFileUsage")
+    Write-TestResult "50-EntryPoint: MemoryAudit page file threshold" ($mod50 -match "'MemoryAudit'[\s\S]{0,6000}pfPctUsed\s*-gt\s*80")
+    Write-TestResult "50-EntryPoint: MemoryAudit JSON has DIMMs" ($mod50 -match "'MemoryAudit'[\s\S]{0,9000}DIMMs\s*=")
+    Write-TestResult "50-EntryPoint: MemoryAudit JSON has PageFiles" ($mod50 -match "'MemoryAudit'[\s\S]{0,9000}PageFiles\s*=")
+    Write-TestResult "50-EntryPoint: MemoryAudit JSON has Summary" ($mod50 -match "'MemoryAudit'[\s\S]{0,8000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: MemoryAudit JSON output" ($mod50 -match "'MemoryAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: MemoryAudit exits 1 on issues" ($mod50 -match "'MemoryAudit'[\s\S]{0,10000}memIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: MemoryAudit Action field" ($mod50 -match "Action\s*=\s*'MemoryAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.48.0
+
+- **New Feature:** GPOAudit CLI action — `RackStack.exe -Action GPOAudit -OutputFormat JSON` inventories applied Group Policies from the GP History registry. Reports machine and user policies with display names, deduplicates entries, and queries last gpupdate time. Works on both domain-joined and standalone systems (50-EntryPoint).
+- **New Feature:** MemoryAudit CLI action — `RackStack.exe -Action MemoryAudit -OutputFormat JSON` audits physical memory configuration. Reports total/used/available RAM with utilization percentage, enumerates DIMM slots with capacity, speed, and manufacturer. Checks page file utilization. Flags RAM usage over 90% and page file over 80%. Exits code 1 when memory issues detected (50-EntryPoint).
+- 65 modules, 3368 tests
+
 ## v1.47.0
 
 - **New Feature:** TimeAudit CLI action — `RackStack.exe -Action TimeAudit -OutputFormat JSON` audits time synchronization configuration. Checks W32Time service status, NTP source and type, last sync time, and measures time drift against time.windows.com. Flags drift over 1s as warning, over 5s as critical. Exits code 1 when time issues detected (50-EntryPoint).
