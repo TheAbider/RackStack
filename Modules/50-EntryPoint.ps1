@@ -5094,6 +5094,291 @@ function Invoke-CLIAction {
             }
             if ($apIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'EnvAudit' {
+            Write-OutputColor "  Auditing environment variables..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $envIssues = 0
+            $sysVars = @()
+            $pathEntries = @()
+            $pathIssues = @()
+
+            # System environment variables
+            try {
+                $sysEnv = [Environment]::GetEnvironmentVariables('Machine')
+                foreach ($key in ($sysEnv.Keys | Sort-Object)) {
+                    $sysVars += @{ Name = "$key"; Value = "$($sysEnv[$key])"; Scope = 'Machine' }
+                }
+            } catch { }
+
+            # PATH analysis
+            $systemPath = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
+            if ($systemPath) {
+                $dirs = $systemPath -split ';' | Where-Object { $_ -ne '' }
+                $seen = @{}
+                foreach ($dir in $dirs) {
+                    $exists = Test-Path -LiteralPath $dir -ErrorAction SilentlyContinue
+                    $duplicate = $seen.ContainsKey($dir.ToLower())
+                    $seen[$dir.ToLower()] = $true
+                    $status = 'OK'
+                    if (-not $exists) { $status = 'MISSING'; $envIssues++ }
+                    if ($duplicate) { $status = 'DUPLICATE'; $envIssues++ }
+                    $pathEntries += @{ Directory = $dir; Exists = $exists; Duplicate = $duplicate; Status = $status }
+                }
+            }
+            if ($pathEntries.Count -gt 50) { $pathIssues += "PATH has $($pathEntries.Count) entries (excessive)" }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  ENV AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  System Variables: $(@($sysVars).Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  PATH Entries:     $(@($pathEntries).Count)".PadRight(72))│" -color $(if (@($pathEntries).Count -gt 50) { "Warning" } else { "Info" })
+            $missing = @($pathEntries | Where-Object { $_.Status -eq 'MISSING' })
+            $dupes = @($pathEntries | Where-Object { $_.Status -eq 'DUPLICATE' })
+            if (@($missing).Count -gt 0) {
+                Write-OutputColor "  │$("  MISSING PATH ENTRIES ($(@($missing).Count))".PadRight(72))│" -color "Warning"
+                foreach ($m in $missing) {
+                    $mDir = if ($m.Directory.Length -gt 65) { $m.Directory.Substring(0, 62) + "..." } else { $m.Directory }
+                    Write-OutputColor "  │$("  $mDir".PadRight(72))│" -color "Warning"
+                }
+            }
+            if (@($dupes).Count -gt 0) {
+                Write-OutputColor "  │$("  DUPLICATE PATH ENTRIES ($(@($dupes).Count))".PadRight(72))│" -color "Warning"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $envIssues".PadRight(72))│" -color $(if ($envIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'EnvAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ SystemVars = @($sysVars).Count; PathEntries = @($pathEntries).Count; Missing = @($missing).Count; Duplicates = @($dupes).Count; Issues = $envIssues }
+                    SystemVariables = $sysVars; PathAnalysis = $pathEntries
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($envIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'CrashAudit' {
+            Write-OutputColor "  Auditing crash/BSOD history..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $crashIssues = 0
+            $crashes = @()
+            $dumpFiles = @()
+
+            # Check for BugCheck events (Event ID 1001 from BugCheck)
+            try {
+                $bugChecks = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WER-SystemErrorReporting'; Id = 1001 } -MaxEvents 20 -ErrorAction SilentlyContinue)
+                foreach ($bc in $bugChecks) {
+                    $crashes += @{
+                        TimeCreated = $bc.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss")
+                        Message     = if ($bc.Message.Length -gt 200) { $bc.Message.Substring(0, 197) + "..." } else { $bc.Message }
+                        EventId     = $bc.Id
+                    }
+                    $crashIssues++
+                }
+            } catch { }
+
+            # Also check for unexpected shutdowns (Event ID 6008)
+            try {
+                $unexpectedShutdowns = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = 6008 } -MaxEvents 10 -ErrorAction SilentlyContinue)
+                foreach ($us in $unexpectedShutdowns) {
+                    $crashes += @{
+                        TimeCreated = $us.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss")
+                        Message     = "Unexpected shutdown"
+                        EventId     = 6008
+                    }
+                    $crashIssues++
+                }
+            } catch { }
+
+            # Check for minidump files
+            $miniDumpPath = "$env:SystemRoot\Minidump"
+            if (Test-Path -LiteralPath $miniDumpPath) {
+                try {
+                    $dumps = @(Get-ChildItem -LiteralPath $miniDumpPath -Filter "*.dmp" -ErrorAction SilentlyContinue)
+                    foreach ($d in $dumps) {
+                        $dumpFiles += @{ Name = $d.Name; SizeKB = [math]::Round($d.Length / 1KB, 1); Created = $d.CreationTime.ToString("yyyy-MM-ddTHH:mm:ss") }
+                    }
+                } catch { }
+            }
+
+            # Full memory dump
+            $fullDump = "$env:SystemRoot\MEMORY.DMP"
+            $fullDumpExists = Test-Path -LiteralPath $fullDump
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  CRASH AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($crashes).Count -eq 0) {
+                Write-OutputColor "  │$("  (No crash events or unexpected shutdowns found)".PadRight(72))│" -color "Success"
+            } else {
+                Write-OutputColor "  │$("  CRASH EVENTS ($(@($crashes).Count))".PadRight(72))│" -color "Error"
+                foreach ($c in ($crashes | Select-Object -First 10)) {
+                    $line = "  $($c.TimeCreated)  Event $($c.EventId)"
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Warning"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Minidumps: $(@($dumpFiles).Count)   Full dump: $(if ($fullDumpExists) { 'Present' } else { 'None' })".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Issues: $crashIssues".PadRight(72))│" -color $(if ($crashIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'CrashAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ CrashEvents = @($crashes).Count; Minidumps = @($dumpFiles).Count; FullDumpPresent = $fullDumpExists; Issues = $crashIssues }
+                    CrashEvents = $crashes; DumpFiles = $dumpFiles
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($crashIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'LocalGroupAudit' {
+            Write-OutputColor "  Auditing local groups..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $groupIssues = 0
+            $groupResults = @()
+
+            try {
+                $groups = @(Get-LocalGroup -ErrorAction Stop)
+                foreach ($g in $groups) {
+                    $members = @()
+                    try {
+                        $grpMembers = @(Get-LocalGroupMember -Group $g.Name -ErrorAction Stop)
+                        foreach ($m in $grpMembers) {
+                            $members += @{ Name = "$($m.Name)"; ObjectClass = "$($m.ObjectClass)"; PrincipalSource = "$($m.PrincipalSource)" }
+                        }
+                    } catch { }
+
+                    $groupResults += @{
+                        Name        = $g.Name
+                        Description = "$($g.Description)"
+                        MemberCount = @($members).Count
+                        Members     = $members
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query groups: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $adminGroup = $groupResults | Where-Object { $_.Name -eq 'Administrators' } | Select-Object -First 1
+            $adminCount = if ($null -ne $adminGroup) { $adminGroup.MemberCount } else { 0 }
+            if ($adminCount -gt 5) { $groupIssues++ }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  LOCAL GROUP AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($g in ($groupResults | Sort-Object MemberCount -Descending)) {
+                $gName = if ($g.Name.Length -gt 30) { $g.Name.Substring(0, 27) + "..." } else { $g.Name }
+                $color = if ($g.Name -eq 'Administrators' -and $g.MemberCount -gt 5) { "Warning" } else { "Info" }
+                Write-OutputColor "  │$("  $($gName.PadRight(32)) Members: $($g.MemberCount)".PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Groups: $(@($groupResults).Count)   Admin members: $adminCount   Issues: $groupIssues".PadRight(72))│" -color $(if ($groupIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LocalGroupAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ TotalGroups = @($groupResults).Count; AdminMembers = $adminCount; Issues = $groupIssues }
+                    Groups = $groupResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($groupIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'WMIAudit' {
+            Write-OutputColor "  Auditing WMI repository..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $wmiIssues = 0
+            $wmiHealth = 'OK'
+            $repoSizeMB = 0
+            $providerResults = @()
+
+            # WMI repository verification
+            try {
+                $verifyOutput = & winmgmt /verifyrepository 2>&1
+                $verifyStr = $verifyOutput -join " "
+                if ($verifyStr -notmatch 'consistent') { $wmiHealth = 'FAIL'; $wmiIssues++ }
+            } catch {
+                $wmiHealth = 'Unknown'
+            }
+
+            # Repository size
+            $repoPath = "$env:SystemRoot\System32\wbem\Repository"
+            if (Test-Path -LiteralPath $repoPath) {
+                try {
+                    $repoSize = (Get-ChildItem -LiteralPath $repoPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                    $repoSizeMB = [math]::Round($repoSize / 1MB, 1)
+                    if ($repoSizeMB -gt 500) { $wmiIssues++ }
+                } catch { }
+            }
+
+            # Key WMI providers
+            $testClasses = @(
+                @{ Class = 'Win32_OperatingSystem'; Name = 'OS Info' }
+                @{ Class = 'Win32_ComputerSystem'; Name = 'System Info' }
+                @{ Class = 'Win32_Processor'; Name = 'CPU Info' }
+                @{ Class = 'Win32_LogicalDisk'; Name = 'Disk Info' }
+                @{ Class = 'Win32_NetworkAdapter'; Name = 'Network' }
+                @{ Class = 'Win32_Service'; Name = 'Services' }
+            )
+
+            foreach ($tc in $testClasses) {
+                $queryOk = $false
+                $queryTime = 0
+                try {
+                    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                    $null = Get-CimInstance -ClassName $tc.Class -ErrorAction Stop | Select-Object -First 1
+                    $sw.Stop()
+                    $queryOk = $true
+                    $queryTime = $sw.ElapsedMilliseconds
+                } catch {
+                    $wmiIssues++
+                }
+                $providerResults += @{ Name = $tc.Name; Class = $tc.Class; Available = $queryOk; QueryMs = $queryTime }
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  WMI AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $healthColor = if ($wmiHealth -eq 'OK') { 'Success' } else { 'Error' }
+            Write-OutputColor "  │$("  Repository:     $wmiHealth".PadRight(72))│" -color $healthColor
+            Write-OutputColor "  │$("  Repo Size:      ${repoSizeMB}MB".PadRight(72))│" -color $(if ($repoSizeMB -gt 500) { "Warning" } else { "Info" })
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  PROVIDER TESTS".PadRight(72))│" -color "Info"
+            foreach ($p in $providerResults) {
+                $pStatus = if ($p.Available) { "OK (${$p.QueryMs}ms)" } else { "FAIL" }
+                $pColor = if ($p.Available) { 'Success' } else { 'Error' }
+                Write-OutputColor "  │$("  $($p.Name.PadRight(20)) $pStatus".PadRight(72))│" -color $pColor
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $wmiIssues".PadRight(72))│" -color $(if ($wmiIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'WMIAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ RepositoryHealth = $wmiHealth; RepoSizeMB = $repoSizeMB; ProvidersOK = @($providerResults | Where-Object { $_.Available }).Count; ProvidersFailed = @($providerResults | Where-Object { -not $_.Available }).Count; Issues = $wmiIssues }
+                    Providers = $providerResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($wmiIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

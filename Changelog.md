@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.53.0
+
+- **New Feature:** EnvAudit CLI action — `RackStack.exe -Action EnvAudit -OutputFormat JSON` audits system environment variables and performs PATH analysis. Detects missing directories, duplicate entries, and excessive PATH length. Exits code 1 when PATH issues detected (50-EntryPoint).
+- **New Feature:** CrashAudit CLI action — `RackStack.exe -Action CrashAudit -OutputFormat JSON` audits system stability. Queries BugCheck events (BSOD), unexpected shutdown events (ID 6008), and inventories minidump/memory dump files. Exits code 1 when crash events found (50-EntryPoint).
+- **New Feature:** LocalGroupAudit CLI action — `RackStack.exe -Action LocalGroupAudit -OutputFormat JSON` audits all local groups with membership. Reports member count, object class, and principal source per group. Flags Administrators group with more than 5 members. Exits code 1 when group issues detected (50-EntryPoint).
+- **New Feature:** WMIAudit CLI action — `RackStack.exe -Action WMIAudit -OutputFormat JSON` audits WMI repository health. Verifies repository consistency, reports repository size, and tests 6 key WMI providers with query timing. Flags repository corruption and oversized repos (>500MB). Exits code 1 when WMI issues detected (50-EntryPoint).
+- 65 modules, 3567 tests
+
 ## v1.52.0
 
 - **New Feature:** AutoStartAudit CLI action — `RackStack.exe -Action AutoStartAudit -OutputFormat JSON` inventories all auto-start entries: registry Run/RunOnce keys (HKLM + HKCU + WOW6432Node), startup folder items, and non-Microsoft auto-start services (50-EntryPoint).

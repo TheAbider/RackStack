@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.52.0
+    Automated Test Runner for RackStack v1.53.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10721,6 +10721,51 @@ try {
     Write-TestResult "50-EntryPoint: AuditPolicyAudit JSON output" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,9000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: AuditPolicyAudit exits 1 on issues" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,9000}apIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: AuditPolicyAudit Action field" ($mod50 -match "Action\s*=\s*'AuditPolicyAudit'")
+
+    # EnvAudit CLI action tests (v1.53.0)
+    Write-TestResult "Header: EnvAudit in ValidateSet" ($headerContent -match "ValidateSet.*EnvAudit")
+    Write-TestResult "Install-RackStack: EnvAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*EnvAudit")
+    Write-TestResult "50-EntryPoint: EnvAudit case exists" ($mod50 -match "'EnvAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: EnvAudit checks system env vars" ($mod50 -match "'EnvAudit'[\s\S]{0,1000}GetEnvironmentVariables")
+    Write-TestResult "50-EntryPoint: EnvAudit analyzes PATH" ($mod50 -match "'EnvAudit'[\s\S]{0,3000}PathAnalysis")
+    Write-TestResult "50-EntryPoint: EnvAudit detects missing dirs" ($mod50 -match "'EnvAudit'[\s\S]{0,3000}MISSING")
+    Write-TestResult "50-EntryPoint: EnvAudit detects duplicates" ($mod50 -match "'EnvAudit'[\s\S]{0,3000}DUPLICATE")
+    Write-TestResult "50-EntryPoint: EnvAudit JSON output" ($mod50 -match "'EnvAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: EnvAudit Action field" ($mod50 -match "Action\s*=\s*'EnvAudit'")
+
+    # CrashAudit CLI action tests (v1.53.0)
+    Write-TestResult "Header: CrashAudit in ValidateSet" ($headerContent -match "ValidateSet.*CrashAudit")
+    Write-TestResult "Install-RackStack: CrashAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*CrashAudit")
+    Write-TestResult "50-EntryPoint: CrashAudit case exists" ($mod50 -match "'CrashAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: CrashAudit checks WER events" ($mod50 -match "'CrashAudit'[\s\S]{0,1500}WER-SystemErrorReporting")
+    Write-TestResult "50-EntryPoint: CrashAudit checks unexpected shutdowns" ($mod50 -match "'CrashAudit'[\s\S]{0,3000}6008")
+    Write-TestResult "50-EntryPoint: CrashAudit checks minidumps" ($mod50 -match "'CrashAudit'[\s\S]{0,4000}Minidump")
+    Write-TestResult "50-EntryPoint: CrashAudit JSON has CrashEvents" ($mod50 -match "'CrashAudit'[\s\S]{0,7000}CrashEvents\s*=")
+    Write-TestResult "50-EntryPoint: CrashAudit JSON output" ($mod50 -match "'CrashAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: CrashAudit Action field" ($mod50 -match "Action\s*=\s*'CrashAudit'")
+
+    # LocalGroupAudit CLI action tests (v1.53.0)
+    Write-TestResult "Header: LocalGroupAudit in ValidateSet" ($headerContent -match "ValidateSet.*LocalGroupAudit")
+    Write-TestResult "Install-RackStack: LocalGroupAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*LocalGroupAudit")
+    Write-TestResult "50-EntryPoint: LocalGroupAudit case exists" ($mod50 -match "'LocalGroupAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: LocalGroupAudit queries Get-LocalGroup" ($mod50 -match "'LocalGroupAudit'[\s\S]{0,1000}Get-LocalGroup")
+    Write-TestResult "50-EntryPoint: LocalGroupAudit queries members" ($mod50 -match "'LocalGroupAudit'[\s\S]{0,2000}Get-LocalGroupMember")
+    Write-TestResult "50-EntryPoint: LocalGroupAudit flags admin count" ($mod50 -match "'LocalGroupAudit'[\s\S]{0,4000}adminCount\s*-gt\s*5")
+    Write-TestResult "50-EntryPoint: LocalGroupAudit JSON has Groups" ($mod50 -match "'LocalGroupAudit'[\s\S]{0,7000}Groups\s*=")
+    Write-TestResult "50-EntryPoint: LocalGroupAudit JSON output" ($mod50 -match "'LocalGroupAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: LocalGroupAudit Action field" ($mod50 -match "Action\s*=\s*'LocalGroupAudit'")
+
+    # WMIAudit CLI action tests (v1.53.0)
+    Write-TestResult "Header: WMIAudit in ValidateSet" ($headerContent -match "ValidateSet.*WMIAudit")
+    Write-TestResult "Install-RackStack: WMIAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*WMIAudit")
+    Write-TestResult "50-EntryPoint: WMIAudit case exists" ($mod50 -match "'WMIAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: WMIAudit verifies repository" ($mod50 -match "'WMIAudit'[\s\S]{0,1000}winmgmt /verifyrepository")
+    Write-TestResult "50-EntryPoint: WMIAudit checks repo size" ($mod50 -match "'WMIAudit'[\s\S]{0,2000}wbem[\s\S]{0,200}Repository")
+    Write-TestResult "50-EntryPoint: WMIAudit tests providers" ($mod50 -match "'WMIAudit'[\s\S]{0,3000}testClasses")
+    Write-TestResult "50-EntryPoint: WMIAudit JSON has Providers" ($mod50 -match "'WMIAudit'[\s\S]{0,7000}Providers\s*=")
+    Write-TestResult "50-EntryPoint: WMIAudit JSON output" ($mod50 -match "'WMIAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: WMIAudit exits 1 on issues" ($mod50 -match "'WMIAudit'[\s\S]{0,8000}wmiIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: WMIAudit Action field" ($mod50 -match "Action\s*=\s*'WMIAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
