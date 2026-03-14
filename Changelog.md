@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.44.0
+
+- **New Feature:** FirewallAudit CLI action — `RackStack.exe -Action FirewallAudit -OutputFormat JSON` audits Windows Firewall configuration: profile status (Domain/Private/Public), rule counts by direction and action, top inbound allow groups. Flags disabled profiles and permissive Public profile settings. Exits code 1 when firewall issues detected (50-EntryPoint).
+- **New Feature:** TaskAudit CLI action — `RackStack.exe -Action TaskAudit -OutputFormat JSON` audits non-Microsoft scheduled tasks for health. Reports task state, last run time, and result code. Classifies each task as OK (exit 0), Failed (non-zero exit excluding running/queued), or NeverRun. Exits code 1 when failed tasks detected (50-EntryPoint).
+- **Performance:** Invoke-WithTimeout rewritten to use runspaces instead of Start-Job — eliminates process-spawn overhead on all ~50 timeout-wrapped operations. Server Readiness Dashboard and other CIM queries now start instantly instead of waiting for job initialization (04-Navigation).
+- **Fix:** CredentialExpired tests no longer depend on Microsoft.PowerShell.Security module auto-loading — uses direct SecureString construction to avoid module load failures in constrained environments (Tests).
+- **Hardened:** FirewallAudit now logs a warning when firewall rule enumeration fails instead of silently swallowing the error. TaskAudit shows an informational message when no non-Microsoft scheduled tasks exist, and uses safe `@()` count wrapping for PowerShell 5.1 compatibility (50-EntryPoint).
+- 65 modules, 3253 tests
+
 ## v1.43.0
 
 - **New Feature:** PatchStatus CLI action — `RackStack.exe -Action PatchStatus [-Config 15] -OutputFormat JSON` reports patch currency by querying installed hotfixes and Windows Update history. Classifies as OK (under 30 days), Warning (30-60 days), or Critical (60+ days). Detects pending reboots via registry. Exits code 1 when patch currency is Critical or reboot pending, usable as a compliance gate (50-EntryPoint).

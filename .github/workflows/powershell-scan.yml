@@ -1,0 +1,252 @@
+name: PowerShell Scan
+
+permissions:
+  issues: write
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * *'
+  push:
+    branches: [master]
+    paths:
+      - 'Modules/**'
+      - 'Tests/**'
+      - '.github/workflows/powershell-scan.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'Modules/**'
+      - 'Tests/**'
+
+jobs:
+  powershell-scan:
+    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || 'self-hosted' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: powershell
+        run: |
+          if (-not (Get-Module PSScriptAnalyzer -ListAvailable)) {
+            Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          }
+
+      - name: Run PowerShell Scan
+        shell: powershell
+        id: scan
+        run: |
+          $timestampUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+          $suffix = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss'Z'")
+          echo "STAMP_SUFFIX=$suffix" >> $env:GITHUB_ENV
+
+          $scriptPaths = @(
+              Join-Path $env:GITHUB_WORKSPACE "Modules"
+              Join-Path $env:GITHUB_WORKSPACE "Tests"
+          )
+
+          $files = Get-ChildItem -Path $scriptPaths -Recurse -Include *.ps1,*.psm1 -ErrorAction SilentlyContinue
+          $issues = @()
+
+          function Get-RiskLevel($type, $file) {
+              if ($type -eq "Secret") { return "High" }
+              if ($file -match "AD|Network|Disk|Registry|Privileged|Scheduled") { return "High" }
+              if ($type -eq "Lint") { return "Medium" }
+              return "Low"
+          }
+
+          foreach ($file in $files) {
+              # Find PSScriptAnalyzerSettings.psd1 in parent directories
+              $settingsFile = $null
+              $searchDir = $file.DirectoryName
+              while ($searchDir -and $searchDir.StartsWith($env:GITHUB_WORKSPACE)) {
+                  $candidate = Join-Path $searchDir "PSScriptAnalyzerSettings.psd1"
+                  if (Test-Path $candidate) { $settingsFile = $candidate; break }
+                  $searchDir = Split-Path $searchDir -Parent
+              }
+
+              $analyzerParams = @{ Path = $file.FullName; Recurse = $true }
+              if ($settingsFile) { $analyzerParams["Settings"] = $settingsFile }
+
+              $results = Invoke-ScriptAnalyzer @analyzerParams
+              foreach ($res in $results) {
+                  $issues += [PSCustomObject]@{
+                      File         = $file.FullName
+                      Line         = $res.Line
+                      Type         = "Lint"
+                      Message      = "$($res.RuleName): $($res.Message)"
+                      Risk         = (Get-RiskLevel "Lint" $file.FullName)
+                      TimestampUtc = $timestampUtc
+                  }
+              }
+          }
+
+          # Save reports only if issues exist
+          $jsonPath = Join-Path $env:GITHUB_WORKSPACE ("scan_results_{0}.json" -f $suffix)
+          $csvPath = Join-Path $env:GITHUB_WORKSPACE ("scan_results_{0}.csv" -f $suffix)
+          if ($issues.Count -gt 0) {
+              $issues | ConvertTo-Json -Depth 10 | Set-Content $jsonPath -Encoding utf8
+              $issues | Select-Object File,Line,Type,Message,Risk,TimestampUtc |
+                Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+          }
+
+          # Normalize grouped data and force array output
+          $grouped = $issues | Group-Object File
+          $normalizedGroups = @()
+          foreach ($g in $grouped) {
+              $normalizedGroups += [PSCustomObject]@{
+                  Name  = $g.Name
+                  Group = $g.Group
+              }
+          }
+          $jsonGrouped = if ($normalizedGroups.Count -gt 0) {
+              $normalizedGroups | ConvertTo-Json -Depth 10 -AsArray
+          } else {
+              "[]"
+          }
+
+          $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($jsonGrouped))
+          echo "GROUPED_ISSUES_BASE64=$encoded" >> $env:GITHUB_ENV
+          echo "JSON_PATH=$jsonPath" >> $env:GITHUB_ENV
+          echo "CSV_PATH=$csvPath" >> $env:GITHUB_ENV
+          echo "ISSUE_COUNT=$($issues.Count)" >> $env:GITHUB_ENV
+
+      - name: Create/Update Issues Per Script
+        uses: actions/github-script@v7
+        id: update-issues
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const groupedJson = Buffer.from(process.env.GROUPED_ISSUES_BASE64, 'base64').toString('utf8');
+            const grouped = JSON.parse(groupedJson);
+            const issueCount = parseInt(process.env.ISSUE_COUNT || "0");
+            const { owner, repo } = context.repo;
+
+            const { data: allIssues } = await github.rest.issues.listForRepo({
+              owner, repo, state: "all", per_page: 100
+            });
+
+            let summaryData = [];
+            let highRiskFound = false;
+
+            if (issueCount === 0) {
+              console.log("No issues found. Closing any open scan issues.");
+              for (const i of allIssues.filter(x => x.title.startsWith("Scan Results:") && x.state === "open")) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: i.number,
+                  body: "All scripts are clean. Closing this issue."
+                });
+                await github.rest.issues.update({
+                  owner, repo, issue_number: i.number, state: "closed"
+                });
+                await github.rest.issues.addLabels({
+                  owner, repo, issue_number: i.number, labels: ["Resolved"]
+                });
+              }
+            } else {
+              for (const group of grouped) {
+                const filePath = group.Name;
+                const fileName = filePath.split(/[\\/]/).pop();
+                const issues = group.Group;
+
+                let fileIssue = allIssues.find(i => i.title === `Scan Results: ${fileName}`);
+
+                if (!issues || issues.length === 0) {
+                  if (fileIssue && fileIssue.state === "open") {
+                    await github.rest.issues.createComment({
+                      owner, repo, issue_number: fileIssue.number,
+                      body: `Script is clean as of latest scan. Closing issue.`
+                    });
+                    await github.rest.issues.update({
+                      owner, repo, issue_number: fileIssue.number, state: "closed"
+                    });
+                    await github.rest.issues.addLabels({
+                      owner, repo, issue_number: fileIssue.number, labels: ["Resolved"]
+                    });
+                  }
+                  summaryData.push({ fileName, risk: "Clean", issueUrl: fileIssue ? fileIssue.html_url : "N/A" });
+                  continue;
+                }
+
+                let summary = `**Scan Results for ${fileName}**\n\n| Line | Type | Message | Risk |\n| ---- | ---- | ------- | ---- |\n`;
+                for (const issue of issues) {
+                  summary += `| ${issue.Line} | ${issue.Type} | ${issue.Message} | ${issue.Risk} |\n`;
+                }
+
+                if (!fileIssue) {
+                  const { data: newIssue } = await github.rest.issues.create({
+                    owner, repo,
+                    title: `Scan Results: ${fileName}`,
+                    body: `This issue tracks scan results for ${fileName}.`
+                  });
+                  fileIssue = newIssue;
+                } else if (fileIssue.state === "closed") {
+                  await github.rest.issues.update({
+                    owner, repo, issue_number: fileIssue.number, state: "open"
+                  });
+                  await github.rest.issues.createComment({
+                    owner, repo, issue_number: fileIssue.number,
+                    body: `Script has new issues. Reopening this issue.`
+                  });
+                  await github.rest.issues.addLabels({
+                    owner, repo, issue_number: fileIssue.number, labels: ["Reopened"]
+                  });
+                }
+
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: fileIssue.number, body: summary
+                });
+
+                const maxRisk = issues.some(i => i.Risk === "High") ? "High" :
+                                issues.some(i => i.Risk === "Medium") ? "Medium" : "Low";
+                if (maxRisk === "High") highRiskFound = true;
+
+                const labels = maxRisk === "High" ? ["High Risk"] :
+                               maxRisk === "Medium" ? ["Medium Risk"] : ["Low Risk"];
+                await github.rest.issues.addLabels({
+                  owner, repo, issue_number: fileIssue.number, labels
+                });
+                summaryData.push({ fileName, risk: maxRisk, issueUrl: fileIssue.html_url });
+              }
+            }
+
+            core.setOutput("summaryData", JSON.stringify(summaryData));
+            core.setOutput("highRiskFound", highRiskFound);
+
+      - name: Generate Workflow Summary
+        shell: powershell
+        run: |
+          $summaryData = '${{ steps.update-issues.outputs.summaryData }}' | ConvertFrom-Json
+          $total = $summaryData.Count
+          $highCount = ($summaryData | Where-Object { $_.risk -eq "High" }).Count
+          $mediumCount = ($summaryData | Where-Object { $_.risk -eq "Medium" }).Count
+          $lowCount = ($summaryData | Where-Object { $_.risk -eq "Low" }).Count
+          $cleanCount = ($summaryData | Where-Object { $_.risk -eq "Clean" }).Count
+          $report = "## PowerShell Scan Summary`n"
+          $report += "**Total Scripts Scanned:** $total`n"
+          $report += "**High Risk:** $highCount | **Medium Risk:** $mediumCount | **Low Risk:** $lowCount | **Clean:** $cleanCount`n`n"
+          $report += "| Script | Risk | Issue Link |`n| ------ | ---- | ---------- |`n"
+          foreach ($item in $summaryData) {
+              $report += "| $($item.fileName) | $($item.risk) | $($item.issueUrl) |`n"
+          }
+          $report | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+      - name: Upload Scan Reports
+        if: ${{ env.ISSUE_COUNT != '0' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: powershell-scan-results-${{ env.STAMP_SUFFIX }}
+          path: |
+            ${{ env.JSON_PATH }}
+            ${{ env.CSV_PATH }}
+          retention-days: 30
+
+      - name: Fail on High Risk
+        if: ${{ steps.update-issues.outputs.highRiskFound == 'true' }}
+        shell: powershell
+        run: |
+          Write-Host "High Risk issues detected. Failing the workflow."
+          exit 1

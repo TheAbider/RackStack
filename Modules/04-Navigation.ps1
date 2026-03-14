@@ -555,7 +555,7 @@ function Get-FileHashBackground {
     return $hash
 }
 
-# Run a scriptblock with a timeout using a background job
+# Run a scriptblock with a timeout using a background runspace (faster than Start-Job)
 function Invoke-WithTimeout {
     param(
         [Parameter(Mandatory=$true)]
@@ -564,11 +564,19 @@ function Invoke-WithTimeout {
         [string]$Activity = "Operation"
     )
 
-    $job = Start-Job -ScriptBlock $ScriptBlock
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript($ScriptBlock.ToString())
+        $handle = $ps.BeginInvoke()
+    } catch {
+        if ($null -ne $ps) { $ps.Dispose() }
+        return @{ TimedOut = $false; Result = $null; Failed = $true; Error = $_.Exception.Message }
+    }
+
     $spinChars = @('|', '/', '-', '\')
     $elapsed = 0
 
-    while ($job.State -eq "Running" -and $elapsed -lt $TimeoutSeconds) {
+    while (-not $handle.IsCompleted -and $elapsed -lt $TimeoutSeconds) {
         $spin = $spinChars[$elapsed % 4]
         Write-Host "`r  [$spin] $Activity... ${elapsed}s    " -NoNewline
         Start-Sleep -Seconds 1
@@ -576,20 +584,27 @@ function Invoke-WithTimeout {
     }
     Write-Host ""
 
-    if ($job.State -eq "Running") {
-        Stop-Job $job -Force
-        Remove-Job $job -Force
+    if (-not $handle.IsCompleted) {
+        $ps.Stop()
+        $ps.Dispose()
         return @{ TimedOut = $true; Result = $null; Failed = $false; Error = "Timed out after $TimeoutSeconds seconds" }
     }
 
-    if ($job.State -eq "Failed") {
-        $errorMsg = if ($job.ChildJobs.Count -gt 0) { $job.ChildJobs[0].JobStateInfo.Reason.Message } else { "Job failed" }
-        Remove-Job $job -Force
+    try {
+        $result = $ps.EndInvoke($handle)
+    } catch {
+        $ps.Dispose()
+        return @{ TimedOut = $false; Result = $null; Failed = $true; Error = $_.Exception.Message }
+    }
+
+    if ($ps.InvocationStateInfo.State -eq 'Failed') {
+        $errorMsg = if ($null -ne $ps.InvocationStateInfo.Reason) { $ps.InvocationStateInfo.Reason.Message } else { "Operation failed" }
+        $ps.Dispose()
         return @{ TimedOut = $false; Result = $null; Failed = $true; Error = $errorMsg }
     }
 
-    $result = Receive-Job $job
-    Remove-Job $job -Force
-    return @{ TimedOut = $false; Result = $result; Failed = $false; Error = $null }
+    $output = if ($result.Count -eq 1) { $result[0] } elseif ($result.Count -eq 0) { $null } else { @($result) }
+    $ps.Dispose()
+    return @{ TimedOut = $false; Result = $output; Failed = $false; Error = $null }
 }
 #endregion

@@ -30,5 +30,15 @@ jobs:
           $result = & .\Tests\Run-Tests.ps1
           exit $LASTEXITCODE
 
+      - name: Upload test artifacts on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-failure-logs
+          path: |
+            builds/RackStack v*.ps1
+            Tests/*.log
+          retention-days: 7
+
       - name: PSScriptAnalyzer
         run: .\Tests\pssa-check.ps1

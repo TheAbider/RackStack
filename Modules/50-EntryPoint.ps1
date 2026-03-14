@@ -2768,6 +2768,206 @@ function Invoke-CLIAction {
 
             if ($issueCount -gt 0) { [Environment]::Exit(1) }
         }
+        'FirewallAudit' {
+            Write-OutputColor "  Auditing firewall configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $fwIssues = 0
+            $profiles = @()
+
+            # Check firewall profiles
+            try {
+                $fwProfiles = @(Get-NetFirewallProfile -ErrorAction Stop)
+                foreach ($p in $fwProfiles) {
+                    $enabled = $p.Enabled -eq $true
+                    $status = 'OK'
+                    if (-not $enabled) { $status = 'WARN'; $fwIssues++ }
+                    if ($p.Name -eq 'Public' -and -not $enabled) { $status = 'CRITICAL' }
+                    if ($p.Name -eq 'Public' -and "$($p.DefaultInboundAction)" -eq 'Allow') { $status = 'CRITICAL'; $fwIssues++ }
+
+                    $profiles += @{
+                        Name            = $p.Name
+                        Enabled         = $enabled
+                        DefaultInbound  = "$($p.DefaultInboundAction)"
+                        DefaultOutbound = "$($p.DefaultOutboundAction)"
+                        Status          = $status
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query firewall profiles: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            # Count firewall rules
+            $totalRules = 0; $enabledRules = 0; $disabledRules = 0
+            $inboundAllow = 0; $inboundBlock = 0; $outboundAllow = 0; $outboundBlock = 0
+            $topGroups = @()
+            try {
+                $allRules = @(Get-NetFirewallRule -ErrorAction Stop)
+                $totalRules = $allRules.Count
+                $enabledRules = @($allRules | Where-Object { $_.Enabled -eq 'True' }).Count
+                $disabledRules = $totalRules - $enabledRules
+                $enabledOnly = @($allRules | Where-Object { $_.Enabled -eq 'True' })
+                $inboundAllow = @($enabledOnly | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' }).Count
+                $inboundBlock = @($enabledOnly | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Block' }).Count
+                $outboundAllow = @($enabledOnly | Where-Object { $_.Direction -eq 'Outbound' -and $_.Action -eq 'Allow' }).Count
+                $outboundBlock = @($enabledOnly | Where-Object { $_.Direction -eq 'Outbound' -and $_.Action -eq 'Block' }).Count
+
+                # Top inbound allow groups
+                $inboundAllowRules = @($enabledOnly | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and $_.DisplayGroup })
+                $grouped = $inboundAllowRules | Group-Object DisplayGroup | Sort-Object Count -Descending | Select-Object -First 10
+                foreach ($g in $grouped) {
+                    $topGroups += @{ Group = $g.Name; Count = $g.Count }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not enumerate firewall rules: $($_.Exception.Message)" -color "Warning"
+            }
+
+            $profilesDisabled = @($profiles | Where-Object { -not $_.Enabled }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  FIREWALL AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($p in $profiles) {
+                $line = "  $($p.Name.PadRight(12)) Enabled: $($p.Enabled)  In: $($p.DefaultInbound)  Out: $($p.DefaultOutbound)  [$($p.Status)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = switch ($p.Status) { 'OK' { 'Success' } 'WARN' { 'Warning' } 'CRITICAL' { 'Error' } default { 'Info' } }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Rules: $totalRules total, $enabledRules enabled, $disabledRules disabled".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Inbound: $inboundAllow allow, $inboundBlock block   Out: $outboundAllow allow, $outboundBlock block".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Profiles disabled: $profilesDisabled   Issues: $fwIssues".PadRight(72))│" -color $(if ($fwIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool     = $script:ToolFullName
+                    Version  = $script:ScriptVersion
+                    Action   = 'FirewallAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname = $env:COMPUTERNAME
+                    Summary  = @{
+                        TotalRules       = $totalRules
+                        EnabledRules     = $enabledRules
+                        DisabledRules    = $disabledRules
+                        InboundAllow     = $inboundAllow
+                        InboundBlock     = $inboundBlock
+                        OutboundAllow    = $outboundAllow
+                        OutboundBlock    = $outboundBlock
+                        ProfilesDisabled = $profilesDisabled
+                        Issues           = $fwIssues
+                    }
+                    Profiles        = $profiles
+                    TopInboundGroups = $topGroups
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($fwIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TaskAudit' {
+            Write-OutputColor "  Auditing scheduled tasks..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $tasks = @()
+            $failedCount = 0
+            $neverRunCount = 0
+
+            try {
+                $scheduledTasks = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskPath -notmatch '^\\Microsoft\\' -and $_.State -ne 'Disabled' })
+
+                foreach ($t in $scheduledTasks) {
+                    $taskInfo = $null
+                    try { $taskInfo = $t | Get-ScheduledTaskInfo -ErrorAction Stop } catch { $taskInfo = $null }
+
+                    $lastRun = $null
+                    $lastResult = $null
+                    $lastResultHex = $null
+                    $nextRun = $null
+                    $health = 'OK'
+
+                    if ($null -ne $taskInfo) {
+                        if ($null -ne $taskInfo.LastRunTime -and $taskInfo.LastRunTime.Year -gt 1999) {
+                            $lastRun = $taskInfo.LastRunTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                        }
+                        $lastResult = $taskInfo.LastTaskResult
+                        $lastResultHex = "0x{0:X}" -f $taskInfo.LastTaskResult
+
+                        if ($null -ne $taskInfo.NextRunTime -and $taskInfo.NextRunTime.Year -gt 1999) {
+                            $nextRun = $taskInfo.NextRunTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                        }
+
+                        # Classify health
+                        if ($null -eq $lastRun) {
+                            $health = 'NeverRun'; $neverRunCount++
+                        } elseif ($lastResult -ne 0 -and $lastResult -ne 0x00041300 -and $lastResult -ne 0x00041303) {
+                            $health = 'FAIL'; $failedCount++
+                        }
+                    } else {
+                        $health = 'NeverRun'; $neverRunCount++
+                    }
+
+                    $tasks += @{
+                        Name          = $t.TaskName
+                        Path          = $t.TaskPath
+                        State         = "$($t.State)"
+                        LastRun       = $lastRun
+                        LastResult    = $lastResult
+                        LastResultHex = $lastResultHex
+                        NextRun       = $nextRun
+                        Health        = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query scheduled tasks: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $healthyCount = @($tasks | Where-Object { $_.Health -eq 'OK' }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  TASK AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($tasks).Count -eq 0) {
+                Write-OutputColor "  │$("  (No non-Microsoft scheduled tasks found)".PadRight(72))│" -color "Info"
+            } else {
+                foreach ($t in $tasks) {
+                    $taskName = if ($t.Name.Length -gt 30) { $t.Name.Substring(0, 27) + "..." } else { $t.Name }
+                    $line = "  $($taskName.PadRight(32)) [$($t.Health)]"
+                    if ($t.LastRun) { $line += "  Last: $($t.LastRun.Substring(0, 10))" }
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = switch ($t.Health) { 'OK' { 'Success' } 'FAIL' { 'Error' } 'NeverRun' { 'Warning' } default { 'Info' } }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Total: $(@($tasks).Count)   Healthy: $healthyCount   Failed: $failedCount   Never Run: $neverRunCount"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($failedCount -gt 0) { "Error" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'TaskAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        Total    = @($tasks).Count
+                        Healthy  = $healthyCount
+                        Failed   = $failedCount
+                        NeverRun = $neverRunCount
+                    }
+                    Tasks     = $tasks
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($failedCount -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.29.1
+    Automated Test Runner for RackStack v1.44.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8573,9 +8573,35 @@ Write-TestResult "10-iSCSI: null-safe VendorId in MPIO display" ($iscsiContent3 
 $ceContent4 = Get-Content (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw
 Write-TestResult "45-ConfigExport: null-safe VendorId in MPIO export" ($ceContent4 -match 'if \(\$dev\.VendorId\)')
 
-# v1.21.2: ChildJobs bounds check in Invoke-WithTimeout
+# v1.44.0: Invoke-WithTimeout uses runspace instead of Start-Job for performance
 $navContent = Get-Content (Join-Path $modulesPath "04-Navigation.ps1") -Raw
-Write-TestResult "04-Navigation: ChildJobs bounds check in timeout handler" ($navContent -match 'ChildJobs\.Count -gt 0.*ChildJobs\[0\]')
+Write-TestResult "04-Navigation: Invoke-WithTimeout uses runspace pattern" ($navContent -match '\[powershell\]::Create\(\)' -and $navContent -match 'BeginInvoke\(\)' -and $navContent -match 'EndInvoke\(')
+
+# v1.44.0: Invoke-WithTimeout runtime tests
+try {
+    $iwtResult = Invoke-WithTimeout -ScriptBlock { 1 + 1 } -TimeoutSeconds 5 -Activity "Test"
+    Write-TestResult "Invoke-WithTimeout: returns result from scriptblock" ($iwtResult.Result -eq 2 -and -not $iwtResult.TimedOut -and -not $iwtResult.Failed)
+} catch {
+    Write-TestResult "Invoke-WithTimeout: returns result from scriptblock" $false $_.Exception.Message
+}
+try {
+    $iwtResult2 = Invoke-WithTimeout -ScriptBlock { $null } -TimeoutSeconds 5 -Activity "Test"
+    Write-TestResult "Invoke-WithTimeout: handles null result" ($null -eq $iwtResult2.Result -and -not $iwtResult2.TimedOut -and -not $iwtResult2.Failed)
+} catch {
+    Write-TestResult "Invoke-WithTimeout: handles null result" $false $_.Exception.Message
+}
+try {
+    $iwtResult3 = Invoke-WithTimeout -ScriptBlock { Start-Sleep -Seconds 10 } -TimeoutSeconds 2 -Activity "Test"
+    Write-TestResult "Invoke-WithTimeout: timeout returns TimedOut flag" ($iwtResult3.TimedOut -eq $true)
+} catch {
+    Write-TestResult "Invoke-WithTimeout: timeout returns TimedOut flag" $false $_.Exception.Message
+}
+try {
+    $iwtResult4 = Invoke-WithTimeout -ScriptBlock { @(1, 2, 3) } -TimeoutSeconds 5 -Activity "Test"
+    Write-TestResult "Invoke-WithTimeout: handles array result" ($iwtResult4.Result.Count -eq 3)
+} catch {
+    Write-TestResult "Invoke-WithTimeout: handles array result" $false $_.Exception.Message
+}
 
 # v1.21.2: HTML report empty table fallbacks
 $htmlContent2 = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
@@ -9263,9 +9289,15 @@ Write-SectionHeader "SECTION 153: CREDENTIAL EXPIRY (Test-CredentialExpired)"
 $_origCredential = $script:VMDeploymentCredential
 $_origTimestamp = $script:VMCredentialTimestamp
 
+# Build a PSCredential without ConvertTo-SecureString (avoids Microsoft.PowerShell.Security module load failures)
+$_testSecStr = [System.Security.SecureString]::new()
+foreach ($_c in "testpass".ToCharArray()) { $_testSecStr.AppendChar($_c) }
+$_testSecStr.MakeReadOnly()
+$_testCred = [PSCredential]::new("testuser", $_testSecStr)
+
 # Test 1: Current timestamp -> not expired
 try {
-    $script:VMDeploymentCredential = New-Object PSCredential("testuser", (ConvertTo-SecureString "testpass" -AsPlainText -Force))
+    $script:VMDeploymentCredential = $_testCred
     $script:VMCredentialTimestamp = Get-Date
     $result = Test-CredentialExpired
     Write-TestResult "CredentialExpired: current timestamp -> false (not expired)" ($result -eq $false) "Result: $result"
@@ -9275,7 +9307,7 @@ try {
 
 # Test 2: Timestamp 31 minutes ago -> expired
 try {
-    $script:VMDeploymentCredential = New-Object PSCredential("testuser", (ConvertTo-SecureString "testpass" -AsPlainText -Force))
+    $script:VMDeploymentCredential = $_testCred
     $script:VMCredentialTimestamp = (Get-Date).AddMinutes(-31)
     $result = Test-CredentialExpired
     Write-TestResult "CredentialExpired: 31 min ago -> true (expired)" ($result -eq $true) "Result: $result"
@@ -9285,7 +9317,7 @@ try {
 
 # Test 3: Credential set but timestamp null -> expired
 try {
-    $script:VMDeploymentCredential = New-Object PSCredential("testuser", (ConvertTo-SecureString "testpass" -AsPlainText -Force))
+    $script:VMDeploymentCredential = $_testCred
     $script:VMCredentialTimestamp = $null
     $result = Test-CredentialExpired
     Write-TestResult "CredentialExpired: null timestamp -> true (no timestamp = expired)" ($result -eq $true) "Result: $result"
@@ -10327,6 +10359,45 @@ try {
     Write-TestResult "50-EntryPoint: UserAudit JSON output" ($mod50 -match "'UserAudit'[\s\S]{0,12000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: UserAudit exits 1 on issues" ($mod50 -match "'UserAudit'[\s\S]{0,12000}issueCount[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: UserAudit Action field" ($mod50 -match "Action\s*=\s*'UserAudit'")
+
+    # FirewallAudit CLI action tests (v1.44.0)
+    Write-TestResult "Header: FirewallAudit in ValidateSet" ($headerContent -match "ValidateSet.*FirewallAudit")
+    Write-TestResult "Install-RackStack: FirewallAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*FirewallAudit")
+    Write-TestResult "50-EntryPoint: FirewallAudit case exists" ($mod50 -match "'FirewallAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: FirewallAudit queries Get-NetFirewallProfile" ($mod50 -match "'FirewallAudit'[\s\S]{0,1000}Get-NetFirewallProfile")
+    Write-TestResult "50-EntryPoint: FirewallAudit queries Get-NetFirewallRule" ($mod50 -match "'FirewallAudit'[\s\S]{0,3000}Get-NetFirewallRule")
+    Write-TestResult "50-EntryPoint: FirewallAudit checks profile enabled status" ($mod50 -match "'FirewallAudit'[\s\S]{0,1500}\.Enabled\s*-eq")
+    Write-TestResult "50-EntryPoint: FirewallAudit checks Public profile" ($mod50 -match "'FirewallAudit'[\s\S]{0,2000}Public[\s\S]{0,200}CRITICAL")
+    Write-TestResult "50-EntryPoint: FirewallAudit counts inbound allow" ($mod50 -match "'FirewallAudit'[\s\S]{0,4000}inboundAllow")
+    Write-TestResult "50-EntryPoint: FirewallAudit counts inbound block" ($mod50 -match "'FirewallAudit'[\s\S]{0,4000}inboundBlock")
+    Write-TestResult "50-EntryPoint: FirewallAudit counts outbound rules" ($mod50 -match "'FirewallAudit'[\s\S]{0,4000}outboundAllow[\s\S]{0,200}outboundBlock")
+    Write-TestResult "50-EntryPoint: FirewallAudit top inbound groups" ($mod50 -match "'FirewallAudit'[\s\S]{0,5000}Group-Object\s+DisplayGroup")
+    Write-TestResult "50-EntryPoint: FirewallAudit JSON has Summary" ($mod50 -match "'FirewallAudit'[\s\S]{0,8000}Summary\s*=[\s\S]{0,500}TotalRules")
+    Write-TestResult "50-EntryPoint: FirewallAudit JSON has Profiles" ($mod50 -match "'FirewallAudit'[\s\S]{0,9000}Profiles\s*=")
+    Write-TestResult "50-EntryPoint: FirewallAudit JSON has TopInboundGroups" ($mod50 -match "'FirewallAudit'[\s\S]{0,9000}TopInboundGroups\s*=")
+    Write-TestResult "50-EntryPoint: FirewallAudit JSON output" ($mod50 -match "'FirewallAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: FirewallAudit exits 1 on issues" ($mod50 -match "'FirewallAudit'[\s\S]{0,10000}fwIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: FirewallAudit Action field" ($mod50 -match "Action\s*=\s*'FirewallAudit'")
+    Write-TestResult "50-EntryPoint: FirewallAudit rule enum error handling" ($mod50 -match "'FirewallAudit'[\s\S]{0,5000}Could not enumerate firewall rules")
+
+    # TaskAudit CLI action tests (v1.44.0)
+    Write-TestResult "Header: TaskAudit in ValidateSet" ($headerContent -match "ValidateSet.*TaskAudit")
+    Write-TestResult "Install-RackStack: TaskAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*TaskAudit")
+    Write-TestResult "50-EntryPoint: TaskAudit case exists" ($mod50 -match "'TaskAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: TaskAudit queries Get-ScheduledTask" ($mod50 -match "'TaskAudit'[\s\S]{0,1000}Get-ScheduledTask")
+    Write-TestResult "50-EntryPoint: TaskAudit filters Microsoft tasks" ($mod50 -match "'TaskAudit'[\s\S]{0,1500}\\\\Microsoft\\\\")
+    Write-TestResult "50-EntryPoint: TaskAudit gets task info" ($mod50 -match "'TaskAudit'[\s\S]{0,3000}Get-ScheduledTaskInfo")
+    Write-TestResult "50-EntryPoint: TaskAudit classifies OK" ($mod50 -match "'TaskAudit'[\s\S]{0,5000}health\s*=\s*'OK'")
+    Write-TestResult "50-EntryPoint: TaskAudit classifies FAIL" ($mod50 -match "'TaskAudit'[\s\S]{0,5000}health\s*=\s*'FAIL'")
+    Write-TestResult "50-EntryPoint: TaskAudit classifies NeverRun" ($mod50 -match "'TaskAudit'[\s\S]{0,5000}health\s*=\s*'NeverRun'")
+    Write-TestResult "50-EntryPoint: TaskAudit excludes running status 0x00041300" ($mod50 -match "'TaskAudit'[\s\S]{0,5000}0x00041300")
+    Write-TestResult "50-EntryPoint: TaskAudit JSON has Summary" ($mod50 -match "'TaskAudit'[\s\S]{0,8000}Summary\s*=[\s\S]{0,500}Total\s*=")
+    Write-TestResult "50-EntryPoint: TaskAudit JSON has Tasks array" ($mod50 -match "'TaskAudit'[\s\S]{0,9000}Tasks\s*=")
+    Write-TestResult "50-EntryPoint: TaskAudit JSON output" ($mod50 -match "'TaskAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: TaskAudit exits 1 on failures" ($mod50 -match "'TaskAudit'[\s\S]{0,10000}failedCount[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: TaskAudit Action field" ($mod50 -match "Action\s*=\s*'TaskAudit'")
+    Write-TestResult "50-EntryPoint: TaskAudit empty list message" ($mod50 -match "'TaskAudit'[\s\S]{0,8000}No non-Microsoft scheduled tasks found")
+    Write-TestResult "50-EntryPoint: TaskAudit safe @() count wrapping" ($mod50 -match "'TaskAudit'[\s\S]{0,10000}@\(.tasks\)\.Count")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
