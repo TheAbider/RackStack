@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.59.0
+
+- **New Feature:** HostsFileAudit CLI action — `RackStack.exe -Action HostsFileAudit -OutputFormat JSON` audits the Windows hosts file. Parses custom entries and flags suspicious redirects of known domains (Microsoft, Google, Windows Update). Exits code 1 when suspicious entries detected (50-EntryPoint).
+- **New Feature:** NetStatAudit CLI action — `RackStack.exe -Action NetStatAudit -OutputFormat JSON` audits established TCP connections. Reports connections grouped by process with remote addresses and ports. Shows unique remote IPs and process counts (50-EntryPoint).
+- **New Feature:** LicenseAudit CLI action — `RackStack.exe -Action LicenseAudit -OutputFormat JSON` audits Windows licensing status. Queries slmgr for product name, license status, key channel, and checks SoftwareLicensingProduct CIM class for partial key and grace period. Exits code 1 when not licensed (50-EntryPoint).
+- **New Feature:** USBDeviceAudit CLI action — `RackStack.exe -Action USBDeviceAudit -OutputFormat JSON` audits connected USB devices and storage policy. Enumerates non-hub USB devices via Win32_USBControllerDevice/Win32_PnPEntity and checks USBSTOR service registry for storage blocking policy (50-EntryPoint).
+- 65 modules, 3699 tests
+
 ## v1.58.0
 
 - **New Feature:** AntivirusAudit CLI action — `RackStack.exe -Action AntivirusAudit -OutputFormat JSON` audits antivirus status. Checks Windows Defender real-time protection, signature age, engine version, and queries SecurityCenter2 for third-party AV products. Flags disabled RTP and stale signatures (>7 days). Exits code 1 when issues detected (50-EntryPoint).

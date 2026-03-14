@@ -225,6 +225,10 @@ function Assert-Elevation {
                 @{ Action = 'DotNetAudit';     Description = '.NET Framework + Runtime versions' }
                 @{ Action = 'RDPAudit';        Description = 'RDP config + active sessions' }
                 @{ Action = 'VPNAudit';        Description = 'VPN connections + RRAS status' }
+                @{ Action = 'HostsFileAudit'; Description = 'Hosts file entries + suspicious redirects' }
+                @{ Action = 'NetStatAudit';   Description = 'Established TCP connections' }
+                @{ Action = 'LicenseAudit';   Description = 'Windows activation + licensing' }
+                @{ Action = 'USBDeviceAudit'; Description = 'USB devices + storage policy' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -6344,6 +6348,240 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($vpnIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'HostsFileAudit' {
+            Write-OutputColor "  Auditing hosts file..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $hostsIssues = 0
+            $hostsEntries = @()
+            $hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
+
+            if (Test-Path -LiteralPath $hostsPath) {
+                try {
+                    $lines = Get-Content -LiteralPath $hostsPath -ErrorAction Stop
+                    foreach ($line in $lines) {
+                        $trimmed = $line.Trim()
+                        if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
+                        if ($trimmed -match '^(\S+)\s+(.+)$') {
+                            $regexMatches = $Matches; $ip = $regexMatches[1]; $hostnames = $regexMatches[2].Trim()
+                            $suspicious = $false
+                            # Flag redirects of known domains (potential hijacking)
+                            if ($hostnames -match 'microsoft\.com|windows\.com|google\.com|windowsupdate|login\.live' -and $ip -ne '127.0.0.1' -and $ip -ne '::1') {
+                                $suspicious = $true; $hostsIssues++
+                            }
+                            $hostsEntries += @{ IP = $ip; Hostnames = $hostnames; Suspicious = $suspicious }
+                        }
+                    }
+                } catch { }
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  HOSTS FILE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($hostsEntries).Count -eq 0) {
+                Write-OutputColor "  │$("  (No custom hosts entries)".PadRight(72))│" -color "Success"
+            } else {
+                foreach ($h in $hostsEntries) {
+                    $line = "  $($h.IP.PadRight(18)) $($h.Hostnames)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = if ($h.Suspicious) { "Error" } else { "Info" }
+                    $suffix = if ($h.Suspicious) { " [SUSPICIOUS]" } else { "" }
+                    Write-OutputColor "  │$(($line + $suffix).PadRight(72))│" -color $color
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Entries: $(@($hostsEntries).Count)   Suspicious: $hostsIssues".PadRight(72))│" -color $(if ($hostsIssues -gt 0) { "Error" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'HostsFileAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Entries = @($hostsEntries).Count; Suspicious = $hostsIssues; Issues = $hostsIssues }
+                    HostsEntries = $hostsEntries
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($hostsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NetStatAudit' {
+            Write-OutputColor "  Auditing TCP connections..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $nsIssues = 0
+            $connections = @()
+
+            try {
+                $tcpConns = @(Get-NetTCPConnection -State Established -ErrorAction Stop)
+                foreach ($c in $tcpConns) {
+                    $processName = ""
+                    try { $processName = (Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue).Name } catch { }
+                    $connections += @{
+                        LocalAddress  = "$($c.LocalAddress)"
+                        LocalPort     = $c.LocalPort
+                        RemoteAddress = "$($c.RemoteAddress)"
+                        RemotePort    = $c.RemotePort
+                        ProcessName   = $processName
+                        PID           = $c.OwningProcess
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query connections: $($_.Exception.Message)" -color "Warning"
+            }
+
+            $uniqueRemote = @($connections | ForEach-Object { $_.RemoteAddress } | Select-Object -Unique)
+            $uniqueProcesses = @($connections | ForEach-Object { $_.ProcessName } | Where-Object { $_ -ne '' } | Select-Object -Unique)
+
+            # Console output - top connections by process
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  NETSTAT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $byProcess = $connections | Group-Object ProcessName | Sort-Object Count -Descending | Select-Object -First 15
+            foreach ($grp in $byProcess) {
+                $pName = if ($grp.Name.Length -gt 25) { $grp.Name.Substring(0, 22) + "..." } elseif ($grp.Name -eq '') { "(unknown)" } else { $grp.Name }
+                Write-OutputColor "  │$("  $($pName.PadRight(27)) $($grp.Count) connections".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Connections: $(@($connections).Count)   Remote IPs: $(@($uniqueRemote).Count)   Processes: $(@($uniqueProcesses).Count)".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NetStatAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Connections = @($connections).Count; UniqueRemoteIPs = @($uniqueRemote).Count; UniqueProcesses = @($uniqueProcesses).Count; Issues = $nsIssues }
+                    Connections = $connections
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($nsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'LicenseAudit' {
+            Write-OutputColor "  Auditing Windows licensing..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $licIssues = 0
+            $licenseInfo = @{}
+
+            try {
+                $slmgr = & cscript //nologo "$env:SystemRoot\System32\slmgr.vbs" /dli 2>&1
+                $slmgrStr = $slmgr -join "`n"
+                if ($slmgrStr -match 'Name:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['ProductName'] = $regexMatches[1].Trim() }
+                if ($slmgrStr -match 'Description:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['Description'] = $regexMatches[1].Trim() }
+                if ($slmgrStr -match 'License Status:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['LicenseStatus'] = $regexMatches[1].Trim() }
+                if ($slmgrStr -match 'Product Key Channel:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['KeyChannel'] = $regexMatches[1].Trim() }
+
+                if ($licenseInfo.ContainsKey('LicenseStatus') -and $licenseInfo['LicenseStatus'] -ne 'Licensed') { $licIssues++ }
+            } catch { }
+
+            # Also check via CIM
+            try {
+                $slp = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND LicenseStatus=1" -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($null -ne $slp) {
+                    $licenseInfo['PartialProductKey'] = "$($slp.PartialProductKey)"
+                    $licenseInfo['GracePeriodDays'] = [math]::Round($slp.GracePeriodRemaining / 1440, 0)
+                }
+            } catch { }
+
+            $status = if ($licenseInfo.ContainsKey('LicenseStatus')) { $licenseInfo['LicenseStatus'] } else { 'Unknown' }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  LICENSE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $statusColor = if ($status -eq 'Licensed') { "Success" } else { "Warning" }
+            if ($licenseInfo.ContainsKey('ProductName')) { Write-OutputColor "  │$("  Product:    $($licenseInfo['ProductName'])".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  Status:     $status".PadRight(72))│" -color $statusColor
+            if ($licenseInfo.ContainsKey('KeyChannel')) { Write-OutputColor "  │$("  Channel:    $($licenseInfo['KeyChannel'])".PadRight(72))│" -color "Info" }
+            if ($licenseInfo.ContainsKey('PartialProductKey')) { Write-OutputColor "  │$("  Key:        *****-$($licenseInfo['PartialProductKey'])".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $licIssues".PadRight(72))│" -color $(if ($licIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LicenseAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ LicenseStatus = $status; Issues = $licIssues }
+                    License = $licenseInfo
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($licIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'USBDeviceAudit' {
+            Write-OutputColor "  Auditing USB devices..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $usbIssues = 0
+            $usbDevices = @()
+
+            try {
+                $devices = @(Get-CimInstance -ClassName Win32_USBControllerDevice -ErrorAction Stop)
+                $seen = @{}
+                foreach ($d in $devices) {
+                    $depPath = $d.Dependent
+                    if ($depPath -match 'DeviceID="(.+)"') {
+                        $regexMatches = $Matches; $devId = $regexMatches[1] -replace '\\\\', '\'
+                        if ($seen.ContainsKey($devId)) { continue }
+                        $seen[$devId] = $true
+                        try {
+                            $pnp = Get-CimInstance -ClassName Win32_PnPEntity -Filter "DeviceID='$($devId -replace "'", "''")'" -ErrorAction SilentlyContinue
+                            if ($null -ne $pnp -and $pnp.Name -notmatch 'Root Hub|Host Controller|Generic Hub') {
+                                $usbDevices += @{
+                                    Name         = "$($pnp.Name)"
+                                    DeviceID     = $devId
+                                    Manufacturer = "$($pnp.Manufacturer)"
+                                    Status       = "$($pnp.Status)"
+                                    PNPClass     = "$($pnp.PNPClass)"
+                                }
+                            }
+                        } catch { }
+                    }
+                }
+            } catch { }
+
+            # Check USB storage policy
+            $usbStorageDisabled = $false
+            try {
+                $usbStor = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR' -ErrorAction SilentlyContinue
+                if ($null -ne $usbStor -and $usbStor.Start -eq 4) { $usbStorageDisabled = $true }
+            } catch { }
+
+            $storageDevices = @($usbDevices | Where-Object { $_.PNPClass -eq 'DiskDrive' -or $_.PNPClass -eq 'USB' -and $_.Name -match 'Storage|Disk|Flash|Drive' })
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  USB DEVICE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  USB Storage Policy: $(if ($usbStorageDisabled) { 'Blocked' } else { 'Allowed' })".PadRight(72))│" -color $(if ($usbStorageDisabled) { "Success" } else { "Info" })
+            if (@($usbDevices).Count -eq 0) {
+                Write-OutputColor "  │$("  (No USB devices connected)".PadRight(72))│" -color "Info"
+            } else {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                foreach ($u in $usbDevices) {
+                    $uName = if ($u.Name.Length -gt 50) { $u.Name.Substring(0, 47) + "..." } else { $u.Name }
+                    $line = "  $uName  [$($u.Status)]"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Devices: $(@($usbDevices).Count)   Storage blocked: $usbStorageDisabled   Issues: $usbIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'USBDeviceAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Devices = @($usbDevices).Count; StorageBlocked = $usbStorageDisabled; Issues = $usbIssues }
+                    Devices = $usbDevices
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($usbIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

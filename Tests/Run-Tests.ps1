@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.58.0
+    Automated Test Runner for RackStack v1.59.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10904,6 +10904,38 @@ try {
     Write-TestResult "50-EntryPoint: VPNAudit JSON has Connections" ($mod50 -match "'VPNAudit'[\s\S]{0,6000}Connections\s*=")
     Write-TestResult "50-EntryPoint: VPNAudit JSON output" ($mod50 -match "'VPNAudit'[\s\S]{0,7000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: VPNAudit Action field" ($mod50 -match "Action\s*=\s*'VPNAudit'")
+
+    # HostsFileAudit (v1.59.0)
+    Write-TestResult "Header: HostsFileAudit in ValidateSet" ($headerContent -match "ValidateSet.*HostsFileAudit")
+    Write-TestResult "50-EntryPoint: HostsFileAudit case exists" ($mod50 -match "'HostsFileAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: HostsFileAudit reads hosts file" ($mod50 -match "'HostsFileAudit'[\s\S]{0,1000}drivers[\s\S]{0,100}etc[\s\S]{0,100}hosts")
+    Write-TestResult "50-EntryPoint: HostsFileAudit detects suspicious" ($mod50 -match "'HostsFileAudit'[\s\S]{0,2000}suspicious")
+    Write-TestResult "50-EntryPoint: HostsFileAudit JSON output" ($mod50 -match "'HostsFileAudit'[\s\S]{0,5000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: HostsFileAudit Action field" ($mod50 -match "Action\s*=\s*'HostsFileAudit'")
+
+    # NetStatAudit (v1.59.0)
+    Write-TestResult "Header: NetStatAudit in ValidateSet" ($headerContent -match "ValidateSet.*NetStatAudit")
+    Write-TestResult "50-EntryPoint: NetStatAudit case exists" ($mod50 -match "'NetStatAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: NetStatAudit queries Get-NetTCPConnection" ($mod50 -match "'NetStatAudit'[\s\S]{0,1000}Get-NetTCPConnection")
+    Write-TestResult "50-EntryPoint: NetStatAudit groups by process" ($mod50 -match "'NetStatAudit'[\s\S]{0,3000}Group-Object ProcessName")
+    Write-TestResult "50-EntryPoint: NetStatAudit JSON output" ($mod50 -match "'NetStatAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: NetStatAudit Action field" ($mod50 -match "Action\s*=\s*'NetStatAudit'")
+
+    # LicenseAudit (v1.59.0)
+    Write-TestResult "Header: LicenseAudit in ValidateSet" ($headerContent -match "ValidateSet.*LicenseAudit")
+    Write-TestResult "50-EntryPoint: LicenseAudit case exists" ($mod50 -match "'LicenseAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: LicenseAudit queries slmgr" ($mod50 -match "'LicenseAudit'[\s\S]{0,1000}slmgr")
+    Write-TestResult "50-EntryPoint: LicenseAudit checks SoftwareLicensingProduct" ($mod50 -match "'LicenseAudit'[\s\S]{0,3000}SoftwareLicensingProduct")
+    Write-TestResult "50-EntryPoint: LicenseAudit JSON output" ($mod50 -match "'LicenseAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: LicenseAudit Action field" ($mod50 -match "Action\s*=\s*'LicenseAudit'")
+
+    # USBDeviceAudit (v1.59.0)
+    Write-TestResult "Header: USBDeviceAudit in ValidateSet" ($headerContent -match "ValidateSet.*USBDeviceAudit")
+    Write-TestResult "50-EntryPoint: USBDeviceAudit case exists" ($mod50 -match "'USBDeviceAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: USBDeviceAudit queries Win32_USBControllerDevice" ($mod50 -match "'USBDeviceAudit'[\s\S]{0,1000}Win32_USBControllerDevice")
+    Write-TestResult "50-EntryPoint: USBDeviceAudit checks USBSTOR policy" ($mod50 -match "'USBDeviceAudit'[\s\S]{0,3000}USBSTOR")
+    Write-TestResult "50-EntryPoint: USBDeviceAudit JSON output" ($mod50 -match "'USBDeviceAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: USBDeviceAudit Action field" ($mod50 -match "Action\s*=\s*'USBDeviceAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
