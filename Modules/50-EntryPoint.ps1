@@ -217,6 +217,10 @@ function Assert-Elevation {
                 @{ Action = 'UpdatePolicyAudit'; Description = 'Windows Update policy + WSUS config' }
                 @{ Action = 'IISAudit';         Description = 'IIS sites + app pools' }
                 @{ Action = 'SSHAudit';         Description = 'OpenSSH server config + keys' }
+                @{ Action = 'BitLockerAudit';  Description = 'BitLocker encryption status' }
+                @{ Action = 'PrintAudit';      Description = 'Printer inventory + queue status' }
+                @{ Action = 'CredGuardAudit';  Description = 'Credential Guard + VBS + HVCI' }
+                @{ Action = 'PortAudit';       Description = 'Outbound connectivity tests' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -5775,6 +5779,273 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($sshIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'BitLockerAudit' {
+            Write-OutputColor "  Auditing BitLocker encryption..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $blIssues = 0
+            $volumes = @()
+
+            try {
+                $blVolumes = @(Get-BitLockerVolume -ErrorAction Stop)
+                foreach ($v in $blVolumes) {
+                    $health = 'OK'
+                    if ("$($v.ProtectionStatus)" -ne 'On' -and $v.MountPoint -eq "$env:SystemDrive\") {
+                        $health = 'WARN'; $blIssues++
+                    }
+                    $keyProtectors = @($v.KeyProtector | ForEach-Object { "$($_.KeyProtectorType)" })
+                    $hasRecoveryPwd = @($v.KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'RecoveryPassword' }).Count -gt 0
+
+                    $volumes += @{
+                        MountPoint       = "$($v.MountPoint)"
+                        VolumeType       = "$($v.VolumeType)"
+                        ProtectionStatus = "$($v.ProtectionStatus)"
+                        EncryptionMethod = "$($v.EncryptionMethod)"
+                        EncryptionPct    = $v.EncryptionPercentage
+                        LockStatus       = "$($v.LockStatus)"
+                        KeyProtectors    = $keyProtectors
+                        HasRecoveryKey   = $hasRecoveryPwd
+                        Health           = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  BitLocker not available: $($_.Exception.Message)" -color "Info"
+            }
+
+            $encrypted = @($volumes | Where-Object { $_.ProtectionStatus -eq 'On' }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  BITLOCKER AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($volumes).Count -eq 0) {
+                Write-OutputColor "  │$("  (BitLocker not configured or not available)".PadRight(72))│" -color "Info"
+            } else {
+                foreach ($v in $volumes) {
+                    $line = "  $($v.MountPoint.PadRight(8)) $("$($v.ProtectionStatus)".PadRight(8)) $($v.EncryptionMethod)  $($v.EncryptionPct)%  [$($v.Health)]"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = switch ($v.Health) { 'OK' { 'Success' } 'WARN' { 'Warning' } default { 'Info' } }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                    $recStr = if ($v.HasRecoveryKey) { "Recovery key: Yes" } else { "Recovery key: No" }
+                    Write-OutputColor "  │$("    $recStr  Protectors: $($v.KeyProtectors -join ', ')".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Volumes: $(@($volumes).Count)   Encrypted: $encrypted   Issues: $blIssues".PadRight(72))│" -color $(if ($blIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'BitLockerAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Volumes = @($volumes).Count; Encrypted = $encrypted; Issues = $blIssues }
+                    Volumes = $volumes
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($blIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'PrintAudit' {
+            Write-OutputColor "  Auditing print configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $printIssues = 0
+            $printers = @()
+
+            try {
+                $installedPrinters = @(Get-Printer -ErrorAction Stop)
+                foreach ($p in $installedPrinters) {
+                    $health = 'OK'
+                    $jobCount = 0
+                    try {
+                        $jobs = @(Get-PrintJob -PrinterName $p.Name -ErrorAction SilentlyContinue)
+                        $jobCount = @($jobs).Count
+                        if ($jobCount -gt 10) { $health = 'WARN'; $printIssues++ }
+                    } catch { }
+
+                    $printers += @{
+                        Name       = $p.Name
+                        DriverName = "$($p.DriverName)"
+                        PortName   = "$($p.PortName)"
+                        Shared     = $p.Shared
+                        Type       = "$($p.Type)"
+                        JobCount   = $jobCount
+                        Health     = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  Print services not available: $($_.Exception.Message)" -color "Info"
+            }
+
+            $shared = @($printers | Where-Object { $_.Shared }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PRINT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($printers).Count -eq 0) {
+                Write-OutputColor "  │$("  (No printers installed)".PadRight(72))│" -color "Info"
+            } else {
+                foreach ($p in $printers) {
+                    $pName = if ($p.Name.Length -gt 30) { $p.Name.Substring(0, 27) + "..." } else { $p.Name }
+                    $sharedStr = if ($p.Shared) { "Shared" } else { "" }
+                    $line = "  $($pName.PadRight(32)) Jobs:$($p.JobCount)  $sharedStr  [$($p.Health)]"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = if ($p.Health -eq 'OK') { 'Info' } else { 'Warning' }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Printers: $(@($printers).Count)   Shared: $shared   Issues: $printIssues".PadRight(72))│" -color $(if ($printIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PrintAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Printers = @($printers).Count; Shared = $shared; Issues = $printIssues }
+                    Printers = $printers
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($printIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'CredGuardAudit' {
+            Write-OutputColor "  Auditing credential protection..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $cgIssues = 0
+
+            # Device Guard / VBS status
+            $vbsRunning = $false
+            $cgRunning = $false
+            $hvciRunning = $false
+            $securityServices = @()
+
+            try {
+                $dgInfo = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\Microsoft\Windows\DeviceGuard' -ErrorAction Stop
+                $vbsRunning = $dgInfo.VirtualizationBasedSecurityStatus -eq 2
+                if ($null -ne $dgInfo.SecurityServicesRunning) {
+                    $svcIds = @($dgInfo.SecurityServicesRunning)
+                    $cgRunning = $svcIds -contains 1
+                    $hvciRunning = $svcIds -contains 2
+                    foreach ($id in $svcIds) {
+                        $svcName = switch ($id) { 1 { 'Credential Guard' } 2 { 'HVCI' } 3 { 'System Guard' } default { "Service $id" } }
+                        $securityServices += $svcName
+                    }
+                }
+            } catch { }
+
+            # LSA protection
+            $lsaPPL = $false
+            try {
+                $lsaReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -ErrorAction SilentlyContinue
+                if ($null -ne $lsaReg -and $null -ne $lsaReg.RunAsPPL) { $lsaPPL = $lsaReg.RunAsPPL -eq 1 }
+            } catch { }
+
+            if (-not $cgRunning) { $cgIssues++ }
+            if (-not $lsaPPL) { $cgIssues++ }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  CREDENTIAL GUARD AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $vbsColor = if ($vbsRunning) { "Success" } else { "Warning" }
+            Write-OutputColor "  │$("  VBS:              $(if ($vbsRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $vbsColor
+            $cgColor = if ($cgRunning) { "Success" } else { "Warning" }
+            Write-OutputColor "  │$("  Credential Guard: $(if ($cgRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $cgColor
+            $hvciColor = if ($hvciRunning) { "Success" } else { "Info" }
+            Write-OutputColor "  │$("  HVCI:             $(if ($hvciRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $hvciColor
+            $lsaColor = if ($lsaPPL) { "Success" } else { "Warning" }
+            Write-OutputColor "  │$("  LSASS Protection: $(if ($lsaPPL) { 'Enabled (PPL)' } else { 'Not enabled' })".PadRight(72))│" -color $lsaColor
+            if (@($securityServices).Count -gt 0) {
+                Write-OutputColor "  │$("  Active Services:  $($securityServices -join ', ')".PadRight(72))│" -color "Success"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $cgIssues".PadRight(72))│" -color $(if ($cgIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'CredGuardAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ VBSRunning = $vbsRunning; CredentialGuard = $cgRunning; HVCI = $hvciRunning; LSAProtection = $lsaPPL; SecurityServices = $securityServices; Issues = $cgIssues }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($cgIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'PortAudit' {
+            Write-OutputColor "  Testing outbound connectivity..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $portIssues = 0
+            $portTests = @()
+
+            $targets = @(
+                @{ Host = 'dns.google';          Port = 443;  Name = 'Google DNS (HTTPS)' }
+                @{ Host = '8.8.8.8';             Port = 53;   Name = 'Google DNS' }
+                @{ Host = 'time.windows.com';    Port = 123;  Name = 'Windows NTP' }
+                @{ Host = 'go.microsoft.com';    Port = 443;  Name = 'Microsoft Update' }
+                @{ Host = 'login.microsoftonline.com'; Port = 443; Name = 'Azure AD' }
+                @{ Host = 'github.com';          Port = 443;  Name = 'GitHub' }
+            )
+
+            foreach ($t in $targets) {
+                $reachable = $false
+                $latencyMs = 0
+                try {
+                    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                    $tcp = [System.Net.Sockets.TcpClient]::new()
+                    $connectTask = $tcp.ConnectAsync($t.Host, $t.Port)
+                    $completed = $connectTask.Wait(3000)
+                    $sw.Stop()
+                    $latencyMs = $sw.ElapsedMilliseconds
+                    if ($completed -and $tcp.Connected) { $reachable = $true }
+                    $tcp.Dispose()
+                } catch {
+                    $reachable = $false
+                }
+
+                if (-not $reachable) { $portIssues++ }
+                $portTests += @{
+                    Name      = $t.Name
+                    Host      = $t.Host
+                    Port      = $t.Port
+                    Reachable = $reachable
+                    LatencyMs = $latencyMs
+                    Status    = if ($reachable) { 'OK' } else { 'FAIL' }
+                }
+            }
+
+            $passed = @($portTests | Where-Object { $_.Reachable }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PORT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($p in $portTests) {
+                $latStr = if ($p.Reachable) { "$($p.LatencyMs)ms" } else { "timeout" }
+                $line = "  $($p.Name.PadRight(25)) $($p.Host):$($p.Port)".PadRight(55) + " $latStr  [$($p.Status)]"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                $color = if ($p.Reachable) { 'Success' } else { 'Error' }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Passed: $passed/$(@($portTests).Count)   Issues: $portIssues".PadRight(72))│" -color $(if ($portIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PortAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Tested = @($portTests).Count; Passed = $passed; Failed = $portIssues; Issues = $portIssues }
+                    Tests = $portTests
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($portIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

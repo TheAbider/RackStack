@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.56.0
+    Automated Test Runner for RackStack v1.57.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10828,6 +10828,44 @@ try {
     # -ListActions table completeness (v1.56.0)
     Write-TestResult "50-EntryPoint: ListActions includes TempAudit" ($mod50 -match "actionList[\s\S]{0,8000}TempAudit")
     Write-TestResult "50-EntryPoint: ListActions includes SSHAudit" ($mod50 -match "actionList[\s\S]{0,8000}SSHAudit")
+
+    # BitLockerAudit CLI action tests (v1.57.0)
+    Write-TestResult "Header: BitLockerAudit in ValidateSet" ($headerContent -match "ValidateSet.*BitLockerAudit")
+    Write-TestResult "50-EntryPoint: BitLockerAudit case exists" ($mod50 -match "'BitLockerAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: BitLockerAudit queries Get-BitLockerVolume" ($mod50 -match "'BitLockerAudit'[\s\S]{0,1000}Get-BitLockerVolume")
+    Write-TestResult "50-EntryPoint: BitLockerAudit checks ProtectionStatus" ($mod50 -match "'BitLockerAudit'[\s\S]{0,2000}ProtectionStatus")
+    Write-TestResult "50-EntryPoint: BitLockerAudit checks recovery key" ($mod50 -match "'BitLockerAudit'[\s\S]{0,3000}RecoveryPassword")
+    Write-TestResult "50-EntryPoint: BitLockerAudit JSON output" ($mod50 -match "'BitLockerAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: BitLockerAudit Action field" ($mod50 -match "Action\s*=\s*'BitLockerAudit'")
+
+    # PrintAudit CLI action tests (v1.57.0)
+    Write-TestResult "Header: PrintAudit in ValidateSet" ($headerContent -match "ValidateSet.*PrintAudit")
+    Write-TestResult "50-EntryPoint: PrintAudit case exists" ($mod50 -match "'PrintAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: PrintAudit queries Get-Printer" ($mod50 -match "'PrintAudit'[\s\S]{0,1000}Get-Printer")
+    Write-TestResult "50-EntryPoint: PrintAudit checks job count" ($mod50 -match "'PrintAudit'[\s\S]{0,2000}Get-PrintJob")
+    Write-TestResult "50-EntryPoint: PrintAudit flags queue backlog" ($mod50 -match "'PrintAudit'[\s\S]{0,3000}jobCount\s*-gt\s*10")
+    Write-TestResult "50-EntryPoint: PrintAudit JSON output" ($mod50 -match "'PrintAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: PrintAudit Action field" ($mod50 -match "Action\s*=\s*'PrintAudit'")
+
+    # CredGuardAudit CLI action tests (v1.57.0)
+    Write-TestResult "Header: CredGuardAudit in ValidateSet" ($headerContent -match "ValidateSet.*CredGuardAudit")
+    Write-TestResult "50-EntryPoint: CredGuardAudit case exists" ($mod50 -match "'CredGuardAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: CredGuardAudit queries Win32_DeviceGuard" ($mod50 -match "'CredGuardAudit'[\s\S]{0,1000}Win32_DeviceGuard")
+    Write-TestResult "50-EntryPoint: CredGuardAudit checks VBS status" ($mod50 -match "'CredGuardAudit'[\s\S]{0,2000}VirtualizationBasedSecurityStatus")
+    Write-TestResult "50-EntryPoint: CredGuardAudit checks LSASS PPL" ($mod50 -match "'CredGuardAudit'[\s\S]{0,3000}RunAsPPL")
+    Write-TestResult "50-EntryPoint: CredGuardAudit JSON output" ($mod50 -match "'CredGuardAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: CredGuardAudit Action field" ($mod50 -match "Action\s*=\s*'CredGuardAudit'")
+
+    # PortAudit CLI action tests (v1.57.0)
+    Write-TestResult "Header: PortAudit in ValidateSet" ($headerContent -match "ValidateSet.*PortAudit")
+    Write-TestResult "50-EntryPoint: PortAudit case exists" ($mod50 -match "'PortAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: PortAudit tests TCP connections" ($mod50 -match "'PortAudit'[\s\S]{0,2000}TcpClient")
+    Write-TestResult "50-EntryPoint: PortAudit tests multiple targets" ($mod50 -match "'PortAudit'[\s\S]{0,1500}dns\.google[\s\S]{0,500}time\.windows\.com")
+    Write-TestResult "50-EntryPoint: PortAudit measures latency" ($mod50 -match "'PortAudit'[\s\S]{0,3000}LatencyMs")
+    Write-TestResult "50-EntryPoint: PortAudit JSON has Tests" ($mod50 -match "'PortAudit'[\s\S]{0,7000}Tests\s*=")
+    Write-TestResult "50-EntryPoint: PortAudit JSON output" ($mod50 -match "'PortAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: PortAudit exits 1 on issues" ($mod50 -match "'PortAudit'[\s\S]{0,8000}portIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: PortAudit Action field" ($mod50 -match "Action\s*=\s*'PortAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

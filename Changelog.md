@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.57.0
+
+- **New Feature:** BitLockerAudit CLI action — `RackStack.exe -Action BitLockerAudit -OutputFormat JSON` audits BitLocker encryption per volume. Reports protection status, encryption method, percentage, lock status, key protectors, and recovery key presence. Flags unencrypted system drives. Exits code 1 when issues detected (50-EntryPoint).
+- **New Feature:** PrintAudit CLI action — `RackStack.exe -Action PrintAudit -OutputFormat JSON` inventories installed printers with driver, port, sharing status, and print queue job count. Flags printers with >10 queued jobs. Exits code 1 when queue backlogs detected (50-EntryPoint).
+- **New Feature:** CredGuardAudit CLI action — `RackStack.exe -Action CredGuardAudit -OutputFormat JSON` audits credential protection posture. Checks Virtualization Based Security, Credential Guard, HVCI, and LSASS PPL protection via Win32_DeviceGuard CIM class. Exits code 1 when credential protection gaps detected (50-EntryPoint).
+- **New Feature:** PortAudit CLI action — `RackStack.exe -Action PortAudit -OutputFormat JSON` tests outbound TCP connectivity to 6 critical endpoints (Google DNS, Windows NTP, Microsoft Update, Azure AD, GitHub). Reports latency in milliseconds. Exits code 1 when connectivity failures detected (50-EntryPoint).
+- 65 modules, 3645 tests
+
 ## v1.56.0
 
 - **New Feature:** TempAudit CLI action — `RackStack.exe -Action TempAudit -OutputFormat JSON` analyzes reclaimable disk space across 10 temp categories (Windows Temp, User Temp, WU cache, Prefetch, CBS logs, DISM logs, IIS logs, crash dumps, error reports). Shows size per category. Flags >5GB total reclaimable (50-EntryPoint).
