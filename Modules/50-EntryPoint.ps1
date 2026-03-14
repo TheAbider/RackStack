@@ -221,6 +221,10 @@ function Assert-Elevation {
                 @{ Action = 'PrintAudit';      Description = 'Printer inventory + queue status' }
                 @{ Action = 'CredGuardAudit';  Description = 'Credential Guard + VBS + HVCI' }
                 @{ Action = 'PortAudit';       Description = 'Outbound connectivity tests' }
+                @{ Action = 'AntivirusAudit';  Description = 'Windows Defender + AV status' }
+                @{ Action = 'DotNetAudit';     Description = '.NET Framework + Runtime versions' }
+                @{ Action = 'RDPAudit';        Description = 'RDP config + active sessions' }
+                @{ Action = 'VPNAudit';        Description = 'VPN connections + RRAS status' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -6046,6 +6050,300 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($portIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'AntivirusAudit' {
+            Write-OutputColor "  Auditing antivirus status..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $avIssues = 0
+            $avProducts = @()
+            $defenderStatus = @{}
+
+            # Windows Defender status
+            try {
+                $mpStatus = Get-MpComputerStatus -ErrorAction Stop
+                $defenderStatus = @{
+                    AMRunning              = $mpStatus.AMServiceEnabled
+                    RealTimeProtection     = $mpStatus.RealTimeProtectionEnabled
+                    BehaviorMonitor        = $mpStatus.BehaviorMonitorEnabled
+                    AntiSpyware            = $mpStatus.AntispywareEnabled
+                    Antivirus              = $mpStatus.AntivirusEnabled
+                    NISEnabled             = $mpStatus.NISEnabled
+                    DefSignatureAge        = $mpStatus.AntivirusSignatureAge
+                    DefLastUpdated         = if ($null -ne $mpStatus.AntivirusSignatureLastUpdated) { $mpStatus.AntivirusSignatureLastUpdated.ToString("yyyy-MM-ddTHH:mm:ss") } else { "Unknown" }
+                    EngineVersion          = "$($mpStatus.AMEngineVersion)"
+                    ProductVersion         = "$($mpStatus.AMProductVersion)"
+                }
+                if (-not $mpStatus.RealTimeProtectionEnabled) { $avIssues++ }
+                if ($mpStatus.AntivirusSignatureAge -gt 7) { $avIssues++ }
+            } catch {
+                Write-OutputColor "  Windows Defender not available: $($_.Exception.Message)" -color "Info"
+            }
+
+            # Third-party AV (via WMI SecurityCenter2)
+            try {
+                $avWmi = @(Get-CimInstance -Namespace 'root\SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
+                foreach ($av in $avWmi) {
+                    $avProducts += @{ Name = "$($av.displayName)"; State = $av.productState; Path = "$($av.pathToSignedProductExe)" }
+                }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  ANTIVIRUS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if ($defenderStatus.Count -gt 0) {
+                $rtpColor = if ($defenderStatus.RealTimeProtection) { "Success" } else { "Error" }
+                Write-OutputColor "  │$("  Defender RTP:     $(if ($defenderStatus.RealTimeProtection) { 'Enabled' } else { 'DISABLED' })".PadRight(72))│" -color $rtpColor
+                $sigColor = if ($defenderStatus.DefSignatureAge -le 7) { "Success" } else { "Warning" }
+                Write-OutputColor "  │$("  Signature Age:    $($defenderStatus.DefSignatureAge) days".PadRight(72))│" -color $sigColor
+                Write-OutputColor "  │$("  Engine:           $($defenderStatus.EngineVersion)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Last Updated:     $($defenderStatus.DefLastUpdated)".PadRight(72))│" -color "Info"
+            } else {
+                Write-OutputColor "  │$("  Windows Defender: Not available".PadRight(72))│" -color "Warning"
+            }
+            if (@($avProducts).Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                foreach ($av in $avProducts) {
+                    Write-OutputColor "  │$("  $($av.Name)".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $avIssues".PadRight(72))│" -color $(if ($avIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'AntivirusAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ DefenderAvailable = ($defenderStatus.Count -gt 0); RealTimeProtection = $defenderStatus.RealTimeProtection; SignatureAgeDays = $defenderStatus.DefSignatureAge; ThirdPartyAV = @($avProducts).Count; Issues = $avIssues }
+                    Defender = $defenderStatus; ThirdPartyProducts = $avProducts
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($avIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DotNetAudit' {
+            Write-OutputColor "  Auditing .NET installations..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $dnIssues = 0
+            $frameworks = @()
+            $runtimes = @()
+
+            # .NET Framework versions
+            $fwPath = 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP'
+            if (Test-Path $fwPath) {
+                try {
+                    $fwKeys = @('v2.0.50727', 'v3.0', 'v3.5', 'v4\Full')
+                    foreach ($key in $fwKeys) {
+                        $regPath = Join-Path $fwPath $key
+                        if (Test-Path $regPath) {
+                            $reg = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+                            if ($null -ne $reg) {
+                                $version = if ($null -ne $reg.Version) { "$($reg.Version)" } else { $key }
+                                $release = if ($null -ne $reg.Release) { $reg.Release } else { 0 }
+                                $frameworks += @{ Key = $key; Version = $version; Release = $release; Installed = ($null -ne $reg.Install -and $reg.Install -eq 1) -or ($null -ne $reg.Version) }
+                            }
+                        }
+                    }
+                } catch { }
+            }
+
+            # .NET Runtime (Core/5+)
+            try {
+                $dotnetOutput = & dotnet --list-runtimes 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    foreach ($line in $dotnetOutput) {
+                        if ($line -match '^(\S+)\s+(\S+)\s+\[(.+)\]') {
+                            $regexMatches = $Matches
+                            $runtimes += @{ Name = $regexMatches[1]; Version = $regexMatches[2]; Path = $regexMatches[3] }
+                        }
+                    }
+                }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  .NET AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($frameworks).Count -gt 0) {
+                Write-OutputColor "  │$("  .NET FRAMEWORK".PadRight(72))│" -color "Info"
+                foreach ($fw in $frameworks) {
+                    $installed = if ($fw.Installed) { "Installed" } else { "Not found" }
+                    Write-OutputColor "  │$("  $($fw.Key.PadRight(18)) $($fw.Version.PadRight(18)) $installed".PadRight(72))│" -color $(if ($fw.Installed) { "Success" } else { "Info" })
+                }
+            }
+            if (@($runtimes).Count -gt 0) {
+                Write-OutputColor "  │$("  .NET RUNTIMES".PadRight(72))│" -color "Info"
+                foreach ($rt in $runtimes) {
+                    $line = "  $($rt.Name.PadRight(30)) $($rt.Version)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Success"
+                }
+            }
+            if (@($frameworks).Count -eq 0 -and @($runtimes).Count -eq 0) {
+                Write-OutputColor "  │$("  (No .NET installations detected)".PadRight(72))│" -color "Warning"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Frameworks: $(@($frameworks | Where-Object { $_.Installed }).Count)   Runtimes: $(@($runtimes).Count)".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DotNetAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Frameworks = @($frameworks | Where-Object { $_.Installed }).Count; Runtimes = @($runtimes).Count; Issues = $dnIssues }
+                    Frameworks = $frameworks; Runtimes = $runtimes
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($dnIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'RDPAudit' {
+            Write-OutputColor "  Auditing RDP configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $rdpIssues = 0
+
+            # RDP enabled
+            $rdpEnabled = $false
+            $nlaRequired = $false
+            $rdpPort = 3389
+            try {
+                $rdpReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -ErrorAction SilentlyContinue
+                $rdpEnabled = $null -ne $rdpReg -and $rdpReg.fDenyTSConnections -eq 0
+                $rdpTcpReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue
+                if ($null -ne $rdpTcpReg) {
+                    $nlaRequired = $rdpTcpReg.UserAuthentication -eq 1
+                    if ($null -ne $rdpTcpReg.PortNumber) { $rdpPort = $rdpTcpReg.PortNumber }
+                }
+                if ($rdpEnabled -and -not $nlaRequired) { $rdpIssues++ }
+            } catch { }
+
+            # Active RDP sessions
+            $sessions = @()
+            try {
+                $qwinstaOutput = & qwinsta 2>&1
+                foreach ($line in $qwinstaOutput) {
+                    if ($line -match '^\s*(rdp-tcp#\d+|console)\s+(\S+)\s+(\d+)\s+(Active|Disc)') {
+                        $regexMatches = $Matches
+                        $sessions += @{ Session = $regexMatches[1]; User = $regexMatches[2]; ID = $regexMatches[3]; State = $regexMatches[4] }
+                    }
+                }
+            } catch { }
+
+            $activeSessions = @($sessions | Where-Object { $_.State -eq 'Active' }).Count
+            $discSessions = @($sessions | Where-Object { $_.State -eq 'Disc' }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  RDP AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  RDP Enabled:      $(if ($rdpEnabled) { 'Yes' } else { 'No' })".PadRight(72))│" -color $(if ($rdpEnabled) { "Success" } else { "Info" })
+            $nlaColor = if ($nlaRequired) { "Success" } else { "Warning" }
+            Write-OutputColor "  │$("  NLA Required:     $(if ($nlaRequired) { 'Yes' } else { 'No' })".PadRight(72))│" -color $nlaColor
+            Write-OutputColor "  │$("  RDP Port:         $rdpPort".PadRight(72))│" -color $(if ($rdpPort -ne 3389) { "Info" } else { "Info" })
+            Write-OutputColor "  │$("  Active Sessions:  $activeSessions".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Disconnected:     $discSessions".PadRight(72))│" -color $(if ($discSessions -gt 0) { "Warning" } else { "Info" })
+            if (@($sessions).Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                foreach ($s in $sessions) {
+                    Write-OutputColor "  │$("  $($s.User.PadRight(25)) $($s.Session.PadRight(18)) $($s.State)".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $rdpIssues".PadRight(72))│" -color $(if ($rdpIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'RDPAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ RDPEnabled = $rdpEnabled; NLARequired = $nlaRequired; Port = $rdpPort; ActiveSessions = $activeSessions; DisconnectedSessions = $discSessions; Issues = $rdpIssues }
+                    Sessions = $sessions
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($rdpIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'VPNAudit' {
+            Write-OutputColor "  Auditing VPN connections..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $vpnIssues = 0
+            $vpnConnections = @()
+            $rasConnections = @()
+
+            # VPN client connections
+            try {
+                $vpns = @(Get-VpnConnection -ErrorAction Stop)
+                foreach ($v in $vpns) {
+                    $vpnConnections += @{
+                        Name             = $v.Name
+                        ServerAddress    = "$($v.ServerAddress)"
+                        TunnelType       = "$($v.TunnelType)"
+                        AuthMethod       = "$($v.AuthenticationMethod)"
+                        ConnectionStatus = "$($v.ConnectionStatus)"
+                        SplitTunneling   = $v.SplitTunneling
+                    }
+                }
+            } catch { }
+
+            # Active RAS connections
+            try {
+                $rasConns = @(Get-VpnConnection -AllUserConnection -ErrorAction SilentlyContinue)
+                foreach ($r in $rasConns) {
+                    if ($r.Name -notin ($vpnConnections | ForEach-Object { $_.Name })) {
+                        $vpnConnections += @{
+                            Name             = $r.Name
+                            ServerAddress    = "$($r.ServerAddress)"
+                            TunnelType       = "$($r.TunnelType)"
+                            AuthMethod       = "$($r.AuthenticationMethod)"
+                            ConnectionStatus = "$($r.ConnectionStatus)"
+                            SplitTunneling   = $r.SplitTunneling
+                        }
+                    }
+                }
+            } catch { }
+
+            # RRAS (server-side)
+            $rrasInstalled = $false
+            try {
+                $rrasSvc = Get-Service -Name RemoteAccess -ErrorAction SilentlyContinue
+                if ($null -ne $rrasSvc) { $rrasInstalled = $true }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  VPN AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($vpnConnections).Count -eq 0) {
+                Write-OutputColor "  │$("  (No VPN connections configured)".PadRight(72))│" -color "Info"
+            } else {
+                foreach ($v in $vpnConnections) {
+                    $vName = if ($v.Name.Length -gt 22) { $v.Name.Substring(0, 19) + "..." } else { $v.Name }
+                    $line = "  $($vName.PadRight(24)) $($v.TunnelType.PadRight(12)) $($v.ConnectionStatus)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = if ($v.ConnectionStatus -eq 'Connected') { "Success" } else { "Info" }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                }
+            }
+            Write-OutputColor "  │$("  RRAS Service: $(if ($rrasInstalled) { 'Installed' } else { 'Not installed' })".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  VPN Connections: $(@($vpnConnections).Count)   Issues: $vpnIssues".PadRight(72))│" -color $(if ($vpnIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VPNAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ VPNConnections = @($vpnConnections).Count; RRASInstalled = $rrasInstalled; Issues = $vpnIssues }
+                    Connections = $vpnConnections
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($vpnIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

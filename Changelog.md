@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.58.0
+
+- **New Feature:** AntivirusAudit CLI action — `RackStack.exe -Action AntivirusAudit -OutputFormat JSON` audits antivirus status. Checks Windows Defender real-time protection, signature age, engine version, and queries SecurityCenter2 for third-party AV products. Flags disabled RTP and stale signatures (>7 days). Exits code 1 when issues detected (50-EntryPoint).
+- **New Feature:** DotNetAudit CLI action — `RackStack.exe -Action DotNetAudit -OutputFormat JSON` inventories .NET installations. Reports .NET Framework versions (2.0-4.x) from registry and .NET Runtime/SDK versions via `dotnet --list-runtimes` (50-EntryPoint).
+- **New Feature:** RDPAudit CLI action — `RackStack.exe -Action RDPAudit -OutputFormat JSON` audits Remote Desktop configuration. Reports RDP enabled status, NLA requirement, port number, and active/disconnected sessions via qwinsta. Flags RDP enabled without NLA. Exits code 1 when security issues detected (50-EntryPoint).
+- **New Feature:** VPNAudit CLI action — `RackStack.exe -Action VPNAudit -OutputFormat JSON` audits VPN connections. Reports configured VPN connections with tunnel type, authentication method, split tunneling status, and RRAS service availability (50-EntryPoint).
+- 65 modules, 3675 tests
+
 ## v1.57.0
 
 - **New Feature:** BitLockerAudit CLI action — `RackStack.exe -Action BitLockerAudit -OutputFormat JSON` audits BitLocker encryption per volume. Reports protection status, encryption method, percentage, lock status, key protectors, and recovery key presence. Flags unencrypted system drives. Exits code 1 when issues detected (50-EntryPoint).

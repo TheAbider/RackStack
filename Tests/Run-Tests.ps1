@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.57.0
+    Automated Test Runner for RackStack v1.58.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10866,6 +10866,44 @@ try {
     Write-TestResult "50-EntryPoint: PortAudit JSON output" ($mod50 -match "'PortAudit'[\s\S]{0,8000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: PortAudit exits 1 on issues" ($mod50 -match "'PortAudit'[\s\S]{0,8000}portIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: PortAudit Action field" ($mod50 -match "Action\s*=\s*'PortAudit'")
+
+    # AntivirusAudit (v1.58.0)
+    Write-TestResult "Header: AntivirusAudit in ValidateSet" ($headerContent -match "ValidateSet.*AntivirusAudit")
+    Write-TestResult "50-EntryPoint: AntivirusAudit case exists" ($mod50 -match "'AntivirusAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: AntivirusAudit queries Get-MpComputerStatus" ($mod50 -match "'AntivirusAudit'[\s\S]{0,1000}Get-MpComputerStatus")
+    Write-TestResult "50-EntryPoint: AntivirusAudit checks RTP" ($mod50 -match "'AntivirusAudit'[\s\S]{0,2000}RealTimeProtectionEnabled")
+    Write-TestResult "50-EntryPoint: AntivirusAudit checks signature age" ($mod50 -match "'AntivirusAudit'[\s\S]{0,2000}AntivirusSignatureAge")
+    Write-TestResult "50-EntryPoint: AntivirusAudit checks SecurityCenter2" ($mod50 -match "'AntivirusAudit'[\s\S]{0,4000}SecurityCenter2")
+    Write-TestResult "50-EntryPoint: AntivirusAudit JSON output" ($mod50 -match "'AntivirusAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: AntivirusAudit Action field" ($mod50 -match "Action\s*=\s*'AntivirusAudit'")
+
+    # DotNetAudit (v1.58.0)
+    Write-TestResult "Header: DotNetAudit in ValidateSet" ($headerContent -match "ValidateSet.*DotNetAudit")
+    Write-TestResult "50-EntryPoint: DotNetAudit case exists" ($mod50 -match "'DotNetAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: DotNetAudit checks Framework registry" ($mod50 -match "'DotNetAudit'[\s\S]{0,1000}NET Framework Setup")
+    Write-TestResult "50-EntryPoint: DotNetAudit checks dotnet --list-runtimes" ($mod50 -match "'DotNetAudit'[\s\S]{0,3000}--list-runtimes")
+    Write-TestResult "50-EntryPoint: DotNetAudit JSON has Frameworks" ($mod50 -match "'DotNetAudit'[\s\S]{0,6000}Frameworks\s*=")
+    Write-TestResult "50-EntryPoint: DotNetAudit JSON output" ($mod50 -match "'DotNetAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: DotNetAudit Action field" ($mod50 -match "Action\s*=\s*'DotNetAudit'")
+
+    # RDPAudit (v1.58.0)
+    Write-TestResult "Header: RDPAudit in ValidateSet" ($headerContent -match "ValidateSet.*RDPAudit")
+    Write-TestResult "50-EntryPoint: RDPAudit case exists" ($mod50 -match "'RDPAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: RDPAudit checks fDenyTSConnections" ($mod50 -match "'RDPAudit'[\s\S]{0,1500}fDenyTSConnections")
+    Write-TestResult "50-EntryPoint: RDPAudit checks NLA" ($mod50 -match "'RDPAudit'[\s\S]{0,2000}UserAuthentication")
+    Write-TestResult "50-EntryPoint: RDPAudit queries sessions" ($mod50 -match "'RDPAudit'[\s\S]{0,3000}qwinsta")
+    Write-TestResult "50-EntryPoint: RDPAudit JSON has Sessions" ($mod50 -match "'RDPAudit'[\s\S]{0,6000}Sessions\s*=")
+    Write-TestResult "50-EntryPoint: RDPAudit JSON output" ($mod50 -match "'RDPAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: RDPAudit Action field" ($mod50 -match "Action\s*=\s*'RDPAudit'")
+
+    # VPNAudit (v1.58.0)
+    Write-TestResult "Header: VPNAudit in ValidateSet" ($headerContent -match "ValidateSet.*VPNAudit")
+    Write-TestResult "50-EntryPoint: VPNAudit case exists" ($mod50 -match "'VPNAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: VPNAudit queries Get-VpnConnection" ($mod50 -match "'VPNAudit'[\s\S]{0,1000}Get-VpnConnection")
+    Write-TestResult "50-EntryPoint: VPNAudit checks RRAS" ($mod50 -match "'VPNAudit'[\s\S]{0,3000}RemoteAccess")
+    Write-TestResult "50-EntryPoint: VPNAudit JSON has Connections" ($mod50 -match "'VPNAudit'[\s\S]{0,6000}Connections\s*=")
+    Write-TestResult "50-EntryPoint: VPNAudit JSON output" ($mod50 -match "'VPNAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: VPNAudit Action field" ($mod50 -match "Action\s*=\s*'VPNAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
