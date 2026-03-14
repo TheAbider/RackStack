@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.48.0
+    Automated Test Runner for RackStack v1.49.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10529,6 +10529,36 @@ try {
     Write-TestResult "50-EntryPoint: MemoryAudit JSON output" ($mod50 -match "'MemoryAudit'[\s\S]{0,10000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: MemoryAudit exits 1 on issues" ($mod50 -match "'MemoryAudit'[\s\S]{0,10000}memIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: MemoryAudit Action field" ($mod50 -match "Action\s*=\s*'MemoryAudit'")
+
+    # ProcessAudit CLI action tests (v1.49.0)
+    Write-TestResult "Header: ProcessAudit in ValidateSet" ($headerContent -match "ValidateSet.*ProcessAudit")
+    Write-TestResult "Install-RackStack: ProcessAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*ProcessAudit")
+    Write-TestResult "50-EntryPoint: ProcessAudit case exists" ($mod50 -match "'ProcessAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: ProcessAudit queries Get-Process" ($mod50 -match "'ProcessAudit'[\s\S]{0,1000}Get-Process")
+    Write-TestResult "50-EntryPoint: ProcessAudit sorts by CPU" ($mod50 -match "'ProcessAudit'[\s\S]{0,2000}Sort-Object CPU")
+    Write-TestResult "50-EntryPoint: ProcessAudit sorts by memory" ($mod50 -match "'ProcessAudit'[\s\S]{0,3000}Sort-Object WorkingSet")
+    Write-TestResult "50-EntryPoint: ProcessAudit checks signatures" ($mod50 -match "'ProcessAudit'[\s\S]{0,4000}Get-AuthenticodeSignature")
+    Write-TestResult "50-EntryPoint: ProcessAudit JSON has TopCPU" ($mod50 -match "'ProcessAudit'[\s\S]{0,8000}TopCPU\s*=")
+    Write-TestResult "50-EntryPoint: ProcessAudit JSON has TopMemory" ($mod50 -match "'ProcessAudit'[\s\S]{0,8000}TopMemory\s*=")
+    Write-TestResult "50-EntryPoint: ProcessAudit JSON has UnsignedProcesses" ($mod50 -match "'ProcessAudit'[\s\S]{0,9000}UnsignedProcesses\s*=")
+    Write-TestResult "50-EntryPoint: ProcessAudit JSON output" ($mod50 -match "'ProcessAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ProcessAudit exits 1 on issues" ($mod50 -match "'ProcessAudit'[\s\S]{0,10000}procIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: ProcessAudit Action field" ($mod50 -match "Action\s*=\s*'ProcessAudit'")
+
+    # BackupAudit CLI action tests (v1.49.0)
+    Write-TestResult "Header: BackupAudit in ValidateSet" ($headerContent -match "ValidateSet.*BackupAudit")
+    Write-TestResult "Install-RackStack: BackupAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*BackupAudit")
+    Write-TestResult "50-EntryPoint: BackupAudit case exists" ($mod50 -match "'BackupAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: BackupAudit queries vssadmin" ($mod50 -match "'BackupAudit'[\s\S]{0,2000}vssadmin list writers")
+    Write-TestResult "50-EntryPoint: BackupAudit checks writer state" ($mod50 -match "'BackupAudit'[\s\S]{0,4000}writerState[\s\S]{0,200}Stable")
+    Write-TestResult "50-EntryPoint: BackupAudit queries shadow copies" ($mod50 -match "'BackupAudit'[\s\S]{0,5000}Win32_ShadowCopy")
+    Write-TestResult "50-EntryPoint: BackupAudit checks WSB" ($mod50 -match "'BackupAudit'[\s\S]{0,6000}Get-WBJob")
+    Write-TestResult "50-EntryPoint: BackupAudit JSON has VSSWriters" ($mod50 -match "'BackupAudit'[\s\S]{0,9000}VSSWriters\s*=")
+    Write-TestResult "50-EntryPoint: BackupAudit JSON has ShadowCopies" ($mod50 -match "'BackupAudit'[\s\S]{0,9000}ShadowCopies\s*=")
+    Write-TestResult "50-EntryPoint: BackupAudit JSON has Summary" ($mod50 -match "'BackupAudit'[\s\S]{0,8000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: BackupAudit JSON output" ($mod50 -match "'BackupAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: BackupAudit exits 1 on issues" ($mod50 -match "'BackupAudit'[\s\S]{0,10000}backupIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: BackupAudit Action field" ($mod50 -match "Action\s*=\s*'BackupAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

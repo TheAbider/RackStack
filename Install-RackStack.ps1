@@ -36,7 +36,7 @@
 #>
 
 param(
-    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate', 'Aggregate', 'Compare', 'Export', 'Trend', 'CertCheck', 'ReportHTML', 'ListeningPorts', 'SoftwareList', 'Uptime', 'ServiceAudit', 'EventAudit', 'NetInfo', 'ScheduledExport', 'ValidateConfig', 'Watch', 'Query', 'Diff', 'Baseline', 'Alert', 'FleetScan', 'PatchStatus', 'UserAudit', 'FirewallAudit', 'TaskAudit', 'DiskAudit', 'TLSAudit', 'SMBAudit', 'DriverAudit', 'TimeAudit', 'BootAudit', 'GPOAudit', 'MemoryAudit')]
+    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate', 'Aggregate', 'Compare', 'Export', 'Trend', 'CertCheck', 'ReportHTML', 'ListeningPorts', 'SoftwareList', 'Uptime', 'ServiceAudit', 'EventAudit', 'NetInfo', 'ScheduledExport', 'ValidateConfig', 'Watch', 'Query', 'Diff', 'Baseline', 'Alert', 'FleetScan', 'PatchStatus', 'UserAudit', 'FirewallAudit', 'TaskAudit', 'DiskAudit', 'TLSAudit', 'SMBAudit', 'DriverAudit', 'TimeAudit', 'BootAudit', 'GPOAudit', 'MemoryAudit', 'ProcessAudit', 'BackupAudit')]
     [string]$Action = 'QuickScan',
 
     [ValidateSet('Light', 'Standard', 'Aggressive')]

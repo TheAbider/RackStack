@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.49.0
+
+- **New Feature:** ProcessAudit CLI action — `RackStack.exe -Action ProcessAudit -OutputFormat JSON` audits running processes. Reports top 10 CPU and memory consumers, and scans running executables for valid Authenticode signatures. Lists unsigned or invalidly signed processes. Exits code 1 when unsigned processes detected (50-EntryPoint).
+- **New Feature:** BackupAudit CLI action — `RackStack.exe -Action BackupAudit -OutputFormat JSON` audits backup infrastructure. Checks all VSS writer states and flags non-Stable writers, inventories Volume Shadow Copies, and queries Windows Server Backup job status. Exits code 1 when backup issues detected (50-EntryPoint).
+- 65 modules, 3394 tests
+
 ## v1.48.0
 
 - **New Feature:** GPOAudit CLI action — `RackStack.exe -Action GPOAudit -OutputFormat JSON` inventories applied Group Policies from the GP History registry. Reports machine and user policies with display names, deduplicates entries, and queries last gpupdate time. Works on both domain-joined and standalone systems (50-EntryPoint).

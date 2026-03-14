@@ -3842,6 +3842,234 @@ function Invoke-CLIAction {
 
             if ($memIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'ProcessAudit' {
+            Write-OutputColor "  Auditing running processes..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $procIssues = 0
+            $topCpu = @()
+            $topMem = @()
+            $unsignedProcs = @()
+
+            try {
+                $processes = @(Get-Process -ErrorAction Stop | Where-Object { $_.Name -ne 'Idle' -and $_.Name -ne 'System' })
+
+                # Top 10 CPU consumers
+                $topCpu = @($processes | Sort-Object CPU -Descending | Select-Object -First 10 | ForEach-Object {
+                    @{
+                        Name      = $_.Name
+                        PID       = $_.Id
+                        CPU       = [math]::Round($_.CPU, 1)
+                        MemoryMB  = [math]::Round($_.WorkingSet64 / 1MB, 1)
+                        Path      = "$($_.Path)"
+                    }
+                })
+
+                # Top 10 memory consumers
+                $topMem = @($processes | Sort-Object WorkingSet64 -Descending | Select-Object -First 10 | ForEach-Object {
+                    @{
+                        Name      = $_.Name
+                        PID       = $_.Id
+                        MemoryMB  = [math]::Round($_.WorkingSet64 / 1MB, 1)
+                        Path      = "$($_.Path)"
+                    }
+                })
+
+                # Check for unsigned processes with paths
+                $withPath = @($processes | Where-Object { $null -ne $_.Path -and $_.Path -ne '' })
+                foreach ($p in $withPath) {
+                    try {
+                        $sig = Get-AuthenticodeSignature -FilePath $p.Path -ErrorAction Stop
+                        if ($sig.Status -ne 'Valid') {
+                            $unsignedProcs += @{
+                                Name      = $p.Name
+                                PID       = $p.Id
+                                Path      = $p.Path
+                                SigStatus = "$($sig.Status)"
+                                MemoryMB  = [math]::Round($p.WorkingSet64 / 1MB, 1)
+                            }
+                        }
+                    } catch { }
+                }
+                if (@($unsignedProcs).Count -gt 0) { $procIssues = @($unsignedProcs).Count }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query processes: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $totalProcs = @($processes).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PROCESS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  TOP CPU CONSUMERS".PadRight(72))│" -color "Info"
+            foreach ($p in $topCpu) {
+                $pName = if ($p.Name.Length -gt 25) { $p.Name.Substring(0, 22) + "..." } else { $p.Name }
+                $line = "  $($pName.PadRight(27)) CPU: $("$($p.CPU)s".PadRight(10)) Mem: $($p.MemoryMB)MB"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  TOP MEMORY CONSUMERS".PadRight(72))│" -color "Info"
+            foreach ($p in $topMem) {
+                $pName = if ($p.Name.Length -gt 25) { $p.Name.Substring(0, 22) + "..." } else { $p.Name }
+                $line = "  $($pName.PadRight(27)) Mem: $($p.MemoryMB)MB"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+            }
+            if (@($unsignedProcs).Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  UNSIGNED PROCESSES ($(@($unsignedProcs).Count))".PadRight(72))│" -color "Warning"
+                foreach ($p in $unsignedProcs) {
+                    $pName = if ($p.Name.Length -gt 25) { $p.Name.Substring(0, 22) + "..." } else { $p.Name }
+                    $line = "  $($pName.PadRight(27)) [$($p.SigStatus)]  $($p.MemoryMB)MB"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Warning"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Total: $totalProcs   Unsigned: $(@($unsignedProcs).Count)"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($procIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'ProcessAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        TotalProcesses  = $totalProcs
+                        UnsignedCount   = @($unsignedProcs).Count
+                        Issues          = $procIssues
+                    }
+                    TopCPU           = $topCpu
+                    TopMemory        = $topMem
+                    UnsignedProcesses = $unsignedProcs
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($procIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'BackupAudit' {
+            Write-OutputColor "  Auditing backup configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $backupIssues = 0
+
+            # VSS Writers
+            $vssWriters = @()
+            try {
+                $vssOutput = & vssadmin list writers 2>&1
+                $vssStr = $vssOutput -join "`n"
+                $writerBlocks = $vssStr -split 'Writer name:'
+                foreach ($block in $writerBlocks) {
+                    if ($block.Trim() -eq '') { continue }
+                    $writerName = ''
+                    $writerState = ''
+                    $lastError = ''
+                    if ($block -match "^\s*'([^']+)'") { $regexMatches = $Matches; $writerName = $regexMatches[1] }
+                    if ($block -match 'State:\s*\[\d+\]\s*(.+)') { $regexMatches = $Matches; $writerState = $regexMatches[1].Trim() }
+                    if ($block -match 'Last error:\s*(.+)') { $regexMatches = $Matches; $lastError = $regexMatches[1].Trim() }
+                    if ($writerName) {
+                        $health = 'OK'
+                        if ($writerState -ne 'Stable' -and $writerState -ne '') { $health = 'FAIL'; $backupIssues++ }
+                        if ($lastError -ne 'No error' -and $lastError -ne '') { $health = 'FAIL'; if ($writerState -eq 'Stable') { $backupIssues++ } }
+                        $vssWriters += @{
+                            Name      = $writerName
+                            State     = $writerState
+                            LastError = $lastError
+                            Health    = $health
+                        }
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query VSS writers: $($_.Exception.Message)" -color "Warning"
+            }
+
+            # Shadow copies
+            $shadowCopies = @()
+            try {
+                $shadows = @(Get-CimInstance -ClassName Win32_ShadowCopy -ErrorAction Stop)
+                foreach ($s in $shadows) {
+                    $shadowCopies += @{
+                        ID         = "$($s.ID)"
+                        Volume     = "$($s.VolumeName)"
+                        Created    = if ($null -ne $s.InstallDate) { $s.InstallDate.ToString("yyyy-MM-ddTHH:mm:ss") } else { "Unknown" }
+                        Provider   = "$($s.ProviderID)"
+                    }
+                }
+            } catch { }
+
+            # Windows Server Backup status (if available)
+            $wsbStatus = $null
+            try {
+                $wsbJob = Get-WBJob -Previous 1 -ErrorAction Stop
+                if ($null -ne $wsbJob) {
+                    $wsbStatus = @{
+                        StartTime  = $wsbJob.StartTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                        EndTime    = if ($null -ne $wsbJob.EndTime) { $wsbJob.EndTime.ToString("yyyy-MM-ddTHH:mm:ss") } else { "Running" }
+                        JobState   = "$($wsbJob.JobState)"
+                        HResult    = $wsbJob.HResult
+                        Health     = if ($wsbJob.HResult -eq 0) { 'OK' } else { 'FAIL' }
+                    }
+                    if ($wsbStatus.Health -eq 'FAIL') { $backupIssues++ }
+                }
+            } catch { }
+
+            $failedWriters = @($vssWriters | Where-Object { $_.Health -eq 'FAIL' })
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  BACKUP AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  VSS WRITERS ($(@($vssWriters).Count) total, $(@($failedWriters).Count) failed)".PadRight(72))│" -color $(if (@($failedWriters).Count -gt 0) { "Warning" } else { "Success" })
+            if (@($failedWriters).Count -gt 0) {
+                foreach ($w in $failedWriters) {
+                    $wName = if ($w.Name.Length -gt 35) { $w.Name.Substring(0, 32) + "..." } else { $w.Name }
+                    $line = "  $($wName.PadRight(37)) $($w.State)  $($w.LastError)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Error"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Shadow Copies: $(@($shadowCopies).Count)".PadRight(72))│" -color "Info"
+            if ($null -ne $wsbStatus) {
+                $wsbColor = if ($wsbStatus.Health -eq 'OK') { "Success" } else { "Error" }
+                Write-OutputColor "  │$("  Last WSB Job: $($wsbStatus.JobState) at $($wsbStatus.EndTime) [$($wsbStatus.Health)]".PadRight(72))│" -color $wsbColor
+            } else {
+                Write-OutputColor "  │$("  Windows Server Backup: Not configured or not available".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $backupIssues".PadRight(72))│" -color $(if ($backupIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'BackupAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        VSSWriters     = @($vssWriters).Count
+                        FailedWriters  = @($failedWriters).Count
+                        ShadowCopies   = @($shadowCopies).Count
+                        WSBConfigured  = $null -ne $wsbStatus
+                        Issues         = $backupIssues
+                    }
+                    VSSWriters    = $vssWriters
+                    ShadowCopies  = $shadowCopies
+                    WSBStatus     = $wsbStatus
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($backupIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
