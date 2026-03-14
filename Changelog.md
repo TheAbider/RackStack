@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.52.0
+
+- **New Feature:** AutoStartAudit CLI action — `RackStack.exe -Action AutoStartAudit -OutputFormat JSON` inventories all auto-start entries: registry Run/RunOnce keys (HKLM + HKCU + WOW6432Node), startup folder items, and non-Microsoft auto-start services (50-EntryPoint).
+- **New Feature:** BIOSAudit CLI action — `RackStack.exe -Action BIOSAudit -OutputFormat JSON` reports BIOS/firmware details including vendor, version, release date, serial number, SMBIOS version. Also reports system manufacturer, model, type, and baseboard info (50-EntryPoint).
+- **New Feature:** ClusterAudit CLI action — `RackStack.exe -Action ClusterAudit -OutputFormat JSON` audits failover cluster health. Reports cluster name, node states, and resource status. Flags nodes not in Up state and offline resources. Exits code 1 when cluster issues detected (50-EntryPoint).
+- **New Feature:** AuditPolicyAudit CLI action — `RackStack.exe -Action AuditPolicyAudit -OutputFormat JSON` audits Windows security audit policies via auditpol. Reports all subcategories with Success/Failure/No Auditing status. Flags unconfigured audit policies. Exits code 1 when gaps detected (50-EntryPoint).
+- 65 modules, 3530 tests
+
 ## v1.51.0
 
 - **New Feature:** HyperVAudit CLI action — `RackStack.exe -Action HyperVAudit -OutputFormat JSON` audits Hyper-V infrastructure. Reports VM states, memory allocation, checkpoint counts (flags >3), and replication health. Exits code 1 when VM issues detected (50-EntryPoint).

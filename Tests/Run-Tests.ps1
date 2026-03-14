@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.51.0
+    Automated Test Runner for RackStack v1.52.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10673,6 +10673,54 @@ try {
     Write-TestResult "50-EntryPoint: FeatureAudit JSON has InstalledFeatures" ($mod50 -match "'FeatureAudit'[\s\S]{0,8000}InstalledFeatures\s*=")
     Write-TestResult "50-EntryPoint: FeatureAudit JSON output" ($mod50 -match "'FeatureAudit'[\s\S]{0,9000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: FeatureAudit Action field" ($mod50 -match "Action\s*=\s*'FeatureAudit'")
+
+    # AutoStartAudit CLI action tests (v1.52.0)
+    Write-TestResult "Header: AutoStartAudit in ValidateSet" ($headerContent -match "ValidateSet.*AutoStartAudit")
+    Write-TestResult "Install-RackStack: AutoStartAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*AutoStartAudit")
+    Write-TestResult "50-EntryPoint: AutoStartAudit case exists" ($mod50 -match "'AutoStartAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: AutoStartAudit checks Run keys" ($mod50 -match "'AutoStartAudit'[\s\S]{0,2000}CurrentVersion[\s\S]{0,200}Run")
+    Write-TestResult "50-EntryPoint: AutoStartAudit checks startup folder" ($mod50 -match "'AutoStartAudit'[\s\S]{0,3000}CommonStartup|GetFolderPath")
+    Write-TestResult "50-EntryPoint: AutoStartAudit checks auto services" ($mod50 -match "'AutoStartAudit'[\s\S]{0,4000}StartMode.*Auto")
+    Write-TestResult "50-EntryPoint: AutoStartAudit JSON has Entries" ($mod50 -match "'AutoStartAudit'[\s\S]{0,8000}Entries\s*=")
+    Write-TestResult "50-EntryPoint: AutoStartAudit JSON output" ($mod50 -match "'AutoStartAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: AutoStartAudit Action field" ($mod50 -match "Action\s*=\s*'AutoStartAudit'")
+
+    # BIOSAudit CLI action tests (v1.52.0)
+    Write-TestResult "Header: BIOSAudit in ValidateSet" ($headerContent -match "ValidateSet.*BIOSAudit")
+    Write-TestResult "Install-RackStack: BIOSAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*BIOSAudit")
+    Write-TestResult "50-EntryPoint: BIOSAudit case exists" ($mod50 -match "'BIOSAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: BIOSAudit queries Win32_BIOS" ($mod50 -match "'BIOSAudit'[\s\S]{0,1000}Win32_BIOS")
+    Write-TestResult "50-EntryPoint: BIOSAudit queries Win32_ComputerSystem" ($mod50 -match "'BIOSAudit'[\s\S]{0,2000}Win32_ComputerSystem")
+    Write-TestResult "50-EntryPoint: BIOSAudit queries Win32_BaseBoard" ($mod50 -match "'BIOSAudit'[\s\S]{0,3000}Win32_BaseBoard")
+    Write-TestResult "50-EntryPoint: BIOSAudit JSON has BIOS" ($mod50 -match "'BIOSAudit'[\s\S]{0,7000}BIOS\s*=")
+    Write-TestResult "50-EntryPoint: BIOSAudit JSON has System" ($mod50 -match "'BIOSAudit'[\s\S]{0,7000}System\s*=")
+    Write-TestResult "50-EntryPoint: BIOSAudit JSON output" ($mod50 -match "'BIOSAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: BIOSAudit Action field" ($mod50 -match "Action\s*=\s*'BIOSAudit'")
+
+    # ClusterAudit CLI action tests (v1.52.0)
+    Write-TestResult "Header: ClusterAudit in ValidateSet" ($headerContent -match "ValidateSet.*ClusterAudit")
+    Write-TestResult "Install-RackStack: ClusterAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*ClusterAudit")
+    Write-TestResult "50-EntryPoint: ClusterAudit case exists" ($mod50 -match "'ClusterAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: ClusterAudit queries Get-Cluster" ($mod50 -match "'ClusterAudit'[\s\S]{0,1000}Get-Cluster\s")
+    Write-TestResult "50-EntryPoint: ClusterAudit queries Get-ClusterNode" ($mod50 -match "'ClusterAudit'[\s\S]{0,2000}Get-ClusterNode")
+    Write-TestResult "50-EntryPoint: ClusterAudit queries Get-ClusterResource" ($mod50 -match "'ClusterAudit'[\s\S]{0,3000}Get-ClusterResource")
+    Write-TestResult "50-EntryPoint: ClusterAudit JSON has Nodes" ($mod50 -match "'ClusterAudit'[\s\S]{0,8000}Nodes\s*=")
+    Write-TestResult "50-EntryPoint: ClusterAudit JSON has Resources" ($mod50 -match "'ClusterAudit'[\s\S]{0,8000}Resources\s*=")
+    Write-TestResult "50-EntryPoint: ClusterAudit JSON output" ($mod50 -match "'ClusterAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ClusterAudit exits 1 on issues" ($mod50 -match "'ClusterAudit'[\s\S]{0,9000}clusterIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: ClusterAudit Action field" ($mod50 -match "Action\s*=\s*'ClusterAudit'")
+
+    # AuditPolicyAudit CLI action tests (v1.52.0)
+    Write-TestResult "Header: AuditPolicyAudit in ValidateSet" ($headerContent -match "ValidateSet.*AuditPolicyAudit")
+    Write-TestResult "Install-RackStack: AuditPolicyAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*AuditPolicyAudit")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit case exists" ($mod50 -match "'AuditPolicyAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit queries auditpol" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,1000}auditpol /get")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit parses categories" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,3000}currentCategory")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit flags No Auditing" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,4000}No Auditing")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit JSON has Policies" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,8000}Policies\s*=")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit JSON output" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,9000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit exits 1 on issues" ($mod50 -match "'AuditPolicyAudit'[\s\S]{0,9000}apIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: AuditPolicyAudit Action field" ($mod50 -match "Action\s*=\s*'AuditPolicyAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

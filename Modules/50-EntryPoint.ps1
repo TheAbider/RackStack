@@ -4784,6 +4784,316 @@ function Invoke-CLIAction {
             }
             if ($featureIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'AutoStartAudit' {
+            Write-OutputColor "  Auditing auto-start entries..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $autoIssues = 0
+            $entries = @()
+
+            # Registry Run keys
+            $runPaths = @(
+                @{ Scope = 'Machine'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' }
+                @{ Scope = 'Machine'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' }
+                @{ Scope = 'Machine'; Path = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run' }
+                @{ Scope = 'User';    Path = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' }
+                @{ Scope = 'User';    Path = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' }
+            )
+
+            foreach ($rp in $runPaths) {
+                if (Test-Path $rp.Path) {
+                    try {
+                        $reg = Get-ItemProperty -Path $rp.Path -ErrorAction SilentlyContinue
+                        if ($null -ne $reg) {
+                            foreach ($prop in $reg.PSObject.Properties) {
+                                if ($prop.Name -match '^PS') { continue }
+                                $entries += @{ Name = $prop.Name; Command = "$($prop.Value)"; Source = $rp.Path; Scope = $rp.Scope; Type = 'Registry' }
+                            }
+                        }
+                    } catch { }
+                }
+            }
+
+            # Startup folder
+            $startupPaths = @(
+                [Environment]::GetFolderPath('CommonStartup')
+                [Environment]::GetFolderPath('Startup')
+            )
+            foreach ($sp in $startupPaths) {
+                if ($sp -and (Test-Path -LiteralPath $sp)) {
+                    try {
+                        $items = @(Get-ChildItem -LiteralPath $sp -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'desktop.ini' })
+                        foreach ($item in $items) {
+                            $entries += @{ Name = $item.Name; Command = $item.FullName; Source = $sp; Scope = 'Startup'; Type = 'StartupFolder' }
+                        }
+                    } catch { }
+                }
+            }
+
+            # Auto-start services (non-Microsoft)
+            $autoServices = @()
+            try {
+                $autoServices = @(Get-CimInstance -ClassName Win32_Service -Filter "StartMode='Auto'" -ErrorAction Stop |
+                    Where-Object { $_.PathName -notmatch 'Windows\\system32|Windows\\SysWOW64|Microsoft' -and $null -ne $_.PathName -and $_.PathName -ne '' })
+                foreach ($svc in $autoServices) {
+                    $entries += @{ Name = $svc.Name; Command = "$($svc.PathName)"; Source = 'Services'; Scope = 'Machine'; Type = 'Service' }
+                }
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  AUTOSTART AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $regEntries = @($entries | Where-Object { $_.Type -eq 'Registry' })
+            $folderEntries = @($entries | Where-Object { $_.Type -eq 'StartupFolder' })
+            $svcEntries = @($entries | Where-Object { $_.Type -eq 'Service' })
+            if (@($regEntries).Count -gt 0) {
+                Write-OutputColor "  │$("  REGISTRY ($(@($regEntries).Count))".PadRight(72))│" -color "Info"
+                foreach ($e in $regEntries) {
+                    $eName = if ($e.Name.Length -gt 30) { $e.Name.Substring(0, 27) + "..." } else { $e.Name }
+                    $line = "  $($eName.PadRight(32)) [$($e.Scope)]"
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+                }
+            }
+            if (@($svcEntries).Count -gt 0) {
+                Write-OutputColor "  │$("  NON-MICROSOFT AUTO SERVICES ($(@($svcEntries).Count))".PadRight(72))│" -color "Info"
+                foreach ($e in $svcEntries) {
+                    $eName = if ($e.Name.Length -gt 65) { $e.Name.Substring(0, 62) + "..." } else { $e.Name }
+                    Write-OutputColor "  │$("  $eName".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Registry: $(@($regEntries).Count)   Startup: $(@($folderEntries).Count)   Services: $(@($svcEntries).Count)   Total: $(@($entries).Count)"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'AutoStartAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Registry = @($regEntries).Count; StartupFolder = @($folderEntries).Count; Services = @($svcEntries).Count; Total = @($entries).Count; Issues = $autoIssues }
+                    Entries = $entries
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($autoIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'BIOSAudit' {
+            Write-OutputColor "  Auditing BIOS/firmware information..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $biosIssues = 0
+            $biosInfo = @{}
+            $systemInfo = @{}
+
+            try {
+                $bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop
+                $biosInfo = @{
+                    Manufacturer   = "$($bios.Manufacturer)"
+                    Version        = "$($bios.SMBIOSBIOSVersion)"
+                    ReleaseDate    = if ($null -ne $bios.ReleaseDate) { $bios.ReleaseDate.ToString("yyyy-MM-dd") } else { "Unknown" }
+                    SerialNumber   = "$($bios.SerialNumber)"
+                    SMBIOSVersion  = "$($bios.SMBIOSMajorVersion).$($bios.SMBIOSMinorVersion)"
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query BIOS: $($_.Exception.Message)" -color "Warning"
+            }
+
+            try {
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $systemInfo = @{
+                    Manufacturer = "$($cs.Manufacturer)"
+                    Model        = "$($cs.Model)"
+                    SystemType   = "$($cs.SystemType)"
+                    TotalMemoryGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
+                    Domain       = "$($cs.Domain)"
+                    DomainRole   = $cs.DomainRole
+                }
+            } catch { }
+
+            try {
+                $board = Get-CimInstance -ClassName Win32_BaseBoard -ErrorAction Stop
+                $systemInfo['BaseBoardProduct'] = "$($board.Product)"
+                $systemInfo['BaseBoardManufacturer'] = "$($board.Manufacturer)"
+                $systemInfo['BaseBoardSerial'] = "$($board.SerialNumber)"
+            } catch { }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  BIOS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if ($biosInfo.Count -gt 0) {
+                Write-OutputColor "  │$("  BIOS Vendor:    $($biosInfo.Manufacturer)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  BIOS Version:   $($biosInfo.Version)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Release Date:   $($biosInfo.ReleaseDate)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Serial Number:  $($biosInfo.SerialNumber)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  SMBIOS:         $($biosInfo.SMBIOSVersion)".PadRight(72))│" -color "Info"
+            }
+            if ($systemInfo.Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  System:         $($systemInfo.Manufacturer) $($systemInfo.Model)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Type:           $($systemInfo.SystemType)".PadRight(72))│" -color "Info"
+                if ($systemInfo.ContainsKey('BaseBoardProduct')) {
+                    Write-OutputColor "  │$("  Baseboard:      $($systemInfo.BaseBoardManufacturer) $($systemInfo.BaseBoardProduct)".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'BIOSAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Issues = $biosIssues }
+                    BIOS = $biosInfo; System = $systemInfo
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($biosIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ClusterAudit' {
+            Write-OutputColor "  Auditing failover cluster..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $clusterIssues = 0
+            $clusterName = ""
+            $nodeResults = @()
+            $resourceResults = @()
+            $clusterInstalled = $false
+
+            try {
+                $cluster = Get-Cluster -ErrorAction Stop
+                $clusterInstalled = $true
+                $clusterName = $cluster.Name
+
+                # Nodes
+                $nodes = @(Get-ClusterNode -ErrorAction Stop)
+                foreach ($n in $nodes) {
+                    $health = 'OK'
+                    if ("$($n.State)" -ne 'Up') { $health = 'FAIL'; $clusterIssues++ }
+                    $nodeResults += @{ Name = $n.Name; State = "$($n.State)"; Health = $health }
+                }
+
+                # Resources
+                $resources = @(Get-ClusterResource -ErrorAction Stop)
+                foreach ($r in $resources) {
+                    $health = 'OK'
+                    if ("$($r.State)" -ne 'Online') { $health = 'WARN'; $clusterIssues++ }
+                    $resourceResults += @{ Name = $r.Name; ResourceType = "$($r.ResourceType)"; State = "$($r.State)"; OwnerNode = "$($r.OwnerNode)"; Health = $health }
+                }
+            } catch {
+                $clusterInstalled = $false
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  CLUSTER AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (-not $clusterInstalled) {
+                Write-OutputColor "  │$("  Failover Clustering: Not configured".PadRight(72))│" -color "Info"
+            } else {
+                Write-OutputColor "  │$("  Cluster: $clusterName".PadRight(72))│" -color "Success"
+                Write-OutputColor "  │$("  NODES ($(@($nodeResults).Count))".PadRight(72))│" -color "Info"
+                foreach ($n in $nodeResults) {
+                    $color = if ($n.Health -eq 'OK') { 'Success' } else { 'Error' }
+                    Write-OutputColor "  │$("  $($n.Name.PadRight(30)) $($n.State)  [$($n.Health)]".PadRight(72))│" -color $color
+                }
+                $failedRes = @($resourceResults | Where-Object { $_.Health -ne 'OK' })
+                if (@($failedRes).Count -gt 0) {
+                    Write-OutputColor "  │$("  OFFLINE/FAILED RESOURCES ($(@($failedRes).Count))".PadRight(72))│" -color "Warning"
+                    foreach ($r in $failedRes) {
+                        $rName = if ($r.Name.Length -gt 30) { $r.Name.Substring(0, 27) + "..." } else { $r.Name }
+                        Write-OutputColor "  │$("  $($rName.PadRight(32)) $($r.State)".PadRight(72))│" -color "Warning"
+                    }
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Nodes: $(@($nodeResults).Count)   Resources: $(@($resourceResults).Count)   Issues: $clusterIssues".PadRight(72))│" -color $(if ($clusterIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ClusterAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ ClusterInstalled = $clusterInstalled; ClusterName = $clusterName; Nodes = @($nodeResults).Count; Resources = @($resourceResults).Count; Issues = $clusterIssues }
+                    Nodes = $nodeResults; Resources = $resourceResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($clusterIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'AuditPolicyAudit' {
+            Write-OutputColor "  Auditing Windows audit policies..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $apIssues = 0
+            $policies = @()
+
+            try {
+                $auditOutput = & auditpol /get /category:* 2>&1
+                $auditStr = $auditOutput -join "`n"
+                $lines = $auditStr -split "`n"
+                $currentCategory = ""
+
+                foreach ($line in $lines) {
+                    $trimmed = $line.Trim()
+                    if ($trimmed -eq '' -or $trimmed -match '^(System|Machine|The command)') { continue }
+
+                    # Category header (no leading spaces, no "No Auditing" etc.)
+                    if ($line -match '^\S' -and $trimmed -notmatch '(Success|Failure|No Auditing)') {
+                        $currentCategory = $trimmed
+                        continue
+                    }
+
+                    # Subcategory line
+                    if ($line -match '^\s{2}\S' -and $trimmed -match '(.+?)\s{2,}(Success and Failure|Success|Failure|No Auditing)') {
+                        $regexMatches = $Matches
+                        $subcat = $regexMatches[1].Trim()
+                        $setting = $regexMatches[2].Trim()
+                        $status = if ($setting -eq 'No Auditing') { 'WARN' } else { 'OK' }
+
+                        $policies += @{
+                            Category    = $currentCategory
+                            Subcategory = $subcat
+                            Setting     = $setting
+                            Status      = $status
+                        }
+                        if ($status -eq 'WARN') { $apIssues++ }
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query audit policies: $($_.Exception.Message)" -color "Warning"
+            }
+
+            $configured = @($policies | Where-Object { $_.Status -eq 'OK' }).Count
+            $notAudited = @($policies | Where-Object { $_.Status -eq 'WARN' }).Count
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  AUDIT POLICY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $categories = @($policies | ForEach-Object { $_.Category } | Select-Object -Unique)
+            foreach ($cat in $categories) {
+                $catPolicies = @($policies | Where-Object { $_.Category -eq $cat })
+                $catConfigured = @($catPolicies | Where-Object { $_.Status -eq 'OK' }).Count
+                $color = if ($catConfigured -eq @($catPolicies).Count) { "Success" } else { "Warning" }
+                $catName = if ($cat.Length -gt 40) { $cat.Substring(0, 37) + "..." } else { $cat }
+                Write-OutputColor "  │$("  $($catName.PadRight(42)) $catConfigured/$(@($catPolicies).Count) configured".PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Total: $(@($policies).Count)   Configured: $configured   Not Audited: $notAudited".PadRight(72))│" -color $(if ($apIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'AuditPolicyAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Total = @($policies).Count; Configured = $configured; NotAudited = $notAudited; Issues = $apIssues }
+                    Policies = $policies
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($apIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)
