@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.54.0
+    Automated Test Runner for RackStack v1.55.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10782,6 +10782,10 @@ try {
     Write-TestResult "Install-RackStack: -Version in param block" ($bootstrapContent -match '\[switch\]\$Version')
     Write-TestResult "Install-RackStack: -ListActions in param block" ($bootstrapContent -match '\[switch\]\$ListActions')
     Write-TestResult "Install-RackStack: -Quiet in param block" ($bootstrapContent -match '\[switch\]\$Quiet')
+
+    # v1.55.0: JSON depth consistency + auto-quiet
+    Write-TestResult "50-EntryPoint: no ConvertTo-Json -Depth 5 (all -Depth 10)" (-not ($mod50 -match 'ConvertTo-Json -Depth 5'))
+    Write-TestResult "00-Initialization: JSON mode auto-enables Quiet" ($_testInitContent -match "OutputFormat\s*-eq\s*'JSON'[\s\S]{0,50}true")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

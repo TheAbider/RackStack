@@ -216,7 +216,7 @@ function Assert-Elevation {
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
-                Write-Output ($actionList | ConvertTo-Json -Depth 5)
+                Write-Output ($actionList | ConvertTo-Json -Depth 10)
             } else {
                 Write-OutputColor "  $($script:ToolFullName) v$($script:ScriptVersion) - Available Actions ($(@($actionList).Count))" -color "Info"
                 Write-OutputColor "" -color "Info"
@@ -278,7 +278,7 @@ function Invoke-CLIAction {
                     Profile = $script:CLIProfile
                     Status  = 'Complete'
                 }
-                Write-Output ($jsonResult | ConvertTo-Json -Depth 5)
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
         'Debloat' {
@@ -301,7 +301,7 @@ function Invoke-CLIAction {
                     Profile = $script:CLIProfile
                     Status  = 'Complete'
                 }
-                Write-Output ($jsonResult | ConvertTo-Json -Depth 5)
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
         }
         'HealthCheck' {
@@ -5842,7 +5842,7 @@ function Start-BatchMode {
                     UndoScript  = $_.UndoScript.ToString()
                 }
             })
-            $serializableStack | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $batchUndoPath -Force -ErrorAction Stop
+            $serializableStack | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $batchUndoPath -Force -ErrorAction Stop
         }
         catch {
             # Don't break batch execution if persistence fails

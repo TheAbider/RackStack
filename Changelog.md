@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.55.0
+
+- **Fix:** JSON mode now automatically enables quiet mode — `-OutputFormat JSON` suppresses all console box-drawing output, ensuring clean machine-readable stdout for Ansible, RMM, and pipeline consumers (00-Initialization).
+- **Fix:** Standardized JSON serialization depth to `-Depth 10` across all actions — Cleanup and Debloat were using `-Depth 5` which could truncate nested objects in complex configurations (50-EntryPoint).
+- 65 modules, 3583 tests
+
 ## v1.54.0
 
 - **New Feature:** `-ListActions` CLI flag — `RackStack.exe -ListActions` enumerates all 62 available CLI actions with descriptions. Supports `-OutputFormat JSON` for machine-readable action discovery, perfect for Ansible/RMM dynamic inventory (50-EntryPoint).
