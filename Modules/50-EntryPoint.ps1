@@ -3215,6 +3215,191 @@ function Invoke-CLIAction {
 
             if ($tlsIssues -gt 0) { [Environment]::Exit(1) }
         }
+        'SMBAudit' {
+            Write-OutputColor "  Auditing SMB configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $smbIssues = 0
+
+            # SMB server configuration
+            $smbConfig = $null
+            try {
+                $smbConfig = Get-SmbServerConfiguration -ErrorAction Stop
+            } catch {
+                Write-OutputColor "  WARNING: Could not query SMB server config: $($_.Exception.Message)" -color "Warning"
+            }
+
+            $smb1Enabled = $false
+            $signingRequired = $false
+            $encryptData = $false
+            if ($null -ne $smbConfig) {
+                $smb1Enabled = $smbConfig.EnableSMB1Protocol -eq $true
+                $signingRequired = $smbConfig.RequireSecuritySignature -eq $true
+                $encryptData = $smbConfig.EncryptData -eq $true
+                if ($smb1Enabled) { $smbIssues++ }
+                if (-not $signingRequired) { $smbIssues++ }
+            }
+
+            # SMB shares
+            $shares = @()
+            try {
+                $smbShares = @(Get-SmbShare -ErrorAction Stop | Where-Object { $_.Name -notmatch '^\$' -and $_.Name -ne 'IPC$' -and $_.Special -ne $true })
+                foreach ($s in $smbShares) {
+                    $access = @()
+                    try {
+                        $acl = @(Get-SmbShareAccess -Name $s.Name -ErrorAction Stop)
+                        foreach ($a in $acl) {
+                            $access += @{
+                                AccountName = $a.AccountName
+                                AccessRight = "$($a.AccessRight)"
+                                AccessType  = "$($a.AccessControlType)"
+                            }
+                        }
+                    } catch { }
+                    $status = 'OK'
+                    $everyoneFullControl = @($access | Where-Object { $_.AccountName -match 'Everyone' -and $_.AccessRight -eq 'Full' -and $_.AccessType -eq 'Allow' })
+                    if (@($everyoneFullControl).Count -gt 0) { $status = 'WARN'; $smbIssues++ }
+
+                    $shares += @{
+                        Name        = $s.Name
+                        Path        = $s.Path
+                        Description = $s.Description
+                        Status      = $status
+                        Access      = $access
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not enumerate shares: $($_.Exception.Message)" -color "Warning"
+            }
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SMB AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $smb1Color = if ($smb1Enabled) { "Error" } else { "Success" }
+            $smb1Status = if ($smb1Enabled) { "ENABLED (insecure)" } else { "Disabled" }
+            Write-OutputColor "  │$("  SMBv1:     $smb1Status".PadRight(72))│" -color $smb1Color
+            $signColor = if ($signingRequired) { "Success" } else { "Warning" }
+            $signStatus = if ($signingRequired) { "Required" } else { "Not required" }
+            Write-OutputColor "  │$("  Signing:   $signStatus".PadRight(72))│" -color $signColor
+            $encColor = if ($encryptData) { "Success" } else { "Info" }
+            $encStatus = if ($encryptData) { "Enabled" } else { "Disabled" }
+            Write-OutputColor "  │$("  Encryption: $encStatus".PadRight(72))│" -color $encColor
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($shares).Count -eq 0) {
+                Write-OutputColor "  │$("  (No non-administrative shares found)".PadRight(72))│" -color "Info"
+            } else {
+                foreach ($s in $shares) {
+                    $shareName = if ($s.Name.Length -gt 25) { $s.Name.Substring(0, 22) + "..." } else { $s.Name }
+                    $sharePath = if ($s.Path.Length -gt 30) { $s.Path.Substring(0, 27) + "..." } else { $s.Path }
+                    $line = "  $($shareName.PadRight(27)) $sharePath  [$($s.Status)]"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    $color = if ($s.Status -eq 'OK') { 'Success' } else { 'Warning' }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $summaryLine = "  Shares: $(@($shares).Count)   Issues: $smbIssues"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($smbIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'SMBAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        SMBv1Enabled     = $smb1Enabled
+                        SigningRequired  = $signingRequired
+                        EncryptData      = $encryptData
+                        ShareCount       = @($shares).Count
+                        Issues           = $smbIssues
+                    }
+                    Shares    = $shares
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($smbIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DriverAudit' {
+            Write-OutputColor "  Auditing system drivers..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $driverIssues = 0
+            $drivers = @()
+
+            try {
+                $allDrivers = @(Get-CimInstance -ClassName Win32_PnPSignedDriver -ErrorAction Stop |
+                    Where-Object { $null -ne $_.DeviceName -and $_.DeviceName -ne '' })
+
+                foreach ($d in $allDrivers) {
+                    $signed = $d.IsSigned -eq $true
+                    $health = 'OK'
+                    if (-not $signed) { $health = 'WARN'; $driverIssues++ }
+
+                    $drivers += @{
+                        DeviceName    = $d.DeviceName
+                        DriverVersion = $d.DriverVersion
+                        Manufacturer  = $d.Manufacturer
+                        DeviceClass   = $d.DeviceClass
+                        IsSigned      = $signed
+                        Signer        = $d.Signer
+                        DriverDate    = if ($null -ne $d.DriverDate) { $d.DriverDate.ToString("yyyy-MM-dd") } else { $null }
+                        Health        = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query drivers: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $totalDrivers = @($drivers).Count
+            $signedCount = @($drivers | Where-Object { $_.IsSigned }).Count
+            $unsignedCount = @($drivers | Where-Object { -not $_.IsSigned }).Count
+            $unsignedDrivers = @($drivers | Where-Object { -not $_.IsSigned })
+
+            # Console output
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  DRIVER AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if ($unsignedCount -gt 0) {
+                Write-OutputColor "  │$("  UNSIGNED DRIVERS".PadRight(72))│" -color "Warning"
+                foreach ($d in $unsignedDrivers) {
+                    $devName = if ($d.DeviceName.Length -gt 40) { $d.DeviceName.Substring(0, 37) + "..." } else { $d.DeviceName }
+                    $line = "  $($devName.PadRight(42)) $($d.DeviceClass)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Warning"
+                }
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            }
+            $summaryLine = "  Total: $totalDrivers   Signed: $signedCount   Unsigned: $unsignedCount"
+            Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($unsignedCount -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'DriverAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Summary   = @{
+                        Total    = $totalDrivers
+                        Signed   = $signedCount
+                        Unsigned = $unsignedCount
+                        Issues   = $driverIssues
+                    }
+                    UnsignedDrivers = $unsignedDrivers
+                    AllDrivers      = $drivers
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($driverIssues -gt 0) { [Environment]::Exit(1) }
+        }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
             [Environment]::Exit(1)

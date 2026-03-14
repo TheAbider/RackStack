@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.46.0
+
+- **New Feature:** SMBAudit CLI action — `RackStack.exe -Action SMBAudit -OutputFormat JSON` audits SMB protocol configuration and share security. Checks SMBv1 status (flags if enabled), signing requirements, and encryption settings. Inventories non-administrative shares and flags those with Everyone Full Control. Exits code 1 when SMB issues detected (50-EntryPoint).
+- **New Feature:** DriverAudit CLI action — `RackStack.exe -Action DriverAudit -OutputFormat JSON` audits system driver signing status via Win32_PnPSignedDriver. Reports all drivers with version, manufacturer, device class, and signing status. Highlights unsigned drivers separately. Exits code 1 when unsigned drivers detected (50-EntryPoint).
+- 65 modules, 3315 tests
+
 ## v1.45.0
 
 - **New Feature:** DiskAudit CLI action — `RackStack.exe -Action DiskAudit -OutputFormat JSON` audits physical disk health and volume utilization. Reports disk health status, operational status, media type, and size. Flags volumes with less than 10% free space as warnings and less than 5% as critical. Exits code 1 when disk issues detected (50-EntryPoint).

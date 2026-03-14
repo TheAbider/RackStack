@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.45.0
+    Automated Test Runner for RackStack v1.46.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10434,6 +10434,40 @@ try {
     Write-TestResult "50-EntryPoint: TLSAudit JSON output" ($mod50 -match "'TLSAudit'[\s\S]{0,10000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: TLSAudit exits 1 on issues" ($mod50 -match "'TLSAudit'[\s\S]{0,10000}tlsIssues[\s\S]{0,200}Exit\(1\)")
     Write-TestResult "50-EntryPoint: TLSAudit Action field" ($mod50 -match "Action\s*=\s*'TLSAudit'")
+
+    # SMBAudit CLI action tests (v1.46.0)
+    Write-TestResult "Header: SMBAudit in ValidateSet" ($headerContent -match "ValidateSet.*SMBAudit")
+    Write-TestResult "Install-RackStack: SMBAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*SMBAudit")
+    Write-TestResult "50-EntryPoint: SMBAudit case exists" ($mod50 -match "'SMBAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: SMBAudit queries Get-SmbServerConfiguration" ($mod50 -match "'SMBAudit'[\s\S]{0,1000}Get-SmbServerConfiguration")
+    Write-TestResult "50-EntryPoint: SMBAudit checks SMBv1" ($mod50 -match "'SMBAudit'[\s\S]{0,2000}EnableSMB1Protocol")
+    Write-TestResult "50-EntryPoint: SMBAudit checks signing" ($mod50 -match "'SMBAudit'[\s\S]{0,2000}RequireSecuritySignature")
+    Write-TestResult "50-EntryPoint: SMBAudit checks encryption" ($mod50 -match "'SMBAudit'[\s\S]{0,2000}EncryptData")
+    Write-TestResult "50-EntryPoint: SMBAudit queries Get-SmbShare" ($mod50 -match "'SMBAudit'[\s\S]{0,3000}Get-SmbShare")
+    Write-TestResult "50-EntryPoint: SMBAudit queries share access" ($mod50 -match "'SMBAudit'[\s\S]{0,5000}Get-SmbShareAccess")
+    Write-TestResult "50-EntryPoint: SMBAudit checks Everyone full control" ($mod50 -match "'SMBAudit'[\s\S]{0,6000}Everyone[\s\S]{0,200}Full")
+    Write-TestResult "50-EntryPoint: SMBAudit empty shares message" ($mod50 -match "'SMBAudit'[\s\S]{0,8000}No non-administrative shares found")
+    Write-TestResult "50-EntryPoint: SMBAudit JSON has Summary" ($mod50 -match "'SMBAudit'[\s\S]{0,9000}Summary\s*=")
+    Write-TestResult "50-EntryPoint: SMBAudit JSON has Shares" ($mod50 -match "'SMBAudit'[\s\S]{0,10000}Shares\s*=")
+    Write-TestResult "50-EntryPoint: SMBAudit JSON output" ($mod50 -match "'SMBAudit'[\s\S]{0,11000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: SMBAudit exits 1 on issues" ($mod50 -match "'SMBAudit'[\s\S]{0,11000}smbIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: SMBAudit Action field" ($mod50 -match "Action\s*=\s*'SMBAudit'")
+
+    # DriverAudit CLI action tests (v1.46.0)
+    Write-TestResult "Header: DriverAudit in ValidateSet" ($headerContent -match "ValidateSet.*DriverAudit")
+    Write-TestResult "Install-RackStack: DriverAudit in ValidateSet" ($bootstrapContent -match "ValidateSet.*DriverAudit")
+    Write-TestResult "50-EntryPoint: DriverAudit case exists" ($mod50 -match "'DriverAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: DriverAudit queries Win32_PnPSignedDriver" ($mod50 -match "'DriverAudit'[\s\S]{0,1000}Win32_PnPSignedDriver")
+    Write-TestResult "50-EntryPoint: DriverAudit checks IsSigned" ($mod50 -match "'DriverAudit'[\s\S]{0,3000}IsSigned")
+    Write-TestResult "50-EntryPoint: DriverAudit counts signed" ($mod50 -match "'DriverAudit'[\s\S]{0,5000}signedCount")
+    Write-TestResult "50-EntryPoint: DriverAudit counts unsigned" ($mod50 -match "'DriverAudit'[\s\S]{0,5000}unsignedCount")
+    Write-TestResult "50-EntryPoint: DriverAudit filters unsigned" ($mod50 -match "'DriverAudit'[\s\S]{0,6000}unsignedDrivers")
+    Write-TestResult "50-EntryPoint: DriverAudit JSON has Summary" ($mod50 -match "'DriverAudit'[\s\S]{0,8000}Summary\s*=[\s\S]{0,300}Total")
+    Write-TestResult "50-EntryPoint: DriverAudit JSON has AllDrivers" ($mod50 -match "'DriverAudit'[\s\S]{0,9000}AllDrivers\s*=")
+    Write-TestResult "50-EntryPoint: DriverAudit JSON has UnsignedDrivers" ($mod50 -match "'DriverAudit'[\s\S]{0,9000}UnsignedDrivers\s*=")
+    Write-TestResult "50-EntryPoint: DriverAudit JSON output" ($mod50 -match "'DriverAudit'[\s\S]{0,10000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: DriverAudit exits 1 on issues" ($mod50 -match "'DriverAudit'[\s\S]{0,10000}driverIssues[\s\S]{0,200}Exit\(1\)")
+    Write-TestResult "50-EntryPoint: DriverAudit Action field" ($mod50 -match "Action\s*=\s*'DriverAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
