@@ -251,6 +251,10 @@ function Assert-Elevation {
                 @{ Action = 'ComObjectAudit'; Description = 'Non-system COM object persistence' }
                 @{ Action = 'FirewallLogAudit'; Description = 'Firewall log analysis + drops' }
                 @{ Action = 'ScheduledRebootAudit'; Description = 'Scheduled reboots + history' }
+                @{ Action = 'PowerShellAudit'; Description = 'PS exec policy + logging + CLM' }
+                @{ Action = 'RouteTableAudit'; Description = 'Full routing table' }
+                @{ Action = 'TokenPrivilegeAudit'; Description = 'Current process privileges' }
+                @{ Action = 'WindowsCapabilityAudit'; Description = 'Installed capabilities + RSAT' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7497,6 +7501,96 @@ function Invoke-CLIAction {
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ScheduledRebootAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ RebootTasks = @($rebootTasks).Count; RebootEvents = @($rebootEvents).Count; Issues = $srIssues }; Tasks = $rebootTasks; Events = $rebootEvents }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($srIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'PowerShellAudit' {
+            Write-OutputColor "  Auditing PowerShell configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $psIssues = 0; $psConfig = @{}
+            $psConfig['Version'] = "$($PSVersionTable.PSVersion)"
+            $psConfig['Edition'] = "$($PSVersionTable.PSEdition)"
+            try { $psConfig['ExecutionPolicy'] = (Get-ExecutionPolicy).ToString() } catch { $psConfig['ExecutionPolicy'] = 'Unknown' }
+            try { $psConfig['MachinePolicy'] = (Get-ExecutionPolicy -Scope MachinePolicy).ToString() } catch { }
+            try { $psConfig['UserPolicy'] = (Get-ExecutionPolicy -Scope UserPolicy).ToString() } catch { }
+            $psConfig['LanguageMode'] = "$($ExecutionContext.SessionState.LanguageMode)"
+            if ($psConfig['LanguageMode'] -ne 'FullLanguage') { $psIssues++ }
+            # Script block logging
+            try { $sblReg = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' -ErrorAction SilentlyContinue; $psConfig['ScriptBlockLogging'] = $null -ne $sblReg -and $sblReg.EnableScriptBlockLogging -eq 1 } catch { $psConfig['ScriptBlockLogging'] = $false }
+            try { $tReg = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription' -ErrorAction SilentlyContinue; $psConfig['Transcription'] = $null -ne $tReg -and $tReg.EnableTranscripting -eq 1 } catch { $psConfig['Transcription'] = $false }
+            # Module logging
+            try { $mlReg = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging' -ErrorAction SilentlyContinue; $psConfig['ModuleLogging'] = $null -ne $mlReg -and $mlReg.EnableModuleLogging -eq 1 } catch { $psConfig['ModuleLogging'] = $false }
+            # PS2 engine
+            try { $ps2 = Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2 -ErrorAction SilentlyContinue; $psConfig['PS2Engine'] = $null -ne $ps2 -and $ps2.State -eq 'Enabled'; if ($psConfig['PS2Engine']) { $psIssues++ } } catch { $psConfig['PS2Engine'] = $false }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  POWERSHELL AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Version:        $($psConfig['Version']) ($($psConfig['Edition']))".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Exec Policy:    $($psConfig['ExecutionPolicy'])".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Language Mode:  $($psConfig['LanguageMode'])".PadRight(72))│" -color $(if ($psConfig['LanguageMode'] -eq 'FullLanguage') { "Info" } else { "Warning" })
+            Write-OutputColor "  │$("  Script Logging: $(if ($psConfig['ScriptBlockLogging']) { 'Enabled' } else { 'Disabled' })".PadRight(72))│" -color $(if ($psConfig['ScriptBlockLogging']) { "Success" } else { "Info" })
+            Write-OutputColor "  │$("  Transcription:  $(if ($psConfig['Transcription']) { 'Enabled' } else { 'Disabled' })".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  PS2 Engine:     $(if ($psConfig['PS2Engine']) { 'ENABLED (security risk)' } else { 'Disabled' })".PadRight(72))│" -color $(if ($psConfig['PS2Engine']) { "Warning" } else { "Success" })
+            Write-OutputColor "  │$("  Issues: $psIssues".PadRight(72))│" -color $(if ($psIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PowerShellAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $psIssues }; Config = $psConfig }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($psIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'RouteTableAudit' {
+            Write-OutputColor "  Auditing routing table..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $rtIssues = 0; $routes = @()
+            try { $allRoutes = @(Get-NetRoute -ErrorAction Stop | Where-Object { $_.DestinationPrefix -ne 'ff00::/8' -and $_.DestinationPrefix -ne 'fe80::/10' })
+                foreach ($r in $allRoutes) { $routes += @{ Destination = "$($r.DestinationPrefix)"; NextHop = "$($r.NextHop)"; Metric = $r.RouteMetric; Interface = "$($r.InterfaceAlias)"; Type = "$($r.AddressFamily)" } }
+            } catch { Write-OutputColor "  WARNING: Could not query routes" -color "Warning" }
+            $ipv4Routes = @($routes | Where-Object { $_.Type -eq 'IPv4' })
+            $defaultRoutes = @($routes | Where-Object { $_.Destination -eq '0.0.0.0/0' })
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  ROUTE TABLE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Default gateways: $(@($defaultRoutes).Count)".PadRight(72))│" -color "Info"
+            foreach ($dr in $defaultRoutes) { Write-OutputColor "  │$("    $($dr.NextHop) via $($dr.Interface) (metric $($dr.Metric))".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  IPv4 routes: $(@($ipv4Routes).Count)   Total: $(@($routes).Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Issues: $rtIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'RouteTableAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ TotalRoutes = @($routes).Count; IPv4Routes = @($ipv4Routes).Count; DefaultGateways = @($defaultRoutes).Count; Issues = $rtIssues }; Routes = $routes }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($rtIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TokenPrivilegeAudit' {
+            Write-OutputColor "  Auditing token privileges..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $tpIssues = 0; $privileges = @()
+            try { $whoami = & whoami /priv /fo csv 2>&1; $privData = $whoami | ConvertFrom-Csv -ErrorAction Stop
+                foreach ($p in $privData) { $enabled = "$($p.State)" -match 'Enabled'; $privName = "$($p.'Privilege Name')"; $privileges += @{ Name = $privName; State = "$($p.State)"; Description = "$($p.Description)" }
+                    if ($enabled -and $privName -match 'SeDebugPrivilege|SeTcbPrivilege|SeBackupPrivilege|SeRestorePrivilege') { $tpIssues++ } }
+            } catch { }
+            $enabledCount = @($privileges | Where-Object { $_.State -match 'Enabled' }).Count
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  TOKEN PRIVILEGE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($p in $privileges) { $color = if ($p.State -match 'Enabled') { "Success" } else { "Info" }; $pName = if ($p.Name.Length -gt 35) { $p.Name.Substring(0,32) + "..." } else { $p.Name }; Write-OutputColor "  │$("  $($pName.PadRight(37)) $($p.State)".PadRight(72))│" -color $color }
+            Write-OutputColor "  │$("  Total: $(@($privileges).Count)   Enabled: $enabledCount   Issues: $tpIssues".PadRight(72))│" -color $(if ($tpIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'TokenPrivilegeAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Total = @($privileges).Count; Enabled = $enabledCount; Issues = $tpIssues }; Privileges = $privileges }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($tpIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'WindowsCapabilityAudit' {
+            Write-OutputColor "  Auditing Windows capabilities..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $wcIssues = 0; $capabilities = @()
+            try { $caps = @(Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.State -eq 'Installed' })
+                foreach ($c in $caps) { $capabilities += @{ Name = "$($c.Name)"; State = "$($c.State)" } }
+            } catch { Write-OutputColor "  WARNING: Could not query capabilities" -color "Warning" }
+            $rsatCaps = @($capabilities | Where-Object { $_.Name -match 'Rsat' })
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  WINDOWS CAPABILITY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Installed: $(@($capabilities).Count)   RSAT: $(@($rsatCaps).Count)".PadRight(72))│" -color "Info"
+            if (@($rsatCaps).Count -gt 0) { Write-OutputColor "  │$("  RSAT TOOLS".PadRight(72))│" -color "Info"; foreach ($r in $rsatCaps) { $rName = $r.Name -replace 'Rsat\.', '' -replace '~~~~.*', ''; Write-OutputColor "  │$("  $rName".PadRight(72))│" -color "Success" } }
+            foreach ($c in ($capabilities | Where-Object { $_.Name -notmatch 'Rsat' } | Select-Object -First 10)) { $cName = $c.Name -replace '~~~~.*', ''; if ($cName.Length -gt 65) { $cName = $cName.Substring(0,62) + "..." }; Write-OutputColor "  │$("  $cName".PadRight(72))│" -color "Info" }
+            if (@($capabilities).Count -gt @($rsatCaps).Count + 10) { Write-OutputColor "  │$("  ... and $(@($capabilities).Count - @($rsatCaps).Count - 10) more".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  Issues: $wcIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'WindowsCapabilityAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Installed = @($capabilities).Count; RSAT = @($rsatCaps).Count; Issues = $wcIssues }; Capabilities = $capabilities }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($wcIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

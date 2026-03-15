@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.64.0
+
+- **New Feature:** PowerShellAudit — audits PS execution policy, language mode, script block logging, transcription, module logging, and PS2 engine status. Flags constrained language mode and enabled PS2 engine.
+- **New Feature:** RouteTableAudit — audits full routing table with default gateways, IPv4/IPv6 route counts, metrics, and interface assignments.
+- **New Feature:** TokenPrivilegeAudit — audits current process token privileges via `whoami /priv`. Flags dangerous enabled privileges (SeDebugPrivilege, SeTcbPrivilege, etc.).
+- **New Feature:** WindowsCapabilityAudit — inventories installed Windows capabilities including RSAT tools. Separates RSAT from other capabilities.
+- 65 modules, 3835 tests
+
 ## v1.63.0 -- 100 CLI ACTIONS
 
 - **CENTURY MARK: 10 new CLI actions in one release, reaching 100 total.**
