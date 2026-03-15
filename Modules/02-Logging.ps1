@@ -218,7 +218,7 @@ function Write-OutputColor {
     }
 }
 
-# Function to display centered output with a border
+# Function to display centered output with a box-drawing border
 function Write-CenteredOutput {
     param (
         [string]$text,
@@ -226,14 +226,17 @@ function Write-CenteredOutput {
         [int]$width = 50
     )
 
+    # Use standard 72-char inner width for consistency with all menus
+    $innerWidth = 72
     $textLength = $text.Length
-    $padding = [math]::Max(0, [math]::Floor(($width - $textLength) / 2))
+    $padding = [math]::Max(0, [math]::Floor(($innerWidth - $textLength) / 2))
     $paddedText = (" " * $padding) + $text
 
-    $border = "=" * $width
-    Write-OutputColor $border -color $color
-    Write-OutputColor $paddedText -color $color
-    Write-OutputColor $border -color $color
+    Write-OutputColor "" -color $color
+    Write-OutputColor "  $([char]0x2554)$("$([char]0x2550)" * $innerWidth)$([char]0x2557)" -color $color
+    Write-OutputColor "  $([char]0x2551)$($paddedText.PadRight($innerWidth))$([char]0x2551)" -color $color
+    Write-OutputColor "  $([char]0x255A)$("$([char]0x2550)" * $innerWidth)$([char]0x255D)" -color $color
+    Write-OutputColor "" -color $color
 }
 
 # ── Error Code Registry ──────────────────────────────────────────────

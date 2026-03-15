@@ -391,7 +391,7 @@ function Set-ScheduledTaskState {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $tasks = Get-ScheduledTaskSafe
+    $tasks = @(Get-ScheduledTaskSafe)
     if ($tasks.Count -eq 0) {
         Write-OutputColor "  No non-system tasks found." -color "Warning"
         return
@@ -471,7 +471,7 @@ function Invoke-ScheduledTaskNow {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $tasks = Get-ScheduledTaskSafe
+    $tasks = @(Get-ScheduledTaskSafe)
     $readyTasks = @($tasks | Where-Object { $_.State -eq 'Ready' })
 
     if ($readyTasks.Count -eq 0) {
@@ -532,7 +532,7 @@ function Export-ScheduledTaskXML {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $tasks = Get-ScheduledTaskSafe
+    $tasks = @(Get-ScheduledTaskSafe)
     if ($tasks.Count -eq 0) {
         Write-OutputColor "  No non-system tasks found." -color "Warning"
         return

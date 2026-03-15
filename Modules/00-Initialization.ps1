@@ -83,7 +83,7 @@ $script:PowerPlanGUID = @{
 $script:DefaultConnectivityTarget = "8.8.8.8"
 
 # Default temp directory for transcripts, reports, and exports (override via defaults.json TempPath)
-$script:TempPath = "C:\Temp"
+$script:TempPath = "$env:SystemDrive\Temp"
 
 # SAN target IP mappings - last octet suffixes paired with labels (override via defaults.json SANTargetMappings)
 $script:SANTargetMappings = @(
@@ -160,7 +160,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.66.1"
+$script:ScriptVersion = "1.66.2"
 $script:ScriptStartTime = Get-Date
 
 # CLI headless mode parameters (populated from param block in monolithic/exe)

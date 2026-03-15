@@ -96,7 +96,7 @@ function Install-WindowsUpdates {
     Write-OutputColor "" -color "Info"
 
     try {
-        # Install NuGet provider if needed
+        # Install NuGet provider if needed (suppress noisy PackageManagement prompts)
         $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
         if (-not $nuget) {
             Write-OutputColor "  Installing NuGet provider..." -color "Info"
@@ -112,6 +112,12 @@ function Install-WindowsUpdates {
         }
 
         Import-Module PSWindowsUpdate -ErrorAction Stop
+
+        # Redraw header if module installation pushed it off screen
+        if (-not $nuget -or -not $psWindowsUpdate) {
+            Clear-Host
+            Write-CenteredOutput "Windows Updates" -color "Info"
+        }
 
         # Check for updates with timeout and progress
         $timeoutSeconds = $script:UpdateTimeoutSeconds

@@ -26,7 +26,7 @@ function Show-ClusterDashboard {
     Write-OutputColor "" -color "Info"
 
     # Get cluster nodes
-    $nodes = Get-ClusterNode -ErrorAction SilentlyContinue
+    $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue)
 
     # Pre-fetch all cluster VM groups once (avoids N+1 query per node)
     $allVMGroups = @(Get-ClusterGroup -Cluster $cluster.Name -ErrorAction SilentlyContinue |
@@ -512,7 +512,7 @@ function Test-ClusterReadiness {
     $checks = @()
 
     # 1. All nodes online
-    $nodes = Get-ClusterNode -ErrorAction SilentlyContinue
+    $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue)
     $nodesUp = @($nodes | Where-Object { $_.State -eq "Up" })
     $nodesDown = @($nodes | Where-Object { $_.State -ne "Up" })
     $nodeOK = ($nodesDown.Count -eq 0)
@@ -525,7 +525,7 @@ function Test-ClusterReadiness {
     $checks += @{ Check = "Quorum Healthy"; Status = if ($quorumOK) { "OK" } else { "FAIL" }; Detail = $quorumDetail }
 
     # 3. CSVs online (no redirected I/O)
-    $csvs = Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+    $csvs = @(Get-ClusterSharedVolume -ErrorAction SilentlyContinue)
     $csvOnline = $true
     $csvRedirected = $false
     if ($csvs) {
@@ -577,7 +577,7 @@ function Test-ClusterReadiness {
 
 # Validate and report on existing CSVs
 function Initialize-ClusterCSV {
-    $csvs = Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+    $csvs = @(Get-ClusterSharedVolume -ErrorAction SilentlyContinue)
     if (-not $csvs) {
         Write-OutputColor "  No Cluster Shared Volumes found." -color "Warning"
         return

@@ -3286,7 +3286,7 @@ function Test-VMPostDeployment {
     $results += @{ Check = "Heartbeat"; Status = if ($hbOK) { "PASS" } elseif ($hb) { "WARN" } else { "FAIL" }; Detail = if ($hb) { $hb.PrimaryStatusDescription } else { "Not available" } }
 
     # 3. NIC connected
-    $nics = Get-VMNetworkAdapter -VM $vm -ErrorAction SilentlyContinue
+    $nics = @(Get-VMNetworkAdapter -VM $vm -ErrorAction SilentlyContinue)
     $nicConnected = $null -ne $nics -and ($nics | Where-Object { $_.Status -eq "Ok" -or $_.Connected })
     $results += @{ Check = "NIC Connected"; Status = if ($nicConnected) { "PASS" } else { "WARN" }; Detail = if ($nics) { "$($nics.Count) NIC(s)" } else { "No NICs" } }
 

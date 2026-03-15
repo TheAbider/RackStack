@@ -292,7 +292,7 @@ function Show-CleanupAnalysis {
 
 function Clear-WindowsOld {
     Write-OutputColor "" -color "Info"
-    $winOldPath = "C:\Windows.old"
+    $winOldPath = "$env:SystemDrive\Windows.old"
 
     if (-not (Test-Path -LiteralPath $winOldPath)) {
         Write-OutputColor "  Windows.old directory not found. Nothing to clean." -color "Info"
@@ -545,7 +545,7 @@ function Clear-UserProfileTemp {
     Write-OutputColor "" -color "Info"
 
     $currentUser = $env:USERNAME
-    $profilesPath = "C:\Users"
+    $profilesPath = "$env:SystemDrive\Users"
     $totalCleaned = 0
     $totalFiles = 0
 
@@ -720,7 +720,7 @@ function Show-EnhancedCleanupAnalysis {
     $shadowCount = 0
 
     # Windows.old
-    $winOldPath = "C:\Windows.old"
+    $winOldPath = "$env:SystemDrive\Windows.old"
     if (Test-Path -LiteralPath $winOldPath) {
         $winOldSize = [long](Get-ChildItem -LiteralPath $winOldPath -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         $winOldGB = [math]::Round($winOldSize / 1GB, 2)
@@ -799,7 +799,7 @@ function Show-EnhancedCleanupAnalysis {
 
     # User profile temp sizes
     $userTempTotal = 0
-    $profilesPath = "C:\Users"
+    $profilesPath = "$env:SystemDrive\Users"
     $currentUser = $env:USERNAME
     $subPaths = @(
         "AppData\Local\Temp",
@@ -840,10 +840,10 @@ function Show-EnhancedCleanupAnalysis {
 
     # Return structured report for JSON output mode
     $winOldSizeValue = 0
-    if (Test-Path -LiteralPath "C:\Windows.old") { $winOldSizeValue = [math]::Round($winOldSize / 1MB, 1) }
+    if (Test-Path -LiteralPath "$env:SystemDrive\Windows.old") { $winOldSizeValue = [math]::Round($winOldSize / 1MB, 1) }
     $cleanupReport = @{
         WindowsOld      = @{
-            Present = (Test-Path -LiteralPath "C:\Windows.old")
+            Present = (Test-Path -LiteralPath "$env:SystemDrive\Windows.old")
             SizeMB  = $winOldSizeValue
         }
         BrowserCacheMB  = [math]::Round($browserTotal / 1MB, 1)
@@ -952,7 +952,7 @@ function Invoke-FullEnhancedCleanup {
         "AppData\Local\Microsoft\Windows\INetCache"
     )
     $profileCleaned = 0
-    $userProfiles = Get-ChildItem -LiteralPath "C:\Users" -Directory -ErrorAction SilentlyContinue | Where-Object {
+    $userProfiles = Get-ChildItem -LiteralPath "$env:SystemDrive\Users" -Directory -ErrorAction SilentlyContinue | Where-Object {
         $_.Name -notin @('Public', 'Default', 'Default User', 'All Users')
     }
     foreach ($userProfile in $userProfiles) {
@@ -982,15 +982,15 @@ function Invoke-FullEnhancedCleanup {
 
     # 6. Windows.old (if present)
     Write-OutputColor "  [6/7] Windows.old..." -color "Info"
-    if (Test-Path -LiteralPath "C:\Windows.old") {
-        $winOldSize = [long](Get-ChildItem -LiteralPath "C:\Windows.old" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+    if (Test-Path -LiteralPath "$env:SystemDrive\Windows.old") {
+        $winOldSize = [long](Get-ChildItem -LiteralPath "$env:SystemDrive\Windows.old" -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         $winOldGB = [math]::Round($winOldSize / 1GB, 2)
         Write-OutputColor "  Windows.old found ($winOldGB GB)." -color "Warning"
         if (Confirm-UserAction -Message "Remove Windows.old ($winOldGB GB)? This is irreversible.") {
             try {
-                $null = takeown /F "C:\Windows.old" /R /A /D Y 2>&1
-                $null = icacls "C:\Windows.old" /grant Administrators:F /T /C /Q 2>&1
-                Remove-Item -LiteralPath "C:\Windows.old" -Recurse -Force -ErrorAction Stop
+                $null = takeown /F "$env:SystemDrive\Windows.old" /R /A /D Y 2>&1
+                $null = icacls "$env:SystemDrive\Windows.old" /grant Administrators:F /T /C /Q 2>&1
+                Remove-Item -LiteralPath "$env:SystemDrive\Windows.old" -Recurse -Force -ErrorAction Stop
                 Write-OutputColor "  Windows.old removed: $winOldGB GB freed." -color "Success"
                 Add-SessionChange -Category "System" -Description "Full cleanup: removed Windows.old ($winOldGB GB)"
             }

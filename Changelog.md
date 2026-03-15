@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.66.2
+
+- **Fix:** PS 5.1 `.Count` on single-object returns — wrapped 9 cmdlet results in `@()` to prevent null `.Count` when only one item is returned. Affected modules: 44-VMDeployment (NIC count in post-deploy check), 46-SessionSummary (reboot reasons suppressed), 50-EntryPoint (fleet scan target counts), 51-ClusterDashboard (node/CSV counts in readiness check and CSV validation), 63-ScheduledTasks (empty-task detection in enable/disable, export, and run-now).
+- **Fix:** Hardcoded `C:\` paths replaced with `$env:SystemDrive` — TempPath default in 00-Initialization, and `C:\Windows.old` / `C:\Users` references in 20-DiskCleanup. Fixes operation on systems where Windows is not installed on C:.
+- **UI:** Unified all 97 screen headers to use box-drawing characters (`╔═╗║╚═╝`) — `Write-CenteredOutput` now renders the same frame style as menu pages instead of plain `=====` borders. Affects 30 modules across the entire tool.
+- **UI:** Windows Updates install screen redraws header after NuGet/PSWindowsUpdate module installation so the title stays visible during long operations.
+- 65 modules, 3851 tests
+
 ## v1.66.1
 
 - **Fix:** Debloat interactive menu crash — all calls to `Get-RemovableAppxPackages`, `Get-DisableableServices`, `Invoke-WorkstationDebloat`, `Invoke-ServerDebloat`, and `Invoke-CustomDebloatExecution` were using `-Profile` instead of `-DebloatProfile`. Fixed 12 call sites across 64-SystemDebloat.ps1. This caused "A parameter cannot be found that matches parameter name 'Profile'" when using the debloat menu interactively.

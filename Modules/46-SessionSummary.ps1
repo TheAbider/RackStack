@@ -110,7 +110,7 @@ function Show-SessionSummary {
     $rebootNeeded = $global:RebootNeeded -or $windowsRebootPending
     $rebootReasons = @()
     if ($global:RebootNeeded) {
-        $rebootReasons = Get-RebootReasons
+        $rebootReasons = @(Get-RebootReasons)
     }
 
     # Display box-drawing summary

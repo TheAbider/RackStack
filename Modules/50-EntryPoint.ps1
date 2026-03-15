@@ -2592,7 +2592,7 @@ function Invoke-CLIAction {
                 [Environment]::Exit(1)
             }
 
-            $targets = Get-FleetTargets -Targets $fleetConfig.Targets
+            $targets = @(Get-FleetTargets -Targets $fleetConfig.Targets)
             if ($null -eq $targets -or $targets.Count -eq 0) {
                 Write-OutputColor "  ERROR: No valid targets found." -color "Error"
                 [Environment]::Exit(1)
