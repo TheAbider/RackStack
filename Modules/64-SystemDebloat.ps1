@@ -240,6 +240,7 @@ function Start-SystemDebloat {
         Write-MenuItem -Text "[3]  Quick Scan (analyze only, no changes)"
         Write-MenuItem -Text "[4]  Custom Debloat (choose individual categories)"
         Write-MenuItem -Text "[5]  Windows 11 / Server 2025 UI Cleanup"
+        Write-MenuItem -Text "[6]  Toggle OS Dark / Light Theme"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -277,6 +278,10 @@ function Start-SystemDebloat {
             }
             "5" {
                 Invoke-Win11UICleanup
+                Write-PressEnter
+            }
+            "6" {
+                Set-OSThemeMode
                 Write-PressEnter
             }
             "b" { return }
@@ -1904,5 +1909,95 @@ function Invoke-Win11UICleanup {
     }
 
     Add-SessionChange -Category "Debloat" -Description "Win11/2025 UI cleanup: $applied tweaks applied"
+}
+
+# ════════════════════════════════════════════════════════════════════════
+# OS Dark / Light Theme Toggle
+# ════════════════════════════════════════════════════════════════════════
+function Set-OSThemeMode {
+    Clear-Host
+    Write-CenteredOutput "OS Theme Mode" -color "Info"
+
+    $themeKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+
+    # Detect current mode
+    $currentApps = $null
+    $currentSystem = $null
+    try {
+        $currentApps = (Get-ItemProperty -LiteralPath $themeKey -Name AppsUseLightTheme -ErrorAction SilentlyContinue).AppsUseLightTheme
+        $currentSystem = (Get-ItemProperty -LiteralPath $themeKey -Name SystemUsesLightTheme -ErrorAction SilentlyContinue).SystemUsesLightTheme
+    }
+    catch { }
+
+    $currentMode = if ($currentApps -eq 0 -and $currentSystem -eq 0) { "Dark" }
+                   elseif ($currentApps -eq 1 -and $currentSystem -eq 1) { "Light" }
+                   elseif ($null -eq $currentApps) { "Unknown" }
+                   else { "Mixed (Apps: $(if ($currentApps -eq 0) {'Dark'} else {'Light'}), System: $(if ($currentSystem -eq 0) {'Dark'} else {'Light'}))" }
+
+    $currentColor = if ($currentMode -eq "Dark") { "Info" } elseif ($currentMode -eq "Light") { "Warning" } else { "Debug" }
+    Write-OutputColor "  Current theme: $currentMode" -color $currentColor
+    Write-OutputColor "" -color "Info"
+
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-MenuItem -Text "[1]  Dark Mode  (dark apps + dark taskbar/start)"
+    Write-MenuItem -Text "[2]  Light Mode (light apps + light taskbar/start)"
+    Write-MenuItem -Text "[3]  Mixed: Dark Apps + Light System (taskbar/start)"
+    Write-MenuItem -Text "[4]  Mixed: Light Apps + Dark System (taskbar/start)"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $choice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return }
+
+    $appsLight = $null
+    $systemLight = $null
+    $modeName = $null
+
+    switch ($choice) {
+        "1" { $appsLight = 0; $systemLight = 0; $modeName = "Dark Mode" }
+        "2" { $appsLight = 1; $systemLight = 1; $modeName = "Light Mode" }
+        "3" { $appsLight = 0; $systemLight = 1; $modeName = "Dark Apps + Light System" }
+        "4" { $appsLight = 1; $systemLight = 0; $modeName = "Light Apps + Dark System" }
+        default {
+            Write-OutputColor "  Invalid selection." -color "Warning"
+            return
+        }
+    }
+
+    try {
+        if (-not (Test-Path -LiteralPath $themeKey)) {
+            $null = New-Item -Path $themeKey -Force -ErrorAction Stop
+        }
+        Set-ItemProperty -LiteralPath $themeKey -Name AppsUseLightTheme -Value $appsLight -Type DWord -Force -ErrorAction Stop
+        Set-ItemProperty -LiteralPath $themeKey -Name SystemUsesLightTheme -Value $systemLight -Type DWord -Force -ErrorAction Stop
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Theme set to: $modeName" -color "Success"
+
+        # Also set color prevalence for accent on taskbar in dark mode
+        if ($systemLight -eq 0) {
+            Set-ItemProperty -LiteralPath $themeKey -Name ColorPrevalence -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+
+        Add-SessionChange -Category "Debloat" -Description "OS theme changed to $modeName"
+
+        # Restart Explorer to apply immediately
+        Write-OutputColor "" -color "Info"
+        if (Confirm-UserAction -Message "Restart Explorer now to apply?") {
+            Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+            Start-Process explorer.exe
+            Write-OutputColor "  Explorer restarted. Theme applied." -color "Success"
+        }
+        else {
+            Write-OutputColor "  Theme saved. Log out and back in to fully apply." -color "Info"
+        }
+    }
+    catch {
+        Write-OutputColor "  Failed to set theme: $($_.Exception.Message)" -color "Error"
+    }
 }
 #endregion

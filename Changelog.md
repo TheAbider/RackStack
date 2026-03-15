@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.67.1
+
+- **New Feature:** OS Dark / Light Theme toggle — switch between Dark Mode, Light Mode, or mixed (dark apps + light system, light apps + dark system) from Debloat menu [6]. Detects current theme, applies instantly with Explorer restart.
+- 65 modules, 3851 tests
+
 ## v1.67.0
 
 - **New Feature:** Windows 11 / Server 2025 UI Cleanup — restores Windows 10-style UI preferences including classic right-click context menu, left-aligned taskbar, file extensions visible, no widgets/copilot/chat/gallery, File Explorer opens to This PC, disables snap flyout and start recommendations, resets folder grouping. Available from Debloat menu option [5].
