@@ -30,7 +30,7 @@
     7h3 4b1d3r
 
 .VERSION
-    1.59.0
+    1.60.0
 
 .LAST UPDATED
     03/13/2026
@@ -1390,7 +1390,7 @@
 param(
     # CLI headless mode: run a specific action without interactive menus
     # Usage: RackStack.exe -Action Cleanup [-Tier Standard] [-Silent] [-OutputFormat JSON]
-    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate', 'Aggregate', 'Compare', 'Export', 'Trend', 'CertCheck', 'ReportHTML', 'ListeningPorts', 'SoftwareList', 'Uptime', 'ServiceAudit', 'EventAudit', 'NetInfo', 'ScheduledExport', 'ValidateConfig', 'Watch', 'Query', 'Diff', 'Baseline', 'Alert', 'FleetScan', 'PatchStatus', 'UserAudit', 'FirewallAudit', 'TaskAudit', 'DiskAudit', 'TLSAudit', 'SMBAudit', 'DriverAudit', 'TimeAudit', 'BootAudit', 'GPOAudit', 'MemoryAudit', 'ProcessAudit', 'BackupAudit', 'ShareAudit', 'DNSAudit', 'PowerAudit', 'RegistryAudit', 'ProfileAudit', 'HyperVAudit', 'NetworkAudit', 'StorageAudit', 'FeatureAudit', 'AutoStartAudit', 'BIOSAudit', 'ClusterAudit', 'AuditPolicyAudit', 'EnvAudit', 'CrashAudit', 'LocalGroupAudit', 'WMIAudit', 'TempAudit', 'UpdatePolicyAudit', 'IISAudit', 'SSHAudit', 'BitLockerAudit', 'PrintAudit', 'CredGuardAudit', 'PortAudit', 'AntivirusAudit', 'DotNetAudit', 'RDPAudit', 'VPNAudit', 'HostsFileAudit', 'NetStatAudit', 'LicenseAudit', 'USBDeviceAudit')]
+    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate', 'Aggregate', 'Compare', 'Export', 'Trend', 'CertCheck', 'ReportHTML', 'ListeningPorts', 'SoftwareList', 'Uptime', 'ServiceAudit', 'EventAudit', 'NetInfo', 'ScheduledExport', 'ValidateConfig', 'Watch', 'Query', 'Diff', 'Baseline', 'Alert', 'FleetScan', 'PatchStatus', 'UserAudit', 'FirewallAudit', 'TaskAudit', 'DiskAudit', 'TLSAudit', 'SMBAudit', 'DriverAudit', 'TimeAudit', 'BootAudit', 'GPOAudit', 'MemoryAudit', 'ProcessAudit', 'BackupAudit', 'ShareAudit', 'DNSAudit', 'PowerAudit', 'RegistryAudit', 'ProfileAudit', 'HyperVAudit', 'NetworkAudit', 'StorageAudit', 'FeatureAudit', 'AutoStartAudit', 'BIOSAudit', 'ClusterAudit', 'AuditPolicyAudit', 'EnvAudit', 'CrashAudit', 'LocalGroupAudit', 'WMIAudit', 'TempAudit', 'UpdatePolicyAudit', 'IISAudit', 'SSHAudit', 'BitLockerAudit', 'PrintAudit', 'CredGuardAudit', 'PortAudit', 'AntivirusAudit', 'DotNetAudit', 'RDPAudit', 'VPNAudit', 'HostsFileAudit', 'NetStatAudit', 'LicenseAudit', 'USBDeviceAudit', 'AppLockerAudit', 'EventSubAudit', 'HotfixAudit', 'SysInfoAudit')]
     [string]$Action,
 
     [ValidateSet('Light', 'Standard', 'Aggressive')]

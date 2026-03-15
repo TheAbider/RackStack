@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.59.0
+    Automated Test Runner for RackStack v1.60.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10936,6 +10936,40 @@ try {
     Write-TestResult "50-EntryPoint: USBDeviceAudit checks USBSTOR policy" ($mod50 -match "'USBDeviceAudit'[\s\S]{0,3000}USBSTOR")
     Write-TestResult "50-EntryPoint: USBDeviceAudit JSON output" ($mod50 -match "'USBDeviceAudit'[\s\S]{0,6000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: USBDeviceAudit Action field" ($mod50 -match "Action\s*=\s*'USBDeviceAudit'")
+
+    # AppLockerAudit (v1.60.0)
+    Write-TestResult "Header: AppLockerAudit in ValidateSet" ($headerContent -match "ValidateSet.*AppLockerAudit")
+    Write-TestResult "50-EntryPoint: AppLockerAudit case exists" ($mod50 -match "'AppLockerAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: AppLockerAudit checks AppIDSvc" ($mod50 -match "'AppLockerAudit'[\s\S]{0,1000}AppIDSvc")
+    Write-TestResult "50-EntryPoint: AppLockerAudit queries policies" ($mod50 -match "'AppLockerAudit'[\s\S]{0,2000}Get-AppLockerPolicy")
+    Write-TestResult "50-EntryPoint: AppLockerAudit JSON output" ($mod50 -match "'AppLockerAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: AppLockerAudit Action field" ($mod50 -match "Action\s*=\s*'AppLockerAudit'")
+
+    # EventSubAudit (v1.60.0)
+    Write-TestResult "Header: EventSubAudit in ValidateSet" ($headerContent -match "ValidateSet.*EventSubAudit")
+    Write-TestResult "50-EntryPoint: EventSubAudit case exists" ($mod50 -match "'EventSubAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: EventSubAudit checks CommandLineEventConsumer" ($mod50 -match "'EventSubAudit'[\s\S]{0,1500}CommandLineEventConsumer")
+    Write-TestResult "50-EntryPoint: EventSubAudit checks ActiveScriptEventConsumer" ($mod50 -match "'EventSubAudit'[\s\S]{0,2000}ActiveScriptEventConsumer")
+    Write-TestResult "50-EntryPoint: EventSubAudit checks EventFilter" ($mod50 -match "'EventSubAudit'[\s\S]{0,4000}__EventFilter")
+    Write-TestResult "50-EntryPoint: EventSubAudit JSON output" ($mod50 -match "'EventSubAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: EventSubAudit Action field" ($mod50 -match "Action\s*=\s*'EventSubAudit'")
+
+    # HotfixAudit (v1.60.0)
+    Write-TestResult "Header: HotfixAudit in ValidateSet" ($headerContent -match "ValidateSet.*HotfixAudit")
+    Write-TestResult "50-EntryPoint: HotfixAudit case exists" ($mod50 -match "'HotfixAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: HotfixAudit queries Get-HotFix" ($mod50 -match "'HotfixAudit'[\s\S]{0,1000}Get-HotFix")
+    Write-TestResult "50-EntryPoint: HotfixAudit JSON has Hotfixes" ($mod50 -match "'HotfixAudit'[\s\S]{0,5000}Hotfixes\s*=")
+    Write-TestResult "50-EntryPoint: HotfixAudit JSON output" ($mod50 -match "'HotfixAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: HotfixAudit Action field" ($mod50 -match "Action\s*=\s*'HotfixAudit'")
+
+    # SysInfoAudit (v1.60.0)
+    Write-TestResult "Header: SysInfoAudit in ValidateSet" ($headerContent -match "ValidateSet.*SysInfoAudit")
+    Write-TestResult "50-EntryPoint: SysInfoAudit case exists" ($mod50 -match "'SysInfoAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: SysInfoAudit queries Win32_OperatingSystem" ($mod50 -match "'SysInfoAudit'[\s\S]{0,1000}Win32_OperatingSystem")
+    Write-TestResult "50-EntryPoint: SysInfoAudit queries Win32_Processor" ($mod50 -match "'SysInfoAudit'[\s\S]{0,2000}Win32_Processor")
+    Write-TestResult "50-EntryPoint: SysInfoAudit JSON has SystemInfo" ($mod50 -match "'SysInfoAudit'[\s\S]{0,6000}SystemInfo\s*=")
+    Write-TestResult "50-EntryPoint: SysInfoAudit JSON output" ($mod50 -match "'SysInfoAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: SysInfoAudit Action field" ($mod50 -match "Action\s*=\s*'SysInfoAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

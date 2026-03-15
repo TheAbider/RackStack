@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.60.0
+
+- **New Feature:** AppLockerAudit CLI action — `RackStack.exe -Action AppLockerAudit -OutputFormat JSON` audits AppLocker application control policies. Checks AppIDSvc service status and reports rule counts per collection type (Exe, Msi, Script, Appx, Dll) (50-EntryPoint).
+- **New Feature:** EventSubAudit CLI action — `RackStack.exe -Action EventSubAudit -OutputFormat JSON` audits WMI event subscriptions — a common malware persistence mechanism. Checks for CommandLine, ActiveScript, LogFile, NTEventLog, and SMTP event consumers plus event filters. Exits code 1 when subscriptions found (50-EntryPoint).
+- **New Feature:** HotfixAudit CLI action — `RackStack.exe -Action HotfixAudit -OutputFormat JSON` inventories all installed hotfixes/KBs with description, install date, and installed-by user. Sorted by install date descending (50-EntryPoint).
+- **New Feature:** SysInfoAudit CLI action — `RackStack.exe -Action SysInfoAudit -OutputFormat JSON` collects comprehensive system information: OS name/version/build, hardware manufacturer/model, CPU details, RAM, domain membership, uptime, timezone, PowerShell version. One-command system profile for fleet inventory (50-EntryPoint).
+- 65 modules, 3725 tests
+
 ## v1.59.0
 
 - **New Feature:** HostsFileAudit CLI action — `RackStack.exe -Action HostsFileAudit -OutputFormat JSON` audits the Windows hosts file. Parses custom entries and flags suspicious redirects of known domains (Microsoft, Google, Windows Update). Exits code 1 when suspicious entries detected (50-EntryPoint).

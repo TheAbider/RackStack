@@ -229,6 +229,10 @@ function Assert-Elevation {
                 @{ Action = 'NetStatAudit';   Description = 'Established TCP connections' }
                 @{ Action = 'LicenseAudit';   Description = 'Windows activation + licensing' }
                 @{ Action = 'USBDeviceAudit'; Description = 'USB devices + storage policy' }
+                @{ Action = 'AppLockerAudit'; Description = 'AppLocker policy + rules' }
+                @{ Action = 'EventSubAudit';  Description = 'WMI event subscriptions (persistence)' }
+                @{ Action = 'HotfixAudit';    Description = 'Installed hotfix/KB inventory' }
+                @{ Action = 'SysInfoAudit';   Description = 'Comprehensive system snapshot' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -6582,6 +6586,242 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($usbIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'AppLockerAudit' {
+            Write-OutputColor "  Auditing AppLocker policies..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $alIssues = 0
+            $alPolicies = @()
+            $alConfigured = $false
+
+            try {
+                $alSvc = Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+                $alRunning = $null -ne $alSvc -and $alSvc.Status -eq 'Running'
+
+                $ruleTypes = @('Exe', 'Msi', 'Script', 'Appx', 'Dll')
+                foreach ($rt in $ruleTypes) {
+                    try {
+                        $rules = @(Get-AppLockerPolicy -Effective -ErrorAction Stop | Select-Object -ExpandProperty RuleCollections | Where-Object { $_.RuleCollectionType -eq $rt })
+                        if (@($rules).Count -gt 0) { $alConfigured = $true }
+                        $alPolicies += @{ Type = $rt; RuleCount = @($rules).Count; Enforcement = if (@($rules).Count -gt 0) { 'Configured' } else { 'Not configured' } }
+                    } catch {
+                        $alPolicies += @{ Type = $rt; RuleCount = 0; Enforcement = 'Not available' }
+                    }
+                }
+            } catch {
+                foreach ($rt in @('Exe', 'Msi', 'Script', 'Appx', 'Dll')) {
+                    $alPolicies += @{ Type = $rt; RuleCount = 0; Enforcement = 'Not available' }
+                }
+            }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  APPLOCKER AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  AppIDSvc:   $(if ($alRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $(if ($alRunning) { "Success" } else { "Info" })
+            Write-OutputColor "  │$("  Configured: $alConfigured".PadRight(72))│" -color $(if ($alConfigured) { "Success" } else { "Info" })
+            foreach ($p in $alPolicies) {
+                Write-OutputColor "  │$("  $($p.Type.PadRight(12)) Rules: $($p.RuleCount)  ($($p.Enforcement))".PadRight(72))│" -color $(if ($p.RuleCount -gt 0) { "Success" } else { "Info" })
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $alIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'AppLockerAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ AppIDSvcRunning = $alRunning; Configured = $alConfigured; Issues = $alIssues }
+                    Policies = $alPolicies
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($alIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'EventSubAudit' {
+            Write-OutputColor "  Auditing WMI event subscriptions..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $esIssues = 0
+            $subscriptions = @()
+
+            # WMI event consumers (persistence mechanism)
+            $subTypes = @(
+                @{ Class = 'CommandLineEventConsumer'; Name = 'CommandLine' }
+                @{ Class = 'ActiveScriptEventConsumer'; Name = 'ActiveScript' }
+                @{ Class = 'LogFileEventConsumer'; Name = 'LogFile' }
+                @{ Class = 'NTEventLogEventConsumer'; Name = 'NTEventLog' }
+                @{ Class = 'SMTPEventConsumer'; Name = 'SMTP' }
+            )
+
+            foreach ($st in $subTypes) {
+                try {
+                    $consumers = @(Get-CimInstance -Namespace 'root\subscription' -ClassName $st.Class -ErrorAction Stop)
+                    foreach ($c in $consumers) {
+                        $esIssues++
+                        $subscriptions += @{
+                            Type   = $st.Name
+                            Name   = "$($c.Name)"
+                            Detail = if ($st.Class -eq 'CommandLineEventConsumer') { "$($c.CommandLineTemplate)" } elseif ($st.Class -eq 'ActiveScriptEventConsumer') { "$($c.ScriptText)" } else { "$($c.Name)" }
+                        }
+                    }
+                } catch { }
+            }
+
+            # Event filters
+            $filters = @()
+            try {
+                $eventFilters = @(Get-CimInstance -Namespace 'root\subscription' -ClassName '__EventFilter' -ErrorAction Stop)
+                foreach ($f in $eventFilters) {
+                    $filters += @{ Name = "$($f.Name)"; Query = "$($f.Query)"; Language = "$($f.QueryLanguage)" }
+                }
+            } catch { }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  WMI EVENT SUBSCRIPTION AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($subscriptions).Count -eq 0 -and @($filters).Count -eq 0) {
+                Write-OutputColor "  │$("  (No WMI event subscriptions found)".PadRight(72))│" -color "Success"
+            } else {
+                if (@($subscriptions).Count -gt 0) {
+                    Write-OutputColor "  │$("  EVENT CONSUMERS ($(@($subscriptions).Count)) - REVIEW FOR PERSISTENCE".PadRight(72))│" -color "Warning"
+                    foreach ($s in $subscriptions) {
+                        $detail = if ($s.Detail.Length -gt 50) { $s.Detail.Substring(0, 47) + "..." } else { $s.Detail }
+                        Write-OutputColor "  │$("  [$($s.Type)] $detail".PadRight(72))│" -color "Warning"
+                    }
+                }
+                Write-OutputColor "  │$("  Event Filters: $(@($filters).Count)".PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Consumers: $(@($subscriptions).Count)   Filters: $(@($filters).Count)   Issues: $esIssues".PadRight(72))│" -color $(if ($esIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'EventSubAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Consumers = @($subscriptions).Count; Filters = @($filters).Count; Issues = $esIssues }
+                    Consumers = $subscriptions; Filters = $filters
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($esIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'HotfixAudit' {
+            Write-OutputColor "  Auditing installed hotfixes..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $hfIssues = 0
+            $hotfixes = @()
+
+            try {
+                $hfs = @(Get-HotFix -ErrorAction Stop | Sort-Object InstalledOn -Descending -ErrorAction SilentlyContinue)
+                foreach ($hf in $hfs) {
+                    $installedDate = if ($null -ne $hf.InstalledOn) { $hf.InstalledOn.ToString("yyyy-MM-dd") } else { "Unknown" }
+                    $hotfixes += @{
+                        HotFixID    = "$($hf.HotFixID)"
+                        Description = "$($hf.Description)"
+                        InstalledBy = "$($hf.InstalledBy)"
+                        InstalledOn = $installedDate
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query hotfixes: $($_.Exception.Message)" -color "Warning"
+            }
+
+            $latestDate = if (@($hotfixes).Count -gt 0 -and $hotfixes[0].InstalledOn -ne 'Unknown') { $hotfixes[0].InstalledOn } else { "Unknown" }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  HOTFIX AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Total Hotfixes: $(@($hotfixes).Count)   Latest: $latestDate".PadRight(72))│" -color "Info"
+            if (@($hotfixes).Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                foreach ($hf in ($hotfixes | Select-Object -First 15)) {
+                    $line = "  $($hf.HotFixID.PadRight(14)) $($hf.InstalledOn.PadRight(12)) $($hf.Description)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+                }
+                if (@($hotfixes).Count -gt 15) {
+                    Write-OutputColor "  │$("  ... and $(@($hotfixes).Count - 15) more".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'HotfixAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Total = @($hotfixes).Count; LatestInstall = $latestDate; Issues = $hfIssues }
+                    Hotfixes = $hotfixes
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($hfIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SysInfoAudit' {
+            Write-OutputColor "  Collecting system information..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $siIssues = 0
+            $sysInfo = @{}
+
+            try {
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
+
+                $sysInfo = @{
+                    ComputerName  = $env:COMPUTERNAME
+                    Domain        = "$($cs.Domain)"
+                    DomainJoined  = $cs.PartOfDomain -eq $true
+                    OSName        = "$($os.Caption)"
+                    OSVersion     = "$($os.Version)"
+                    OSBuild       = "$($os.BuildNumber)"
+                    Architecture  = "$($os.OSArchitecture)"
+                    InstallDate   = if ($null -ne $os.InstallDate) { $os.InstallDate.ToString("yyyy-MM-ddTHH:mm:ss") } else { "Unknown" }
+                    LastBoot      = if ($null -ne $os.LastBootUpTime) { $os.LastBootUpTime.ToString("yyyy-MM-ddTHH:mm:ss") } else { "Unknown" }
+                    UptimeDays    = if ($null -ne $os.LastBootUpTime) { [math]::Round(((Get-Date) - $os.LastBootUpTime).TotalDays, 1) } else { 0 }
+                    Manufacturer  = "$($cs.Manufacturer)"
+                    Model         = "$($cs.Model)"
+                    TotalMemoryGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
+                    CPUName       = "$($cpu.Name)".Trim()
+                    CPUCores      = $cpu.NumberOfCores
+                    CPULogical    = $cpu.NumberOfLogicalProcessors
+                    TimeZone      = (Get-TimeZone).Id
+                    PowerShell    = "$($PSVersionTable.PSVersion)"
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query system info: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SYSTEM INFO - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  OS:           $($sysInfo.OSName)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Build:        $($sysInfo.OSVersion) ($($sysInfo.OSBuild))".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Arch:         $($sysInfo.Architecture)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Hardware:     $($sysInfo.Manufacturer) $($sysInfo.Model)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  CPU:          $($sysInfo.CPUName)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Cores:        $($sysInfo.CPUCores) cores / $($sysInfo.CPULogical) logical".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  RAM:          $($sysInfo.TotalMemoryGB)GB".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Domain:       $($sysInfo.Domain) (joined: $($sysInfo.DomainJoined))".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Uptime:       $($sysInfo.UptimeDays) days".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  TimeZone:     $($sysInfo.TimeZone)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  PowerShell:   $($sysInfo.PowerShell)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SysInfoAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Issues = $siIssues }
+                    SystemInfo = $sysInfo
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($siIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
