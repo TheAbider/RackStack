@@ -76,7 +76,7 @@ function Export-VMWizard {
     if (-not (Test-Path -LiteralPath $exportPath)) {
         Write-OutputColor "  Creating export directory: $exportPath" -color "Info"
         try {
-            $null = New-Item -Path $exportPath -ItemType Directory -Force -ErrorAction Stop
+            $null = New-Item -LiteralPath $exportPath -ItemType Directory -Force -ErrorAction Stop
         }
         catch {
             Write-OutputColor "  Failed to create export directory: $_" -color "Error"

@@ -1237,7 +1237,7 @@ function Show-AgentManagement {
 
         Write-OutputColor "  Enter agent number to install, or:" -color "Info"
         Write-OutputColor "  [A] Install all missing agents" -color "Info"
-        Write-OutputColor "  [B] Back" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"

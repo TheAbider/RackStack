@@ -289,7 +289,7 @@ function Compare-FirewallTemplate {
 
     if ($missing -gt 0) {
         Write-OutputColor "  Apply missing rules? [Y/N]" -color "Info"
-        $response = Read-Host "  Choice"
+        $response = Read-Host "  Select"
         if ($response -eq 'Y' -or $response -eq 'y') {
             return $true
         }

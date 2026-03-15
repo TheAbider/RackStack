@@ -225,7 +225,7 @@ function Copy-VHDForVM {
     # Ensure destination directory exists
     if (-not (Test-Path -LiteralPath $DestinationFolder)) {
         try {
-            New-Item -Path $DestinationFolder -ItemType Directory -Force -ErrorAction Stop | Out-Null
+            New-Item -LiteralPath $DestinationFolder -ItemType Directory -Force -ErrorAction Stop | Out-Null
         }
         catch {
             Write-OutputColor "  Failed to create destination directory: $_" -color "Error"

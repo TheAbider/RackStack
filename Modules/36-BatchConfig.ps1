@@ -418,7 +418,7 @@ function Show-BatchConfigMenu {
     Write-MenuItem "[3]  Generate from Scenario Template"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [B] Back" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $userResponse = Read-Host "  Select"

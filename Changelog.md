@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.67.0
+
+- **New Feature:** Windows 11 / Server 2025 UI Cleanup — restores Windows 10-style UI preferences including classic right-click context menu, left-aligned taskbar, file extensions visible, no widgets/copilot/chat/gallery, File Explorer opens to This PC, disables snap flyout and start recommendations, resets folder grouping. Available from Debloat menu option [5].
+- **Fix:** 9 broken favorites dispatch entries in QoL module — "Set IP Address", "Set DNS", "Enable WinRM", "Configure Firewall", "Add Local Admin", "License Server", "Set Power Plan", "Storage Manager", and "BitLocker Management" were mapped to non-existent function names and would silently fail when invoked from favorites.
+- **Fix:** `-Path` replaced with `-LiteralPath` on 7 `New-Item`/`Get-ChildItem` calls where paths contain VM names or user input that could include wildcard characters. Affected modules: 44-VMDeployment, 41-VHDManagement, 53-VMExportImport, 62-HyperVReplica.
+- **UI:** Consistent `[B] ◄ Back` arrows across all menus — 8 instances missing the `◄` arrow fixed in 6 modules.
+- **UI:** Standardized `Read-Host "  Select"` prompt across all menus — 5 instances using `"Choice"` updated for consistency.
+- 65 modules, 3851 tests
+
 ## v1.66.2
 
 - **Fix:** PS 5.1 `.Count` on single-object returns — wrapped 9 cmdlet results in `@()` to prevent null `.Count` when only one item is returned. Affected modules: 44-VMDeployment (NIC count in post-deploy check), 46-SessionSummary (reboot reasons suppressed), 50-EntryPoint (fleet scan target counts), 51-ClusterDashboard (node/CSV counts in readiness check and CSV validation), 63-ScheduledTasks (empty-task detection in enable/disable, export, and run-now).

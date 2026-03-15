@@ -1795,7 +1795,7 @@ function Show-RoleTemplates {
     Write-OutputColor "  [3] Cluster Node" -color "Success"
     Write-OutputColor "      All of Hyper-V Host + Failover Clustering + Domain" -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  [B] Back" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"
@@ -1888,7 +1888,7 @@ function Show-RoleTemplates {
     Write-OutputColor "  $($missing.Count) item(s) need attention." -color "Warning"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [A] Auto-configure all missing items (guided)" -color "Success"
-    Write-OutputColor "  [B] Back" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $action = Read-Host "  Select"

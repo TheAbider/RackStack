@@ -2023,7 +2023,7 @@ function Show-DriftDetectionMenu {
         Write-OutputColor "  [4] Compare two baselines" -color "Info"
         Write-OutputColor "  [5] Show drift trend timeline" -color "Info"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  [B] Back" -color "Info"
+        Write-OutputColor "  [B] ◄ Back" -color "Info"
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"

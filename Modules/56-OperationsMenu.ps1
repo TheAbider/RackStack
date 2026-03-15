@@ -585,7 +585,7 @@ function Show-CompanyDefaultsPicker {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [S] Skip / no company defaults" -color "Info"
-    Write-OutputColor "  [B] Back" -color "Info"
+    Write-OutputColor "  [B] ◄ Back" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"
@@ -1335,7 +1335,7 @@ function Show-EditDefaults {
                     $presetIndex++
                 }
                 Write-OutputColor "" -color "Info"
-                Write-OutputColor "  [A] Add custom DNS preset  [D] Delete custom preset  [B] Back" -color "Info"
+                Write-OutputColor "  [A] Add custom DNS preset  [D] Delete custom preset  [B] ◄ Back" -color "Info"
                 $dnsChoice = Read-Host "  Select"
                 $navResult = Test-NavigationCommand -UserInput $dnsChoice
                 if ($navResult.ShouldReturn) { return }

@@ -239,6 +239,7 @@ function Start-SystemDebloat {
         Write-MenuItem -Text "[2]  Server Debloat (services, optional features, telemetry)"
         Write-MenuItem -Text "[3]  Quick Scan (analyze only, no changes)"
         Write-MenuItem -Text "[4]  Custom Debloat (choose individual categories)"
+        Write-MenuItem -Text "[5]  Windows 11 / Server 2025 UI Cleanup"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -273,6 +274,10 @@ function Start-SystemDebloat {
             }
             "4" {
                 Invoke-CustomDebloat
+            }
+            "5" {
+                Invoke-Win11UICleanup
+                Write-PressEnter
             }
             "b" { return }
             "B" { return }
@@ -1709,5 +1714,195 @@ function Invoke-CustomDebloatExecution {
     Write-OutputColor "  │$("  Skipped:  $totalSkipped".PadRight(72))│" -color "Debug"
     Write-OutputColor "  │$("  Failed:   $totalFailed".PadRight(72))│" -color $(if ($totalFailed -gt 0) { "Error" } else { "Debug" })
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+}
+
+# ════════════════════════════════════════════════════════════════════════
+# Windows 11 / Server 2025 UI Cleanup
+# ════════════════════════════════════════════════════════════════════════
+function Invoke-Win11UICleanup {
+    Clear-Host
+    Write-CenteredOutput "Windows 11 / Server 2025 UI Cleanup" -color "Info"
+
+    # Detect OS build
+    $build = [System.Environment]::OSVersion.Version.Build
+    if ($build -lt 22000) {
+        Write-OutputColor "  This system is not Windows 11 or Server 2025 (build $build)." -color "Warning"
+        Write-OutputColor "  These tweaks target Windows 11 22H2+ and Server 2025." -color "Info"
+        return
+    }
+
+    Write-OutputColor "  Detected build $build — applying Windows 10-style UI preferences." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $applied = 0
+    $failed = 0
+
+    $tweaks = @(
+        @{
+            Name = "Classic right-click context menu"
+            Key  = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
+            Property = "(Default)"
+            Value = ""
+            Type = "String"
+            IsDefault = $true
+        }
+        @{
+            Name = "Left-align taskbar"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "TaskbarAl"
+            Value = 0
+            Type = "DWord"
+        }
+        @{
+            Name = "Show file extensions"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "HideFileExt"
+            Value = 0
+            Type = "DWord"
+        }
+        @{
+            Name = "Show hidden files"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "Hidden"
+            Value = 1
+            Type = "DWord"
+        }
+        @{
+            Name = "Disable Widgets on taskbar"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "TaskbarDa"
+            Value = 0
+            Type = "DWord"
+        }
+        @{
+            Name = "Disable Chat/Teams on taskbar"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "TaskbarMn"
+            Value = 0
+            Type = "DWord"
+        }
+        @{
+            Name = "Minimize search box (icon only)"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
+            Property = "SearchboxTaskbarMode"
+            Value = 1
+            Type = "DWord"
+        }
+        @{
+            Name = "Disable Copilot"
+            Key  = "HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot"
+            Property = "TurnOffWindowsCopilot"
+            Value = 1
+            Type = "DWord"
+        }
+        @{
+            Name = "File Explorer opens to This PC"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "LaunchTo"
+            Value = 1
+            Type = "DWord"
+        }
+        @{
+            Name = "Disable Snap Layout flyout on maximize hover"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "EnableSnapAssistFlyout"
+            Value = 0
+            Type = "DWord"
+        }
+        @{
+            Name = "Disable Start menu recommendations"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "Start_IrisRecommendations"
+            Value = 0
+            Type = "DWord"
+        }
+        @{
+            Name = "Disable Gallery in File Explorer"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "ShowGalleryInExplorer"
+            Value = 0
+            Type = "DWord"
+        }
+        @{
+            Name = "Disable File Explorer Home page"
+            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Property = "ShowHome"
+            Value = 0
+            Type = "DWord"
+        }
+    )
+
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  APPLYING UI TWEAKS".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    foreach ($tweak in $tweaks) {
+        try {
+            # Ensure registry key exists
+            if (-not (Test-Path -LiteralPath $tweak.Key)) {
+                $null = New-Item -Path $tweak.Key -Force -ErrorAction Stop
+            }
+
+            if ($tweak.IsDefault) {
+                # Set the (Default) value
+                $null = Set-Item -LiteralPath $tweak.Key -Value $tweak.Value -Force -ErrorAction Stop
+            }
+            else {
+                $null = Set-ItemProperty -LiteralPath $tweak.Key -Name $tweak.Property -Value $tweak.Value -Type $tweak.Type -Force -ErrorAction Stop
+            }
+
+            $line = "  [OK] $($tweak.Name)"
+            Write-OutputColor "  │$($line.PadRight(72))│" -color "Success"
+            $applied++
+        }
+        catch {
+            $line = "  [!!] $($tweak.Name): $($_.Exception.Message)"
+            if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($line.PadRight(72))│" -color "Error"
+            $failed++
+        }
+    }
+
+    # Reset folder grouping (nuke saved folder views)
+    try {
+        Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FolderTypes" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Streams" -Recurse -Force -ErrorAction SilentlyContinue
+        $line = "  [OK] Reset folder view settings (removes date grouping)"
+        Write-OutputColor "  │$($line.PadRight(72))│" -color "Success"
+        $applied++
+    }
+    catch {
+        $line = "  [!!] Folder view reset: $($_.Exception.Message)"
+        if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+        Write-OutputColor "  │$($line.PadRight(72))│" -color "Error"
+        $failed++
+    }
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Summary
+    $summaryColor = if ($failed -eq 0) { "Success" } else { "Warning" }
+    Write-OutputColor "  Applied: $applied   Failed: $failed" -color $summaryColor
+
+    # Restart Explorer to apply
+    Write-OutputColor "" -color "Info"
+    if (Confirm-UserAction -Message "Restart Explorer now to apply changes?") {
+        try {
+            Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+            Start-Process explorer.exe
+            Write-OutputColor "  Explorer restarted. Changes applied." -color "Success"
+        }
+        catch {
+            Write-OutputColor "  Could not restart Explorer: $($_.Exception.Message)" -color "Warning"
+            Write-OutputColor "  Log out and back in to apply changes." -color "Info"
+        }
+    }
+    else {
+        Write-OutputColor "  Changes saved. Log out and back in or restart Explorer to apply." -color "Info"
+    }
+
+    Add-SessionChange -Category "Debloat" -Description "Win11/2025 UI cleanup: $applied tweaks applied"
 }
 #endregion

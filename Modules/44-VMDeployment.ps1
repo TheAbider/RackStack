@@ -1715,8 +1715,8 @@ function New-VMDirectories {
     if ($ComputerName) {
         $scriptBlock = {
             param($vmPath, $vhdPath)
-            if (-not (Test-Path -LiteralPath $vmPath)) { New-Item -Path $vmPath -ItemType Directory -Force | Out-Null }
-            if (-not (Test-Path -LiteralPath $vhdPath)) { New-Item -Path $vhdPath -ItemType Directory -Force | Out-Null }
+            if (-not (Test-Path -LiteralPath $vmPath)) { New-Item -LiteralPath $vmPath -ItemType Directory -Force | Out-Null }
+            if (-not (Test-Path -LiteralPath $vhdPath)) { New-Item -LiteralPath $vhdPath -ItemType Directory -Force | Out-Null }
         }
         $invokeParams = @{
             ComputerName = $ComputerName
@@ -1728,8 +1728,8 @@ function New-VMDirectories {
         Invoke-Command @invokeParams
     }
     else {
-        if (-not (Test-Path -LiteralPath $VMSpecificPath)) { New-Item -Path $VMSpecificPath -ItemType Directory -Force | Out-Null }
-        if (-not (Test-Path -LiteralPath $VHDSpecificPath)) { New-Item -Path $VHDSpecificPath -ItemType Directory -Force | Out-Null }
+        if (-not (Test-Path -LiteralPath $VMSpecificPath)) { New-Item -LiteralPath $VMSpecificPath -ItemType Directory -Force | Out-Null }
+        if (-not (Test-Path -LiteralPath $VHDSpecificPath)) { New-Item -LiteralPath $VHDSpecificPath -ItemType Directory -Force | Out-Null }
     }
 }
 
