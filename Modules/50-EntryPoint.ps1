@@ -2757,7 +2757,7 @@ function Invoke-CLIAction {
                 Write-OutputColor "  │$("  WU Service:     $($wuService.Status) ($($wuService.StartType))".PadRight(72))│" -color "Info"
             }
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            $summaryLine = "  Recent: $($recentUpdates.Count)   Succeeded: $succeeded   Failed: $failed"
+            $summaryLine = "  Recent: $(@($recentUpdates).Count)   Succeeded: $succeeded   Failed: $failed"
             Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($failed -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
@@ -2774,7 +2774,7 @@ function Invoke-CLIAction {
                     UpdateService = $wuService
                     RecentUpdates = $recentUpdates
                     Summary       = @{
-                        TotalRecent        = $recentUpdates.Count
+                        TotalRecent        = @($recentUpdates).Count
                         Succeeded          = $succeeded
                         Failed             = $failed
                         DaysSinceLastPatch = $daysSinceLastPatch
@@ -2874,7 +2874,7 @@ function Invoke-CLIAction {
                 Write-OutputColor "  │$($line.PadRight(72))│" -color $color
             }
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            $summaryLine = "  Total: $($accounts.Count)   Enabled: $enabledCount   Disabled: $disabledCount   Issues: $issueCount   Admins: $adminCount"
+            $summaryLine = "  Total: $(@($accounts).Count)   Enabled: $enabledCount   Disabled: $disabledCount   Issues: $issueCount   Admins: $adminCount"
             Write-OutputColor "  │$($summaryLine.PadRight(72))│" -color $(if ($issueCount -gt 0) { "Warning" } else { "Success" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
@@ -2886,7 +2886,7 @@ function Invoke-CLIAction {
                     Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
                     Hostname  = $env:COMPUTERNAME
                     Summary   = @{
-                        Total          = $accounts.Count
+                        Total          = @($accounts).Count
                         Enabled        = $enabledCount
                         Disabled       = $disabledCount
                         Issues         = $issueCount

@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.66.0
+
+- **Fix:** PatchStatus — `$recentUpdates.Count` wrapped in `@()` to prevent PS 5.1 single-object null on .Count (50-EntryPoint).
+- **Fix:** UserAudit — `$accounts.Count` wrapped in `@()` to prevent PS 5.1 single-object null on .Count (50-EntryPoint).
+- 65 modules, 3851 tests
+
 ## v1.65.0
 
 - **New Feature:** ARPTableAudit CLI action — audits ARP neighbor cache via Get-NetNeighbor. Reports reachable, stale, and permanent entries per interface (50-EntryPoint).
