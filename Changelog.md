@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.66.1
+
+- **Fix:** Debloat interactive menu crash — all calls to `Get-RemovableAppxPackages`, `Get-DisableableServices`, `Invoke-WorkstationDebloat`, `Invoke-ServerDebloat`, and `Invoke-CustomDebloatExecution` were using `-Profile` instead of `-DebloatProfile`. Fixed 12 call sites across 64-SystemDebloat.ps1. This caused "A parameter cannot be found that matches parameter name 'Profile'" when using the debloat menu interactively.
+
 ## v1.66.0
 
 - **Fix:** PatchStatus — `$recentUpdates.Count` wrapped in `@()` to prevent PS 5.1 single-object null on .Count (50-EntryPoint).

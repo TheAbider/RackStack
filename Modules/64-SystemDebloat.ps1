@@ -252,7 +252,7 @@ function Start-SystemDebloat {
             "1" {
                 $selectedProfile = Select-DebloatProfile
                 if ($null -eq $selectedProfile) { continue }
-                Invoke-WorkstationDebloat -Profile $selectedProfile
+                Invoke-WorkstationDebloat -DebloatProfile $selectedProfile
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Press Enter to continue..." -color "Info"
                 Read-Host | Out-Null
@@ -260,7 +260,7 @@ function Start-SystemDebloat {
             "2" {
                 $selectedProfile = Select-DebloatProfile
                 if ($null -eq $selectedProfile) { continue }
-                Invoke-ServerDebloat -Profile $selectedProfile
+                Invoke-ServerDebloat -DebloatProfile $selectedProfile
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Press Enter to continue..." -color "Info"
                 Read-Host | Out-Null
@@ -314,7 +314,7 @@ function Invoke-WorkstationDebloat {
 
     # ── Phase 1: AppxPackage Removal ──────────────────────────────────
     Write-OutputColor "  ── AppxPackage Removal ────────────────────────────────────────────" -color "Info"
-    $packages = Get-RemovableAppxPackages -Profile $DebloatProfile
+    $packages = Get-RemovableAppxPackages -DebloatProfile $DebloatProfile
 
     foreach ($pkgName in $packages) {
         $installed = Get-AppxPackage -Name "*$pkgName*" -AllUsers -ErrorAction SilentlyContinue
@@ -375,7 +375,7 @@ function Invoke-WorkstationDebloat {
 
     # ── Phase 2: Service Optimization ─────────────────────────────────
     Write-OutputColor "  ── Service Optimization ──────────────────────────────────────────" -color "Info"
-    $serviceList = Get-DisableableServices -Type "Workstation" -Profile $DebloatProfile
+    $serviceList = Get-DisableableServices -Type "Workstation" -DebloatProfile $DebloatProfile
 
     foreach ($svcInfo in $serviceList) {
         # SSD check for SysMain
@@ -725,7 +725,7 @@ function Invoke-ServerDebloat {
 
     # ── Phase 3: Service Optimization ─────────────────────────────────
     Write-OutputColor "  ── Service Optimization ──────────────────────────────────────────" -color "Info"
-    $serviceList = Get-DisableableServices -Type "Server" -Profile $DebloatProfile
+    $serviceList = Get-DisableableServices -Type "Server" -DebloatProfile $DebloatProfile
 
     # Deduplicate by service name (Aggressive adds DiagTrack again)
     $seenServices = @{}
@@ -1029,7 +1029,7 @@ function Show-DebloatAnalysis {
     Write-OutputColor "  │$("  REMOVABLE APPX PACKAGES".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-    $allPackageNames = Get-RemovableAppxPackages -Profile "Aggressive"
+    $allPackageNames = Get-RemovableAppxPackages -DebloatProfile "Aggressive"
     $removableCount = 0
     $totalPackageSize = [long]0
 
@@ -1072,7 +1072,7 @@ function Show-DebloatAnalysis {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $svcType = if ($isServer) { "Server" } else { "Workstation" }
-    $candidateServices = Get-DisableableServices -Type $svcType -Profile "Aggressive"
+    $candidateServices = Get-DisableableServices -Type $svcType -DebloatProfile "Aggressive"
 
     # Deduplicate
     $seenSvc = @{}
@@ -1300,7 +1300,7 @@ function Invoke-CustomDebloat {
                     continue
                 }
 
-                Invoke-CustomDebloatExecution -Selected $selected -Profile $selectedProfile
+                Invoke-CustomDebloatExecution -Selected $selected -DebloatProfile $selectedProfile
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Press Enter to continue..." -color "Info"
                 Read-Host | Out-Null
@@ -1345,7 +1345,7 @@ function Invoke-CustomDebloatExecution {
     # ── AppxPackage Removal ───────────────────────────────────────────
     if ($Selected.AppxPackages) {
         Write-OutputColor "  ── AppxPackage Removal ────────────────────────────────────────────" -color "Info"
-        $packages = Get-RemovableAppxPackages -Profile $DebloatProfile
+        $packages = Get-RemovableAppxPackages -DebloatProfile $DebloatProfile
 
         foreach ($pkgName in $packages) {
             $installed = Get-AppxPackage -Name "*$pkgName*" -AllUsers -ErrorAction SilentlyContinue
@@ -1378,7 +1378,7 @@ function Invoke-CustomDebloatExecution {
     # ── Service Optimization ──────────────────────────────────────────
     if ($Selected.Services) {
         Write-OutputColor "  ── Service Optimization ──────────────────────────────────────────" -color "Info"
-        $serviceList = Get-DisableableServices -Type $svcType -Profile $DebloatProfile
+        $serviceList = Get-DisableableServices -Type $svcType -DebloatProfile $DebloatProfile
 
         $seenSvc = @{}
         foreach ($svcInfo in $serviceList) {
