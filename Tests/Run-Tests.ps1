@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.61.0
+    Automated Test Runner for RackStack v1.62.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11004,6 +11004,42 @@ try {
     Write-TestResult "50-EntryPoint: ServiceAccountAudit JSON has Services" ($mod50 -match "'ServiceAccountAudit'[\s\S]{0,5000}Services\s*=")
     Write-TestResult "50-EntryPoint: ServiceAccountAudit JSON output" ($mod50 -match "'ServiceAccountAudit'[\s\S]{0,6000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: ServiceAccountAudit Action field" ($mod50 -match "Action\s*=\s*'ServiceAccountAudit'")
+
+    # ProxyAudit (v1.62.0)
+    Write-TestResult "Header: ProxyAudit in ValidateSet" ($headerContent -match "ValidateSet.*ProxyAudit")
+    Write-TestResult "50-EntryPoint: ProxyAudit case exists" ($mod50 -match "'ProxyAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: ProxyAudit checks IE proxy" ($mod50 -match "'ProxyAudit'[\s\S]{0,1000}Internet Settings")
+    Write-TestResult "50-EntryPoint: ProxyAudit checks WinHTTP" ($mod50 -match "'ProxyAudit'[\s\S]{0,2000}winhttp show proxy")
+    Write-TestResult "50-EntryPoint: ProxyAudit JSON output" ($mod50 -match "'ProxyAudit'[\s\S]{0,5000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ProxyAudit Action field" ($mod50 -match "Action\s*=\s*'ProxyAudit'")
+
+    # PendingRebootAudit (v1.62.0)
+    Write-TestResult "Header: PendingRebootAudit in ValidateSet" ($headerContent -match "ValidateSet.*PendingRebootAudit")
+    Write-TestResult "50-EntryPoint: PendingRebootAudit case exists" ($mod50 -match "'PendingRebootAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: PendingRebootAudit checks CBS" ($mod50 -match "'PendingRebootAudit'[\s\S]{0,1000}Component Based Servicing")
+    Write-TestResult "50-EntryPoint: PendingRebootAudit checks WU" ($mod50 -match "'PendingRebootAudit'[\s\S]{0,1500}WindowsUpdate[\s\S]{0,200}RebootRequired")
+    Write-TestResult "50-EntryPoint: PendingRebootAudit checks file rename" ($mod50 -match "'PendingRebootAudit'[\s\S]{0,2000}PendingFileRenameOperations")
+    Write-TestResult "50-EntryPoint: PendingRebootAudit checks SCCM" ($mod50 -match "'PendingRebootAudit'[\s\S]{0,3000}CCM_ClientUtilities")
+    Write-TestResult "50-EntryPoint: PendingRebootAudit JSON output" ($mod50 -match "'PendingRebootAudit'[\s\S]{0,5000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: PendingRebootAudit Action field" ($mod50 -match "Action\s*=\s*'PendingRebootAudit'")
+
+    # PageFileAudit (v1.62.0)
+    Write-TestResult "Header: PageFileAudit in ValidateSet" ($headerContent -match "ValidateSet.*PageFileAudit")
+    Write-TestResult "50-EntryPoint: PageFileAudit case exists" ($mod50 -match "'PageFileAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: PageFileAudit checks auto-managed" ($mod50 -match "'PageFileAudit'[\s\S]{0,1000}AutomaticManagedPagefile")
+    Write-TestResult "50-EntryPoint: PageFileAudit queries usage" ($mod50 -match "'PageFileAudit'[\s\S]{0,2000}Win32_PageFileUsage")
+    Write-TestResult "50-EntryPoint: PageFileAudit JSON output" ($mod50 -match "'PageFileAudit'[\s\S]{0,5000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: PageFileAudit Action field" ($mod50 -match "Action\s*=\s*'PageFileAudit'")
+
+    # CPUAudit (v1.62.0)
+    Write-TestResult "Header: CPUAudit in ValidateSet" ($headerContent -match "ValidateSet.*CPUAudit")
+    Write-TestResult "50-EntryPoint: CPUAudit case exists" ($mod50 -match "'CPUAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: CPUAudit queries Win32_Processor" ($mod50 -match "'CPUAudit'[\s\S]{0,1000}Win32_Processor")
+    Write-TestResult "50-EntryPoint: CPUAudit checks load percentage" ($mod50 -match "'CPUAudit'[\s\S]{0,2000}LoadPercentage")
+    Write-TestResult "50-EntryPoint: CPUAudit checks virtualization" ($mod50 -match "'CPUAudit'[\s\S]{0,3000}VirtualizationFirmwareEnabled")
+    Write-TestResult "50-EntryPoint: CPUAudit JSON has Processors" ($mod50 -match "'CPUAudit'[\s\S]{0,6000}Processors\s*=")
+    Write-TestResult "50-EntryPoint: CPUAudit JSON output" ($mod50 -match "'CPUAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: CPUAudit Action field" ($mod50 -match "Action\s*=\s*'CPUAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

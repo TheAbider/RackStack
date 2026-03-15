@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.62.0
+
+- **New Feature:** ProxyAudit CLI action — `RackStack.exe -Action ProxyAudit -OutputFormat JSON` audits proxy configuration across IE/system proxy, WinHTTP proxy, and environment variables (HTTP_PROXY/HTTPS_PROXY/NO_PROXY). Reports PAC URLs and bypass lists (50-EntryPoint).
+- **New Feature:** PendingRebootAudit CLI action — `RackStack.exe -Action PendingRebootAudit -OutputFormat JSON` performs comprehensive pending reboot detection. Checks CBS, Windows Update, pending file renames, computer rename, domain join, and SCCM reboot flags. Reports all reboot reasons. Exits code 1 when reboot required (50-EntryPoint).
+- **New Feature:** PageFileAudit CLI action — `RackStack.exe -Action PageFileAudit -OutputFormat JSON` audits page file configuration and utilization. Reports auto-managed status, configured sizes, current/peak usage, and utilization percentage. Flags >80% usage. Exits code 1 when issues detected (50-EntryPoint).
+- **New Feature:** CPUAudit CLI action — `RackStack.exe -Action CPUAudit -OutputFormat JSON` audits CPU topology and utilization. Reports processor name, cores, logical processors, clock speeds, L2/L3 cache, load percentage, virtualization support, and architecture. Flags >90% load. Exits code 1 when CPU issues detected (50-EntryPoint).
+- 65 modules, 3779 tests
+
 ## v1.61.0
 
 - **New Feature:** LogonAudit CLI action — `RackStack.exe -Action LogonAudit -OutputFormat JSON` audits recent logon activity. Reports successful interactive/RDP logons (Event 4624) and failed logon attempts (Event 4625) with source IPs. Exits code 1 when failed logons detected (50-EntryPoint).

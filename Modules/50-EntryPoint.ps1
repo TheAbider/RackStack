@@ -237,6 +237,10 @@ function Assert-Elevation {
                 @{ Action = 'ACLAudit';       Description = 'Critical folder permissions' }
                 @{ Action = 'RecoveryAudit';  Description = 'Restore points + recovery options' }
                 @{ Action = 'ServiceAccountAudit'; Description = 'Services with custom accounts' }
+                @{ Action = 'ProxyAudit';     Description = 'System/WinHTTP proxy config' }
+                @{ Action = 'PendingRebootAudit'; Description = 'Comprehensive reboot detection' }
+                @{ Action = 'PageFileAudit';  Description = 'Page file config + utilization' }
+                @{ Action = 'CPUAudit';       Description = 'CPU topology + utilization' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7069,6 +7073,238 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($saIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ProxyAudit' {
+            Write-OutputColor "  Auditing proxy configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $proxyIssues = 0
+            $proxyConfig = @{}
+
+            # System (IE) proxy
+            try {
+                $inetReg = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
+                $proxyConfig['IEProxyEnabled'] = $null -ne $inetReg -and $inetReg.ProxyEnable -eq 1
+                $proxyConfig['IEProxyServer'] = if ($null -ne $inetReg -and $null -ne $inetReg.ProxyServer) { "$($inetReg.ProxyServer)" } else { '' }
+                $proxyConfig['IEAutoConfigURL'] = if ($null -ne $inetReg -and $null -ne $inetReg.AutoConfigURL) { "$($inetReg.AutoConfigURL)" } else { '' }
+            } catch { }
+
+            # WinHTTP proxy
+            try {
+                $winhttp = & netsh winhttp show proxy 2>&1
+                $winhttpStr = $winhttp -join ' '
+                $proxyConfig['WinHTTPProxy'] = if ($winhttpStr -match 'Proxy Server.*:\s*(\S+)') { $regexMatches = $Matches; $regexMatches[1] } else { 'Direct' }
+                $proxyConfig['WinHTTPBypass'] = if ($winhttpStr -match 'Bypass List.*:\s*(.+)') { $regexMatches = $Matches; $regexMatches[1].Trim() } else { '' }
+            } catch { }
+
+            # Environment proxy
+            $proxyConfig['HTTP_PROXY'] = if ($env:HTTP_PROXY) { $env:HTTP_PROXY } else { '' }
+            $proxyConfig['HTTPS_PROXY'] = if ($env:HTTPS_PROXY) { $env:HTTPS_PROXY } else { '' }
+            $proxyConfig['NO_PROXY'] = if ($env:NO_PROXY) { $env:NO_PROXY } else { '' }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PROXY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  IE Proxy:     $(if ($proxyConfig['IEProxyEnabled']) { $proxyConfig['IEProxyServer'] } else { 'Disabled' })".PadRight(72))│" -color "Info"
+            if ($proxyConfig['IEAutoConfigURL']) { Write-OutputColor "  │$("  PAC URL:      $($proxyConfig['IEAutoConfigURL'])".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  WinHTTP:      $($proxyConfig['WinHTTPProxy'])".PadRight(72))│" -color "Info"
+            if ($proxyConfig['HTTP_PROXY']) { Write-OutputColor "  │$("  HTTP_PROXY:   $($proxyConfig['HTTP_PROXY'])".PadRight(72))│" -color "Info" }
+            if ($proxyConfig['HTTPS_PROXY']) { Write-OutputColor "  │$("  HTTPS_PROXY:  $($proxyConfig['HTTPS_PROXY'])".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $proxyIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ProxyAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Issues = $proxyIssues }
+                    ProxyConfig = $proxyConfig
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($proxyIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'PendingRebootAudit' {
+            Write-OutputColor "  Checking pending reboot status..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $rebootRequired = $false
+            $rebootReasons = @()
+
+            # CBS (Component Based Servicing)
+            if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') {
+                $rebootRequired = $true; $rebootReasons += 'CBS RebootPending'
+            }
+
+            # Windows Update
+            if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') {
+                $rebootRequired = $true; $rebootReasons += 'Windows Update'
+            }
+
+            # Pending file rename operations
+            $pfro = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction SilentlyContinue
+            if ($null -ne $pfro -and $null -ne $pfro.PendingFileRenameOperations) {
+                $rebootRequired = $true; $rebootReasons += 'Pending File Rename'
+            }
+
+            # Computer rename pending
+            $activeCompName = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName' -ErrorAction SilentlyContinue
+            $pendCompName = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName' -ErrorAction SilentlyContinue
+            if ($null -ne $activeCompName -and $null -ne $pendCompName -and $activeCompName.ComputerName -ne $pendCompName.ComputerName) {
+                $rebootRequired = $true; $rebootReasons += 'Computer Rename'
+            }
+
+            # Domain join
+            if (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\JoinDomain') {
+                $rebootRequired = $true; $rebootReasons += 'Domain Join'
+            }
+
+            # SCCM
+            try {
+                $sccm = Invoke-CimMethod -Namespace 'ROOT\ccm\ClientSDK' -ClassName CCM_ClientUtilities -MethodName DetermineIfRebootPending -ErrorAction SilentlyContinue
+                if ($null -ne $sccm -and ($sccm.IsHardRebootPending -or $sccm.RebootPending)) {
+                    $rebootRequired = $true; $rebootReasons += 'SCCM'
+                }
+            } catch { }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PENDING REBOOT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            $statusColor = if ($rebootRequired) { "Warning" } else { "Success" }
+            Write-OutputColor "  │$("  Reboot Required: $(if ($rebootRequired) { 'YES' } else { 'No' })".PadRight(72))│" -color $statusColor
+            if (@($rebootReasons).Count -gt 0) {
+                foreach ($r in $rebootReasons) {
+                    Write-OutputColor "  │$("  - $r".PadRight(72))│" -color "Warning"
+                }
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PendingRebootAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ RebootRequired = $rebootRequired; ReasonCount = @($rebootReasons).Count; Issues = if ($rebootRequired) { 1 } else { 0 } }
+                    Reasons = $rebootReasons
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($rebootRequired) { [Environment]::Exit(1) }
+        }
+        'PageFileAudit' {
+            Write-OutputColor "  Auditing page file configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $pfIssues = 0
+            $pageFiles = @()
+            $autoManaged = $false
+
+            try {
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $autoManaged = $cs.AutomaticManagedPagefile -eq $true
+            } catch { }
+
+            try {
+                $pfs = @(Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue)
+                foreach ($pf in $pfs) {
+                    $pageFiles += @{ Path = "$($pf.Name)"; InitialMB = $pf.InitialSize; MaximumMB = $pf.MaximumSize; AutoManaged = ($pf.InitialSize -eq 0 -and $pf.MaximumSize -eq 0) }
+                }
+            } catch { }
+
+            # Current usage
+            $pfUsage = @()
+            try {
+                $usage = @(Get-CimInstance -ClassName Win32_PageFileUsage -ErrorAction Stop)
+                foreach ($u in $usage) {
+                    $pctUsed = if ($u.AllocatedBaseSize -gt 0) { [math]::Round(($u.CurrentUsage / $u.AllocatedBaseSize) * 100, 1) } else { 0 }
+                    if ($pctUsed -gt 80) { $pfIssues++ }
+                    $pfUsage += @{ Path = "$($u.Name)"; AllocatedMB = $u.AllocatedBaseSize; UsedMB = $u.CurrentUsage; PeakMB = $u.PeakUsage; PctUsed = $pctUsed }
+                }
+            } catch { }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  PAGE FILE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Auto Managed: $autoManaged".PadRight(72))│" -color "Info"
+            foreach ($u in $pfUsage) {
+                $color = if ($u.PctUsed -gt 80) { "Warning" } else { "Success" }
+                Write-OutputColor "  │$("  $($u.Path)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("    Used: $($u.UsedMB)/$($u.AllocatedMB)MB ($($u.PctUsed)%)  Peak: $($u.PeakMB)MB".PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $pfIssues".PadRight(72))│" -color $(if ($pfIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PageFileAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ AutoManaged = $autoManaged; PageFiles = @($pfUsage).Count; Issues = $pfIssues }
+                    Settings = $pageFiles; Usage = $pfUsage
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($pfIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'CPUAudit' {
+            Write-OutputColor "  Auditing CPU configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $cpuIssues = 0
+            $cpuResults = @()
+
+            try {
+                $cpus = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
+                foreach ($cpu in $cpus) {
+                    $loadPct = $cpu.LoadPercentage
+                    if ($null -ne $loadPct -and $loadPct -gt 90) { $cpuIssues++ }
+                    $cpuResults += @{
+                        Name              = "$($cpu.Name)".Trim()
+                        DeviceID          = "$($cpu.DeviceID)"
+                        Cores             = $cpu.NumberOfCores
+                        LogicalProcessors = $cpu.NumberOfLogicalProcessors
+                        MaxClockMHz       = $cpu.MaxClockSpeed
+                        CurrentClockMHz   = $cpu.CurrentClockSpeed
+                        LoadPct           = $loadPct
+                        L2CacheKB         = $cpu.L2CacheSize
+                        L3CacheKB         = $cpu.L3CacheSize
+                        Architecture      = switch ($cpu.Architecture) { 0 { 'x86' } 5 { 'ARM' } 9 { 'x64' } 12 { 'ARM64' } default { "$($cpu.Architecture)" } }
+                        Virtualization     = $cpu.VirtualizationFirmwareEnabled -eq $true
+                    }
+                }
+            } catch {
+                Write-OutputColor "  ERROR: Failed to query CPU: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $totalCores = ($cpuResults | ForEach-Object { $_.Cores } | Measure-Object -Sum).Sum
+            $totalLogical = ($cpuResults | ForEach-Object { $_.LogicalProcessors } | Measure-Object -Sum).Sum
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  CPU AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($c in $cpuResults) {
+                $cpuName = if ($c.Name.Length -gt 55) { $c.Name.Substring(0, 52) + "..." } else { $c.Name }
+                Write-OutputColor "  │$("  $cpuName".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("    Cores: $($c.Cores)  Logical: $($c.LogicalProcessors)  Clock: $($c.CurrentClockMHz)/$($c.MaxClockMHz)MHz".PadRight(72))│" -color "Info"
+                $loadStr = if ($null -ne $c.LoadPct) { "$($c.LoadPct)%" } else { "N/A" }
+                $loadColor = if ($null -ne $c.LoadPct -and $c.LoadPct -gt 90) { "Error" } elseif ($null -ne $c.LoadPct -and $c.LoadPct -gt 70) { "Warning" } else { "Success" }
+                Write-OutputColor "  │$("    Load: $loadStr  VT: $(if ($c.Virtualization) { 'Enabled' } else { 'Disabled' })  Arch: $($c.Architecture)".PadRight(72))│" -color $loadColor
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Sockets: $(@($cpuResults).Count)   Cores: $totalCores   Logical: $totalLogical   Issues: $cpuIssues".PadRight(72))│" -color $(if ($cpuIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'CPUAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Sockets = @($cpuResults).Count; TotalCores = $totalCores; TotalLogical = $totalLogical; Issues = $cpuIssues }
+                    Processors = $cpuResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($cpuIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
