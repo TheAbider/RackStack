@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.60.0
+    Automated Test Runner for RackStack v1.61.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10970,6 +10970,40 @@ try {
     Write-TestResult "50-EntryPoint: SysInfoAudit JSON has SystemInfo" ($mod50 -match "'SysInfoAudit'[\s\S]{0,6000}SystemInfo\s*=")
     Write-TestResult "50-EntryPoint: SysInfoAudit JSON output" ($mod50 -match "'SysInfoAudit'[\s\S]{0,7000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: SysInfoAudit Action field" ($mod50 -match "Action\s*=\s*'SysInfoAudit'")
+
+    # LogonAudit (v1.61.0)
+    Write-TestResult "Header: LogonAudit in ValidateSet" ($headerContent -match "ValidateSet.*LogonAudit")
+    Write-TestResult "50-EntryPoint: LogonAudit case exists" ($mod50 -match "'LogonAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: LogonAudit checks Event 4624" ($mod50 -match "'LogonAudit'[\s\S]{0,1000}4624")
+    Write-TestResult "50-EntryPoint: LogonAudit checks Event 4625" ($mod50 -match "'LogonAudit'[\s\S]{0,3000}4625")
+    Write-TestResult "50-EntryPoint: LogonAudit JSON has RecentLogons" ($mod50 -match "'LogonAudit'[\s\S]{0,6000}RecentLogons\s*=")
+    Write-TestResult "50-EntryPoint: LogonAudit JSON output" ($mod50 -match "'LogonAudit'[\s\S]{0,7000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: LogonAudit Action field" ($mod50 -match "Action\s*=\s*'LogonAudit'")
+
+    # ACLAudit (v1.61.0)
+    Write-TestResult "Header: ACLAudit in ValidateSet" ($headerContent -match "ValidateSet.*ACLAudit")
+    Write-TestResult "50-EntryPoint: ACLAudit case exists" ($mod50 -match "'ACLAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: ACLAudit checks SystemRoot" ($mod50 -match "'ACLAudit'[\s\S]{0,1000}SystemRoot")
+    Write-TestResult "50-EntryPoint: ACLAudit uses Get-Acl" ($mod50 -match "'ACLAudit'[\s\S]{0,2000}Get-Acl")
+    Write-TestResult "50-EntryPoint: ACLAudit checks Everyone write" ($mod50 -match "'ACLAudit'[\s\S]{0,3000}Everyone[\s\S]{0,200}FullControl\|Modify\|Write")
+    Write-TestResult "50-EntryPoint: ACLAudit JSON output" ($mod50 -match "'ACLAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ACLAudit Action field" ($mod50 -match "Action\s*=\s*'ACLAudit'")
+
+    # RecoveryAudit (v1.61.0)
+    Write-TestResult "Header: RecoveryAudit in ValidateSet" ($headerContent -match "ValidateSet.*RecoveryAudit")
+    Write-TestResult "50-EntryPoint: RecoveryAudit case exists" ($mod50 -match "'RecoveryAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: RecoveryAudit queries restore points" ($mod50 -match "'RecoveryAudit'[\s\S]{0,1000}Get-ComputerRestorePoint")
+    Write-TestResult "50-EntryPoint: RecoveryAudit checks recovery partition" ($mod50 -match "'RecoveryAudit'[\s\S]{0,2000}Recovery")
+    Write-TestResult "50-EntryPoint: RecoveryAudit JSON output" ($mod50 -match "'RecoveryAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: RecoveryAudit Action field" ($mod50 -match "Action\s*=\s*'RecoveryAudit'")
+
+    # ServiceAccountAudit (v1.61.0)
+    Write-TestResult "Header: ServiceAccountAudit in ValidateSet" ($headerContent -match "ValidateSet.*ServiceAccountAudit")
+    Write-TestResult "50-EntryPoint: ServiceAccountAudit case exists" ($mod50 -match "'ServiceAccountAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: ServiceAccountAudit filters built-in accounts" ($mod50 -match "'ServiceAccountAudit'[\s\S]{0,1500}LocalSystem[\s\S]{0,200}LocalService[\s\S]{0,200}NetworkService")
+    Write-TestResult "50-EntryPoint: ServiceAccountAudit JSON has Services" ($mod50 -match "'ServiceAccountAudit'[\s\S]{0,5000}Services\s*=")
+    Write-TestResult "50-EntryPoint: ServiceAccountAudit JSON output" ($mod50 -match "'ServiceAccountAudit'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ServiceAccountAudit Action field" ($mod50 -match "Action\s*=\s*'ServiceAccountAudit'")
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

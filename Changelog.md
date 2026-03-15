@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.61.0
+
+- **New Feature:** LogonAudit CLI action — `RackStack.exe -Action LogonAudit -OutputFormat JSON` audits recent logon activity. Reports successful interactive/RDP logons (Event 4624) and failed logon attempts (Event 4625) with source IPs. Exits code 1 when failed logons detected (50-EntryPoint).
+- **New Feature:** ACLAudit CLI action — `RackStack.exe -Action ACLAudit -OutputFormat JSON` audits permissions on 6 critical system folders (Windows, System32, Program Files, Drivers, ProgramData). Flags Everyone with write/modify/full control. Exits code 1 when permission issues detected (50-EntryPoint).
+- **New Feature:** RecoveryAudit CLI action — `RackStack.exe -Action RecoveryAudit -OutputFormat JSON` audits system recovery configuration. Reports system restore points, recovery partition presence, and system protection status (50-EntryPoint).
+- **New Feature:** ServiceAccountAudit CLI action — `RackStack.exe -Action ServiceAccountAudit -OutputFormat JSON` identifies services running under custom accounts (not LocalSystem/LocalService/NetworkService). Reports service name, account, start mode, and separates domain vs local accounts (50-EntryPoint).
+- 65 modules, 3751 tests
+
 ## v1.60.0
 
 - **New Feature:** AppLockerAudit CLI action — `RackStack.exe -Action AppLockerAudit -OutputFormat JSON` audits AppLocker application control policies. Checks AppIDSvc service status and reports rule counts per collection type (Exe, Msi, Script, Appx, Dll) (50-EntryPoint).

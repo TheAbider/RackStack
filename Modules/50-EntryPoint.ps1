@@ -233,6 +233,10 @@ function Assert-Elevation {
                 @{ Action = 'EventSubAudit';  Description = 'WMI event subscriptions (persistence)' }
                 @{ Action = 'HotfixAudit';    Description = 'Installed hotfix/KB inventory' }
                 @{ Action = 'SysInfoAudit';   Description = 'Comprehensive system snapshot' }
+                @{ Action = 'LogonAudit';     Description = 'Recent logons + failed attempts' }
+                @{ Action = 'ACLAudit';       Description = 'Critical folder permissions' }
+                @{ Action = 'RecoveryAudit';  Description = 'Restore points + recovery options' }
+                @{ Action = 'ServiceAccountAudit'; Description = 'Services with custom accounts' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -6822,6 +6826,249 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($siIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'LogonAudit' {
+            Write-OutputColor "  Auditing logon events..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $logonIssues = 0
+            $recentLogons = @()
+            $failedLogons = @()
+
+            # Recent successful logons (Event ID 4624, Type 2=Interactive, 10=RemoteInteractive)
+            try {
+                $logonEvents = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4624 } -MaxEvents 50 -ErrorAction SilentlyContinue)
+                foreach ($evt in $logonEvents) {
+                    $logonType = $evt.Properties[8].Value
+                    if ($logonType -eq 2 -or $logonType -eq 10 -or $logonType -eq 11) {
+                        $user = "$($evt.Properties[5].Value)"
+                        if ($user -match 'SYSTEM|DWM-|UMFD-|Font Driver') { continue }
+                        $recentLogons += @{
+                            Time      = $evt.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss")
+                            User      = $user
+                            Domain    = "$($evt.Properties[6].Value)"
+                            LogonType = switch ($logonType) { 2 { 'Interactive' } 10 { 'RemoteDesktop' } 11 { 'CachedInteractive' } default { "$logonType" } }
+                            Source    = "$($evt.Properties[18].Value)"
+                        }
+                    }
+                }
+            } catch { }
+
+            # Failed logons (Event ID 4625)
+            try {
+                $failEvents = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4625 } -MaxEvents 30 -ErrorAction SilentlyContinue)
+                foreach ($evt in $failEvents) {
+                    $failedLogons += @{
+                        Time       = $evt.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss")
+                        User       = "$($evt.Properties[5].Value)"
+                        Domain     = "$($evt.Properties[6].Value)"
+                        SourceIP   = "$($evt.Properties[19].Value)"
+                        FailReason = "$($evt.Properties[8].Value)"
+                    }
+                    $logonIssues++
+                }
+            } catch { }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  LOGON AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  RECENT LOGONS ($(@($recentLogons).Count))".PadRight(72))│" -color "Info"
+            foreach ($l in ($recentLogons | Select-Object -First 10)) {
+                $line = "  $($l.Time.Substring(0,16))  $($l.User.PadRight(20)) $($l.LogonType)"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+            }
+            if (@($failedLogons).Count -gt 0) {
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  FAILED LOGONS ($(@($failedLogons).Count))".PadRight(72))│" -color "Warning"
+                foreach ($f in ($failedLogons | Select-Object -First 10)) {
+                    $line = "  $($f.Time.Substring(0,16))  $($f.User.PadRight(20)) $($f.SourceIP)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Warning"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Successful: $(@($recentLogons).Count)   Failed: $(@($failedLogons).Count)".PadRight(72))│" -color $(if ($logonIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LogonAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ RecentLogons = @($recentLogons).Count; FailedLogons = @($failedLogons).Count; Issues = $logonIssues }
+                    RecentLogons = $recentLogons; FailedLogons = $failedLogons
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($logonIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ACLAudit' {
+            Write-OutputColor "  Auditing critical folder permissions..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $aclIssues = 0
+            $aclResults = @()
+
+            $criticalPaths = @(
+                @{ Path = "$env:SystemRoot"; Name = 'Windows' }
+                @{ Path = "$env:SystemRoot\System32"; Name = 'System32' }
+                @{ Path = "$env:ProgramFiles"; Name = 'Program Files' }
+                @{ Path = "${env:ProgramFiles(x86)}"; Name = 'Program Files (x86)' }
+                @{ Path = "$env:SystemRoot\System32\drivers"; Name = 'Drivers' }
+                @{ Path = "$env:ProgramData"; Name = 'ProgramData' }
+            )
+
+            foreach ($cp in $criticalPaths) {
+                if (-not (Test-Path -LiteralPath $cp.Path)) { continue }
+                $status = 'OK'
+                $aces = @()
+                try {
+                    $acl = Get-Acl -Path $cp.Path -ErrorAction Stop
+                    foreach ($ace in $acl.Access) {
+                        $aces += @{ Identity = "$($ace.IdentityReference)"; Rights = "$($ace.FileSystemRights)"; Type = "$($ace.AccessControlType)" }
+                        if ("$($ace.IdentityReference)" -eq 'Everyone' -and "$($ace.FileSystemRights)" -match 'FullControl|Modify|Write' -and "$($ace.AccessControlType)" -eq 'Allow') {
+                            $status = 'WARN'; $aclIssues++
+                        }
+                    }
+                } catch { }
+                $aclResults += @{ Name = $cp.Name; Path = $cp.Path; ACECount = @($aces).Count; Status = $status; ACEs = $aces }
+            }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  ACL AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($a in $aclResults) {
+                $line = "  $($a.Name.PadRight(22)) ACEs: $($a.ACECount)  [$($a.Status)]"
+                $color = if ($a.Status -eq 'OK') { 'Success' } else { 'Warning' }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Paths checked: $(@($aclResults).Count)   Issues: $aclIssues".PadRight(72))│" -color $(if ($aclIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ACLAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ PathsChecked = @($aclResults).Count; Issues = $aclIssues }
+                    Paths = $aclResults
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($aclIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'RecoveryAudit' {
+            Write-OutputColor "  Auditing recovery configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $recIssues = 0
+            $restorePoints = @()
+
+            # System Restore points
+            try {
+                $rps = @(Get-ComputerRestorePoint -ErrorAction Stop)
+                foreach ($rp in $rps) {
+                    $restorePoints += @{ SequenceNumber = $rp.SequenceNumber; Description = "$($rp.Description)"; CreationTime = "$($rp.CreationTime)"; RestorePointType = $rp.RestorePointType }
+                }
+            } catch { }
+
+            # Recovery partition
+            $recoveryPartition = $false
+            try {
+                $parts = @(Get-Partition -ErrorAction SilentlyContinue | Where-Object { $_.Type -eq 'Recovery' })
+                $recoveryPartition = @($parts).Count -gt 0
+            } catch { }
+
+            # System protection enabled
+            $protectionEnabled = $false
+            try {
+                $vssOutput = & vssadmin list shadowstorage 2>&1
+                $protectionEnabled = ($vssOutput -join ' ') -match 'Used Shadow Copy Storage'
+            } catch { }
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  RECOVERY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  System Protection: $(if ($protectionEnabled) { 'Enabled' } else { 'Disabled' })".PadRight(72))│" -color $(if ($protectionEnabled) { "Success" } else { "Info" })
+            Write-OutputColor "  │$("  Recovery Partition: $(if ($recoveryPartition) { 'Present' } else { 'Not found' })".PadRight(72))│" -color $(if ($recoveryPartition) { "Success" } else { "Info" })
+            Write-OutputColor "  │$("  Restore Points: $(@($restorePoints).Count)".PadRight(72))│" -color "Info"
+            if (@($restorePoints).Count -gt 0) {
+                foreach ($rp in ($restorePoints | Select-Object -First 5)) {
+                    $desc = if ($rp.Description.Length -gt 55) { $rp.Description.Substring(0, 52) + "..." } else { $rp.Description }
+                    Write-OutputColor "  │$("  #$($rp.SequenceNumber) $desc".PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Issues: $recIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'RecoveryAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ ProtectionEnabled = $protectionEnabled; RecoveryPartition = $recoveryPartition; RestorePoints = @($restorePoints).Count; Issues = $recIssues }
+                    RestorePoints = $restorePoints
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($recIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ServiceAccountAudit' {
+            Write-OutputColor "  Auditing service accounts..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $saIssues = 0
+            $serviceAccounts = @()
+
+            try {
+                $services = @(Get-CimInstance -ClassName Win32_Service -ErrorAction Stop |
+                    Where-Object { $_.StartName -ne 'LocalSystem' -and $_.StartName -ne 'NT AUTHORITY\LocalService' -and $_.StartName -ne 'NT AUTHORITY\NetworkService' -and $_.StartName -ne 'NT Authority\LocalService' -and $_.StartName -ne 'NT Authority\NetworkService' -and $null -ne $_.StartName -and $_.StartName -ne '' })
+
+                foreach ($svc in $services) {
+                    $health = 'OK'
+                    $serviceAccounts += @{
+                        ServiceName  = $svc.Name
+                        DisplayName  = "$($svc.DisplayName)"
+                        StartName    = "$($svc.StartName)"
+                        StartMode    = "$($svc.StartMode)"
+                        State        = "$($svc.State)"
+                        Health       = $health
+                    }
+                }
+            } catch {
+                Write-OutputColor "  WARNING: Could not query services: $($_.Exception.Message)" -color "Warning"
+            }
+
+            $domainAccounts = @($serviceAccounts | Where-Object { $_.StartName -match '\\' -and $_.StartName -notmatch 'NT SERVICE' })
+            $localAccounts = @($serviceAccounts | Where-Object { $_.StartName -match '^\.\\'  })
+
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SERVICE ACCOUNT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($serviceAccounts).Count -eq 0) {
+                Write-OutputColor "  │$("  (All services use built-in accounts)".PadRight(72))│" -color "Success"
+            } else {
+                foreach ($sa in $serviceAccounts) {
+                    $sName = if ($sa.ServiceName.Length -gt 22) { $sa.ServiceName.Substring(0, 19) + "..." } else { $sa.ServiceName }
+                    $line = "  $($sName.PadRight(24)) $($sa.StartName)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+                }
+            }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Custom accounts: $(@($serviceAccounts).Count)   Domain: $(@($domainAccounts).Count)   Local: $(@($localAccounts).Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ServiceAccountAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ CustomAccounts = @($serviceAccounts).Count; DomainAccounts = @($domainAccounts).Count; LocalAccounts = @($localAccounts).Count; Issues = $saIssues }
+                    Services = $serviceAccounts
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($saIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
