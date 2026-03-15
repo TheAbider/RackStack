@@ -241,6 +241,16 @@ function Assert-Elevation {
                 @{ Action = 'PendingRebootAudit'; Description = 'Comprehensive reboot detection' }
                 @{ Action = 'PageFileAudit';  Description = 'Page file config + utilization' }
                 @{ Action = 'CPUAudit';       Description = 'CPU topology + utilization' }
+                @{ Action = 'DefenderExclusionAudit'; Description = 'Defender exclusion paths/processes' }
+                @{ Action = 'KerberosAudit';  Description = 'Kerberos tickets + config' }
+                @{ Action = 'DHCPAudit';      Description = 'DHCP client lease details' }
+                @{ Action = 'NUMAAudit';      Description = 'NUMA topology' }
+                @{ Action = 'SymlinkAudit';   Description = 'Symlinks in system directories' }
+                @{ Action = 'StartupScriptAudit'; Description = 'GPO startup/shutdown scripts' }
+                @{ Action = 'SecureChannelAudit'; Description = 'Domain secure channel health' }
+                @{ Action = 'ComObjectAudit'; Description = 'Non-system COM object persistence' }
+                @{ Action = 'FirewallLogAudit'; Description = 'Firewall log analysis + drops' }
+                @{ Action = 'ScheduledRebootAudit'; Description = 'Scheduled reboots + history' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7305,6 +7315,188 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($cpuIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DefenderExclusionAudit' {
+            Write-OutputColor "  Auditing Defender exclusions..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $deIssues = 0; $exclusions = @()
+            try {
+                $prefs = Get-MpPreference -ErrorAction Stop
+                foreach ($p in @($prefs.ExclusionPath)) { if ($p) { $exclusions += @{ Type = 'Path'; Value = "$p" }; $deIssues++ } }
+                foreach ($p in @($prefs.ExclusionProcess)) { if ($p) { $exclusions += @{ Type = 'Process'; Value = "$p" }; $deIssues++ } }
+                foreach ($e in @($prefs.ExclusionExtension)) { if ($e) { $exclusions += @{ Type = 'Extension'; Value = "$e" }; $deIssues++ } }
+                foreach ($ip in @($prefs.ExclusionIpAddress)) { if ($ip) { $exclusions += @{ Type = 'IPAddress'; Value = "$ip" }; $deIssues++ } }
+            } catch { Write-OutputColor "  Defender not available" -color "Info" }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  DEFENDER EXCLUSION AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($exclusions).Count -eq 0) { Write-OutputColor "  │$("  (No exclusions configured)".PadRight(72))│" -color "Success" }
+            else { foreach ($e in $exclusions) { $line = "  [$($e.Type.PadRight(10))] $($e.Value)"; if ($line.Length -gt 72) { $line = $line.Substring(0,69) + "..." }; Write-OutputColor "  │$($line.PadRight(72))│" -color "Warning" } }
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Exclusions: $(@($exclusions).Count)   (review for abuse)".PadRight(72))│" -color $(if ($deIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DefenderExclusionAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Exclusions = @($exclusions).Count; Issues = $deIssues }; Exclusions = $exclusions }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($deIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'KerberosAudit' {
+            Write-OutputColor "  Auditing Kerberos configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $kbIssues = 0; $tickets = @(); $kerbConfig = @{}
+            try { $klistOutput = & klist 2>&1; $klistStr = $klistOutput -join "`n"; $ticketCount = 0; if ($klistStr -match 'Cached Tickets:\s*(\d+)') { $regexMatches = $Matches; $ticketCount = [int]$regexMatches[1] }; $kerbConfig['CachedTickets'] = $ticketCount } catch { }
+            try { $krbReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters' -ErrorAction SilentlyContinue; if ($null -ne $krbReg) { $kerbConfig['MaxTokenSize'] = $krbReg.MaxTokenSize; $kerbConfig['MaxPacketSize'] = $krbReg.MaxPacketSize } } catch { }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  KERBEROS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Cached Tickets: $($kerbConfig['CachedTickets'])".PadRight(72))│" -color "Info"
+            if ($kerbConfig.ContainsKey('MaxTokenSize')) { Write-OutputColor "  │$("  Max Token Size: $($kerbConfig['MaxTokenSize'])".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  Issues: $kbIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'KerberosAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $kbIssues }; Config = $kerbConfig }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($kbIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DHCPAudit' {
+            Write-OutputColor "  Auditing DHCP client configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $dhcpIssues = 0; $leases = @()
+            try { $adapters = @(Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "DHCPEnabled=TRUE" -ErrorAction Stop)
+                foreach ($a in $adapters) { $leases += @{ Description = "$($a.Description)"; DHCPServer = "$($a.DHCPServer)"; IPAddress = if ($null -ne $a.IPAddress) { $a.IPAddress[0] } else { '' }; LeaseObtained = if ($null -ne $a.DHCPLeaseObtained) { $a.DHCPLeaseObtained.ToString("yyyy-MM-ddTHH:mm:ss") } else { '' }; LeaseExpires = if ($null -ne $a.DHCPLeaseExpires) { $a.DHCPLeaseExpires.ToString("yyyy-MM-ddTHH:mm:ss") } else { '' } } }
+            } catch { }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  DHCP AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($leases).Count -eq 0) { Write-OutputColor "  │$("  (No DHCP-enabled adapters)".PadRight(72))│" -color "Info" }
+            else { foreach ($l in $leases) { Write-OutputColor "  │$("  $($l.IPAddress.PadRight(16)) DHCP: $($l.DHCPServer)".PadRight(72))│" -color "Info"; Write-OutputColor "  │$("    Expires: $($l.LeaseExpires)".PadRight(72))│" -color "Info" } }
+            Write-OutputColor "  │$("  DHCP Adapters: $(@($leases).Count)   Issues: $dhcpIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DHCPAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ DHCPAdapters = @($leases).Count; Issues = $dhcpIssues }; Leases = $leases }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($dhcpIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NUMAAudit' {
+            Write-OutputColor "  Auditing NUMA topology..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $numaIssues = 0; $numaNodes = @()
+            try { $nodes = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
+                foreach ($n in $nodes) { $numaNodes += @{ DeviceID = "$($n.DeviceID)"; Cores = $n.NumberOfCores; Logical = $n.NumberOfLogicalProcessors; L2KB = $n.L2CacheSize; L3KB = $n.L3CacheSize; NUMANode = $n.DeviceID -replace 'CPU', '' } }
+            } catch { }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  NUMA AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($n in $numaNodes) { Write-OutputColor "  │$("  $($n.DeviceID): $($n.Cores) cores, $($n.Logical) logical, L2:$($n.L2KB)KB L3:$($n.L3KB)KB".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  NUMA Nodes: $(@($numaNodes).Count)   Issues: $numaIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NUMAAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Nodes = @($numaNodes).Count; Issues = $numaIssues }; Nodes = $numaNodes }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($numaIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SymlinkAudit' {
+            Write-OutputColor "  Auditing symbolic links in system directories..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $slIssues = 0; $symlinks = @()
+            $searchPaths = @("$env:SystemRoot\System32", "$env:SystemRoot\SysWOW64", "$env:ProgramData")
+            foreach ($sp in $searchPaths) { if (Test-Path -LiteralPath $sp) { try { $items = @(Get-ChildItem -LiteralPath $sp -Force -ErrorAction SilentlyContinue | Where-Object { $_.Attributes -match 'ReparsePoint' } | Select-Object -First 20); foreach ($i in $items) { $symlinks += @{ Name = $i.Name; Path = $i.FullName; Target = "$($i.Target)"; ParentDir = $sp }; $slIssues++ } } catch { } } }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SYMLINK AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($symlinks).Count -eq 0) { Write-OutputColor "  │$("  (No symlinks/reparse points found in system dirs)".PadRight(72))│" -color "Success" }
+            else { foreach ($s in ($symlinks | Select-Object -First 15)) { $line = "  $($s.Name)"; if ($line.Length -gt 72) { $line = $line.Substring(0,69) + "..." }; Write-OutputColor "  │$($line.PadRight(72))│" -color "Info" } }
+            Write-OutputColor "  │$("  Symlinks: $(@($symlinks).Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SymlinkAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Symlinks = @($symlinks).Count; Issues = $slIssues }; Symlinks = $symlinks }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($slIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'StartupScriptAudit' {
+            Write-OutputColor "  Auditing GPO startup/logon scripts..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $ssIssues = 0; $scripts = @()
+            $scriptPaths = @( @{ Type = 'MachineStartup'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Scripts\Startup' }; @{ Type = 'MachineShutdown'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Scripts\Shutdown' } )
+            foreach ($sp in $scriptPaths) { if (Test-Path $sp.Path) { try { $subkeys = Get-ChildItem -Path $sp.Path -ErrorAction SilentlyContinue; foreach ($sk in $subkeys) { $innerKeys = Get-ChildItem -Path $sk.PSPath -ErrorAction SilentlyContinue; foreach ($ik in $innerKeys) { $props = Get-ItemProperty -Path $ik.PSPath -ErrorAction SilentlyContinue; if ($null -ne $props -and $null -ne $props.Script) { $scripts += @{ Type = $sp.Type; Script = "$($props.Script)"; Parameters = "$($props.Parameters)" } } } } } catch { } } }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  STARTUP SCRIPT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($scripts).Count -eq 0) { Write-OutputColor "  │$("  (No GPO startup/shutdown scripts configured)".PadRight(72))│" -color "Success" }
+            else { foreach ($s in $scripts) { $line = "  [$($s.Type)] $($s.Script)"; if ($line.Length -gt 72) { $line = $line.Substring(0,69) + "..." }; Write-OutputColor "  │$($line.PadRight(72))│" -color "Info" } }
+            Write-OutputColor "  │$("  Scripts: $(@($scripts).Count)   Issues: $ssIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'StartupScriptAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Scripts = @($scripts).Count; Issues = $ssIssues }; Scripts = $scripts }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($ssIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SecureChannelAudit' {
+            Write-OutputColor "  Auditing domain secure channel..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $scIssues = 0; $scStatus = @{}
+            try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; $scStatus['DomainJoined'] = $cs.PartOfDomain -eq $true; $scStatus['Domain'] = "$($cs.Domain)" } catch { }
+            if ($scStatus['DomainJoined']) {
+                try { $nltest = & nltest /sc_query:$($scStatus['Domain']) 2>&1; $nltestStr = $nltest -join ' '; $scStatus['SecureChannel'] = if ($nltestStr -match 'NERR_Success') { 'OK' } else { 'FAIL' }; if ($scStatus['SecureChannel'] -ne 'OK') { $scIssues++ }; if ($nltestStr -match 'Trusted DC Name\s*(.+?)(?:\s|$)') { $regexMatches = $Matches; $scStatus['TrustedDC'] = $regexMatches[1].Trim() } } catch { $scStatus['SecureChannel'] = 'Error' }
+            } else { $scStatus['SecureChannel'] = 'N/A (not domain-joined)' }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SECURE CHANNEL AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Domain:         $($scStatus['Domain'])".PadRight(72))│" -color "Info"
+            $scColor = if ($scStatus['SecureChannel'] -eq 'OK') { 'Success' } elseif ($scStatus['SecureChannel'] -eq 'FAIL') { 'Error' } else { 'Info' }
+            Write-OutputColor "  │$("  Secure Channel: $($scStatus['SecureChannel'])".PadRight(72))│" -color $scColor
+            if ($scStatus.ContainsKey('TrustedDC')) { Write-OutputColor "  │$("  Trusted DC:     $($scStatus['TrustedDC'])".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  Issues: $scIssues".PadRight(72))│" -color $(if ($scIssues -gt 0) { "Error" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SecureChannelAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $scIssues }; Status = $scStatus }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($scIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ComObjectAudit' {
+            Write-OutputColor "  Auditing COM object persistence..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $coIssues = 0; $comObjects = @()
+            $comPaths = @('HKLM:\SOFTWARE\Classes\CLSID', 'HKCU:\SOFTWARE\Classes\CLSID')
+            foreach ($cp in $comPaths) { if (Test-Path $cp) { try { $keys = Get-ChildItem -Path $cp -ErrorAction SilentlyContinue | Select-Object -First 500; foreach ($k in $keys) { $server = Get-ItemProperty -Path "$($k.PSPath)\InprocServer32" -ErrorAction SilentlyContinue; if ($null -ne $server -and $null -ne $server.'(default)' -and $server.'(default)' -notmatch 'System32|SysWOW64|Windows|Microsoft|Common Files') { $coIssues++; $comObjects += @{ CLSID = $k.PSChildName; Path = "$($server.'(default)')"; Source = $cp } } } } catch { } } }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  COM OBJECT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($comObjects).Count -eq 0) { Write-OutputColor "  │$("  (No non-system COM objects found)".PadRight(72))│" -color "Success" }
+            else { foreach ($c in ($comObjects | Select-Object -First 15)) { $line = "  $($c.Path)"; if ($line.Length -gt 72) { $line = $line.Substring(0,69) + "..." }; Write-OutputColor "  │$($line.PadRight(72))│" -color "Info" } }
+            Write-OutputColor "  │$("  Non-system COM: $(@($comObjects).Count)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ComObjectAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ NonSystemCOM = @($comObjects).Count; Issues = $coIssues }; COMObjects = $comObjects }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($coIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'FirewallLogAudit' {
+            Write-OutputColor "  Auditing firewall logs..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $flIssues = 0; $logStats = @{}; $recentDrops = @()
+            $logPath = "$env:SystemRoot\System32\LogFiles\Firewall\pfirewall.log"
+            $logStats['LogExists'] = Test-Path -LiteralPath $logPath
+            if ($logStats['LogExists']) {
+                try { $logLines = Get-Content -LiteralPath $logPath -Tail 500 -ErrorAction Stop | Where-Object { $_ -notmatch '^#' -and $_ -match '\S' }
+                    $drops = @($logLines | Where-Object { $_ -match '\bDROP\b' }); $allows = @($logLines | Where-Object { $_ -match '\bALLOW\b' })
+                    $logStats['TotalLines'] = @($logLines).Count; $logStats['Drops'] = @($drops).Count; $logStats['Allows'] = @($allows).Count
+                    foreach ($d in ($drops | Select-Object -Last 10)) { if ($d -match '(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s+DROP\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)') { $regexMatches = $Matches; $recentDrops += @{ Date = $regexMatches[1]; Time = $regexMatches[2]; Protocol = $regexMatches[3]; SrcIP = $regexMatches[4]; DstIP = $regexMatches[5]; SrcPort = $regexMatches[6]; DstPort = $regexMatches[7] } } }
+                } catch { }
+            }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  FIREWALL LOG AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Log File: $(if ($logStats['LogExists']) { 'Present' } else { 'Not found (logging may be disabled)' })".PadRight(72))│" -color $(if ($logStats['LogExists']) { "Success" } else { "Warning" })
+            if ($logStats['LogExists'] -and $logStats.ContainsKey('Drops')) { Write-OutputColor "  │$("  Recent: $($logStats['Drops']) drops, $($logStats['Allows']) allows (last 500 lines)".PadRight(72))│" -color "Info" }
+            if (@($recentDrops).Count -gt 0) { Write-OutputColor "  │$("  RECENT DROPS".PadRight(72))│" -color "Warning"; foreach ($d in ($recentDrops | Select-Object -First 5)) { Write-OutputColor "  │$("  $($d.SrcIP):$($d.SrcPort) -> $($d.DstIP):$($d.DstPort) ($($d.Protocol))".PadRight(72))│" -color "Warning" } }
+            Write-OutputColor "  │$("  Issues: $flIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'FirewallLogAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ LogExists = $logStats['LogExists']; Drops = $logStats['Drops']; Allows = $logStats['Allows']; Issues = $flIssues }; RecentDrops = $recentDrops }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($flIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ScheduledRebootAudit' {
+            Write-OutputColor "  Auditing scheduled reboots..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $srIssues = 0; $rebootTasks = @(); $rebootEvents = @()
+            try { $tasks = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -match 'reboot|restart|shutdown' -and $_.State -ne 'Disabled' }); foreach ($t in $tasks) { $rebootTasks += @{ Name = $t.TaskName; Path = $t.TaskPath; State = "$($t.State)" } } } catch { }
+            try { $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = @(1074, 6006, 6009) } -MaxEvents 10 -ErrorAction SilentlyContinue)
+                foreach ($e in $events) { $rebootEvents += @{ Time = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); EventId = $e.Id; Type = switch ($e.Id) { 1074 { 'User-initiated restart' } 6006 { 'Clean shutdown' } 6009 { 'Boot' } default { "Event $($e.Id)" } } } }
+            } catch { }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  SCHEDULED REBOOT AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Reboot-related tasks: $(@($rebootTasks).Count)".PadRight(72))│" -color "Info"
+            foreach ($t in $rebootTasks) { Write-OutputColor "  │$("  $($t.Name) [$($t.State)]".PadRight(72))│" -color "Info" }
+            if (@($rebootEvents).Count -gt 0) { Write-OutputColor "  │$("  RECENT REBOOT EVENTS".PadRight(72))│" -color "Info"; foreach ($e in $rebootEvents) { Write-OutputColor "  │$("  $($e.Time)  $($e.Type)".PadRight(72))│" -color "Info" } }
+            Write-OutputColor "  │$("  Issues: $srIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ScheduledRebootAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ RebootTasks = @($rebootTasks).Count; RebootEvents = @($rebootEvents).Count; Issues = $srIssues }; Tasks = $rebootTasks; Events = $rebootEvents }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($srIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

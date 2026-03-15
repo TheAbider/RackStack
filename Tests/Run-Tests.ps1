@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.62.0
+    Automated Test Runner for RackStack v1.63.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11040,6 +11040,14 @@ try {
     Write-TestResult "50-EntryPoint: CPUAudit JSON has Processors" ($mod50 -match "'CPUAudit'[\s\S]{0,6000}Processors\s*=")
     Write-TestResult "50-EntryPoint: CPUAudit JSON output" ($mod50 -match "'CPUAudit'[\s\S]{0,7000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: CPUAudit Action field" ($mod50 -match "Action\s*=\s*'CPUAudit'")
+
+    # v1.63.0 — Century mark: 10 new actions
+    foreach ($action in @('DefenderExclusionAudit','KerberosAudit','DHCPAudit','NUMAAudit','SymlinkAudit','StartupScriptAudit','SecureChannelAudit','ComObjectAudit','FirewallLogAudit','ScheduledRebootAudit')) {
+        Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
+        Write-TestResult "50-EntryPoint: $action case exists" ($mod50 -match "'$action'\s*\{")
+        Write-TestResult "50-EntryPoint: $action JSON output" ($mod50 -match "'$action'[\s\S]{0,8000}ConvertTo-Json")
+        Write-TestResult "50-EntryPoint: $action Action field" ($mod50 -match "Action\s*=\s*'$action'")
+    }
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

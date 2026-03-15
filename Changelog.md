@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## v1.63.0 -- 100 CLI ACTIONS
+
+- **CENTURY MARK: 10 new CLI actions in one release, reaching 100 total.**
+- **New Feature:** DefenderExclusionAudit — audits Windows Defender exclusion paths, processes, extensions, and IPs. Flags exclusions for review (attackers abuse these for evasion).
+- **New Feature:** KerberosAudit — audits Kerberos configuration: cached ticket count, max token/packet size from registry.
+- **New Feature:** DHCPAudit — audits DHCP client leases: server address, IP, lease obtained/expiry times per adapter.
+- **New Feature:** NUMAAudit — audits NUMA topology: cores, logical processors, L2/L3 cache per processor socket.
+- **New Feature:** SymlinkAudit — audits symbolic links and reparse points in System32, SysWOW64, ProgramData.
+- **New Feature:** StartupScriptAudit — audits GPO startup/shutdown scripts from Group Policy State registry.
+- **New Feature:** SecureChannelAudit — audits domain secure channel health via nltest. Reports trusted DC.
+- **New Feature:** ComObjectAudit — audits non-system COM object registrations (persistence detection).
+- **New Feature:** FirewallLogAudit — analyzes Windows Firewall log file. Reports drop/allow counts and recent dropped connections.
+- **New Feature:** ScheduledRebootAudit — audits reboot-related scheduled tasks and recent reboot/shutdown events (1074/6006/6009).
+- **Improved:** README Actions section reformatted as categorized table for readability.
+- 65 modules, 3819 tests
+
 ## v1.62.0
 
 - **New Feature:** ProxyAudit CLI action — `RackStack.exe -Action ProxyAudit -OutputFormat JSON` audits proxy configuration across IE/system proxy, WinHTTP proxy, and environment variables (HTTP_PROXY/HTTPS_PROXY/NO_PROXY). Reports PAC URLs and bypass lists (50-EntryPoint).
