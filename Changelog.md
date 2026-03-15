@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.65.0
+
+- **New Feature:** ARPTableAudit CLI action — audits ARP neighbor cache via Get-NetNeighbor. Reports reachable, stale, and permanent entries per interface (50-EntryPoint).
+- **New Feature:** LocaleAudit CLI action — audits system locale, UI language, timezone, date format, number format, and input languages (50-EntryPoint).
+- **New Feature:** TaskHistoryAudit CLI action — audits scheduled task execution history from TaskScheduler event log (events 102/201). Reports recent completions with result codes, flags failures (50-EntryPoint).
+- **New Feature:** NTFSAudit CLI action — audits NTFS volume health and features. Reports volume health status and detects compressed/EFS-encrypted files. Flags unhealthy volumes (50-EntryPoint).
+- 65 modules, 3851 tests
+
 ## v1.64.0
 
 - **New Feature:** PowerShellAudit — audits PS execution policy, language mode, script block logging, transcription, module logging, and PS2 engine status. Flags constrained language mode and enabled PS2 engine.

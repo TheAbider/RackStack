@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.64.0
+    Automated Test Runner for RackStack v1.65.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11042,7 +11042,7 @@ try {
     Write-TestResult "50-EntryPoint: CPUAudit Action field" ($mod50 -match "Action\s*=\s*'CPUAudit'")
 
     # v1.63.0 — Century mark: 10 new actions
-    foreach ($action in @('DefenderExclusionAudit','KerberosAudit','DHCPAudit','NUMAAudit','SymlinkAudit','StartupScriptAudit','SecureChannelAudit','ComObjectAudit','FirewallLogAudit','ScheduledRebootAudit','PowerShellAudit','RouteTableAudit','TokenPrivilegeAudit','WindowsCapabilityAudit')) {
+    foreach ($action in @('DefenderExclusionAudit','KerberosAudit','DHCPAudit','NUMAAudit','SymlinkAudit','StartupScriptAudit','SecureChannelAudit','ComObjectAudit','FirewallLogAudit','ScheduledRebootAudit','PowerShellAudit','RouteTableAudit','TokenPrivilegeAudit','WindowsCapabilityAudit','ARPTableAudit','LocaleAudit','TaskHistoryAudit','NTFSAudit')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
         Write-TestResult "50-EntryPoint: $action case exists" ($mod50 -match "'$action'\s*\{")
         Write-TestResult "50-EntryPoint: $action JSON output" ($mod50 -match "'$action'[\s\S]{0,8000}ConvertTo-Json")

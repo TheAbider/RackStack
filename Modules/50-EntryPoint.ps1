@@ -255,6 +255,10 @@ function Assert-Elevation {
                 @{ Action = 'RouteTableAudit'; Description = 'Full routing table' }
                 @{ Action = 'TokenPrivilegeAudit'; Description = 'Current process privileges' }
                 @{ Action = 'WindowsCapabilityAudit'; Description = 'Installed capabilities + RSAT' }
+                @{ Action = 'ARPTableAudit';  Description = 'ARP neighbor cache' }
+                @{ Action = 'LocaleAudit';    Description = 'Language + region + timezone' }
+                @{ Action = 'TaskHistoryAudit'; Description = 'Scheduled task run history' }
+                @{ Action = 'NTFSAudit';      Description = 'NTFS volume health + features' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7591,6 +7595,104 @@ function Invoke-CLIAction {
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'WindowsCapabilityAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Installed = @($capabilities).Count; RSAT = @($rsatCaps).Count; Issues = $wcIssues }; Capabilities = $capabilities }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($wcIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ARPTableAudit' {
+            Write-OutputColor "  Auditing ARP table..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $arpIssues = 0; $arpEntries = @()
+            try { $neighbors = @(Get-NetNeighbor -ErrorAction Stop | Where-Object { $_.State -ne 'Unreachable' -and $_.IPAddress -notmatch '^ff|^224|^239' })
+                foreach ($n in $neighbors) { $arpEntries += @{ IPAddress = "$($n.IPAddress)"; LinkLayerAddress = "$($n.LinkLayerAddress)"; State = "$($n.State)"; Interface = "$($n.InterfaceAlias)"; AddressFamily = "$($n.AddressFamily)" } }
+            } catch { Write-OutputColor "  WARNING: Could not query ARP table" -color "Warning" }
+            $staleCount = @($arpEntries | Where-Object { $_.State -eq 'Stale' }).Count
+            $reachable = @($arpEntries | Where-Object { $_.State -eq 'Reachable' }).Count
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  ARP TABLE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($a in ($arpEntries | Where-Object { $_.AddressFamily -eq 'IPv4' } | Select-Object -First 20)) { Write-OutputColor "  │$("  $($a.IPAddress.PadRight(17)) $($a.LinkLayerAddress.PadRight(20)) $($a.State)".PadRight(72))│" -color "Info" }
+            Write-OutputColor "  │$("  Entries: $(@($arpEntries).Count)   Reachable: $reachable   Stale: $staleCount".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ARPTableAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Entries = @($arpEntries).Count; Reachable = $reachable; Stale = $staleCount; Issues = $arpIssues }; Neighbors = $arpEntries }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($arpIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'LocaleAudit' {
+            Write-OutputColor "  Auditing locale configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $lcIssues = 0; $localeConfig = @{}
+            try { $culture = [System.Globalization.CultureInfo]::CurrentCulture; $uiCulture = [System.Globalization.CultureInfo]::CurrentUICulture
+                $localeConfig['SystemLocale'] = "$($culture.Name)"
+                $localeConfig['DisplayName'] = "$($culture.DisplayName)"
+                $localeConfig['UILanguage'] = "$($uiCulture.Name)"
+                $localeConfig['UIDisplayName'] = "$($uiCulture.DisplayName)"
+            } catch { }
+            try { $tz = Get-TimeZone -ErrorAction Stop; $localeConfig['TimeZone'] = $tz.Id; $localeConfig['UTCOffset'] = "$($tz.BaseUtcOffset)" } catch { }
+            try { $kbLayouts = @(Get-WinUserLanguageList -ErrorAction SilentlyContinue); $localeConfig['InputLanguages'] = @($kbLayouts | ForEach-Object { "$($_.LanguageTag)" }) } catch { $localeConfig['InputLanguages'] = @() }
+            $localeConfig['DateFormat'] = [System.Globalization.CultureInfo]::CurrentCulture.DateTimeFormat.ShortDatePattern
+            $localeConfig['NumberDecimal'] = [System.Globalization.CultureInfo]::CurrentCulture.NumberFormat.NumberDecimalSeparator
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  LOCALE AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  System Locale: $($localeConfig['SystemLocale']) ($($localeConfig['DisplayName']))".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  UI Language:   $($localeConfig['UILanguage']) ($($localeConfig['UIDisplayName']))".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Time Zone:     $($localeConfig['TimeZone']) ($($localeConfig['UTCOffset']))".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Date Format:   $($localeConfig['DateFormat'])   Decimal: $($localeConfig['NumberDecimal'])".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  Issues: $lcIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LocaleAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $lcIssues }; Locale = $localeConfig }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($lcIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TaskHistoryAudit' {
+            Write-OutputColor "  Auditing scheduled task history..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $thIssues = 0; $taskHistory = @()
+            try { $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-TaskScheduler/Operational'; Id = @(102, 201) } -MaxEvents 50 -ErrorAction SilentlyContinue)
+                foreach ($e in $events) {
+                    $taskName = ''; $resultCode = ''
+                    if ($e.Id -eq 102) { if ($e.Properties.Count -ge 2) { $taskName = "$($e.Properties[0].Value)"; $resultCode = "$($e.Properties[1].Value)" } }
+                    elseif ($e.Id -eq 201) { if ($e.Properties.Count -ge 2) { $taskName = "$($e.Properties[0].Value)"; $resultCode = "$($e.Properties[1].Value)" } }
+                    if ($taskName) { $health = if ($resultCode -eq '0' -or $resultCode -eq '267009' -or $resultCode -eq '267014') { 'OK' } else { 'FAIL' }
+                        if ($health -eq 'FAIL') { $thIssues++ }
+                        $taskHistory += @{ Time = $e.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss"); TaskName = $taskName; ResultCode = $resultCode; Health = $health } }
+                }
+            } catch { }
+            $failedTasks = @($taskHistory | Where-Object { $_.Health -eq 'FAIL' })
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  TASK HISTORY AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            if (@($failedTasks).Count -gt 0) { Write-OutputColor "  │$("  FAILED TASKS ($(@($failedTasks).Count))".PadRight(72))│" -color "Warning"
+                foreach ($t in ($failedTasks | Select-Object -First 10)) { $tName = if ($t.TaskName.Length -gt 40) { $t.TaskName.Substring(0,37) + "..." } else { $t.TaskName }; Write-OutputColor "  │$("  $($t.Time.Substring(0,16))  $tName  RC:$($t.ResultCode)".PadRight(72))│" -color "Warning" } }
+            Write-OutputColor "  │$("  Recent: $(@($taskHistory).Count)   Failed: $(@($failedTasks).Count)".PadRight(72))│" -color $(if ($thIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'TaskHistoryAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ RecentTasks = @($taskHistory).Count; Failed = @($failedTasks).Count; Issues = $thIssues }; History = $taskHistory }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($thIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NTFSAudit' {
+            Write-OutputColor "  Auditing NTFS features..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $ntfsIssues = 0; $volumeInfo = @()
+            try { $vols = @(Get-Volume -ErrorAction Stop | Where-Object { $_.FileSystem -eq 'NTFS' -and $null -ne $_.DriveLetter -and $_.DriveLetter -ne '' })
+                foreach ($v in $vols) {
+                    $compressed = $false; $encrypted = $false
+                    $drivePath = "$($v.DriveLetter):\"
+                    if (Test-Path -LiteralPath $drivePath) {
+                        try { $compFiles = @(Get-ChildItem -LiteralPath $drivePath -Recurse -Force -ErrorAction SilentlyContinue -Attributes Compressed | Select-Object -First 1); $compressed = @($compFiles).Count -gt 0 } catch { }
+                        try { $encFiles = @(Get-ChildItem -LiteralPath $drivePath -Recurse -Force -ErrorAction SilentlyContinue -Attributes Encrypted | Select-Object -First 1); $encrypted = @($encFiles).Count -gt 0 } catch { }
+                    }
+                    $volumeInfo += @{ DriveLetter = "$($v.DriveLetter):"; FileSystem = "$($v.FileSystem)"; SizeGB = [math]::Round($v.Size / 1GB, 1); Label = "$($v.FileSystemLabel)"; HasCompressed = $compressed; HasEncrypted = $encrypted; HealthStatus = "$($v.HealthStatus)" }
+                    if ("$($v.HealthStatus)" -ne 'Healthy') { $ntfsIssues++ }
+                }
+            } catch { Write-OutputColor "  WARNING: Could not query volumes" -color "Warning" }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  NTFS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($vol in $volumeInfo) {
+                $flags = @(); if ($vol.HasCompressed) { $flags += "COMP" }; if ($vol.HasEncrypted) { $flags += "EFS" }
+                $flagStr = if (@($flags).Count -gt 0) { "[$($flags -join ',')]" } else { "" }
+                Write-OutputColor "  │$("  $($vol.DriveLetter) $($vol.Label.PadRight(15)) $($vol.SizeGB)GB  $($vol.HealthStatus)  $flagStr".PadRight(72))│" -color $(if ($vol.HealthStatus -eq 'Healthy') { "Success" } else { "Error" })
+            }
+            Write-OutputColor "  │$("  NTFS Volumes: $(@($volumeInfo).Count)   Issues: $ntfsIssues".PadRight(72))│" -color $(if ($ntfsIssues -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NTFSAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Volumes = @($volumeInfo).Count; Issues = $ntfsIssues }; Volumes = $volumeInfo }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
+            if ($ntfsIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
