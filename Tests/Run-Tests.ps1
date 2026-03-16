@@ -8926,40 +8926,21 @@ $gotchaPatterns = @(
     @{ Pattern = '\$ver:';             Description = 'Parse error pattern $ver: (use ${ver}:)' }
 )
 
-foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
-    $lines = Get-Content -LiteralPath $modFile.FullName
-    for ($lineNum = 0; $lineNum -lt $lines.Count; $lineNum++) {
-        $line = $lines[$lineNum]
-        # Skip comment lines
-        if ($line -match '^\s*#') { continue }
-
-        foreach ($gotcha in $gotchaPatterns) {
-            if ($line -match $gotcha.Pattern) {
-                # Check exclusion pattern if defined
-                if ($gotcha.Exclude -and $line -match $gotcha.Exclude) { continue }
-                Write-TestResult "Gotcha: $($modFile.Name):$($lineNum + 1) — $($gotcha.Description)" $false "Line: $($line.Trim())"
-            }
-        }
-    }
-}
-
-# If no gotchas found, report a pass
+# Single pass: read each module once, check all patterns, track if any found
 $gotchaFound = $false
 foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
-    $lines = Get-Content -LiteralPath $modFile.FullName
-    for ($lineNum = 0; $lineNum -lt $lines.Count; $lineNum++) {
-        $line = $lines[$lineNum]
+    $lineNum = 0
+    foreach ($line in (Get-Content -LiteralPath $modFile.FullName)) {
+        $lineNum++
         if ($line -match '^\s*#') { continue }
         foreach ($gotcha in $gotchaPatterns) {
             if ($line -match $gotcha.Pattern) {
                 if ($gotcha.Exclude -and $line -match $gotcha.Exclude) { continue }
+                Write-TestResult "Gotcha: $($modFile.Name):$lineNum — $($gotcha.Description)" $false "Line: $($line.Trim())"
                 $gotchaFound = $true
-                break
             }
         }
-        if ($gotchaFound) { break }
     }
-    if ($gotchaFound) { break }
 }
 if (-not $gotchaFound) {
     Write-TestResult "No known gotcha patterns found in any module" $true
