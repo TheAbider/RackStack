@@ -505,7 +505,7 @@ try {
 
 # 6b. Monolithic file contains matching version
 try {
-    $monoContent = Get-Content $monolithicPath -Raw
+    $monoContent = if ($monolithicContent) { $monolithicContent } else { Get-Content $monolithicPath -Raw }
     $escapedVer = [regex]::Escape($_testScriptVersion)
     $monoHasVersion = $monoContent -match ('\$script:ScriptVersion\s*=\s*"' + $escapedVer + '"')
     Write-TestResult "Monolithic contains ScriptVersion = '$_testScriptVersion'" $monoHasVersion
@@ -568,7 +568,7 @@ if (-not $Quick) {
 Write-SectionHeader "SECTION 8: MONOLITHIC/MODULAR SYNC CHECK"
 
 try {
-    $monoContent = Get-Content $monolithicPath -Raw -ErrorAction Stop
+    $monoContent = if ($monolithicContent) { $monolithicContent } else { Get-Content $monolithicPath -Raw -ErrorAction Stop }
     $syncErrors = @()
     $syncChecked = 0
 
@@ -2513,7 +2513,7 @@ try {
 
 # Monolithic has FILESERVER DOWNLOAD region (not NEXTCLOUD)
 try {
-    $monoRaw = Get-Content $monolithicPath -Raw
+    $monoRaw = if ($monolithicContent) { $monolithicContent } else { Get-Content $monolithicPath -Raw }
     $hasAbider = $monoRaw -match '#region\s+=+\s+FILESERVER DOWNLOAD'
     $hasNextcloud = $monoRaw -match '#region\s+=+\s+NEXTCLOUD DOWNLOAD'
     $pass = $hasAbider -and -not $hasNextcloud
@@ -2573,7 +2573,7 @@ try {
 
 # No credentials in monolithic script
 try {
-    $monoRaw2 = Get-Content $monolithicPath -Raw
+    $monoRaw2 = if ($monolithicContent) { $monolithicContent } else { Get-Content $monolithicPath -Raw }
     $credLeaks = @()
     if ($credPatterns.Count -gt 0) {
         foreach ($pat in $credPatterns) {
@@ -2763,7 +2763,7 @@ try {
 
 # --- 35j: Monolithic/modular sync for FileServer functions ---
 try {
-    $monoRaw3 = Get-Content $monolithicPath -Raw
+    $monoRaw3 = if ($monolithicContent) { $monolithicContent } else { Get-Content $monolithicPath -Raw }
     $modContent = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
 
     # Check all 4 functions exist in both
@@ -2783,7 +2783,7 @@ try {
 
 # Check integrity validation code exists in both monolithic and modules
 try {
-    $monoRaw4 = Get-Content $monolithicPath -Raw
+    $monoRaw4 = if ($monolithicContent) { $monolithicContent } else { Get-Content $monolithicPath -Raw }
     $isoMod = Get-Content (Join-Path $modulesPath "42-ISODownload.ps1") -Raw
     $vhdMod = Get-Content (Join-Path $modulesPath "41-VHDManagement.ps1") -Raw
     $agentMod = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
@@ -8823,7 +8823,8 @@ Write-SectionHeader "SECTION 144: FUNCTION PARITY (modular vs monolithic)"
 
 if (Test-Path $monolithicPath) {
     try {
-        $monoContentParity = Get-Content $monolithicPath -Raw -ErrorAction Stop
+        # Reuse already-loaded monolithic content to prevent OOM on CI runners
+        $monoContentParity = if ($monolithicContent) { $monolithicContent } else { Get-Content $monolithicPath -Raw -ErrorAction Stop }
         $modularFunctions = @{}
         $monolithicFunctions = @{}
 
