@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.75.0
+
+- **New CLI Action:** `VirtualSwitchAudit` — audit all Hyper-V virtual switches, SET team members with link status/speed, and management OS vNICs with VLAN assignments.
+- **New CLI Action:** `MPIOPathAudit` — audit MPIO device paths (flags single-path devices), claimed hardware IDs, and global load balance policy.
+- **New CLI Action:** `ServiceRecoveryAudit` — audit auto-start running services for missing recovery actions. Flags services that won't auto-restart on failure.
+- 117 CLI actions, 65 modules
+
 ## v1.74.0
 
 - **New Feature:** `CLIDefaults` section in `defaults.json` — set org-wide default OutputFormat, DefaultTier, and QuietMode for CLI actions. Operators no longer need to pass `-OutputFormat JSON` every time if their workflow always uses JSON.

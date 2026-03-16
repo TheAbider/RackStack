@@ -268,6 +268,9 @@ function Assert-Elevation {
                 @{ Action = 'WindowsUpdateAudit'; Description = 'List pending updates (no install)' }
                 @{ Action = 'ClusterQuorumAudit'; Description = 'Cluster quorum config + witness health' }
                 @{ Action = 'S2DAudit';         Description = 'Storage Spaces Direct health + cache' }
+                @{ Action = 'VirtualSwitchAudit'; Description = 'Hyper-V virtual switch + vNIC audit' }
+                @{ Action = 'MPIOPathAudit';   Description = 'MPIO path health + load balance policy' }
+                @{ Action = 'ServiceRecoveryAudit'; Description = 'Service recovery actions audit' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8062,6 +8065,111 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($s2dIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'VirtualSwitchAudit' {
+            Write-OutputColor "  Auditing Hyper-V virtual switches..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $vsIssues = 0
+            $switches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
+            if ($switches.Count -eq 0) {
+                Write-OutputColor "  No virtual switches found." -color "Info"
+            }
+            else {
+                foreach ($sw in $switches) {
+                    $setEnabled = $sw.EmbeddedTeamingEnabled
+                    $swColor = "Success"
+                    Write-OutputColor "  Switch: $($sw.Name)  Type: $($sw.SwitchType)  SET: $setEnabled" -color $swColor
+                    if ($setEnabled) {
+                        $teamMembers = @(Get-VMSwitchTeam -VMSwitch $sw -ErrorAction SilentlyContinue | ForEach-Object { $_.NetAdapterInterfaceDescription })
+                        foreach ($member in $teamMembers) {
+                            $nic = Get-NetAdapter -InterfaceDescription $member -ErrorAction SilentlyContinue
+                            $status = if ($nic) { $nic.Status } else { "Unknown" }
+                            $color = if ($status -eq "Up") { "Success" } else { "Error" }
+                            Write-OutputColor "    Member: $member — $status $(if ($nic) { "($($nic.LinkSpeed))" })" -color $color
+                            if ($status -ne "Up") { $vsIssues++ }
+                        }
+                    }
+                    # List vNICs on this switch
+                    $vnics = @(Get-VMNetworkAdapter -ManagementOS -SwitchName $sw.Name -ErrorAction SilentlyContinue)
+                    foreach ($vnic in $vnics) {
+                        Write-OutputColor "    vNIC: $($vnic.Name)  Status: $($vnic.Status)  VLAN: $(if ($vnic.VlanSetting.AccessVlanId) { $vnic.VlanSetting.AccessVlanId } else { 'None' })" -color "Info"
+                    }
+                }
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VirtualSwitchAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Switches = $switches.Count; Issues = $vsIssues } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($vsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'MPIOPathAudit' {
+            Write-OutputColor "  Auditing MPIO paths..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $mpioIssues = 0
+            $mpioDisks = @(Get-MSDSMAutomaticClaimSettings -ErrorAction SilentlyContinue)
+            $supportedHW = @(Get-MSDSMSupportedHW -ErrorAction SilentlyContinue)
+            Write-OutputColor "  Claimed HW IDs: $($supportedHW.Count)" -color "Info"
+            # Check MPIO disks
+            $mpioDevices = @(Get-WmiObject -Namespace root\wmi -Class MPIO_DISK_INFO -ErrorAction SilentlyContinue)
+            if ($mpioDevices.Count -eq 0) {
+                Write-OutputColor "  No MPIO devices found." -color "Info"
+            }
+            else {
+                Write-OutputColor "  MPIO Devices: $($mpioDevices.Count)" -color "Success"
+                foreach ($dev in $mpioDevices) {
+                    $pathCount = if ($dev.NumberPaths) { $dev.NumberPaths } else { 0 }
+                    $color = if ($pathCount -ge 2) { "Success" } elseif ($pathCount -eq 1) { "Warning" } else { "Error" }
+                    $devName = if ($dev.DeviceName) { $dev.DeviceName } else { "Unknown" }
+                    if ($devName.Length -gt 50) { $devName = $devName.Substring(0, 47) + "..." }
+                    Write-OutputColor "    $devName — Paths: $pathCount" -color $color
+                    if ($pathCount -lt 2) { $mpioIssues++ }
+                }
+            }
+            # Check load balance policy
+            $lbPolicy = (Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue)
+            if ($lbPolicy) {
+                Write-OutputColor "  Global LB Policy: $lbPolicy" -color "Info"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'MPIOPathAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ ClaimedHW = $supportedHW.Count; Devices = $mpioDevices.Count; Issues = $mpioIssues; LBPolicy = "$lbPolicy" } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($mpioIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ServiceRecoveryAudit' {
+            Write-OutputColor "  Auditing service recovery actions..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $svcIssues = 0
+            $services = @(Get-WmiObject Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.StartMode -eq 'Auto' -and $_.State -eq 'Running' })
+            $noRecovery = @()
+            foreach ($svc in $services) {
+                try {
+                    $recoveryInfo = sc.exe qfailure $svc.Name 2>$null
+                    $actions = ($recoveryInfo | Select-String "FAILURE_ACTIONS" -ErrorAction SilentlyContinue)
+                    $resetPeriod = ($recoveryInfo | Where-Object { $_ -match "RESET_PERIOD" }) -replace '.*:\s*', ''
+                    $firstAction = ($recoveryInfo | Where-Object { $_ -match "FIRST\s" }) -replace '.*--\s*', ''
+                    if (-not $firstAction -or $firstAction -match "No Action|Take No Action") {
+                        $noRecovery += @{ Name = $svc.Name; DisplayName = $svc.DisplayName; FirstAction = "$firstAction" }
+                    }
+                }
+                catch { }
+            }
+            if ($noRecovery.Count -gt 0) {
+                Write-OutputColor "  Services with NO recovery action ($($noRecovery.Count)):" -color "Warning"
+                foreach ($nr in $noRecovery | Select-Object -First 20) {
+                    Write-OutputColor "    $($nr.DisplayName) ($($nr.Name))" -color "Warning"
+                }
+                if ($noRecovery.Count -gt 20) { Write-OutputColor "    ... and $($noRecovery.Count - 20) more" -color "Info" }
+                $svcIssues = $noRecovery.Count
+            }
+            else {
+                Write-OutputColor "  All $($services.Count) auto-start running services have recovery actions configured." -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ServiceRecoveryAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ TotalAutoServices = $services.Count; NoRecovery = $noRecovery.Count; Issues = $svcIssues }; ServicesWithoutRecovery = @($noRecovery | Select-Object -First 50) }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($svcIssues -gt 5) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
