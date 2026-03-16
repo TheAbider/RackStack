@@ -6132,8 +6132,8 @@ try {
     Write-TestResult "36-BatchConfig: Show-BatchConfigMenu exists" ($bcContent -match 'function\s+Show-BatchConfigMenu')
     Write-TestResult "36-BatchConfig: Export-BatchConfigFromState exists" ($bcContent -match 'function\s+Export-BatchConfigFromState')
 
-    # EntryPoint: totalSteps is 24
-    Write-TestResult "50-EntryPoint: totalSteps is 24" ($epContent -match 'totalSteps\s*=\s*24')
+    # EntryPoint: totalSteps is 26 (24 original + Win11Cleanup + OSTheme)
+    Write-TestResult "50-EntryPoint: totalSteps is 26" ($epContent -match 'totalSteps\s*=\s*26')
 
     # EntryPoint: step 14 mentions Server Role Template
     Write-TestResult "50-EntryPoint: step 14 is Server Role Template" ($epContent -match '14.*Server Role Template|14.*ServerRoleTemplate')
@@ -6425,7 +6425,7 @@ try {
     $batchContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
     Write-TestResult "50-EntryPoint: batch has CustomVNICs step" ($batchContent -match 'CustomVNICs')
     Write-TestResult "50-EntryPoint: batch step creates vNICs on SET" ($batchContent -match 'Custom vNICs[\s\S]*?Add-VMNetworkAdapter -ManagementOS')
-    Write-TestResult "50-EntryPoint: totalSteps is 24" ($batchContent -match '\$totalSteps = 24')
+    Write-TestResult "50-EntryPoint: totalSteps is 26" ($batchContent -match '\$totalSteps = 26')
 
     # Batch template has CustomVNICs
     $templateContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
