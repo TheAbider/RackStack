@@ -8841,10 +8841,11 @@ if (Test-Path $monolithicPath) {
             }
         }
 
-        # Parse all functions from monolithic
-        $monoFuncMatches = [regex]::Matches($monoContentParity, '(?m)^\s*function\s+([\w-]+)')
-        foreach ($mfm in $monoFuncMatches) {
-            $monolithicFunctions[$mfm.Groups[1].Value] = $true
+        # Parse all functions from monolithic (line-by-line to avoid regex engine OOM on 62K+ lines)
+        foreach ($line in $monoContentParity -split "`n") {
+            if ($line -match '^\s*function\s+([\w-]+)') {
+                $regexMatches = $matches
+                $monolithicFunctions[$regexMatches[1]] = $true
         }
 
         # Functions in modular but NOT in monolithic (sync failure)
