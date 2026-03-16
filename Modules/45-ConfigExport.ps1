@@ -2521,22 +2521,27 @@ function Test-WatchThresholds {
         }
     }
 
+    # Query Win32_OperatingSystem once for memory + uptime checks (avoid duplicate CIM query)
+    $watchOS = $null
+    if (($Thresholds.Memory -and $null -ne $Thresholds.Memory.MaxPercent) -or ($Thresholds.Uptime -and $null -ne $Thresholds.Uptime.MaxDays)) {
+        try {
+            $osCim = Invoke-WithTimeout -ScriptBlock {
+                Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Memory/uptime check"
+            if (-not $osCim.TimedOut) { $watchOS = $osCim.Result }
+        } catch { }
+    }
+
     # Memory check
     if ($Thresholds.Memory -and $null -ne $Thresholds.Memory.MaxPercent) {
         $memVal = $null
-        try {
-            $memCim = Invoke-WithTimeout -ScriptBlock {
-                Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-            } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Memory check"
-            if (-not $memCim.TimedOut -and $null -ne $memCim.Result) {
-                $os = $memCim.Result
-                $totalMB = $os.TotalVisibleMemorySize / 1024
-                $freeMB = $os.FreePhysicalMemory / 1024
-                if ($totalMB -gt 0) {
-                    $memVal = [math]::Round((($totalMB - $freeMB) / $totalMB) * 100, 1)
-                }
+        if ($null -ne $watchOS) {
+            $totalMB = $watchOS.TotalVisibleMemorySize / 1024
+            $freeMB = $watchOS.FreePhysicalMemory / 1024
+            if ($totalMB -gt 0) {
+                $memVal = [math]::Round((($totalMB - $freeMB) / $totalMB) * 100, 1)
             }
-        } catch { }
+        }
         if ($null -ne $memVal) {
             $status = if ($memVal -gt $Thresholds.Memory.MaxPercent) { "ALERT" } else { "OK" }
             $checks.Add(@{ Category = "Memory"; Check = "Memory usage"; Value = $memVal; Threshold = $Thresholds.Memory.MaxPercent; Unit = "%"; Status = $status })
@@ -2561,18 +2566,13 @@ function Test-WatchThresholds {
         } catch { }
     }
 
-    # Uptime check
+    # Uptime check (reuses $watchOS from memory check)
     if ($Thresholds.Uptime -and $null -ne $Thresholds.Uptime.MaxDays) {
-        try {
-            $uptimeCim = Invoke-WithTimeout -ScriptBlock {
-                (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).LastBootUpTime
-            } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Uptime check"
-            if (-not $uptimeCim.TimedOut -and $null -ne $uptimeCim.Result) {
-                $uptimeDays = [math]::Round(((Get-Date) - $uptimeCim.Result).TotalDays, 1)
-                $status = if ($uptimeDays -gt $Thresholds.Uptime.MaxDays) { "ALERT" } else { "OK" }
-                $checks.Add(@{ Category = "Uptime"; Check = "Days since reboot"; Value = $uptimeDays; Threshold = $Thresholds.Uptime.MaxDays; Unit = "days"; Status = $status })
-            }
-        } catch { }
+        if ($null -ne $watchOS -and $null -ne $watchOS.LastBootUpTime) {
+            $uptimeDays = [math]::Round(((Get-Date) - $watchOS.LastBootUpTime).TotalDays, 1)
+            $status = if ($uptimeDays -gt $Thresholds.Uptime.MaxDays) { "ALERT" } else { "OK" }
+            $checks.Add(@{ Category = "Uptime"; Check = "Days since reboot"; Value = $uptimeDays; Threshold = $Thresholds.Uptime.MaxDays; Unit = "days"; Status = $status })
+        }
     }
 
     # Certificate check

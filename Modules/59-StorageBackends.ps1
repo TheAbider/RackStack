@@ -136,7 +136,9 @@ function Get-DetectedStorageBackend {
         $s2dEnabled = Get-ClusterS2D -ErrorAction Stop
         if ($s2dEnabled -and $s2dEnabled.State -eq "Enabled") { return "S2D" }
     }
-    catch { }
+    catch {
+        # S2D cmdlet not available or cluster not configured — continue detection
+    }
 
     # Check for FC HBAs
     $fcAdapters = @(Get-InitiatorPort -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionType -eq "Fibre Channel" })
@@ -153,7 +155,9 @@ function Get-DetectedStorageBackend {
         }
         if ($clusterSMBResources) { return "SMB3" }
     }
-    catch { }
+    catch {
+        # Cluster cmdlets not available — continue detection
+    }
 
     # Check for NVMe-oF
     $nvmeDisks = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "NVMe" })

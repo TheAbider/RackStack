@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.69.1
+
+- **Performance:** Eliminated duplicate `Win32_OperatingSystem` CIM query in `Test-WatchThresholds` — memory and uptime checks now share a single query instead of spawning two separate runspaces.
+- **Fix:** Empty catch blocks in `59-StorageBackends.ps1` storage backend auto-detection now have comments explaining why failure is acceptable (S2D/cluster cmdlets unavailable).
+- 111 CLI actions, 65 modules
+
 ## v1.69.0
 
 - **New CLI Action:** `iSCSIAudit` — audit iSCSI sessions, targets, connections, persistent status, and MPIO claimed devices. Flags disconnected or non-persistent sessions.
