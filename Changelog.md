@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.67.2
+
+- **Fix:** OS build detection used `[Environment]::OSVersion` which returns compat-shimmed build 9200 in PS 5.1 / ps2exe. Replaced with registry `CurrentBuildNumber` in Win11 UI Cleanup and Console VT/color detection. This caused "not Windows 11" false negative on actual Windows 11 systems.
+- 65 modules, 3851 tests
+
 ## v1.67.1
 
 - **New Feature:** OS Dark / Light Theme toggle — switch between Dark Mode, Light Mode, or mixed (dark apps + light system, light apps + dark system) from Debloat menu [6]. Detects current theme, applies instantly with Explorer restart.

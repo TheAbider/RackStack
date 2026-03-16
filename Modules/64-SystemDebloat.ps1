@@ -1728,8 +1728,8 @@ function Invoke-Win11UICleanup {
     Clear-Host
     Write-CenteredOutput "Windows 11 / Server 2025 UI Cleanup" -color "Info"
 
-    # Detect OS build
-    $build = [System.Environment]::OSVersion.Version.Build
+    # Detect OS build (registry is reliable; OSVersion returns compat-shimmed 9200 in PS 5.1)
+    $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction SilentlyContinue).CurrentBuildNumber
     if ($build -lt 22000) {
         Write-OutputColor "  This system is not Windows 11 or Server 2025 (build $build)." -color "Warning"
         Write-OutputColor "  These tweaks target Windows 11 22H2+ and Server 2025." -color "Info"

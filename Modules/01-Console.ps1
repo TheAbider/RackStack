@@ -90,7 +90,7 @@ function Get-ConsoleCapabilities {
 
     # Detect VT/ANSI escape sequence support (Windows 10 1607+ / Server 2016+)
     try {
-        $build = [System.Environment]::OSVersion.Version.Build
+        $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction SilentlyContinue).CurrentBuildNumber
         # VT support was added in Windows 10 build 14393 (Anniversary Update)
         if ($build -ge 14393) {
             $capabilities.SupportsVT = $true
@@ -116,7 +116,7 @@ function Get-ConsoleCapabilities {
     try {
         $hostName = (Get-Host).Name
         if ($hostName -eq 'ConsoleHost') {
-            $build = [System.Environment]::OSVersion.Version.Build
+            $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction SilentlyContinue).CurrentBuildNumber
             # Windows 10 1703+ supports 24-bit color in ConHost
             if ($build -ge 15063 -and $capabilities.SupportsVT) {
                 $capabilities.ColorDepth = 256
