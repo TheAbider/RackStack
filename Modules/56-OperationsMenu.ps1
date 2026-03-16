@@ -1755,7 +1755,7 @@ function Show-EditLicenses {
 
 # First-run configuration wizard
 function Show-FirstRunWizard {
-    Clear-Host
+    try { Clear-Host } catch { }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"

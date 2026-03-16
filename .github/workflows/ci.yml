@@ -32,9 +32,10 @@ jobs:
         run: .\Tests\parse-check.ps1
 
       - name: Run tests (core)
+        env:
+          RACKSTACK_CI: 'true'
         run: |
           # Core tests: parse, module load, function existence, validation, navigation
-          # Each step gets a fresh PowerShell process to avoid cumulative OOM
           & .\Tests\Run-Tests.ps1 -Quick
           exit $LASTEXITCODE
 
