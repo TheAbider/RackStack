@@ -124,7 +124,7 @@ function Show-MainMenu {
 
     # Status line
     $statusParts = @()
-    $windowsRebootPending = Test-RebootPending
+    $windowsRebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
     if ($global:RebootNeeded -or $windowsRebootPending) {
         $statusParts += "REBOOT PENDING"
     }
@@ -147,22 +147,22 @@ function Show-MainMenu {
 function Show-ConfigureServerMenu {
     Clear-Host
 
-    # Get quick status info for display
+    # Get quick status info for display (long cache — these only change when user installs features, which calls Clear-MenuCache)
     $hypervStatus = Get-CachedValue -Key "HyperVInstalled" -FetchScript {
         if (Test-HyperVInstalled) { "Installed" } else { "Not Installed" }
-    }
+    } -CacheSeconds 300
     $mpioStatus = Get-CachedValue -Key "MPIOInstalled" -FetchScript {
         if (Test-MPIOInstalled) { "Installed" } else { "Not Installed" }
-    }
+    } -CacheSeconds 300
     $clusterStatus = Get-CachedValue -Key "ClusteringInstalled" -FetchScript {
         if (Test-FailoverClusteringInstalled) { "Installed" } else { "Not Installed" }
-    }
+    } -CacheSeconds 300
     $agentConfigured = Test-AgentInstallerConfigured
     $agentStatus = if (-not $agentConfigured) { "Not Configured" } else {
         Get-CachedValue -Key "AgentInstalled" -FetchScript {
             $kStatus = Test-AgentInstalled
             if ($kStatus.Installed) { "Installed" } else { "Not Installed" }
-        }
+        } -CacheSeconds 300
     }
 
     # Compute summary counts for submenu status (exclude agent if not configured)
@@ -173,8 +173,8 @@ function Show-ConfigureServerMenu {
     $rolesSummary = "$($rolesOK.Count)/$rolesTotal Installed"
     $rolesColor = if ($rolesOK.Count -eq $rolesTotal) { "Success" } elseif ($rolesOK.Count -ge 2) { "Info" } else { "Warning" }
 
-    $rdpQuick = Get-CachedValue -Key "RDPState" -FetchScript { Get-RDPState }
-    $winrmQuick = Get-CachedValue -Key "WinRMState" -FetchScript { Get-WinRMState }
+    $rdpQuick = Get-CachedValue -Key "RDPState" -FetchScript { Get-RDPState } -CacheSeconds 60
+    $winrmQuick = Get-CachedValue -Key "WinRMState" -FetchScript { Get-WinRMState } -CacheSeconds 120
     $secSummary = "RDP: $rdpQuick | WinRM: $winrmQuick"
     $secColor = if ($rdpQuick -eq "Enabled" -and $winrmQuick -match "Enabled|Running") { "Success" } else { "Warning" }
 
@@ -607,9 +607,11 @@ function Show-HostNetworkMenu {
 function Show-VirtualSwitchMenu {
     Clear-Host
 
-    # Get current switch summary
-    $switches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
-    $switchSummary = "$($switches.Count) switch(es)"
+    # Get current switch summary (cached to avoid slow WMI query on every render)
+    $switchCount = Get-CachedValue -Key "VMSwitchCount" -FetchScript {
+        @(Get-VMSwitch -ErrorAction SilentlyContinue).Count
+    } -CacheSeconds 30
+    $switchSummary = "$switchCount switch(es)"
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"

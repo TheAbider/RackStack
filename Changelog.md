@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.67.4
+
+- **Performance:** Aggressive cache tuning across all menu display functions — feature install checks (Hyper-V, MPIO, Clustering, Agent) cached for 300s instead of 30s, RDP/WinRM state cached 60-120s, reboot-pending cached 15s. Eliminates repeated slow CIM queries on every menu render.
+- **Performance:** `Test-HyperVInstalled` in host network menu loop now uses cache instead of calling `Get-WindowsFeature` (~2s) on every iteration.
+- **Performance:** `Get-VMSwitch` cached in virtual switch menu (was uncached, ~1-2s per render).
+- 65 modules, 3851 tests
+
 ## v1.67.3
 
 - **Improvement:** Menu speed — added cache durations to timezone (120s), license status (300s), and power plan (60s) queries that were uncached and re-queried on every menu render.

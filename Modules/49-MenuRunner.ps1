@@ -382,8 +382,9 @@ function Start-Show-NetworkMenu {
 function Start-Show-HostNetworkMenu {
     while ($true) {
         if ($global:ReturnToMainMenu) { return }
-        # Check if a reboot is pending
-        if (Test-RebootPending) {
+        # Check if a reboot is pending (cached to avoid repeated registry reads in loop)
+        $rebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
+        if ($rebootPending) {
             Clear-Host
             Write-CenteredOutput "Configure Host Network" -color "Info"
             Write-OutputColor "  A reboot is pending. Please reboot the server and rerun the script." -color "Error"
@@ -391,8 +392,9 @@ function Start-Show-HostNetworkMenu {
             return
         }
 
-        # Check if Hyper-V is installed
-        if (-not (Test-HyperVInstalled)) {
+        # Check if Hyper-V is installed (use same cache key as menu display)
+        $hvInstalled = Get-CachedValue -Key "HyperVInstalled" -FetchScript { Test-HyperVInstalled } -CacheSeconds 300
+        if (-not $hvInstalled) {
             Clear-Host
             Write-CenteredOutput "Configure Host Network" -color "Info"
             Write-OutputColor "  Hyper-V is not installed." -color "Warning"
