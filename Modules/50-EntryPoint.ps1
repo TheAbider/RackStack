@@ -8144,7 +8144,7 @@ function Invoke-CLIAction {
             Write-OutputColor "  Auditing service recovery actions..." -color "Info"
             Write-OutputColor "" -color "Info"
             $svcIssues = 0
-            $services = @(Get-WmiObject Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.StartMode -eq 'Auto' -and $_.State -eq 'Running' })
+            $services = @(Get-CimInstance Win32_Service -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Where-Object { $_.StartMode -eq 'Auto' -and $_.State -eq 'Running' })
             $noRecovery = @()
             foreach ($svc in $services) {
                 try {
