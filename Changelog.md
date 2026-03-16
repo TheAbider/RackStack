@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.68.0
+
+- **New CLI Action:** `Win11Cleanup` — apply all Windows 10-style UI tweaks non-interactively. Supports JSON output. Usage: `RackStack.exe -Action Win11Cleanup [-OutputFormat JSON]`
+- **New CLI Action:** `DarkMode` / `LightMode` — set OS theme non-interactively. Usage: `RackStack.exe -Action DarkMode`
+- 103 CLI actions, 65 modules
+
 ## v1.67.4
 
 - **Performance:** Aggressive cache tuning across all menu display functions — feature install checks (Hyper-V, MPIO, Clustering, Agent) cached for 300s instead of 30s, RDP/WinRM state cached 60-120s, reboot-pending cached 15s. Eliminates repeated slow CIM queries on every menu render.

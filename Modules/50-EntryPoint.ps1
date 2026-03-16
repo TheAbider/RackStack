@@ -259,6 +259,9 @@ function Assert-Elevation {
                 @{ Action = 'LocaleAudit';    Description = 'Language + region + timezone' }
                 @{ Action = 'TaskHistoryAudit'; Description = 'Scheduled task run history' }
                 @{ Action = 'NTFSAudit';      Description = 'NTFS volume health + features' }
+                @{ Action = 'Win11Cleanup';    Description = 'Apply Windows 10-style UI tweaks (Win11/2025)' }
+                @{ Action = 'DarkMode';        Description = 'Set OS to dark theme' }
+                @{ Action = 'LightMode';       Description = 'Set OS to light theme' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7693,6 +7696,86 @@ function Invoke-CLIAction {
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NTFSAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Volumes = @($volumeInfo).Count; Issues = $ntfsIssues }; Volumes = $volumeInfo }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($ntfsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'Win11Cleanup' {
+            $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction SilentlyContinue).CurrentBuildNumber
+            if ($build -lt 22000) {
+                Write-OutputColor "  Not Windows 11 or Server 2025 (build $build). Skipping." -color "Warning"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'Win11Cleanup'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Status = 'Skipped'; Build = $build; Reason = 'OS build < 22000' }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            }
+            else {
+                $tweakResults = @()
+                $tweaks = @(
+                    @{ Name = "Classic right-click"; Key = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"; IsDefault = $true; Value = "" }
+                    @{ Name = "Left-align taskbar"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "TaskbarAl"; Value = 0 }
+                    @{ Name = "Show file extensions"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "HideFileExt"; Value = 0 }
+                    @{ Name = "Show hidden files"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "Hidden"; Value = 1 }
+                    @{ Name = "Disable Widgets"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "TaskbarDa"; Value = 0 }
+                    @{ Name = "Disable Chat"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "TaskbarMn"; Value = 0 }
+                    @{ Name = "Minimize search box"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"; Prop = "SearchboxTaskbarMode"; Value = 1 }
+                    @{ Name = "Disable Copilot"; Key = "HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot"; Prop = "TurnOffWindowsCopilot"; Value = 1 }
+                    @{ Name = "Explorer to This PC"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "LaunchTo"; Value = 1 }
+                    @{ Name = "Disable Snap flyout"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "EnableSnapAssistFlyout"; Value = 0 }
+                    @{ Name = "Disable Start recommendations"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "Start_IrisRecommendations"; Value = 0 }
+                    @{ Name = "Disable Gallery"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "ShowGalleryInExplorer"; Value = 0 }
+                    @{ Name = "Disable Home page"; Key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Prop = "ShowHome"; Value = 0 }
+                )
+                $applied = 0; $w11failed = 0
+                foreach ($t in $tweaks) {
+                    try {
+                        if (-not (Test-Path -LiteralPath $t.Key)) { $null = New-Item -Path $t.Key -Force -ErrorAction Stop }
+                        if ($t.IsDefault) { $null = Set-Item -LiteralPath $t.Key -Value $t.Value -Force -ErrorAction Stop }
+                        else { $null = Set-ItemProperty -LiteralPath $t.Key -Name $t.Prop -Value $t.Value -Type DWord -Force -ErrorAction Stop }
+                        Write-OutputColor "  [OK] $($t.Name)" -color "Success"
+                        $tweakResults += @{ Name = $t.Name; Status = 'Applied' }
+                        $applied++
+                    }
+                    catch {
+                        Write-OutputColor "  [!!] $($t.Name): $($_.Exception.Message)" -color "Error"
+                        $tweakResults += @{ Name = $t.Name; Status = 'Failed'; Error = $_.Exception.Message }
+                        $w11failed++
+                    }
+                }
+                # Reset folder grouping
+                Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FolderTypes" -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Streams" -Recurse -Force -ErrorAction SilentlyContinue
+                $tweakResults += @{ Name = 'Reset folder grouping'; Status = 'Applied' }
+                $applied++
+                Write-OutputColor "  [OK] Reset folder grouping" -color "Success"
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Applied: $applied   Failed: $w11failed" -color $(if ($w11failed -gt 0) { "Warning" } else { "Success" })
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'Win11Cleanup'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Build = $build; Applied = $applied; Failed = $w11failed; Tweaks = $tweakResults }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+                Add-SessionChange -Category "Debloat" -Description "Win11Cleanup CLI: $applied tweaks applied"
+                if ($w11failed -gt 0) { [Environment]::Exit(1) }
+            }
+        }
+        'DarkMode' {
+            $themeKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            try {
+                if (-not (Test-Path -LiteralPath $themeKey)) { $null = New-Item -Path $themeKey -Force }
+                Set-ItemProperty -LiteralPath $themeKey -Name AppsUseLightTheme -Value 0 -Type DWord -Force
+                Set-ItemProperty -LiteralPath $themeKey -Name SystemUsesLightTheme -Value 0 -Type DWord -Force
+                Write-OutputColor "  Dark Mode applied." -color "Success"
+                if ($script:CLIOutputFormat -eq 'JSON') { Write-Output (@{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DarkMode'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Status = 'Applied' } | ConvertTo-Json -Depth 10) }
+            }
+            catch { Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"; [Environment]::Exit(1) }
+        }
+        'LightMode' {
+            $themeKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            try {
+                if (-not (Test-Path -LiteralPath $themeKey)) { $null = New-Item -Path $themeKey -Force }
+                Set-ItemProperty -LiteralPath $themeKey -Name AppsUseLightTheme -Value 1 -Type DWord -Force
+                Set-ItemProperty -LiteralPath $themeKey -Name SystemUsesLightTheme -Value 1 -Type DWord -Force
+                Write-OutputColor "  Light Mode applied." -color "Success"
+                if ($script:CLIOutputFormat -eq 'JSON') { Write-Output (@{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LightMode'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Status = 'Applied' } | ConvertTo-Json -Depth 10) }
+            }
+            catch { Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"; [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
