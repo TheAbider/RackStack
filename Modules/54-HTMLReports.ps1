@@ -1,4 +1,4 @@
-﻿﻿#region ===== HTML REPORTING (v2.8.0) =====
+﻿#region ===== HTML REPORTING (v2.8.0) =====
 # HTML-encode dynamic values to prevent display issues with special characters
 function ConvertTo-HtmlSafe([string]$s) { if ($s) { [System.Net.WebUtility]::HtmlEncode($s) } else { $s } }
 

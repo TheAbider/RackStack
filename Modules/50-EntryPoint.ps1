@@ -1,4 +1,4 @@
-﻿﻿#region ===== SCRIPT ENTRY POINT =====
+﻿#region ===== SCRIPT ENTRY POINT =====
 # Start transcript logging
 function Start-ScriptTranscript {
     # Ensure temp directory exists

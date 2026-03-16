@@ -1,4 +1,4 @@
-﻿﻿#region ===== UTILITY FUNCTIONS (v2.6.0) =====
+﻿#region ===== UTILITY FUNCTIONS (v2.6.0) =====
 # Function to compare two configuration profiles
 function Compare-ConfigurationProfiles {
     Clear-Host

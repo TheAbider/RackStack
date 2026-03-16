@@ -1,4 +1,4 @@
-﻿﻿#region ===== HOST STORAGE SETUP =====
+﻿#region ===== HOST STORAGE SETUP =====
 # Generate Defender VM exclusion paths based on current host drive
 function Update-DefenderVMPaths {
     $drive = $script:SelectedHostDrive  # e.g. "D:"
