@@ -349,6 +349,9 @@ if ($pssaAvailable) {
 }
 } # end if (-not $Quick) — skip PSSA in Quick mode
 
+# Reclaim memory after PSSA (loads every module into analyzer engine)
+[GC]::Collect(); [GC]::WaitForPendingFinalizers()
+
 # ============================================================================
 # SECTION 5: FUNCTION EXISTENCE (50+ important functions)
 # ============================================================================
