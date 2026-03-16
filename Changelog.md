@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.70.1
+
+- **Fix:** `Invoke-WithTimeout` could hang on Server 2025 when `$ps.Stop()` blocked on a CIM query that ignored cancellation. Now uses fire-and-forget `ThreadPool.QueueUserWorkItem` for cleanup so the script never freezes waiting for a stuck runspace.
+- **Cleanup:** Removed dead `Test-SessionResume` function from 55-QoLFeatures.ps1 (defined but never called from anywhere).
+- 112 CLI actions, 65 modules
+
 ## v1.70.0
 
 - **New CLI Action:** `WindowsUpdateAudit` — lists all pending Windows updates with severity, KB, and size without installing anything. Uses PSWindowsUpdate module if available, falls back to COM-based Microsoft.Update.Session. Flags critical/important updates. Supports JSON output.

@@ -470,57 +470,6 @@ function Restore-SessionState {
     }
 }
 
-# Detect and offer resume of previous session via snapshot file
-function Test-SessionResume {
-    $stateFile = Join-Path $script:TempPath "session-state.json"
-
-    if (-not (Test-Path -LiteralPath $stateFile)) { return }
-
-    try {
-        $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
-
-        # Only offer resume if session is less than 24 hours old
-        $stateTime = [datetime]::Parse($state.Timestamp)
-        $age = (Get-Date) - $stateTime
-        if ($age.TotalHours -gt 24) {
-            Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
-            return
-        }
-
-        $changeCount = @($state.SessionChanges).Count
-        if ($changeCount -eq 0) {
-            Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
-            return
-        }
-
-        Write-OutputColor "`n  Previous session detected ($([math]::Round($age.TotalMinutes)) minutes ago)" -color "Info"
-        Write-OutputColor "  $changeCount operation(s) were completed:" -color "Info"
-
-        # Show last 5 operations
-        $recent = @($state.SessionChanges) | Select-Object -Last 5
-        foreach ($change in $recent) {
-            Write-OutputColor "    - $($change.Description)" -color "Info"
-        }
-
-        if ($changeCount -gt 5) {
-            Write-OutputColor "    ... and $($changeCount - 5) more" -color "Info"
-        }
-
-        Write-OutputColor "`n  Clear previous session data? [Y/N]" -color "Info"
-        $response = Read-Host "  Choice"
-        if ($response -eq 'Y' -or $response -eq 'y') {
-            Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
-            Write-OutputColor "  Session data cleared" -color "Success"
-        }
-        else {
-            Write-OutputColor "  Previous session data preserved" -color "Info"
-        }
-    }
-    catch {
-        Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
-    }
-}
-
 # Configure pagefile settings (system managed, custom size, or move to different drive)
 function Set-PagefileConfiguration {
     # --- Section: Main Configuration Loop ---

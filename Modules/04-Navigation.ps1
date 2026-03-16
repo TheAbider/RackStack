@@ -585,8 +585,14 @@ function Invoke-WithTimeout {
     Write-Host ""
 
     if (-not $handle.IsCompleted) {
-        $ps.Stop()
-        $ps.Dispose()
+        # Fire-and-forget cleanup — $ps.Stop() can itself hang if CIM/WMI ignores cancellation
+        # (common on Server 2025 cold WMI initialization). Dispose in background to avoid blocking.
+        $psRef = $ps
+        $null = [System.Threading.ThreadPool]::QueueUserWorkItem([System.Threading.WaitCallback]{
+            param($state)
+            try { $state.Stop() } catch { }
+            try { $state.Dispose() } catch { }
+        }, $psRef)
         return @{ TimedOut = $true; Result = $null; Failed = $false; Error = "Timed out after $TimeoutSeconds seconds" }
     }
 
