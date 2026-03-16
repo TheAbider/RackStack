@@ -8821,6 +8821,10 @@ Write-TestResult "56-OperationsMenu: prompts for company defaults when missing f
 
 Write-SectionHeader "SECTION 144: FUNCTION PARITY (modular vs monolithic)"
 
+# Free memory before heavy regex operations on 62K+ line monolithic
+[GC]::Collect()
+[GC]::WaitForPendingFinalizers()
+
 if (Test-Path $monolithicPath) {
     try {
         # Reuse already-loaded monolithic content to prevent OOM on CI runners
