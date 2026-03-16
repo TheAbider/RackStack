@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.79.0
+
+- **New CLI Action:** `LiveMigrationAudit` — checks live migration enabled/disabled, auth type, performance option, migration networks, and surfaces recent migration failures from Hyper-V event logs (last 7 days).
+- **New CLI Action:** `DomainTrustAudit` — enumerates domain trust relationships via nltest, verifies secure channel health, and checks domain controller connectivity.
+- 126 CLI actions, 65 modules
+
 ## v1.78.0
 
 - **New CLI Action:** `ShadowCopyAudit` — reports shadow copy counts per volume, storage usage/capacity, newest/oldest shadow timestamps, and flags volumes with no shadow copies configured. Catches stale/full shadow storage before users need file recovery.

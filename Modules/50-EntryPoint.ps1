@@ -278,6 +278,8 @@ function Assert-Elevation {
                 @{ Action = 'HandleLeakAudit'; Description = 'Process handle/thread count anomalies' }
                 @{ Action = 'ShadowCopyAudit'; Description = 'VSS shadow copy schedule + storage audit' }
                 @{ Action = 'QoSPolicyAudit'; Description = 'Network QoS policies + bandwidth reservations' }
+                @{ Action = 'LiveMigrationAudit'; Description = 'Hyper-V live migration config + failures' }
+                @{ Action = 'DomainTrustAudit'; Description = 'AD trust relationships + secure channel' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8478,6 +8480,97 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($qosIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'LiveMigrationAudit' {
+            Write-OutputColor "  Auditing Hyper-V live migration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $lmIssues = 0
+            try {
+                $vmHost = Get-VMHost -ErrorAction Stop
+                Write-OutputColor "  Live Migration Enabled: $($vmHost.VirtualMachineMigrationEnabled)" -color $(if ($vmHost.VirtualMachineMigrationEnabled) { "Success" } else { "Warning" })
+                if ($vmHost.VirtualMachineMigrationEnabled) {
+                    Write-OutputColor "  Auth Type: $($vmHost.VirtualMachineMigrationAuthenticationType)" -color "Info"
+                    Write-OutputColor "  Performance: $($vmHost.VirtualMachineMigrationPerformanceOption)" -color "Info"
+                    Write-OutputColor "  Max Simultaneous: $($vmHost.MaximumVirtualMachineMigrations)" -color "Info"
+                    # Check migration networks
+                    $migNets = @(Get-VMMigrationNetwork -ErrorAction SilentlyContinue)
+                    Write-OutputColor "  Migration Networks: $($migNets.Count)" -color $(if ($migNets.Count -gt 0) { "Success" } else { "Warning" })
+                    foreach ($net in $migNets) {
+                        Write-OutputColor "    $($net.Subnet)  Priority: $($net.Priority)" -color "Info"
+                    }
+                    if ($migNets.Count -eq 0) { $lmIssues++ }
+                }
+                else { $lmIssues++ }
+                # Check recent migration events (last 7 days)
+                $migEvents = @(Get-WinEvent -FilterHashtable @{ ProviderName='Microsoft-Windows-Hyper-V-VMMS'; ID=@(20300,20301,20302,20303,20304,20305,20306); StartTime=(Get-Date).AddDays(-7) } -MaxEvents 20 -ErrorAction SilentlyContinue)
+                $failed = @($migEvents | Where-Object { $_.Id -eq 20306 -or $_.Id -eq 20304 })
+                $succeeded = @($migEvents | Where-Object { $_.Id -eq 20301 })
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Recent Migrations (7d): $($succeeded.Count) succeeded, $($failed.Count) failed" -color $(if ($failed.Count -gt 0) { "Error" } else { "Success" })
+                if ($failed.Count -gt 0) {
+                    foreach ($f in $failed | Select-Object -First 5) {
+                        $fLine = "    $($f.TimeCreated.ToString('yyyy-MM-dd HH:mm'))  $($f.Message.Split("`n")[0])"
+                        if ($fLine.Length -gt 72) { $fLine = $fLine.Substring(0, 69) + "..." }
+                        Write-OutputColor $fLine -color "Error"
+                    }
+                    $lmIssues += $failed.Count
+                }
+            }
+            catch {
+                Write-OutputColor "  Hyper-V not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LiveMigrationAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $lmIssues } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($lmIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DomainTrustAudit' {
+            Write-OutputColor "  Auditing domain trust relationships..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $dtIssues = 0
+            try {
+                $cs = Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
+                if (-not $cs.PartOfDomain) {
+                    Write-OutputColor "  Not domain-joined. No trusts to audit." -color "Info"
+                }
+                else {
+                    Write-OutputColor "  Domain: $($cs.Domain)" -color "Info"
+                    # Enumerate trusts via nltest
+                    $trustOutput = nltest /domain_trusts 2>&1
+                    $trusts = @($trustOutput | Where-Object { $_ -match '^\s+\d+:' })
+                    Write-OutputColor "  Trust Relationships: $($trusts.Count)" -color $(if ($trusts.Count -gt 0) { "Info" } else { "Info" })
+                    foreach ($t in $trusts) {
+                        $tLine = $t.Trim()
+                        if ($tLine.Length -gt 72) { $tLine = $tLine.Substring(0, 69) + "..." }
+                        Write-OutputColor "    $tLine" -color "Info"
+                    }
+                    # Verify own secure channel
+                    Write-OutputColor "" -color "Info"
+                    $scResult = Test-ComputerSecureChannel -ErrorAction SilentlyContinue
+                    $scColor = if ($scResult) { "Success" } else { "Error" }
+                    Write-OutputColor "  Secure Channel: $(if ($scResult) { 'OK' } else { 'BROKEN' })" -color $scColor
+                    if (-not $scResult) { $dtIssues++ }
+                    # Check domain controller connectivity
+                    try {
+                        $dc = nltest /dsgetdc:$($cs.Domain) 2>&1
+                        $dcName = ($dc | Where-Object { $_ -match 'DC:\\\\' }) -replace '.*DC:\\\\', '' -replace '\s.*', ''
+                        if ($dcName) {
+                            Write-OutputColor "  DC: $dcName" -color "Success"
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch {
+                Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"
+                $dtIssues++
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DomainTrustAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $dtIssues } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($dtIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
