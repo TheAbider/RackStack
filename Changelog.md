@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.72.0
+
+- **New Feature:** Batch config now supports `Win11Cleanup` (boolean) and `OSTheme` ("Dark"/"Light") fields — apply Windows 11 UI tweaks and theme changes via JSON batch mode alongside all other server configuration steps.
+- Batch mode expanded from 24 to 26 steps.
+- 114 CLI actions, 65 modules
+
 ## v1.71.0
 
 - **New CLI Action:** `ClusterQuorumAudit` — audit cluster quorum type, witness health, node vote weights. Flags missing witness on 2-node clusters, offline witnesses, and down nodes.

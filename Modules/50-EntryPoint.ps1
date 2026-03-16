@@ -8157,7 +8157,7 @@ function Test-BatchConfig {
                     "DisableBuiltInAdmin", "InstallUpdates", "AutoReboot",
                     "CreateVirtualSwitch", "CreateSETSwitch", "ConfigureSharedStorage",
                     "ConfigureMPIO", "InitializeHostStorage", "ConfigureDefenderExclusions",
-                    "PromoteToDC", "InstallAgent", "ValidateCluster", "DryRun")
+                    "PromoteToDC", "InstallAgent", "ValidateCluster", "Win11Cleanup", "DryRun")
     foreach ($field in $boolFields) {
         if ($null -ne $Config[$field] -and $Config[$field] -isnot [bool]) {
             $null = $errors.Add("$field must be true or false (got '$($Config[$field])').")
@@ -8357,6 +8357,8 @@ function Start-BatchMode {
         @{ Label = "Defender";           Active = [bool]$Config.ConfigureDefenderExclusions; Detail = "Add Hyper-V exclusions" }
         @{ Label = "Agent Install";      Active = [bool]($Config.InstallAgents -or $Config.InstallAgent); Detail = "Install monitoring agent" }
         @{ Label = "Cluster Validate";   Active = [bool]$Config.ValidateCluster;      Detail = "Run cluster readiness check" }
+        @{ Label = "Win11 Cleanup";     Active = [bool]$Config.Win11Cleanup;         Detail = "Apply Windows 10-style UI tweaks" }
+        @{ Label = "OS Theme";          Active = [bool]$Config.OSTheme;              Detail = if ($Config.OSTheme) { $Config.OSTheme } else { "Not set" } }
     )
 
     foreach ($item in $summaryItems) {
@@ -8390,7 +8392,7 @@ function Start-BatchMode {
     Write-OutputColor "" -color "Info"
 
     $stepNum = 0
-    $totalSteps = 24
+    $totalSteps = 26
     $changesApplied = 0
     $skipped = 0
     $errors = 0
@@ -9647,6 +9649,64 @@ function Start-BatchMode {
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Cluster validation: skipped" -color "Debug"
+    }
+
+    # Step 25: Win11 / Server 2025 UI Cleanup (v1.71.0)
+    $stepNum++
+    if ($Config.Win11Cleanup) {
+        $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction SilentlyContinue).CurrentBuildNumber
+        if ($build -ge 22000) {
+            Write-OutputColor "  [$stepNum/$totalSteps] Applying Windows 11 UI cleanup..." -color "Info"
+            if ($script:DryRunMode) {
+                Write-OutputColor "           [DRY RUN] Would apply Win11 UI tweaks" -color "Info"
+                $changesApplied++
+            }
+            else {
+                try {
+                    Invoke-Win11UICleanup
+                    $changesApplied++
+                }
+                catch {
+                    Write-OutputColor "           Win11 cleanup failed: $_" -color "Warning"
+                    $errors++
+                }
+            }
+        }
+        else {
+            Write-OutputColor "  [$stepNum/$totalSteps] Win11 cleanup: skipped (build $build < 22000)" -color "Debug"
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] Win11 cleanup: skipped" -color "Debug"
+    }
+
+    # Step 26: OS Theme (v1.71.0)
+    $stepNum++
+    if ($Config.OSTheme) {
+        Write-OutputColor "  [$stepNum/$totalSteps] Setting OS theme to $($Config.OSTheme)..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would set OS theme to $($Config.OSTheme)" -color "Info"
+            $changesApplied++
+        }
+        else {
+            try {
+                $themeKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+                if (-not (Test-Path -LiteralPath $themeKey)) { $null = New-Item -Path $themeKey -Force }
+                $appsVal = if ($Config.OSTheme -eq "Light") { 1 } else { 0 }
+                $sysVal = if ($Config.OSTheme -eq "Light") { 1 } else { 0 }
+                Set-ItemProperty -LiteralPath $themeKey -Name AppsUseLightTheme -Value $appsVal -Type DWord -Force
+                Set-ItemProperty -LiteralPath $themeKey -Name SystemUsesLightTheme -Value $sysVal -Type DWord -Force
+                Write-OutputColor "           Theme set to $($Config.OSTheme)" -color "Success"
+                $changesApplied++
+            }
+            catch {
+                Write-OutputColor "           Theme change failed: $_" -color "Warning"
+                $errors++
+            }
+        }
+    }
+    else {
+        Write-OutputColor "  [$stepNum/$totalSteps] OS theme: skipped" -color "Debug"
     }
 
     # Dry-run summary (replaces normal summary when in dry-run mode)
