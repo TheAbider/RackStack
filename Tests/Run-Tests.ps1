@@ -11050,11 +11050,16 @@ try {
     }
 
     # v1.68.0-v1.69.0 — Win11 Cleanup, Theme, and infrastructure audit actions
-    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit')) {
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
         Write-TestResult "Install-RackStack: $action in ValidateSet" ($mod50 -match "'$action'\s*\{")
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
     }
+
+    # v1.73.0 — -OutputFile parameter
+    Write-TestResult "Header: -OutputFile param exists" ($headerContent -match '\[string\]\$OutputFile')
+    Write-TestResult "00-Initialization: CLIOutputFile variable" ($mod00 -match 'CLIOutputFile')
+    Write-TestResult "50-EntryPoint: OutputFile saves transcript" ($mod50 -match 'CLIOutputFile.*Copy-Item|Copy-Item.*CLIOutputFile')
 
     # v1.67.0 — Win11 UI Cleanup and Theme Toggle function existence
     Write-TestResult "Function exists: Invoke-Win11UICleanup" ($null -ne (Get-Command Invoke-Win11UICleanup -ErrorAction SilentlyContinue))
