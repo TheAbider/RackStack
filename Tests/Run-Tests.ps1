@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.69.1
+    Automated Test Runner for RackStack v1.69.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11048,6 +11048,29 @@ try {
         Write-TestResult "50-EntryPoint: $action JSON output" ($mod50 -match "'$action'[\s\S]{0,8000}ConvertTo-Json")
         Write-TestResult "50-EntryPoint: $action Action field" ($mod50 -match "Action\s*=\s*'$action'")
     }
+
+    # v1.68.0-v1.69.0 — Win11 Cleanup, Theme, and infrastructure audit actions
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit')) {
+        Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
+        Write-TestResult "Install-RackStack: $action in ValidateSet" ($mod50 -match "'$action'\s*\{")
+        Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
+    }
+
+    # v1.67.0 — Win11 UI Cleanup and Theme Toggle function existence
+    Write-TestResult "Function exists: Invoke-Win11UICleanup" ($null -ne (Get-Command Invoke-Win11UICleanup -ErrorAction SilentlyContinue))
+    Write-TestResult "Function exists: Set-OSThemeMode" ($null -ne (Get-Command Set-OSThemeMode -ErrorAction SilentlyContinue))
+
+    # v1.67.0 — Favorites dispatch map validates all function names exist
+    $dispatchValid = $true
+    $dispatchMissing = @()
+    foreach ($entry in $script:FavoriteDispatch.GetEnumerator()) {
+        if ($null -eq (Get-Command $entry.Value -ErrorAction SilentlyContinue)) {
+            $dispatchValid = $false
+            $dispatchMissing += "$($entry.Key) -> $($entry.Value)"
+        }
+    }
+    $dispatchDetail = if ($dispatchMissing.Count -gt 0) { "Missing: $($dispatchMissing -join ', ')" } else { $null }
+    Write-TestResult "55-QoLFeatures: All FavoriteDispatch functions exist" $dispatchValid $dispatchDetail
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message

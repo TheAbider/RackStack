@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.69.2
+
+- **Tests:** Added 22 new tests — function existence for `Invoke-Win11UICleanup` and `Set-OSThemeMode`, CLI action validation for Win11Cleanup/DarkMode/LightMode/iSCSIAudit/NICTeamAudit/SMBSessionAudit, and favorites dispatch map validation (verifies all 30 mapped function names resolve to real functions).
+- 111 CLI actions, 65 modules
+
 ## v1.69.1
 
 - **Performance:** Eliminated duplicate `Win32_OperatingSystem` CIM query in `Test-WatchThresholds` — memory and uptime checks now share a single query instead of spawning two separate runspaces.
