@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.78.0
+
+- **New CLI Action:** `ShadowCopyAudit` — reports shadow copy counts per volume, storage usage/capacity, newest/oldest shadow timestamps, and flags volumes with no shadow copies configured. Catches stale/full shadow storage before users need file recovery.
+- **New CLI Action:** `QoSPolicyAudit` — inventories network QoS policies (DSCP markings, throttle rates), DCB traffic classes, SMB bandwidth limits, and QoS-enabled adapters. Critical for converged networking environments (S2D/HCI) where QoS misconfiguration causes storage timeouts.
+- 124 CLI actions, 65 modules
+
 ## v1.77.0
 
 - **New CLI Action:** `ReplicaLagAudit` — reports Hyper-V Replica lag duration, replication health, state, and missed cycles per VM. Flags replicas >60 minutes behind or in non-Normal health.

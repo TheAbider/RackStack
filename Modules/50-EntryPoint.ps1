@@ -276,6 +276,8 @@ function Assert-Elevation {
                 @{ Action = 'ClusterNetworkAudit'; Description = 'Cluster network roles + partition events' }
                 @{ Action = 'ReplicaLagAudit'; Description = 'Hyper-V Replica lag + missed cycles' }
                 @{ Action = 'HandleLeakAudit'; Description = 'Process handle/thread count anomalies' }
+                @{ Action = 'ShadowCopyAudit'; Description = 'VSS shadow copy schedule + storage audit' }
+                @{ Action = 'QoSPolicyAudit'; Description = 'Network QoS policies + bandwidth reservations' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8383,6 +8385,99 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($hlIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ShadowCopyAudit' {
+            Write-OutputColor "  Auditing VSS shadow copies..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $scIssues = 0
+            try {
+                $shadows = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue)
+                $storage = @(Get-WmiObject Win32_ShadowStorage -ErrorAction SilentlyContinue)
+                Write-OutputColor "  Shadow Copies: $($shadows.Count)" -color $(if ($shadows.Count -gt 0) { "Success" } else { "Warning" })
+                if ($storage.Count -gt 0) {
+                    foreach ($st in $storage) {
+                        $volName = $st.Volume -replace '\\\\\.\\', '' -replace '\\$', ''
+                        $usedGB = [math]::Round($st.UsedSpace / 1GB, 1)
+                        $maxGB = [math]::Round($st.MaxSpace / 1GB, 1)
+                        $pct = if ($st.MaxSpace -gt 0) { [math]::Round(($st.UsedSpace / $st.MaxSpace) * 100, 1) } else { 0 }
+                        $color = if ($pct -lt 80) { "Success" } elseif ($pct -lt 95) { "Warning" } else { "Error" }
+                        Write-OutputColor "  $volName — Used: ${usedGB}GB / ${maxGB}GB ($pct%)" -color $color
+                        if ($pct -ge 90) { $scIssues++ }
+                        # Check age of newest shadow copy for this volume
+                        $volShadows = @($shadows | Where-Object { $_.VolumeName -eq $st.Volume })
+                        if ($volShadows.Count -gt 0) {
+                            $newest = ($volShadows | Sort-Object InstallDate -Descending | Select-Object -First 1)
+                            $oldest = ($volShadows | Sort-Object InstallDate | Select-Object -First 1)
+                            Write-OutputColor "    Copies: $($volShadows.Count)  Newest: $($newest.InstallDate.Substring(0,8))  Oldest: $($oldest.InstallDate.Substring(0,8))" -color "Info"
+                        }
+                    }
+                }
+                # Check volumes with NO shadow copies
+                $allVols = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' -and $_.Size -gt 0 })
+                $protectedDrives = @($storage | ForEach-Object { ($_.Volume -replace '\\\\\.\\', '' -replace '\\$', '').Substring(0,2) })
+                $unprotected = @($allVols | Where-Object { "$($_.DriveLetter):" -notin $protectedDrives })
+                if ($unprotected.Count -gt 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Volumes WITHOUT shadow copies:" -color "Warning"
+                    foreach ($uv in $unprotected) { Write-OutputColor "    $($uv.DriveLetter): ($([math]::Round($uv.Size/1GB,0))GB)" -color "Warning" }
+                    $scIssues += $unprotected.Count
+                }
+            }
+            catch {
+                Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"
+                $scIssues++
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ShadowCopyAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ ShadowCopies = $shadows.Count; StorageEntries = $storage.Count; Issues = $scIssues } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($scIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'QoSPolicyAudit' {
+            Write-OutputColor "  Auditing network QoS policies..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $qosIssues = 0
+            # QoS Policies
+            $policies = @(Get-NetQosPolicy -ErrorAction SilentlyContinue)
+            Write-OutputColor "  QoS Policies: $($policies.Count)" -color $(if ($policies.Count -gt 0) { "Success" } else { "Info" })
+            foreach ($pol in $policies) {
+                $detail = @()
+                if ($pol.DSCPAction -ge 0) { $detail += "DSCP=$($pol.DSCPAction)" }
+                if ($pol.ThrottleRateActionBitsPerSecond -gt 0) { $detail += "Throttle=$([math]::Round($pol.ThrottleRateActionBitsPerSecond/1MB,0))Mbps" }
+                if ($pol.MinBandwidthWeightAction -gt 0) { $detail += "MinBW=$($pol.MinBandwidthWeightAction)%" }
+                $detailStr = if ($detail.Count -gt 0) { $detail -join ', ' } else { "No actions" }
+                Write-OutputColor "    $($pol.Name): $detailStr" -color "Info"
+            }
+            # Traffic Classes (DCB)
+            $trafficClasses = @(Get-NetQosTrafficClass -ErrorAction SilentlyContinue)
+            if ($trafficClasses.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  DCB Traffic Classes: $($trafficClasses.Count)" -color "Info"
+                foreach ($tc in $trafficClasses) {
+                    Write-OutputColor "    $($tc.Name): Priority=$($tc.Priority)  BW=$($tc.BandwidthPercentage)%  Algorithm=$($tc.Algorithm)" -color "Info"
+                }
+            }
+            # SMB Bandwidth Limits
+            $smbLimits = @(Get-SmbBandwidthLimit -ErrorAction SilentlyContinue)
+            if ($smbLimits.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  SMB Bandwidth Limits:" -color "Info"
+                foreach ($lim in $smbLimits) {
+                    $bwMbps = [math]::Round($lim.BytesPerSecond / 1MB, 0)
+                    Write-OutputColor "    $($lim.Category): ${bwMbps}MB/s" -color "Info"
+                }
+            }
+            # Adapter QoS
+            $adapterQos = @(Get-NetAdapterQos -ErrorAction SilentlyContinue | Where-Object { $_.Enabled })
+            if ($adapterQos.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Adapters with QoS enabled: $($adapterQos.Count)" -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'QoSPolicyAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Policies = $policies.Count; TrafficClasses = $trafficClasses.Count; SMBLimits = $smbLimits.Count; QoSAdapters = $adapterQos.Count; Issues = $qosIssues } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($qosIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
