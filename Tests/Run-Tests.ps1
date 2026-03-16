@@ -8819,6 +8819,12 @@ Write-TestResult "56-OperationsMenu: prompts for company defaults when missing f
 # SECTION 144: FUNCTION PARITY (modular vs monolithic)
 # ============================================================================
 
+# Free large variables accumulated from earlier sections to prevent OOM on CI runners
+$monoContent = $null; $monoRaw = $null; $monoRaw2 = $null; $monoRaw3 = $null; $monoRaw4 = $null
+$monoContentParity = $null; $monolithicContent = $null
+$mod50 = $null; $mod00 = $null; $headerContent = $null; $batchContent = $null; $epContent = $null
+[GC]::Collect(); [GC]::WaitForPendingFinalizers()
+
 Write-SectionHeader "SECTION 144: FUNCTION PARITY (modular vs monolithic)"
 
 # SKIPPED: This section crashes the PowerShell process (exit code 2) on CI runners
