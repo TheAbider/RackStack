@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.75.1
+
+- **Fix:** VM remote deployment — `Connect-VMNetworkAdapter` and `Set-VMNetworkAdapterVlan` used `-VMName` (string, loses host context) instead of `-VM` (object, carries remote host). NIC configuration silently failed on cluster/remote deployments.
+- **Fix:** Box-drawing overflow — 4 `PadRight(72)` locations in EntryPoint could overflow the `│` border when file paths, DNS lists, query expressions, or diff summaries exceeded 72 characters. Now truncated with `...`.
+- 117 CLI actions, 65 modules
+
 ## v1.75.0
 
 - **New CLI Action:** `VirtualSwitchAudit` — audit all Hyper-V virtual switches, SET team members with link status/speed, and management OS vNICs with VLAN assignments.

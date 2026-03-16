@@ -1831,7 +1831,8 @@ function Invoke-CLIAction {
                     Write-OutputColor "  │$("    GW: $($nic.Gateway)".PadRight(72))│" -color "Info"
                 }
                 if ($nic.DNS.Count -gt 0) {
-                    Write-OutputColor "  │$("    DNS: $($nic.DNS -join ', ')".PadRight(72))│" -color "Info"
+                    $dnsLine = "    DNS: $($nic.DNS -join ', ')"; if ($dnsLine.Length -gt 72) { $dnsLine = $dnsLine.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($dnsLine.PadRight(72))│" -color "Info"
                 }
                 if ($nic.InErrors -gt 0 -or $nic.OutErrors -gt 0) {
                     Write-OutputColor "  │$("    NIC Errors: In=$($nic.InErrors) Out=$($nic.OutErrors)".PadRight(72))│" -color "Warning"
@@ -2066,7 +2067,8 @@ function Invoke-CLIAction {
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  BATCH CONFIG VALIDATION".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  File: $configPath".PadRight(72))│" -color "Info"
+            $fileLine = "  File: $configPath"; if ($fileLine.Length -gt 72) { $fileLine = $fileLine.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($fileLine.PadRight(72))│" -color "Info"
 
             $cfgType = if ($configHash.ConfigType) { $configHash.ConfigType } else { "(not set)" }
             Write-OutputColor "  │$("  Type: $cfgType".PadRight(72))│" -color "Info"
@@ -2231,7 +2233,8 @@ function Invoke-CLIAction {
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  FLEET QUERY RESULTS".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  Query: $queryExpr".PadRight(72))│" -color "Info"
+            $queryLine = "  Query: $queryExpr"; if ($queryLine.Length -gt 72) { $queryLine = $queryLine.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($queryLine.PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("  Reports: $($queryResult.TotalReports)   Matches: $($queryResult.MatchCount)".PadRight(72))│" -color $(if ($queryResult.MatchCount -gt 0) { "Success" } else { "Warning" })
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             if ($queryResult.MatchCount -gt 0) {
@@ -2316,7 +2319,8 @@ function Invoke-CLIAction {
                         $delta = if ($chg.ScoreDelta -gt 0) { "+$($chg.ScoreDelta)" } else { "$($chg.ScoreDelta)" }
                         Write-OutputColor "  │$("  [$section] Score: $($chg.ScoreOld) -> $($chg.ScoreNew) ($delta)".PadRight(72))│" -color $(if ($chg.ScoreDelta -lt 0) { "Error" } else { "Success" })
                     } elseif ($section -eq 'Health') {
-                        Write-OutputColor "  │$("  [$section] $($chg.Old) -> $($chg.New)".PadRight(72))│" -color "Warning"
+                        $healthLine = "  [$section] $($chg.Old) -> $($chg.New)"; if ($healthLine.Length -gt 72) { $healthLine = $healthLine.Substring(0, 69) + "..." }
+                        Write-OutputColor "  │$($healthLine.PadRight(72))│" -color "Warning"
                     } elseif ($section -eq 'Uptime') {
                         Write-OutputColor "  │$("  [$section] Rebooted ($($chg.OldDays)d -> $($chg.NewDays)d)".PadRight(72))│" -color "Info"
                     } else {

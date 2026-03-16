@@ -1870,10 +1870,10 @@ function Set-VMNetworkConfig {
         try {
             Add-VMNetworkAdapter -VM $VM -Name $adapterName -ErrorAction Stop
             if ($nic.SwitchName) {
-                Connect-VMNetworkAdapter -VMName $VM.Name -Name $adapterName -SwitchName $nic.SwitchName -ErrorAction Stop
+                Connect-VMNetworkAdapter -VM $VM -Name $adapterName -SwitchName $nic.SwitchName -ErrorAction Stop
             }
             if ($nic.VLAN) {
-                Set-VMNetworkAdapterVlan -VMName $VM.Name -VMNetworkAdapterName $adapterName -Access -VlanId $nic.VLAN -ErrorAction Stop
+                Set-VMNetworkAdapterVlan -VM $VM -VMNetworkAdapterName $adapterName -Access -VlanId $nic.VLAN -ErrorAction Stop
             }
         } catch {
             Write-OutputColor "  Warning: NIC $nicIndex configuration failed — $_" -color "Warning"
