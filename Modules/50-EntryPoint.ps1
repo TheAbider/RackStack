@@ -266,6 +266,8 @@ function Assert-Elevation {
                 @{ Action = 'NICTeamAudit';    Description = 'SET/LBFO team health + member status' }
                 @{ Action = 'SMBSessionAudit'; Description = 'Active SMB sessions + open files' }
                 @{ Action = 'WindowsUpdateAudit'; Description = 'List pending updates (no install)' }
+                @{ Action = 'ClusterQuorumAudit'; Description = 'Cluster quorum config + witness health' }
+                @{ Action = 'S2DAudit';         Description = 'Storage Spaces Direct health + cache' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7941,6 +7943,125 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($wuIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ClusterQuorumAudit' {
+            Write-OutputColor "  Auditing cluster quorum configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $cqIssues = 0
+            $quorumInfo = @{}
+            try {
+                $cluster = Get-Cluster -ErrorAction Stop
+                Write-OutputColor "  Cluster: $($cluster.Name)" -color "Success"
+                $quorum = Get-ClusterQuorum -ErrorAction Stop
+                $quorumInfo.ClusterName = "$($cluster.Name)"
+                $quorumInfo.QuorumType = "$($quorum.QuorumType)"
+                Write-OutputColor "  Quorum Type: $($quorum.QuorumType)" -color "Info"
+                if ($quorum.QuorumResource) {
+                    $quorumInfo.WitnessName = "$($quorum.QuorumResource.Name)"
+                    $quorumInfo.WitnessState = "$($quorum.QuorumResource.State)"
+                    $witnessColor = if ($quorum.QuorumResource.State -eq "Online") { "Success" } else { "Error" }
+                    Write-OutputColor "  Witness: $($quorum.QuorumResource.Name) — $($quorum.QuorumResource.State)" -color $witnessColor
+                    if ($quorum.QuorumResource.State -ne "Online") { $cqIssues++ }
+                }
+                else {
+                    $quorumInfo.WitnessName = "None"
+                    Write-OutputColor "  Witness: None configured" -color "Warning"
+                    # Node majority without witness is risky for 2-node clusters
+                    $nodeCount = @(Get-ClusterNode -ErrorAction SilentlyContinue).Count
+                    if ($nodeCount -le 2) {
+                        Write-OutputColor "  WARNING: $nodeCount-node cluster with no witness — single failure causes quorum loss" -color "Warning"
+                        $cqIssues++
+                    }
+                    $quorumInfo.NodeCount = $nodeCount
+                }
+                # Node vote status
+                $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue)
+                $quorumInfo.Nodes = @($nodes | ForEach-Object { @{ Name = "$($_.Name)"; State = "$($_.State)"; NodeWeight = $_.NodeWeight; DynamicWeight = $_.DynamicWeight } })
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Node Votes:" -color "Info"
+                foreach ($n in $nodes) {
+                    $nColor = if ($n.State -eq "Up") { "Success" } else { "Error" }
+                    Write-OutputColor "    $($n.Name) — $($n.State)  Weight: $($n.NodeWeight)  Dynamic: $($n.DynamicWeight)" -color $nColor
+                    if ($n.State -ne "Up") { $cqIssues++ }
+                }
+            }
+            catch {
+                Write-OutputColor "  Not a cluster node or cluster unavailable: $($_.Exception.Message)" -color "Warning"
+                $cqIssues++
+                $quorumInfo.Error = "$($_.Exception.Message)"
+            }
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Issues: $cqIssues" -color $(if ($cqIssues -gt 0) { "Warning" } else { "Success" })
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ClusterQuorumAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $cqIssues }; Quorum = $quorumInfo }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($cqIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'S2DAudit' {
+            Write-OutputColor "  Auditing Storage Spaces Direct..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $s2dIssues = 0
+            $s2dInfo = @{}
+            try {
+                $s2d = Get-ClusterS2D -ErrorAction Stop
+                $s2dInfo.State = "$($s2d.State)"
+                $s2dInfo.CacheState = "$($s2d.CacheState)"
+                Write-OutputColor "  S2D State: $($s2d.State)" -color $(if ($s2d.State -eq "Enabled") { "Success" } else { "Error" })
+                Write-OutputColor "  Cache State: $($s2d.CacheState)" -color $(if ($s2d.CacheState -eq "Enabled" -or $s2d.CacheState -eq "ReadWrite") { "Success" } else { "Warning" })
+                if ($s2d.State -ne "Enabled") { $s2dIssues++ }
+                # Storage subsystem
+                $subsystem = Get-StorageSubSystem -FriendlyName "Clustered*" -ErrorAction SilentlyContinue
+                if ($subsystem) {
+                    $s2dInfo.HealthStatus = "$($subsystem.HealthStatus)"
+                    $s2dInfo.OperationalStatus = "$($subsystem.OperationalStatus)"
+                    Write-OutputColor "  Subsystem Health: $($subsystem.HealthStatus)" -color $(if ($subsystem.HealthStatus -eq "Healthy") { "Success" } else { "Error" })
+                    if ($subsystem.HealthStatus -ne "Healthy") { $s2dIssues++ }
+                }
+                # Storage pools
+                $pools = @(Get-StoragePool -ErrorAction SilentlyContinue | Where-Object { $_.IsPrimordial -eq $false })
+                $s2dInfo.PoolCount = $pools.Count
+                Write-OutputColor "  Storage Pools: $($pools.Count)" -color "Info"
+                foreach ($pool in $pools) {
+                    $pColor = if ($pool.HealthStatus -eq "Healthy") { "Success" } else { "Error" }
+                    $usedPct = if ($pool.Size -gt 0) { [math]::Round(($pool.AllocatedSize / $pool.Size) * 100, 1) } else { 0 }
+                    Write-OutputColor "    $($pool.FriendlyName) — $($pool.HealthStatus)  Used: $usedPct%  Op: $($pool.OperationalStatus)" -color $pColor
+                    if ($pool.HealthStatus -ne "Healthy") { $s2dIssues++ }
+                }
+                # Virtual disks
+                $vdisks = @(Get-VirtualDisk -ErrorAction SilentlyContinue)
+                $s2dInfo.VirtualDiskCount = $vdisks.Count
+                Write-OutputColor "  Virtual Disks: $($vdisks.Count)" -color "Info"
+                foreach ($vd in $vdisks) {
+                    $vColor = if ($vd.HealthStatus -eq "Healthy" -and $vd.OperationalStatus -eq "OK") { "Success" } else { "Error" }
+                    Write-OutputColor "    $($vd.FriendlyName) — $($vd.HealthStatus)  Op: $($vd.OperationalStatus)  Size: $([math]::Round($vd.Size / 1GB, 1))GB" -color $vColor
+                    if ($vd.HealthStatus -ne "Healthy") { $s2dIssues++ }
+                }
+                # Physical disks
+                $pdisks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.CanPool -eq $false -and $_.BusType -ne "USB" })
+                $unhealthy = @($pdisks | Where-Object { $_.HealthStatus -ne "Healthy" })
+                $s2dInfo.PhysicalDisks = $pdisks.Count
+                $s2dInfo.UnhealthyDisks = $unhealthy.Count
+                Write-OutputColor "  Physical Disks: $($pdisks.Count) ($($unhealthy.Count) unhealthy)" -color $(if ($unhealthy.Count -gt 0) { "Error" } else { "Success" })
+                if ($unhealthy.Count -gt 0) {
+                    foreach ($ud in $unhealthy) {
+                        Write-OutputColor "    [!!] $($ud.FriendlyName) — $($ud.HealthStatus)  Op: $($ud.OperationalStatus)" -color "Error"
+                    }
+                    $s2dIssues += $unhealthy.Count
+                }
+            }
+            catch {
+                Write-OutputColor "  S2D not available: $($_.Exception.Message)" -color "Warning"
+                $s2dIssues++
+                $s2dInfo.Error = "$($_.Exception.Message)"
+            }
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Issues: $s2dIssues" -color $(if ($s2dIssues -gt 0) { "Warning" } else { "Success" })
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'S2DAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $s2dIssues }; S2D = $s2dInfo }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($s2dIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

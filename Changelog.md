@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.71.0
+
+- **New CLI Action:** `ClusterQuorumAudit` — audit cluster quorum type, witness health, node vote weights. Flags missing witness on 2-node clusters, offline witnesses, and down nodes.
+- **New CLI Action:** `S2DAudit` — audit Storage Spaces Direct health including S2D state, cache, storage subsystem, pools, virtual disks, and physical disk health. Flags unhealthy components.
+- Both support `-OutputFormat JSON` for fleet automation.
+- 114 CLI actions, 65 modules
+
 ## v1.70.3
 
 - **Code quality:** Standardized `$Matches` → `$matches` across 4 modules (33 occurrences). PowerShell is case-insensitive but consistent casing improves readability.
