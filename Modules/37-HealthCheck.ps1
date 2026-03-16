@@ -209,7 +209,7 @@ function Test-NUMATopology {
         if ($numaNodes.Count -eq 0) {
             # Fall back to processor NUMA info
             $cpuResult = Invoke-WithTimeout -ScriptBlock {
-                Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+                Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             } -TimeoutSeconds 10 -Activity "Querying NUMA info"
             $cpus = if ($cpuResult.TimedOut) { @() } else { @($cpuResult.Result) }
             $numaCount = if ($cpus.Count -gt 0) { $cpus.Count } else { 1 }
@@ -236,7 +236,7 @@ function Test-NUMATopology {
         } else {
             # Determine per-node memory capacity (approximate from total/nodes)
             $osResult = Invoke-WithTimeout -ScriptBlock {
-                Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+                Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             } -TimeoutSeconds 10 -Activity "Querying memory for NUMA"
             $osInfo = if ($osResult.TimedOut) { $null } else { $osResult.Result }
             $totalMemGB = if ($null -ne $osInfo) { [math]::Round($osInfo.TotalVisibleMemorySize / 1MB, 1) } else { 0 }
@@ -680,7 +680,7 @@ function Show-SystemHealthCheck {
     Write-OutputColor "=== SYSTEM INFORMATION ===" -color "Success"
     $cimResult = Invoke-WithTimeout -ScriptBlock {
         @{
-            OS  = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+            OS  = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             CS  = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
             CPU = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
         }
@@ -1176,7 +1176,7 @@ function Show-ServerReadiness {
     }
 
     $total++
-    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
     $cs = if ($csResult.TimedOut) { $null } else { $csResult.Result }
     if ($null -ne $cs -and $cs.PartOfDomain) {
         $ready++
@@ -1317,7 +1317,7 @@ function Show-ServerReadiness {
     # Uptime check - warn if server hasn't rebooted in 30+ days
     $total++
     try {
-        $osResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking uptime"
+        $osResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking uptime"
         $osInfo = if ($osResult.TimedOut) { $null } else { $osResult.Result }
         if ($null -ne $osInfo -and $null -ne $osInfo.LastBootUpTime) {
             $uptime = (Get-Date) - $osInfo.LastBootUpTime
@@ -1584,7 +1584,7 @@ function Show-QuickSetupWizard {
     Write-OutputColor "  ────────────────────────────────────────────" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $csResult2 = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    $csResult2 = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
     $cs = if ($csResult2.TimedOut) { $null } else { $csResult2.Result }
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     if ($cs -and $cs.PartOfDomain) {

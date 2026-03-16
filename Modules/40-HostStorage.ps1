@@ -29,7 +29,7 @@ function Test-OpticalDrive {
 
     # Check WMI for CD-ROM drives
     $cdCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_CDROMDrive -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_CDROMDrive -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Checking optical drives"
     $cdDrives = if ($cdCim.TimedOut) { @() } else { $cdCim.Result }
     foreach ($cd in $cdDrives) {
@@ -67,7 +67,7 @@ function Get-NextAvailableDriveLetter {
     $usedLetters = @()
     $usedLetters += (Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { $_.DriveLetter })
     $cdCim2 = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_CDROMDrive -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_CDROMDrive -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Checking CD-ROM drives"
     if (-not $cdCim2.TimedOut -and $cdCim2.Result) {
         $usedLetters += ($cdCim2.Result | ForEach-Object {

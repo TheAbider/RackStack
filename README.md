@@ -337,24 +337,24 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 100 CLI Actions
+### 112 CLI Actions
 
 | Category | Actions |
 |----------|---------|
-| **System Ops** | `Cleanup` `Debloat` `HealthCheck` `QuickScan` `Batch` `Remediate` |
-| **Inventory** | `Inventory` `Export` `SysInfoAudit` `BIOSAudit` `SoftwareList` `HotfixAudit` `FeatureAudit` `DotNetAudit` |
+| **System Ops** | `Cleanup` `Debloat` `HealthCheck` `QuickScan` `Batch` `Remediate` `Win11Cleanup` `DarkMode` `LightMode` |
+| **Inventory** | `Inventory` `Export` `SysInfoAudit` `BIOSAudit` `SoftwareList` `HotfixAudit` `FeatureAudit` `DotNetAudit` `WindowsCapabilityAudit` |
 | **Monitoring** | `Snapshot` `Trend` `Watch` `Alert` `Uptime` `CPUAudit` `MemoryAudit` `DiskAudit` `TempAudit` |
 | **Compliance** | `Compliance` `DriftCheck` `Diff` `Baseline` `Compare` `Aggregate` `ReportHTML` |
-| **Security** | `Harden` `RegistryAudit` `TLSAudit` `CredGuardAudit` `AuditPolicyAudit` `AppLockerAudit` `DefenderExclusionAudit` |
+| **Security** | `Harden` `RegistryAudit` `TLSAudit` `CredGuardAudit` `AuditPolicyAudit` `AppLockerAudit` `DefenderExclusionAudit` `TokenPrivilegeAudit` |
 | **Identity** | `UserAudit` `LocalGroupAudit` `LogonAudit` `ServiceAccountAudit` `KerberosAudit` `ACLAudit` |
-| **Network** | `NetInfo` `DNSAudit` `NetworkAudit` `ListeningPorts` `NetStatAudit` `PortAudit` `ProxyAudit` `DHCPAudit` `VPNAudit` |
+| **Network** | `NetInfo` `DNSAudit` `NetworkAudit` `ListeningPorts` `NetStatAudit` `PortAudit` `ProxyAudit` `DHCPAudit` `VPNAudit` `ARPTableAudit` `NICTeamAudit` |
 | **Firewall** | `FirewallAudit` `FirewallLogAudit` |
-| **Storage** | `StorageAudit` `ShareAudit` `SMBAudit` `BitLockerAudit` `PageFileAudit` `ProfileAudit` |
-| **Services** | `ServiceAudit` `TaskAudit` `EventAudit` `PrintAudit` `IISAudit` `SSHAudit` |
+| **Storage** | `StorageAudit` `ShareAudit` `SMBAudit` `SMBSessionAudit` `BitLockerAudit` `NTFSAudit` `PageFileAudit` `ProfileAudit` `iSCSIAudit` |
+| **Services** | `ServiceAudit` `TaskAudit` `TaskHistoryAudit` `EventAudit` `PrintAudit` `IISAudit` `SSHAudit` |
 | **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` |
-| **Time/Boot** | `TimeAudit` `BootAudit` `PendingRebootAudit` `ScheduledRebootAudit` `RecoveryAudit` |
-| **Patching** | `PatchStatus` `CertCheck` `UpdatePolicyAudit` `LicenseAudit` `AntivirusAudit` |
-| **Infra** | `HyperVAudit` `ClusterAudit` `BackupAudit` `GPOAudit` `WMIAudit` |
+| **Time/Boot** | `TimeAudit` `BootAudit` `PendingRebootAudit` `ScheduledRebootAudit` `RecoveryAudit` `LocaleAudit` |
+| **Patching** | `PatchStatus` `WindowsUpdateAudit` `CertCheck` `UpdatePolicyAudit` `LicenseAudit` `AntivirusAudit` |
+| **Infra** | `HyperVAudit` `ClusterAudit` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` |
 | **Persistence** | `AutoStartAudit` `EventSubAudit` `ComObjectAudit` `SymlinkAudit` `StartupScriptAudit` `HostsFileAudit` |
 | **Domain** | `SecureChannelAudit` `ScheduledExport` `ValidateConfig` `EnvAudit` `CrashAudit` `ProcessAudit` |
 | **Fleet** | `FleetScan` `Query` `RDPAudit` |
@@ -377,7 +377,7 @@ RackStack/
 │   ├── ...                     # 61 more modules
 │   └── 64-SystemDebloat.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 2500+ automated tests
+│   ├── Run-Tests.ps1           # 3800+ automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/

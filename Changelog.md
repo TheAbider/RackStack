@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.70.2
+
+- **Fix:** Added `-OperationTimeoutSec 8` to all CIM queries inside `Invoke-WithTimeout` scriptblocks across 15 modules. This makes CIM/WMI itself timeout at the provider level before the runspace timeout fires, preventing native code from blocking indefinitely on unreachable domain controllers or cold WMI. Defense-in-depth alongside the v1.70.1 fire-and-forget cleanup.
+- **Docs:** Updated README.md — CLI actions table now lists all 112 actions including Win11Cleanup, DarkMode, LightMode, iSCSIAudit, NICTeamAudit, SMBSessionAudit, WindowsUpdateAudit. Test count updated to 3800+.
+- 112 CLI actions, 65 modules
+
 ## v1.70.1
 
 - **Fix:** `Invoke-WithTimeout` could hang on Server 2025 when `$ps.Stop()` blocked on a CIM query that ignored cancellation. Now uses fire-and-forget `ThreadPool.QueueUserWorkItem` for cleanup so the script never freezes waiting for a stuck runspace.

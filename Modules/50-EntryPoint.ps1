@@ -940,7 +940,7 @@ function Invoke-CLIAction {
                 $stepNum++
                 Write-OutputColor "  [$stepNum/$totalSteps] Checking uptime..." -color "Info"
                 try {
-                    $exportCim = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } -TimeoutSeconds 10 -Activity "Querying uptime"
+                    $exportCim = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop } -TimeoutSeconds 10 -Activity "Querying uptime"
                     if (-not $exportCim.TimedOut) {
                         $exportBoot = $exportCim.Result.LastBootUpTime
                         $exportUptime = (Get-Date) - $exportBoot
@@ -1446,7 +1446,7 @@ function Invoke-CLIAction {
 
             try {
                 $uptCim = Invoke-WithTimeout -ScriptBlock {
-                    Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+                    Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 } -TimeoutSeconds 10 -Activity "Querying uptime"
                 if ($uptCim.TimedOut) { throw "CIM query timed out" }
                 $osData = $uptCim.Result
@@ -8839,7 +8839,7 @@ function Start-BatchMode {
     # Step 13: Join domain (prompts for credentials - do near end)
     $stepNum++
     $csCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Checking domain status"
     $csInfo = if ($csCim.TimedOut) { $null } else { $csCim.Result }
     $isDomainJoined = if ($null -ne $csInfo) { $csInfo.PartOfDomain } else { $false }
@@ -8925,7 +8925,7 @@ function Start-BatchMode {
     $stepNum++
     if ($Config.PromoteToDC) {
         $dcCim = Invoke-WithTimeout -ScriptBlock {
-            Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+            Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         } -TimeoutSeconds 10 -Activity "Checking domain role"
         $domainRole = if ($dcCim.TimedOut) { $null } else { $dcCim.Result.DomainRole }
         if ($domainRole -ge 4) {

@@ -32,7 +32,7 @@ function Set-NTPConfiguration {
         Write-OutputColor "  │$("  Current Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')".PadRight(72))│" -color "Info"
 
         $ntpCim = Invoke-WithTimeout -ScriptBlock {
-            (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain
+            (Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).PartOfDomain
         } -TimeoutSeconds 10 -Activity "Checking domain status"
         $isDomainJoined = if ($ntpCim.TimedOut) { $false } else { $ntpCim.Result }
         if ($isDomainJoined) {

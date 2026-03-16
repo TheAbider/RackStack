@@ -3138,7 +3138,7 @@ function Test-VMDeploymentPreFlight {
 
     # 2. RAM check
     $osCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Checking system memory"
     $os = if ($osCim.TimedOut) { $null } else { $osCim.Result }
     $totalRAMGB = if ($os) { [math]::Round($os.TotalVisibleMemorySize / 1MB, 1) } else { 0 }
@@ -3163,7 +3163,7 @@ function Test-VMDeploymentPreFlight {
 
     # 3. vCPU ratio check
     $cpuCim = Invoke-WithTimeout -ScriptBlock {
-        (Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+        (Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
     } -TimeoutSeconds 10 -Activity "Checking CPU info"
     $logicalProcs = if ($cpuCim.TimedOut) { 0 } else { $cpuCim.Result }
     $newvCPUs = 0

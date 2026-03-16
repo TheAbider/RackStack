@@ -75,7 +75,7 @@ function Export-HTMLHealthReport {
     # Gather data (CIM with timeout — immune to WMI hangs)
     $cimResult = Invoke-WithTimeout -ScriptBlock {
         @{
-            OS  = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+            OS  = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             CS  = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
             CPU = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
         }
@@ -800,7 +800,7 @@ function Get-ReadinessChecks {
     }
 
     # Domain
-    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
+    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Checking domain"
     $cs = if ($csResult.TimedOut) { $null } else { $csResult.Result }
     if ($cs -and $cs.PartOfDomain) {
         $checks.Add(@{ Category = "Identity"; Name = "Domain"; Value = $cs.Domain; Status = "OK" })
@@ -1028,7 +1028,7 @@ function Export-HTMLReadinessReport {
     }
 
     # Get domain info for report title (from checks)
-    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Getting hostname"
+    $csResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Getting hostname"
     $cs = if ($csResult.TimedOut) { $null } else { $csResult.Result }
 
     $pct = if ($total -gt 0) { [math]::Round(($ready / $total) * 100) } else { 0 }
@@ -1178,7 +1178,7 @@ function Save-PerformanceSnapshot {
     try {
         $cimSnap = Invoke-WithTimeout -ScriptBlock {
             @{
-                OS   = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+                OS   = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
                 CPU  = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
                 Disk = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
             }

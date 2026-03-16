@@ -13,7 +13,7 @@ function Show-PerformanceDashboard {
         # Batch CIM queries with timeout (immune to WMI hangs)
         $cimResult = Invoke-WithTimeout -ScriptBlock {
             @{
-                CPU = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+                CPU = Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
                 OS  = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
             }
         } -TimeoutSeconds 10 -Activity "Refreshing metrics"

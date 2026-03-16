@@ -83,7 +83,7 @@ function Disable-BuiltInAdminAccount {
         })
 
         $daCim = Invoke-WithTimeout -ScriptBlock {
-            (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain
+            (Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).PartOfDomain
         } -TimeoutSeconds 10 -Activity "Checking domain status"
         $isDomainJoined = if ($daCim.TimedOut) { $false } else { $daCim.Result }
         $hasDomainAdmins = @($adminMembers | Where-Object { $_.ObjectClass -eq 'Group' -or $_.PrincipalSource -eq 'ActiveDirectory' }).Count -gt 0

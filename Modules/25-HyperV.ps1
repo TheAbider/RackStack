@@ -62,7 +62,7 @@ function Install-HyperVRole {
 
     # Detect if this is Windows Server or Windows Client
     $osCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Detecting OS type"
     $osInfo = if ($osCim.TimedOut) { $null } else { $osCim.Result }
     if (-not $osInfo) {

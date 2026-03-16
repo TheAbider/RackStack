@@ -49,7 +49,7 @@ function Export-ServerConfiguration {
         $config += "### SYSTEM INFORMATION ###"
         $sysInfo = Invoke-WithTimeout -ScriptBlock {
             @{
-                CS   = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+                CS   = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
                 OS   = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
                 CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
             }
@@ -472,7 +472,7 @@ function Save-ConfigurationProfile {
     Write-OutputColor "  Gathering current configuration..." -color "Info"
 
     $csCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Querying computer system"
     $computerSystem = if ($csCim.TimedOut) { $null } else { $csCim.Result }
     $timezone = Get-TimeZone
@@ -982,7 +982,7 @@ function Import-ConfigurationProfile {
 
         # Domain join (always last among quick tasks - prompts for creds)
         $domCim = Invoke-WithTimeout -ScriptBlock {
-            Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         } -TimeoutSeconds 10 -Activity "Checking domain status"
         $domCs = if ($domCim.TimedOut) { $null } else { $domCim.Result }
         if ($configProfile.Domain.JoinDomain -and $null -ne $domCs -and -not $domCs.PartOfDomain) {
@@ -1103,7 +1103,7 @@ function Compare-ConfigurationDrift {
 
     # Domain membership
     $driftCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Checking domain membership"
     $cs = if ($driftCim.TimedOut) { $null } else { $driftCim.Result }
     if ($savedProfile.Domain -and $savedProfile.Domain.DomainName) {
@@ -2136,7 +2136,7 @@ function Get-ServerInventory {
     # System info (batch CIM with timeout)
     $sysInfo = Invoke-WithTimeout -ScriptBlock {
         @{
-            CS   = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            CS   = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             OS   = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
             CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
             BIOS = Get-CimInstance -ClassName Win32_BIOS -ErrorAction SilentlyContinue
@@ -2509,7 +2509,7 @@ function Test-WatchThresholds {
         $cpuVal = $null
         try {
             $cpuCim = Invoke-WithTimeout -ScriptBlock {
-                (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
+                (Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
             } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "CPU check"
             if (-not $cpuCim.TimedOut -and $null -ne $cpuCim.Result) {
                 $cpuVal = [math]::Round($cpuCim.Result, 1)
@@ -2526,7 +2526,7 @@ function Test-WatchThresholds {
     if (($Thresholds.Memory -and $null -ne $Thresholds.Memory.MaxPercent) -or ($Thresholds.Uptime -and $null -ne $Thresholds.Uptime.MaxDays)) {
         try {
             $osCim = Invoke-WithTimeout -ScriptBlock {
-                Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+                Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Memory/uptime check"
             if (-not $osCim.TimedOut) { $watchOS = $osCim.Result }
         } catch { }

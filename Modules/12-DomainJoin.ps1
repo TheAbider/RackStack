@@ -97,7 +97,7 @@ function Join-Domain {
 
     # Check current domain status
     $csCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Checking domain status"
     $computerSystem = if ($csCim.TimedOut) { $null } else { $csCim.Result }
     if ($null -ne $computerSystem -and $computerSystem.PartOfDomain) {
@@ -214,7 +214,7 @@ function Join-Domain {
 
             # Check if partial join occurred (domain state changed despite error)
             $postCim = Invoke-WithTimeout -ScriptBlock {
-                Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+                Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             } -TimeoutSeconds 10 -Activity "Verifying domain join"
             $postCheck = if ($postCim.TimedOut) { $null } else { $postCim.Result }
             if ($null -ne $postCheck -and $postCheck.PartOfDomain) {

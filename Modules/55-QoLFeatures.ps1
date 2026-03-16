@@ -487,7 +487,7 @@ function Set-PagefileConfiguration {
         # Read current pagefile settings (batch CIM with timeout)
         $pfCim = Invoke-WithTimeout -ScriptBlock {
             @{
-                Settings = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
+                Settings = Get-CimInstance Win32_PageFileSetting -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
                 Usage    = @(Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue)
                 CompSys  = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
             }
@@ -574,7 +574,7 @@ function Set-PagefileConfiguration {
                 try {
                     # Enable automatic managed pagefile
                     $pfSysCim = Invoke-WithTimeout -ScriptBlock {
-                        Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+                        Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
                     } -TimeoutSeconds 10 -Activity "Querying pagefile settings"
                     if ($pfSysCim.TimedOut) {
                         Write-OutputColor "  CIM query timed out." -color "Error"

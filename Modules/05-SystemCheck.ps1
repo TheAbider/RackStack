@@ -573,7 +573,7 @@ function Test-FeaturePrerequisites {
             # Batch CIM queries with timeout (immune to WMI hangs)
             $hvCim = Invoke-WithTimeout -ScriptBlock {
                 @{
-                    CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+                    CPU  = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
                     CS   = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
                     Disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction SilentlyContinue
                 }
@@ -655,7 +655,7 @@ function Test-FeaturePrerequisites {
 
             # Domain membership (with timeout protection)
             $fcCim = Invoke-WithTimeout -ScriptBlock {
-                Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+                Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             } -TimeoutSeconds 10 -Activity "Checking cluster prerequisites"
             $cs = if ($fcCim.TimedOut) { $null } else { $fcCim.Result }
             $inDomain = if ($cs) { $cs.PartOfDomain } else { $false }

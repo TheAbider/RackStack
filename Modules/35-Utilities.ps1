@@ -1516,7 +1516,7 @@ function Show-UptimeRebootHistory {
     $uptimeStr = "Unknown"
     try {
         $uptCim = Invoke-WithTimeout -ScriptBlock {
-            Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+            Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
         } -TimeoutSeconds 10 -Activity "Querying uptime"
         if ($uptCim.TimedOut) { throw "CIM query timed out" }
         $os = $uptCim.Result
@@ -1616,7 +1616,7 @@ function Show-DriverHealthCheck {
     # Get device/driver info in one batched CIM call
     $drvCim = Invoke-WithTimeout -ScriptBlock {
         @{
-            Devices = @(Get-CimInstance Win32_PnPEntity -ErrorAction Stop)
+            Devices = @(Get-CimInstance Win32_PnPEntity -OperationTimeoutSec 8 -ErrorAction Stop)
             SignedDrivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue)
         }
     } -TimeoutSeconds 30 -Activity "Scanning device drivers"
@@ -2239,7 +2239,7 @@ function Show-MemoryDiagnostics {
     # Physical memory (with timeout protection)
     $memCim = Invoke-WithTimeout -ScriptBlock {
         @{
-            OS     = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            OS     = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             PF     = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue
             PerfOS = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory -ErrorAction SilentlyContinue
         }
