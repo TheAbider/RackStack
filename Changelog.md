@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.77.0
+
+- **New CLI Action:** `ReplicaLagAudit` — reports Hyper-V Replica lag duration, replication health, state, and missed cycles per VM. Flags replicas >60 minutes behind or in non-Normal health.
+- **New CLI Action:** `HandleLeakAudit` — detects processes with anomalous handle counts (>10K), thread counts (>500), or private memory (>4GB) that suggest resource leaks. Catches services like WmiPrvSE/svchost leaking handles before they crash the server.
+- 122 CLI actions, 65 modules
+
 ## v1.76.0
 
 - **New CLI Action:** `VMOvercommitAudit` — calculates CPU and RAM overcommit ratios for running Hyper-V VMs vs physical host resources. Flags critical overcommit (>8:1 CPU, >1.5:1 RAM). Accounts for dynamic memory max.

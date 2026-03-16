@@ -274,6 +274,8 @@ function Assert-Elevation {
                 @{ Action = 'VMOvercommitAudit'; Description = 'Hyper-V CPU/RAM/storage overcommit ratios' }
                 @{ Action = 'DedupAudit';       Description = 'Dedup savings, job health, corruption' }
                 @{ Action = 'ClusterNetworkAudit'; Description = 'Cluster network roles + partition events' }
+                @{ Action = 'ReplicaLagAudit'; Description = 'Hyper-V Replica lag + missed cycles' }
+                @{ Action = 'HandleLeakAudit'; Description = 'Process handle/thread count anomalies' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8304,6 +8306,83 @@ function Invoke-CLIAction {
                 Write-OutputColor "  Cluster not available: $($_.Exception.Message)" -color "Warning"
             }
             if ($cnIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ReplicaLagAudit' {
+            Write-OutputColor "  Auditing Hyper-V Replica lag..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $rlIssues = 0
+            try {
+                $replicas = @(Get-VMReplication -ErrorAction Stop)
+                if ($replicas.Count -eq 0) {
+                    Write-OutputColor "  No VM replication configured." -color "Info"
+                }
+                else {
+                    Write-OutputColor "  Replicated VMs: $($replicas.Count)" -color "Info"
+                    Write-OutputColor "" -color "Info"
+                    foreach ($r in $replicas) {
+                        $lagMins = if ($r.LastReplicationTime) { [math]::Round(((Get-Date) - $r.LastReplicationTime).TotalMinutes, 1) } else { 999 }
+                        $health = "$($r.Health)"
+                        $state = "$($r.State)"
+                        $color = if ($health -eq "Normal" -and $lagMins -lt 15) { "Success" } elseif ($lagMins -lt 60) { "Warning" } else { "Error" }
+                        $vmName = "$($r.VMName)"; if ($vmName.Length -gt 30) { $vmName = $vmName.Substring(0, 27) + "..." }
+                        Write-OutputColor "  $vmName — $state  Health: $health  Lag: ${lagMins}m" -color $color
+                        if ($r.MissedReplicationCount -gt 0) {
+                            Write-OutputColor "    Missed cycles: $($r.MissedReplicationCount)" -color "Warning"
+                            $rlIssues++
+                        }
+                        if ($lagMins -gt 60) { $rlIssues++ }
+                        if ($health -ne "Normal") { $rlIssues++ }
+                    }
+                }
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ReplicaLagAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ ReplicatedVMs = $replicas.Count; Issues = $rlIssues }; Replicas = @($replicas | ForEach-Object { @{ VM = "$($_.VMName)"; State = "$($_.State)"; Health = "$($_.Health)"; LagMinutes = if ($_.LastReplicationTime) { [math]::Round(((Get-Date) - $_.LastReplicationTime).TotalMinutes, 1) } else { -1 }; MissedCycles = $_.MissedReplicationCount } }) }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            }
+            catch {
+                Write-OutputColor "  Hyper-V Replica not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($rlIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'HandleLeakAudit' {
+            Write-OutputColor "  Auditing process handle/thread counts..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $hlIssues = 0
+            $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.HandleCount -gt 0 })
+            # Flag processes with high handles (>10K), high threads (>500), or high private bytes (>4GB)
+            $highHandles = @($procs | Where-Object { $_.HandleCount -gt 10000 } | Sort-Object HandleCount -Descending)
+            $highThreads = @($procs | Where-Object { $_.Threads.Count -gt 500 } | Sort-Object { $_.Threads.Count } -Descending)
+            $highMem = @($procs | Where-Object { $_.PrivateMemorySize64 -gt 4GB } | Sort-Object PrivateMemorySize64 -Descending)
+            if ($highHandles.Count -gt 0) {
+                Write-OutputColor "  Processes with >10,000 handles ($($highHandles.Count)):" -color "Warning"
+                foreach ($p in $highHandles | Select-Object -First 10) {
+                    Write-OutputColor "    $($p.ProcessName) (PID $($p.Id)) — $($p.HandleCount) handles" -color "Warning"
+                }
+                $hlIssues += $highHandles.Count
+            }
+            if ($highThreads.Count -gt 0) {
+                Write-OutputColor "  Processes with >500 threads ($($highThreads.Count)):" -color "Warning"
+                foreach ($p in $highThreads | Select-Object -First 10) {
+                    Write-OutputColor "    $($p.ProcessName) (PID $($p.Id)) — $($p.Threads.Count) threads" -color "Warning"
+                }
+                $hlIssues += $highThreads.Count
+            }
+            if ($highMem.Count -gt 0) {
+                Write-OutputColor "  Processes with >4GB private memory ($($highMem.Count)):" -color "Warning"
+                foreach ($p in $highMem | Select-Object -First 10) {
+                    $memGB = [math]::Round($p.PrivateMemorySize64 / 1GB, 1)
+                    Write-OutputColor "    $($p.ProcessName) (PID $($p.Id)) — ${memGB}GB private" -color "Warning"
+                }
+                $hlIssues += $highMem.Count
+            }
+            if ($hlIssues -eq 0) {
+                Write-OutputColor "  No handle/thread/memory anomalies detected." -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'HandleLeakAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ TotalProcesses = $procs.Count; HighHandles = $highHandles.Count; HighThreads = $highThreads.Count; HighMemory = $highMem.Count; Issues = $hlIssues }; HighHandleProcesses = @($highHandles | Select-Object -First 10 | ForEach-Object { @{ Name = $_.ProcessName; PID = $_.Id; Handles = $_.HandleCount } }); HighThreadProcesses = @($highThreads | Select-Object -First 10 | ForEach-Object { @{ Name = $_.ProcessName; PID = $_.Id; Threads = $_.Threads.Count } }) }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($hlIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

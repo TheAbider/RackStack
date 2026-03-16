@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.76.0
+    Automated Test Runner for RackStack v1.77.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11056,7 +11056,7 @@ try {
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
     }
 
-    # v1.76.0 — -OutputFile parameter
+    # v1.77.0 — -OutputFile parameter
     Write-TestResult "Header: -OutputFile param exists" ($headerContent -match '\[string\]\$OutputFile')
     Write-TestResult "00-Initialization: CLIOutputFile variable" ($mod00 -match 'CLIOutputFile')
     Write-TestResult "50-EntryPoint: OutputFile saves transcript" ($mod50 -match 'CLIOutputFile.*Copy-Item|Copy-Item.*CLIOutputFile')
