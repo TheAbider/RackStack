@@ -1,4 +1,4 @@
-﻿#region ===== MENU RUNNER FUNCTIONS =====
+﻿﻿﻿#region ===== MENU RUNNER FUNCTIONS =====
 # Function to run the main menu
 function Start-Show-Mainmenu {
     while ($true) {
@@ -57,7 +57,7 @@ function Start-Show-Mainmenu {
                         if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
                         if ($batchChoice) {
                             Write-OutputColor "  Invalid choice. Enter 1, 2, 3, or B." -color "Error"
-                            Start-Sleep -Seconds 1
+                            Start-Sleep -Milliseconds 500
                         }
                     }
                 }
@@ -100,7 +100,7 @@ function Start-Show-Mainmenu {
             }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-8, [U]pdate, [V]iew, or [R]efresh." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -177,7 +177,7 @@ function Start-Show-ConfigureServerMenu {
             }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-10, Q, or B to go back." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -206,7 +206,7 @@ function Start-Show-SystemConfigMenu {
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -232,7 +232,7 @@ function Start-Show-RolesFeaturesMenu {
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -264,7 +264,7 @@ function Start-Show-SecurityAccessMenu {
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -300,7 +300,7 @@ function Start-Show-ToolsUtilitiesMenu {
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-14 or B." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -328,7 +328,7 @@ function Start-Show-StorageClusteringMenu {
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -372,7 +372,7 @@ function Start-Show-NetworkMenu {
             }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-2 or B to go back." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -462,7 +462,7 @@ function Start-Show-HostNetworkMenu {
             }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-6, B, or M." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -490,7 +490,7 @@ function Start-Show-VirtualSwitchMenu {
             "back" { return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -542,7 +542,7 @@ function Start-Show-HostNetworkIPMenu {
             }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
@@ -594,7 +594,7 @@ function Start-Show-VM-NetworkMenu {
             }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 500
             }
         }
     }
