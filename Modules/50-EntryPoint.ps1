@@ -271,6 +271,9 @@ function Assert-Elevation {
                 @{ Action = 'VirtualSwitchAudit'; Description = 'Hyper-V virtual switch + vNIC audit' }
                 @{ Action = 'MPIOPathAudit';   Description = 'MPIO path health + load balance policy' }
                 @{ Action = 'ServiceRecoveryAudit'; Description = 'Service recovery actions audit' }
+                @{ Action = 'VMOvercommitAudit'; Description = 'Hyper-V CPU/RAM/storage overcommit ratios' }
+                @{ Action = 'DedupAudit';       Description = 'Dedup savings, job health, corruption' }
+                @{ Action = 'ClusterNetworkAudit'; Description = 'Cluster network roles + partition events' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8174,6 +8177,133 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($svcIssues -gt 5) { [Environment]::Exit(1) }
+        }
+        'VMOvercommitAudit' {
+            Write-OutputColor "  Auditing Hyper-V resource overcommit..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $ocIssues = 0
+            try {
+                $vmHost = Get-VMHost -ErrorAction Stop
+                $physCores = (Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction Stop | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+                $physRAMGB = [math]::Round((Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop).TotalPhysicalMemory / 1GB, 1)
+                $vms = @(Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.State -ne 'Off' })
+                $totalVCPU = ($vms | Measure-Object -Property ProcessorCount -Sum).Sum
+                $totalStaticRAMGB = 0; $totalMaxDynRAMGB = 0
+                foreach ($vm in $vms) {
+                    if ($vm.DynamicMemoryEnabled) { $totalMaxDynRAMGB += $vm.MemoryMaximum / 1GB }
+                    else { $totalStaticRAMGB += $vm.MemoryStartup / 1GB }
+                }
+                $totalRAMGB = [math]::Round($totalStaticRAMGB + $totalMaxDynRAMGB, 1)
+                $cpuRatio = if ($physCores -gt 0) { [math]::Round($totalVCPU / $physCores, 2) } else { 0 }
+                $ramRatio = if ($physRAMGB -gt 0) { [math]::Round($totalRAMGB / $physRAMGB, 2) } else { 0 }
+                Write-OutputColor "  Physical: $physCores cores, $physRAMGB GB RAM" -color "Info"
+                Write-OutputColor "  Allocated: $totalVCPU vCPUs, $totalRAMGB GB RAM ($($vms.Count) running VMs)" -color "Info"
+                Write-OutputColor "" -color "Info"
+                $cpuColor = if ($cpuRatio -le 4) { "Success" } elseif ($cpuRatio -le 8) { "Warning" } else { "Error" }
+                $ramColor = if ($ramRatio -le 1) { "Success" } elseif ($ramRatio -le 1.5) { "Warning" } else { "Error" }
+                Write-OutputColor "  CPU Overcommit:  ${cpuRatio}:1 $(if ($cpuRatio -gt 8) { '(CRITICAL)' } elseif ($cpuRatio -gt 4) { '(High)' } else { '(OK)' })" -color $cpuColor
+                Write-OutputColor "  RAM Overcommit:  ${ramRatio}:1 $(if ($ramRatio -gt 1.5) { '(CRITICAL - exceeds physical)' } elseif ($ramRatio -gt 1) { '(Overcommitted)' } else { '(OK)' })" -color $ramColor
+                if ($cpuRatio -gt 8) { $ocIssues++ }
+                if ($ramRatio -gt 1.5) { $ocIssues++ }
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VMOvercommitAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ PhysicalCores = $physCores; PhysicalRAMGB = $physRAMGB; AllocatedVCPU = $totalVCPU; AllocatedRAMGB = $totalRAMGB; RunningVMs = $vms.Count; CPURatio = $cpuRatio; RAMRatio = $ramRatio; Issues = $ocIssues } }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            }
+            catch {
+                Write-OutputColor "  Hyper-V not available: $($_.Exception.Message)" -color "Warning"
+                $ocIssues++
+            }
+            if ($ocIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DedupAudit' {
+            Write-OutputColor "  Auditing Data Deduplication..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $ddIssues = 0
+            try {
+                $dedupVols = @(Get-DedupVolume -ErrorAction Stop)
+                if ($dedupVols.Count -eq 0) {
+                    Write-OutputColor "  No dedup-enabled volumes found." -color "Info"
+                }
+                else {
+                    foreach ($vol in $dedupVols) {
+                        $status = Get-DedupStatus -Volume $vol.Volume -ErrorAction SilentlyContinue
+                        $savingsGB = if ($status) { [math]::Round($status.SavedSpace / 1GB, 1) } else { 0 }
+                        $pct = if ($status -and $status.OptimizedFilesCount -gt 0) { "$([math]::Round($status.OptimizedFilesSavingsRate * 100, 1))%" } else { "N/A" }
+                        $lastOpt = if ($status -and $status.LastOptimizationTime) { $status.LastOptimizationTime.ToString("yyyy-MM-dd HH:mm") } else { "Never" }
+                        $color = if ($savingsGB -gt 0) { "Success" } else { "Warning" }
+                        Write-OutputColor "  Volume $($vol.Volume): Saved $savingsGB GB ($pct)  Last optimized: $lastOpt" -color $color
+                        if ($status -and $status.LastOptimizationTime -and ((Get-Date) - $status.LastOptimizationTime).TotalDays -gt 7) {
+                            Write-OutputColor "    WARNING: Last optimization >7 days ago" -color "Warning"
+                            $ddIssues++
+                        }
+                    }
+                    # Check dedup jobs
+                    $jobs = @(Get-DedupJob -ErrorAction SilentlyContinue)
+                    if ($jobs.Count -gt 0) {
+                        Write-OutputColor "  Active jobs: $($jobs.Count)" -color "Info"
+                    }
+                }
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DedupAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Volumes = $dedupVols.Count; Issues = $ddIssues } }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            }
+            catch {
+                Write-OutputColor "  Deduplication not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($ddIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ClusterNetworkAudit' {
+            Write-OutputColor "  Auditing cluster networks..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $cnIssues = 0
+            try {
+                $networks = @(Get-ClusterNetwork -ErrorAction Stop)
+                Write-OutputColor "  Cluster Networks: $($networks.Count)" -color "Info"
+                Write-OutputColor "" -color "Info"
+                $hasHeartbeat = $false
+                $hasClient = $false
+                foreach ($net in $networks) {
+                    $role = switch ($net.Role) { 0 { "None" } 1 { "Cluster Only" } 3 { "Cluster + Client" } default { "Unknown ($($net.Role))" } }
+                    if ($net.Role -eq 1) { $hasHeartbeat = $true }
+                    if ($net.Role -eq 3) { $hasClient = $true }
+                    $nColor = if ($net.State -eq "Up") { "Success" } else { "Error" }
+                    Write-OutputColor "  $($net.Name) — $($net.State)  Role: $role  Metric: $($net.Metric)" -color $nColor
+                    if ($net.State -ne "Up") { $cnIssues++ }
+                    # List interfaces on this network
+                    $interfaces = @(Get-ClusterNetworkInterface -Network $net.Name -ErrorAction SilentlyContinue)
+                    foreach ($iface in $interfaces) {
+                        $ifColor = if ($iface.State -eq "Up") { "Success" } else { "Error" }
+                        Write-OutputColor "    $($iface.Node): $($iface.Adapter) — $($iface.State)  IP: $($iface.Address)" -color $ifColor
+                        if ($iface.State -ne "Up") { $cnIssues++ }
+                    }
+                }
+                if (-not $hasHeartbeat -and -not $hasClient) {
+                    Write-OutputColor "  WARNING: No dedicated cluster/heartbeat network found" -color "Warning"
+                    $cnIssues++
+                }
+                # Check for recent partition events
+                $partEvents = @(Get-WinEvent -FilterHashtable @{ LogName='Microsoft-Windows-FailoverClustering/Operational'; ID=1135,1123,1127; StartTime=(Get-Date).AddDays(-7) } -MaxEvents 10 -ErrorAction SilentlyContinue)
+                if ($partEvents.Count -gt 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Network Partition Events (last 7d): $($partEvents.Count)" -color "Error"
+                    foreach ($evt in $partEvents | Select-Object -First 5) {
+                        $evtLine = "    $($evt.TimeCreated.ToString('yyyy-MM-dd HH:mm'))  ID:$($evt.Id) $($evt.Message.Split("`n")[0])"
+                        if ($evtLine.Length -gt 72) { $evtLine = $evtLine.Substring(0, 69) + "..." }
+                        Write-OutputColor $evtLine -color "Warning"
+                    }
+                    $cnIssues += $partEvents.Count
+                }
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ClusterNetworkAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Networks = $networks.Count; PartitionEvents = $partEvents.Count; Issues = $cnIssues } }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            }
+            catch {
+                Write-OutputColor "  Cluster not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($cnIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

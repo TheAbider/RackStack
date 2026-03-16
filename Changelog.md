@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.76.0
+
+- **New CLI Action:** `VMOvercommitAudit` — calculates CPU and RAM overcommit ratios for running Hyper-V VMs vs physical host resources. Flags critical overcommit (>8:1 CPU, >1.5:1 RAM). Accounts for dynamic memory max.
+- **New CLI Action:** `DedupAudit` — reports dedup-enabled volume savings, optimization rate, last optimization time, and active jobs. Flags volumes where optimization hasn't run in >7 days.
+- **New CLI Action:** `ClusterNetworkAudit` — validates cluster network roles (heartbeat, client), interface states, and surfaces network partition events (event IDs 1123/1127/1135) from the last 7 days.
+- All support `-OutputFormat JSON`.
+- 120 CLI actions, 65 modules
+
 ## v1.75.1
 
 - **Fix:** VM remote deployment — `Connect-VMNetworkAdapter` and `Set-VMNetworkAdapterVlan` used `-VMName` (string, loses host context) instead of `-VM` (object, carries remote host). NIC configuration silently failed on cluster/remote deployments.
