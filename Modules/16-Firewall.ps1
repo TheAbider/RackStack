@@ -314,7 +314,7 @@ function Export-FirewallRuleAudit {
 
         $export | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Encoding UTF8
 
-        $enabledCount = @($rules | Where-Object { $_.Enabled -eq 'True' }).Count
+        $enabledCount = @($rules | Where-Object { $_.Enabled -eq $true }).Count
         $totalCount = @($rules).Count
         Write-OutputColor "  Exported $totalCount rules ($enabledCount enabled) to:" -color "Success"
         Write-OutputColor "  $OutputPath" -color "Info"

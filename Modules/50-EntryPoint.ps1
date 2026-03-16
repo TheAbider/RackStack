@@ -2945,9 +2945,9 @@ function Invoke-CLIAction {
             try {
                 $allRules = @(Get-NetFirewallRule -ErrorAction Stop)
                 $totalRules = $allRules.Count
-                $enabledRules = @($allRules | Where-Object { $_.Enabled -eq 'True' }).Count
+                $enabledRules = @($allRules | Where-Object { $_.Enabled -eq $true }).Count
                 $disabledRules = $totalRules - $enabledRules
-                $enabledOnly = @($allRules | Where-Object { $_.Enabled -eq 'True' })
+                $enabledOnly = @($allRules | Where-Object { $_.Enabled -eq $true })
                 $inboundAllow = @($enabledOnly | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' }).Count
                 $inboundBlock = @($enabledOnly | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Block' }).Count
                 $outboundAllow = @($enabledOnly | Where-Object { $_.Direction -eq 'Outbound' -and $_.Action -eq 'Allow' }).Count

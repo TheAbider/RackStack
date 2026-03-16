@@ -2380,11 +2380,14 @@ function Test-DeploymentDiskSpace {
 
     if (-not $StoragePath) {
         if ($script:VMDeploymentMode -eq "Cluster") {
-            $csvs = Get-ClusterSharedVolume -Cluster $script:VMDeploymentTarget -ErrorAction SilentlyContinue
-            if ($csvs) {
-                $StoragePath = ($csvs | Select-Object -First 1).SharedVolumeInfo.FriendlyVolumeName
+            $csvs = @(Get-ClusterSharedVolume -Cluster $script:VMDeploymentTarget -ErrorAction SilentlyContinue)
+            if ($csvs.Count -gt 0) {
+                $firstCSV = $csvs | Select-Object -First 1
+                if ($null -ne $firstCSV -and $null -ne $firstCSV.SharedVolumeInfo) {
+                    $StoragePath = $firstCSV.SharedVolumeInfo.FriendlyVolumeName
+                }
             }
-            if (-not $StoragePath) { $StoragePath = "C:\ClusterStorage\Volume1" }
+            if (-not $StoragePath) { $StoragePath = "$env:SystemDrive\ClusterStorage\Volume1" }
         }
         else {
             $StoragePath = $script:HostVMStoragePath
