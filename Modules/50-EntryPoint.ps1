@@ -7920,7 +7920,7 @@ function Invoke-CLIAction {
                     foreach ($u in $result.Updates) {
                         $sizeMB = if ($u.MaxDownloadSize) { [math]::Round($u.MaxDownloadSize / 1MB, 1) } else { 0 }
                         $severity = if ($u.MsrcSeverity) { $u.MsrcSeverity } else { "Unspecified" }
-                        $kbMatch = if ($u.Title -match 'KB(\d+)') { $matches[1] } else { "" }
+                        $kbMatch = if ($u.Title -match 'KB(\d+)') { $regexMatches = $matches; $regexMatches[1] } else { "" }
                         $pendingUpdates += @{ Title = "$($u.Title)"; KB = $kbMatch; SizeMB = $sizeMB; Severity = $severity }
                         $color = if ($severity -eq "Critical") { "Error" } elseif ($severity -eq "Important") { "Warning" } else { "Info" }
                         Write-OutputColor "  [$severity] $($u.Title) ($sizeMB MB)" -color $color
