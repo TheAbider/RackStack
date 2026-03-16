@@ -8393,8 +8393,8 @@ function Invoke-CLIAction {
             Write-OutputColor "" -color "Info"
             $scIssues = 0
             try {
-                $shadows = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue)
-                $storage = @(Get-WmiObject Win32_ShadowStorage -ErrorAction SilentlyContinue)
+                $shadows = @(Get-CimInstance Win32_ShadowCopy -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
+                $storage = @(Get-CimInstance Win32_ShadowStorage -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
                 Write-OutputColor "  Shadow Copies: $($shadows.Count)" -color $(if ($shadows.Count -gt 0) { "Success" } else { "Warning" })
                 if ($storage.Count -gt 0) {
                     foreach ($st in $storage) {
