@@ -8072,6 +8072,17 @@ function Invoke-CLIAction {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  CLI action completed successfully." -color "Success"
 
+    # Save output to file if -OutputFile was specified
+    if ($script:CLIOutputFile -and $script:TranscriptPath -and (Test-Path -LiteralPath $script:TranscriptPath)) {
+        try {
+            Copy-Item -LiteralPath $script:TranscriptPath -Destination $script:CLIOutputFile -Force -ErrorAction Stop
+            Write-OutputColor "  Output saved: $($script:CLIOutputFile)" -color "Info"
+        }
+        catch {
+            Write-OutputColor "  Failed to save output: $($_.Exception.Message)" -color "Warning"
+        }
+    }
+
     # Exit with proper code for automation consumers
     if ($script:HeadlessMode) {
         [Environment]::Exit(0)

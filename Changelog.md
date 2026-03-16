@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.73.0
+
+- **New Feature:** `-OutputFile` parameter — save CLI action output (transcript) to a file. Usage: `RackStack.exe -Action HealthCheck -OutputFile C:\reports\health.log`
+- **Docs:** README updated — added System Debloat section to features, updated function count to 600+, added all new CLI actions to the table.
+- 114 CLI actions, 65 modules, 606 functions
+
 ## v1.72.0
 
 - **New Feature:** Batch config now supports `Win11Cleanup` (boolean) and `OSTheme` ("Dark"/"Light") fields — apply Windows 11 UI tweaks and theme changes via JSON batch mode alongside all other server configuration steps.

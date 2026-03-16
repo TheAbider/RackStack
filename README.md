@@ -50,6 +50,8 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Remote Ops** -- Remote PowerShell sessions, remote health checks, remote service management
 
+**System Debloat** -- Remove bloatware, disable telemetry, optimize services (Light/Standard/Aggressive profiles), Windows 11 / Server 2025 UI cleanup (classic right-click, left taskbar, no widgets/copilot), OS dark/light theme toggle
+
 **UX** -- 5 color themes, session resume, favorites, command history, undo framework, 72-char box-drawing UI
 
 ## Quick Start
@@ -413,7 +415,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 powershell -ExecutionPolicy Bypass -File Tests\Validate-Release.ps1
 ```
 
-Tests cover parsing, module loading, function existence (300+), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
+Tests cover parsing, module loading, function existence (600+), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
 
 ## Development
 

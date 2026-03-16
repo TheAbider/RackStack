@@ -30,7 +30,7 @@
     7h3 4b1d3r
 
 .VERSION
-    1.72.0
+    1.73.0
 
 .LAST UPDATED
     03/13/2026
@@ -1402,6 +1402,9 @@ param(
 
     [ValidateSet('Console', 'JSON')]
     [string]$OutputFormat = 'Console',
+
+    # Save CLI action output to file (works with any -Action)
+    [string]$OutputFile,
 
     # Show version and exit
     [switch]$Version,
