@@ -1,4 +1,4 @@
-﻿﻿﻿#region ===== MENU RUNNER FUNCTIONS =====
+﻿#region ===== MENU RUNNER FUNCTIONS =====
 # Function to run the main menu
 function Start-Show-Mainmenu {
     while ($true) {
