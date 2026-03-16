@@ -27,9 +27,9 @@ jobs:
 
       - name: Run tests
         run: |
-          # Run tests (skip monolithic parse to reduce memory pressure on CI runners)
-          $result = & .\Tests\Run-Tests.ps1 -Quick
-          exit $LASTEXITCODE
+          # Run tests in a child process with increased stack size to prevent OOM
+          $proc = Start-Process powershell -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\Tests\Run-Tests.ps1', '-Quick' -Wait -PassThru -NoNewWindow
+          exit $proc.ExitCode
 
       - name: Upload test artifacts on failure
         uses: actions/upload-artifact@v4
