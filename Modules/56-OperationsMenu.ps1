@@ -1150,6 +1150,20 @@ function Import-Defaults {
         }
     }
 
+    # Apply CLI defaults (only when CLI flags weren't explicitly provided)
+    if ($null -ne $merged.CLIDefaults) {
+        $cliDef = $merged.CLIDefaults
+        if ($cliDef.OutputFormat -and $script:CLIOutputFormat -eq 'Console' -and -not $OutputFormat) {
+            $script:CLIOutputFormat = "$($cliDef.OutputFormat)"
+        }
+        if ($cliDef.DefaultTier -and $script:CLIProfile -eq 'Standard' -and -not $Tier) {
+            $script:CLIProfile = "$($cliDef.DefaultTier)"
+        }
+        if ($cliDef.QuietMode -eq $true -and -not $script:CLIQuiet) {
+            $script:CLIQuiet = $true
+        }
+    }
+
     # Rebuild SAN target pairs from configured subnet
     Initialize-SANTargetPairs
 }

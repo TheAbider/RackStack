@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.74.0
+
+- **New Feature:** `CLIDefaults` section in `defaults.json` — set org-wide default OutputFormat, DefaultTier, and QuietMode for CLI actions. Operators no longer need to pass `-OutputFormat JSON` every time if their workflow always uses JSON.
+- **Fix:** `.Enabled -eq 'True'` string comparison replaced with `-eq $true` (boolean) in Firewall export and FirewallAudit (3 sites).
+- **Fix:** Null-safe CSV StoragePath in VM deployment — properly handles empty cluster CSV list with null checks instead of crashing.
+- **Performance:** Menu invalid choice feedback reduced from 1000ms to 500ms (13 locations in MenuRunner).
+- **Config:** `defaults.example.json` updated with CLIDefaults section and documentation.
+- 114 CLI actions, 65 modules
+
 ## v1.73.0
 
 - **New Feature:** `-OutputFile` parameter — save CLI action output (transcript) to a file. Usage: `RackStack.exe -Action HealthCheck -OutputFile C:\reports\health.log`

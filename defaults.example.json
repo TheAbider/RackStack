@@ -404,5 +404,17 @@
         "CredentialExpiry": 1800,
         "MenuCache": 60,
         "HealthCheckCache": 30
+    },
+
+    "_section_cli": "========== CLI ACTION DEFAULTS ==========",
+
+    "_CLIDefaults_help": "Default preferences for CLI actions (RackStack.exe -Action ...). These are used when the corresponding CLI flag is not provided.",
+    "CLIDefaults": {
+        "OutputFormat": "Console",
+        "_OutputFormat_help": "'Console' for human-readable output, 'JSON' for machine-readable. Override with -OutputFormat.",
+        "DefaultTier": "Standard",
+        "_DefaultTier_help": "'Light', 'Standard', or 'Aggressive' for Cleanup/Debloat actions. Override with -Tier.",
+        "QuietMode": false,
+        "_QuietMode_help": "true = suppress banner and non-essential output during CLI actions. Override with -Quiet."
     }
 }
