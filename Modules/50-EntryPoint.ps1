@@ -265,6 +265,7 @@ function Assert-Elevation {
                 @{ Action = 'iSCSIAudit';      Description = 'iSCSI sessions, targets, MPIO paths' }
                 @{ Action = 'NICTeamAudit';    Description = 'SET/LBFO team health + member status' }
                 @{ Action = 'SMBSessionAudit'; Description = 'Active SMB sessions + open files' }
+                @{ Action = 'WindowsUpdateAudit'; Description = 'List pending updates (no install)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7890,6 +7891,56 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($smbIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'WindowsUpdateAudit' {
+            Write-OutputColor "  Checking for pending Windows updates..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $wuIssues = 0
+            $pendingUpdates = @()
+            try {
+                # Try PSWindowsUpdate module first (faster, more reliable)
+                $pswu = Get-Module -ListAvailable -Name PSWindowsUpdate -ErrorAction SilentlyContinue
+                if ($pswu) {
+                    Import-Module PSWindowsUpdate -ErrorAction Stop
+                    $updates = @(Get-WindowsUpdate -AcceptAll -ErrorAction Stop)
+                    foreach ($u in $updates) {
+                        $sizeMB = if ($u.Size) { [math]::Round($u.Size / 1MB, 1) } else { 0 }
+                        $pendingUpdates += @{ Title = "$($u.Title)"; KB = "$($u.KB)"; SizeMB = $sizeMB; IsImportant = ($u.MsrcSeverity -eq "Critical" -or $u.MsrcSeverity -eq "Important") }
+                        $color = if ($u.MsrcSeverity -eq "Critical") { "Error" } elseif ($u.MsrcSeverity -eq "Important") { "Warning" } else { "Info" }
+                        Write-OutputColor "  [$($u.MsrcSeverity)] $($u.Title) ($sizeMB MB)" -color $color
+                    }
+                }
+                else {
+                    # Fallback: COM-based update search
+                    $session = New-Object -ComObject Microsoft.Update.Session
+                    $searcher = $session.CreateUpdateSearcher()
+                    $result = $searcher.Search("IsInstalled=0")
+                    foreach ($u in $result.Updates) {
+                        $sizeMB = if ($u.MaxDownloadSize) { [math]::Round($u.MaxDownloadSize / 1MB, 1) } else { 0 }
+                        $severity = if ($u.MsrcSeverity) { $u.MsrcSeverity } else { "Unspecified" }
+                        $kbMatch = if ($u.Title -match 'KB(\d+)') { $matches[1] } else { "" }
+                        $pendingUpdates += @{ Title = "$($u.Title)"; KB = $kbMatch; SizeMB = $sizeMB; Severity = $severity }
+                        $color = if ($severity -eq "Critical") { "Error" } elseif ($severity -eq "Important") { "Warning" } else { "Info" }
+                        Write-OutputColor "  [$severity] $($u.Title) ($sizeMB MB)" -color $color
+                    }
+                }
+            }
+            catch {
+                Write-OutputColor "  Failed to check updates: $($_.Exception.Message)" -color "Error"
+                $wuIssues++
+            }
+            Write-OutputColor "" -color "Info"
+            $critical = @($pendingUpdates | Where-Object { $_.IsImportant -or $_.Severity -eq "Critical" }).Count
+            Write-OutputColor "  Pending: $($pendingUpdates.Count)   Critical/Important: $critical" -color $(if ($critical -gt 0) { "Warning" } elseif ($pendingUpdates.Count -gt 0) { "Info" } else { "Success" })
+            if ($pendingUpdates.Count -eq 0 -and $wuIssues -eq 0) {
+                Write-OutputColor "  System is up to date." -color "Success"
+            }
+            if ($critical -gt 0) { $wuIssues++ }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'WindowsUpdateAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ PendingUpdates = $pendingUpdates.Count; Critical = $critical; Issues = $wuIssues }; Updates = $pendingUpdates }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($wuIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

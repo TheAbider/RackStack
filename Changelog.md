@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.70.0
+
+- **New CLI Action:** `WindowsUpdateAudit` — lists all pending Windows updates with severity, KB, and size without installing anything. Uses PSWindowsUpdate module if available, falls back to COM-based Microsoft.Update.Session. Flags critical/important updates. Supports JSON output.
+- 112 CLI actions, 65 modules
+
 ## v1.69.2
 
 - **Tests:** Added 22 new tests — function existence for `Invoke-Win11UICleanup` and `Set-OSThemeMode`, CLI action validation for Win11Cleanup/DarkMode/LightMode/iSCSIAudit/NICTeamAudit/SMBSessionAudit, and favorites dispatch map validation (verifies all 30 mapped function names resolve to real functions).
