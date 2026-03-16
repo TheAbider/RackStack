@@ -262,6 +262,9 @@ function Assert-Elevation {
                 @{ Action = 'Win11Cleanup';    Description = 'Apply Windows 10-style UI tweaks (Win11/2025)' }
                 @{ Action = 'DarkMode';        Description = 'Set OS to dark theme' }
                 @{ Action = 'LightMode';       Description = 'Set OS to light theme' }
+                @{ Action = 'iSCSIAudit';      Description = 'iSCSI sessions, targets, MPIO paths' }
+                @{ Action = 'NICTeamAudit';    Description = 'SET/LBFO team health + member status' }
+                @{ Action = 'SMBSessionAudit'; Description = 'Active SMB sessions + open files' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -7776,6 +7779,117 @@ function Invoke-CLIAction {
                 if ($script:CLIOutputFormat -eq 'JSON') { Write-Output (@{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LightMode'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Status = 'Applied' } | ConvertTo-Json -Depth 10) }
             }
             catch { Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"; [Environment]::Exit(1) }
+        }
+        'iSCSIAudit' {
+            Write-OutputColor "  Auditing iSCSI configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $iscsiIssues = 0
+            $sessions = @(Get-IscsiSession -ErrorAction SilentlyContinue)
+            $targets = @(Get-IscsiTarget -ErrorAction SilentlyContinue)
+            $connections = @(Get-IscsiConnection -ErrorAction SilentlyContinue)
+            $initiator = Get-InitiatorPort -ErrorAction SilentlyContinue | Select-Object -First 1
+            $iqn = if ($initiator) { $initiator.NodeAddress } else { "Unknown" }
+            Write-OutputColor "  Initiator IQN: $iqn" -color "Info"
+            Write-OutputColor "  Active Sessions: $($sessions.Count)" -color $(if ($sessions.Count -gt 0) { "Success" } else { "Warning" })
+            Write-OutputColor "  Known Targets: $($targets.Count)" -color "Info"
+            Write-OutputColor "  Connections: $($connections.Count)" -color "Info"
+            if ($sessions.Count -eq 0) {
+                Write-OutputColor "  No active iSCSI sessions." -color "Warning"
+                $iscsiIssues++
+            }
+            else {
+                Write-OutputColor "" -color "Info"
+                foreach ($s in $sessions) {
+                    $pathCount = @($connections | Where-Object { $_.SessionIdentifier -eq $s.SessionIdentifier }).Count
+                    $color = if ($s.IsConnected) { "Success" } else { "Error" }
+                    Write-OutputColor "  Target: $($s.TargetNodeAddress)" -color $color
+                    Write-OutputColor "    Connected: $($s.IsConnected)   Persistent: $($s.IsPersistent)   Paths: $pathCount" -color "Info"
+                    if (-not $s.IsConnected) { $iscsiIssues++ }
+                    if (-not $s.IsPersistent) { $iscsiIssues++; Write-OutputColor "    WARNING: Session is not persistent (won't survive reboot)" -color "Warning" }
+                }
+            }
+            # MPIO check
+            $mpioDevices = @(Get-MSDSMSupportedHW -ErrorAction SilentlyContinue)
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  MPIO Claimed Devices: $($mpioDevices.Count)" -color $(if ($mpioDevices.Count -gt 0) { "Success" } else { "Info" })
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'iSCSIAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ InitiatorIQN = $iqn; Sessions = $sessions.Count; Targets = $targets.Count; Connections = $connections.Count; MPIODevices = $mpioDevices.Count; Issues = $iscsiIssues }; Sessions = @($sessions | ForEach-Object { @{ Target = $_.TargetNodeAddress; Connected = $_.IsConnected; Persistent = $_.IsPersistent } }) }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($iscsiIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NICTeamAudit' {
+            Write-OutputColor "  Auditing NIC teaming..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $teamIssues = 0
+            # Check SET teams (Hyper-V Switch Embedded Teaming)
+            $setTeams = @(Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.EmbeddedTeamingEnabled })
+            if ($setTeams.Count -gt 0) {
+                Write-OutputColor "  SET Teams: $($setTeams.Count)" -color "Success"
+                foreach ($team in $setTeams) {
+                    $members = @(Get-VMSwitchTeam -VMSwitch $team -ErrorAction SilentlyContinue | ForEach-Object { $_.NetAdapterInterfaceDescription })
+                    Write-OutputColor "    Switch: $($team.Name)  Members: $($members.Count)  Mode: $($team.BandwidthReservationMode)" -color "Info"
+                    foreach ($member in $members) {
+                        $nic = Get-NetAdapter -InterfaceDescription $member -ErrorAction SilentlyContinue
+                        $status = if ($nic) { $nic.Status } else { "Unknown" }
+                        $color = if ($status -eq "Up") { "Success" } else { "Error" }
+                        Write-OutputColor "      $member — $status" -color $color
+                        if ($status -ne "Up") { $teamIssues++ }
+                    }
+                }
+            }
+            # Check LBFO teams
+            $lbfoTeams = @(Get-NetLbfoTeam -ErrorAction SilentlyContinue)
+            if ($lbfoTeams.Count -gt 0) {
+                Write-OutputColor "  LBFO Teams: $($lbfoTeams.Count)" -color "Success"
+                foreach ($team in $lbfoTeams) {
+                    $color = if ($team.Status -eq "Up") { "Success" } else { "Error" }
+                    Write-OutputColor "    Team: $($team.Name)  Status: $($team.Status)  Mode: $($team.TeamingMode)  LB: $($team.LoadBalancingAlgorithm)" -color $color
+                    $members = @(Get-NetLbfoTeamMember -Team $team.Name -ErrorAction SilentlyContinue)
+                    foreach ($m in $members) {
+                        $mColor = if ($m.AdministrativeMode -eq "Active" -and $m.ReceiveLinkSpeed -gt 0) { "Success" } else { "Warning" }
+                        Write-OutputColor "      $($m.Name) — $($m.AdministrativeMode)  Speed: $(Format-LinkSpeed $m.ReceiveLinkSpeed)" -color $mColor
+                    }
+                    if ($team.Status -ne "Up") { $teamIssues++ }
+                }
+            }
+            if ($setTeams.Count -eq 0 -and $lbfoTeams.Count -eq 0) {
+                Write-OutputColor "  No NIC teams (SET or LBFO) found." -color "Info"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NICTeamAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ SETTeams = $setTeams.Count; LBFOTeams = $lbfoTeams.Count; Issues = $teamIssues } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($teamIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SMBSessionAudit' {
+            Write-OutputColor "  Auditing SMB sessions..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $smbIssues = 0
+            $sessions = @(Get-SmbSession -ErrorAction SilentlyContinue)
+            $openFiles = @(Get-SmbOpenFile -ErrorAction SilentlyContinue)
+            Write-OutputColor "  Active Sessions: $($sessions.Count)" -color $(if ($sessions.Count -gt 0) { "Success" } else { "Info" })
+            Write-OutputColor "  Open Files: $($openFiles.Count)" -color "Info"
+            if ($sessions.Count -gt 0) {
+                Write-OutputColor "" -color "Info"
+                $grouped = $sessions | Group-Object -Property ClientComputerName
+                foreach ($g in $grouped) {
+                    $clientFiles = @($openFiles | Where-Object { $_.ClientComputerName -eq $g.Name }).Count
+                    Write-OutputColor "  Client: $($g.Name)  Sessions: $($g.Count)  Open Files: $clientFiles" -color "Info"
+                }
+                # Check for stale sessions (connected > 24h)
+                $stale = @($sessions | Where-Object { $null -ne $_.ConnectedTime -and (New-TimeSpan -Start $_.ConnectedTime).TotalHours -gt 24 })
+                if ($stale.Count -gt 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Stale sessions (>24h): $($stale.Count)" -color "Warning"
+                    $smbIssues++
+                }
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SMBSessionAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ ActiveSessions = $sessions.Count; OpenFiles = $openFiles.Count; Issues = $smbIssues }; SessionsByClient = @($sessions | Group-Object ClientComputerName | ForEach-Object { @{ Client = $_.Name; Sessions = $_.Count } }) }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($smbIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

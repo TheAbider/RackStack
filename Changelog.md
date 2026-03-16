@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.69.0
+
+- **New CLI Action:** `iSCSIAudit` — audit iSCSI sessions, targets, connections, persistent status, and MPIO claimed devices. Flags disconnected or non-persistent sessions.
+- **New CLI Action:** `NICTeamAudit` — audit SET (Switch Embedded Teaming) and LBFO team health, member NIC status, teaming mode, and load balancing algorithm. Flags down members.
+- **New CLI Action:** `SMBSessionAudit` — audit active SMB sessions and open files grouped by client. Flags stale sessions (>24h). Useful for file server monitoring.
+- All 3 support `-OutputFormat JSON` for fleet automation.
+- 111 CLI actions, 65 modules
+
 ## v1.68.0
 
 - **New CLI Action:** `Win11Cleanup` — apply all Windows 10-style UI tweaks non-interactively. Supports JSON output. Usage: `RackStack.exe -Action Win11Cleanup [-OutputFormat JSON]`
