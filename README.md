@@ -339,7 +339,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 112 CLI Actions
+### 126 CLI Actions
 
 | Category | Actions |
 |----------|---------|
@@ -356,9 +356,12 @@ $report.Issues
 | **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` |
 | **Time/Boot** | `TimeAudit` `BootAudit` `PendingRebootAudit` `ScheduledRebootAudit` `RecoveryAudit` `LocaleAudit` |
 | **Patching** | `PatchStatus` `WindowsUpdateAudit` `CertCheck` `UpdatePolicyAudit` `LicenseAudit` `AntivirusAudit` |
-| **Infra** | `HyperVAudit` `ClusterAudit` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` |
+| **Infra** | `HyperVAudit` `ClusterAudit` `ClusterQuorumAudit` `ClusterNetworkAudit` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` |
+| **Hyper-V** | `VMOvercommitAudit` `ReplicaLagAudit` `LiveMigrationAudit` `VirtualSwitchAudit` |
+| **Storage** (ext) | `S2DAudit` `DedupAudit` `MPIOPathAudit` `ShadowCopyAudit` `QoSPolicyAudit` |
+| **Services** (ext) | `ServiceRecoveryAudit` `HandleLeakAudit` |
 | **Persistence** | `AutoStartAudit` `EventSubAudit` `ComObjectAudit` `SymlinkAudit` `StartupScriptAudit` `HostsFileAudit` |
-| **Domain** | `SecureChannelAudit` `ScheduledExport` `ValidateConfig` `EnvAudit` `CrashAudit` `ProcessAudit` |
+| **Domain** | `SecureChannelAudit` `DomainTrustAudit` `ScheduledExport` `ValidateConfig` `EnvAudit` `CrashAudit` `ProcessAudit` |
 | **Fleet** | `FleetScan` `Query` `RDPAudit` |
 
 Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JSON` for the full list with descriptions.
