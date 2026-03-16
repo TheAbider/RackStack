@@ -1,4 +1,4 @@
-﻿#region ===== HOST STORAGE SETUP =====
+﻿﻿#region ===== HOST STORAGE SETUP =====
 # Generate Defender VM exclusion paths based on current host drive
 function Update-DefenderVMPaths {
     $drive = $script:SelectedHostDrive  # e.g. "D:"
@@ -127,7 +127,7 @@ function Move-OpticalDriveFromD {
             $volGuid = $null
             $mountvolOutput = mountvol D: /L 2>$null
             if ($mountvolOutput -match '(\\\\\?\\Volume\{[a-f0-9-]+\}\\)') {
-                $regexMatches = $Matches
+                $regexMatches = $matches
                 $volGuid = $regexMatches[1]
             }
 

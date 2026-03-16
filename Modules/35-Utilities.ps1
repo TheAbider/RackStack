@@ -1,4 +1,4 @@
-﻿#region ===== UTILITY FUNCTIONS (v2.6.0) =====
+﻿﻿#region ===== UTILITY FUNCTIONS (v2.6.0) =====
 # Function to compare two configuration profiles
 function Compare-ConfigurationProfiles {
     Clear-Host
@@ -284,7 +284,7 @@ function Install-ScriptUpdate {
         # Parse SHA256 hash from release notes (format: "abcdef123...  filename")
         $hashPattern = '([0-9a-fA-F]{64})\s+' + [regex]::Escape($asset.name)
         if ($Release.body -match $hashPattern) {
-            $regexMatches = $Matches
+            $regexMatches = $matches
             $expectedHash = $regexMatches[1].ToUpper()
         }
     }
@@ -786,7 +786,7 @@ function Get-StoredCredential {
             $storedUser = ""
             foreach ($line in $cmdkeyOutput) {
                 if ($line -match "User:\s*(.+)$") {
-                    $regexMatches = $Matches
+                    $regexMatches = $matches
                     $storedUser = $regexMatches[1].Trim()
                     break
                 }
@@ -1336,16 +1336,16 @@ function Show-VSSWriterStatus {
     foreach ($line in $vssOutput) {
         $lineStr = "$line".Trim()
         if ($lineStr -match "^Writer name:\s*'(.+)'") {
-            $regexMatches = $Matches
+            $regexMatches = $matches
             if ($null -ne $currentWriter) { $writers += $currentWriter }
             $currentWriter = @{ Name = $regexMatches[1]; State = "Unknown"; LastError = "No error" }
         }
         elseif ($lineStr -match "^\s*State:\s*\[(\d+)\]\s*(.+)") {
-            $regexMatches = $Matches
+            $regexMatches = $matches
             if ($null -ne $currentWriter) { $currentWriter.State = $regexMatches[2].Trim() }
         }
         elseif ($lineStr -match "^\s*Last error:\s*(.+)") {
-            $regexMatches = $Matches
+            $regexMatches = $matches
             if ($null -ne $currentWriter) { $currentWriter.LastError = $regexMatches[1].Trim() }
         }
     }

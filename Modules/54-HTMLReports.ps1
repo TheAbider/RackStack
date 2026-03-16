@@ -1,4 +1,4 @@
-﻿#region ===== HTML REPORTING (v2.8.0) =====
+﻿﻿#region ===== HTML REPORTING (v2.8.0) =====
 # HTML-encode dynamic values to prevent display issues with special characters
 function ConvertTo-HtmlSafe([string]$s) { if ($s) { [System.Net.WebUtility]::HtmlEncode($s) } else { $s } }
 
@@ -2271,7 +2271,7 @@ function Invoke-FleetQuery {
     # Parse query expression: section.field<operator>value
     $queryMatch = $null
     if ($QueryExpr -match '^([^.]+)\.([^=~<>]+)(=|~|<|>)(.+)$') {
-        $regexMatches = $Matches
+        $regexMatches = $matches
         $queryMatch = @{
             Section  = $regexMatches[1]
             Field    = $regexMatches[2]

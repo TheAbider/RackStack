@@ -1,4 +1,4 @@
-﻿#region ===== SCRIPT ENTRY POINT =====
+﻿﻿#region ===== SCRIPT ENTRY POINT =====
 # Start transcript logging
 function Start-ScriptTranscript {
     # Ensure temp directory exists
@@ -2734,7 +2734,7 @@ function Invoke-CLIAction {
                         $entry = $history.Item($i)
                         $resultText = switch ($entry.ResultCode) { 0 { 'NotStarted' } 1 { 'InProgress' } 2 { 'Succeeded' } 3 { 'SucceededWithErrors' } 4 { 'Failed' } 5 { 'Aborted' } default { 'Unknown' } }
                         $kbMatch = ''
-                        if ($entry.Title -match 'KB\d+') { $regexMatches = $Matches; $kbMatch = $regexMatches[0] }
+                        if ($entry.Title -match 'KB\d+') { $regexMatches = $matches; $kbMatch = $regexMatches[0] }
                         $recentUpdates += @{
                             Title  = "$($entry.Title)"
                             Date   = $entry.Date.ToString("yyyy-MM-ddTHH:mm:ss")
@@ -3563,8 +3563,8 @@ function Invoke-CLIAction {
             try {
                 $w32tmOutput = & w32tm /query /status 2>&1
                 $w32tmStr = $w32tmOutput -join "`n"
-                if ($w32tmStr -match 'Source:\s*(.+)') { $regexMatches = $Matches; $ntpSource = $regexMatches[1].Trim() }
-                if ($w32tmStr -match 'Last Successful Sync Time:\s*(.+)') { $regexMatches = $Matches; $lastSync = $regexMatches[1].Trim() }
+                if ($w32tmStr -match 'Source:\s*(.+)') { $regexMatches = $matches; $ntpSource = $regexMatches[1].Trim() }
+                if ($w32tmStr -match 'Last Successful Sync Time:\s*(.+)') { $regexMatches = $matches; $lastSync = $regexMatches[1].Trim() }
             } catch { }
 
             try {
@@ -3580,7 +3580,7 @@ function Invoke-CLIAction {
                 $w32tmStrip = & w32tm /stripchart /computer:time.windows.com /dataonly /samples:1 2>&1
                 $stripStr = $w32tmStrip -join "`n"
                 if ($stripStr -match '([+-]?\d+\.?\d*s)') {
-                    $regexMatches = $Matches; $driftStr = $regexMatches[1] -replace 's$', ''
+                    $regexMatches = $matches; $driftStr = $regexMatches[1] -replace 's$', ''
                     $driftMs = [math]::Abs([double]$driftStr) * 1000
                     $driftStatus = if ($driftMs -lt 1000) { 'OK' } elseif ($driftMs -lt 5000) { 'WARN' } else { 'CRITICAL' }
                     if ($driftStatus -ne 'OK') { $timeIssues++ }
@@ -3807,7 +3807,7 @@ function Invoke-CLIAction {
                 $gpResult = & gpresult /scope computer /v 2>&1
                 $gpStr = $gpResult -join "`n"
                 if ($gpStr -match 'Last time Group Policy was applied:\s*(.+)') {
-                    $regexMatches = $Matches; $lastGPUpdate = $regexMatches[1].Trim()
+                    $regexMatches = $matches; $lastGPUpdate = $regexMatches[1].Trim()
                 }
             } catch { }
 
@@ -4109,9 +4109,9 @@ function Invoke-CLIAction {
                     $writerName = ''
                     $writerState = ''
                     $lastError = ''
-                    if ($block -match "^\s*'([^']+)'") { $regexMatches = $Matches; $writerName = $regexMatches[1] }
-                    if ($block -match 'State:\s*\[\d+\]\s*(.+)') { $regexMatches = $Matches; $writerState = $regexMatches[1].Trim() }
-                    if ($block -match 'Last error:\s*(.+)') { $regexMatches = $Matches; $lastError = $regexMatches[1].Trim() }
+                    if ($block -match "^\s*'([^']+)'") { $regexMatches = $matches; $writerName = $regexMatches[1] }
+                    if ($block -match 'State:\s*\[\d+\]\s*(.+)') { $regexMatches = $matches; $writerState = $regexMatches[1].Trim() }
+                    if ($block -match 'Last error:\s*(.+)') { $regexMatches = $matches; $lastError = $regexMatches[1].Trim() }
                     if ($writerName) {
                         $health = 'OK'
                         if ($writerState -ne 'Stable' -and $writerState -ne '') { $health = 'FAIL'; $backupIssues++ }
@@ -4390,7 +4390,7 @@ function Invoke-CLIAction {
                 $plans = & powercfg /getactivescheme 2>&1
                 $planStr = $plans -join " "
                 if ($planStr -match 'Power Scheme GUID:\s*(\S+)\s*\(([^)]+)\)') {
-                    $regexMatches = $Matches; $planGuid = $regexMatches[1]; $activePlan = $regexMatches[2]
+                    $regexMatches = $matches; $planGuid = $regexMatches[1]; $activePlan = $regexMatches[2]
                 }
                 if ($activePlan -notmatch 'High [Pp]erformance') { $powerIssues++ }
             } catch { }
@@ -4402,11 +4402,11 @@ function Invoke-CLIAction {
                 $sleepOutput = & powercfg /query $planGuid SUB_SLEEP STANDBYIDLE 2>&1
                 $sleepStr = $sleepOutput -join "`n"
                 if ($sleepStr -match 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') {
-                    $regexMatches = $Matches; $sleepAC = [int]("0x" + $regexMatches[1])
+                    $regexMatches = $matches; $sleepAC = [int]("0x" + $regexMatches[1])
                     $sleepAC = if ($sleepAC -eq 0) { "Never" } else { "$($sleepAC)s" }
                 }
                 if ($sleepStr -match 'Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)') {
-                    $regexMatches = $Matches; $sleepDC = [int]("0x" + $regexMatches[1])
+                    $regexMatches = $matches; $sleepDC = [int]("0x" + $regexMatches[1])
                     $sleepDC = if ($sleepDC -eq 0) { "Never" } else { "$($sleepDC)s" }
                 }
             } catch { }
@@ -5184,7 +5184,7 @@ function Invoke-CLIAction {
 
                     # Subcategory line
                     if ($line -match '^\s{2}\S' -and $trimmed -match '(.+?)\s{2,}(Success and Failure|Success|Failure|No Auditing)') {
-                        $regexMatches = $Matches
+                        $regexMatches = $matches
                         $subcat = $regexMatches[1].Trim()
                         $setting = $regexMatches[2].Trim()
                         $status = if ($setting -eq 'No Auditing') { 'WARN' } else { 'OK' }
@@ -5767,7 +5767,7 @@ function Invoke-CLIAction {
                     $configLines = Get-Content -LiteralPath $configPath -ErrorAction Stop | Where-Object { $_ -match '^\s*\w' -and $_ -notmatch '^\s*#' }
                     foreach ($line in $configLines) {
                         if ($line -match '^\s*(\S+)\s+(.+)$') {
-                            $regexMatches = $Matches
+                            $regexMatches = $matches
                             $configSettings += @{ Setting = $regexMatches[1]; Value = $regexMatches[2].Trim() }
                         }
                     }
@@ -6197,7 +6197,7 @@ function Invoke-CLIAction {
                 if ($LASTEXITCODE -eq 0) {
                     foreach ($line in $dotnetOutput) {
                         if ($line -match '^(\S+)\s+(\S+)\s+\[(.+)\]') {
-                            $regexMatches = $Matches
+                            $regexMatches = $matches
                             $runtimes += @{ Name = $regexMatches[1]; Version = $regexMatches[2]; Path = $regexMatches[3] }
                         }
                     }
@@ -6268,7 +6268,7 @@ function Invoke-CLIAction {
                 $qwinstaOutput = & qwinsta 2>&1
                 foreach ($line in $qwinstaOutput) {
                     if ($line -match '^\s*(rdp-tcp#\d+|console)\s+(\S+)\s+(\d+)\s+(Active|Disc)') {
-                        $regexMatches = $Matches
+                        $regexMatches = $matches
                         $sessions += @{ Session = $regexMatches[1]; User = $regexMatches[2]; ID = $regexMatches[3]; State = $regexMatches[4] }
                     }
                 }
@@ -6401,7 +6401,7 @@ function Invoke-CLIAction {
                         $trimmed = $line.Trim()
                         if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
                         if ($trimmed -match '^(\S+)\s+(.+)$') {
-                            $regexMatches = $Matches; $ip = $regexMatches[1]; $hostnames = $regexMatches[2].Trim()
+                            $regexMatches = $matches; $ip = $regexMatches[1]; $hostnames = $regexMatches[2].Trim()
                             $suspicious = $false
                             # Flag redirects of known domains (potential hijacking)
                             if ($hostnames -match 'microsoft\.com|windows\.com|google\.com|windowsupdate|login\.live' -and $ip -ne '127.0.0.1' -and $ip -ne '::1') {
@@ -6505,10 +6505,10 @@ function Invoke-CLIAction {
             try {
                 $slmgr = & cscript //nologo "$env:SystemRoot\System32\slmgr.vbs" /dli 2>&1
                 $slmgrStr = $slmgr -join "`n"
-                if ($slmgrStr -match 'Name:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['ProductName'] = $regexMatches[1].Trim() }
-                if ($slmgrStr -match 'Description:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['Description'] = $regexMatches[1].Trim() }
-                if ($slmgrStr -match 'License Status:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['LicenseStatus'] = $regexMatches[1].Trim() }
-                if ($slmgrStr -match 'Product Key Channel:\s*(.+)') { $regexMatches = $Matches; $licenseInfo['KeyChannel'] = $regexMatches[1].Trim() }
+                if ($slmgrStr -match 'Name:\s*(.+)') { $regexMatches = $matches; $licenseInfo['ProductName'] = $regexMatches[1].Trim() }
+                if ($slmgrStr -match 'Description:\s*(.+)') { $regexMatches = $matches; $licenseInfo['Description'] = $regexMatches[1].Trim() }
+                if ($slmgrStr -match 'License Status:\s*(.+)') { $regexMatches = $matches; $licenseInfo['LicenseStatus'] = $regexMatches[1].Trim() }
+                if ($slmgrStr -match 'Product Key Channel:\s*(.+)') { $regexMatches = $matches; $licenseInfo['KeyChannel'] = $regexMatches[1].Trim() }
 
                 if ($licenseInfo.ContainsKey('LicenseStatus') -and $licenseInfo['LicenseStatus'] -ne 'Licensed') { $licIssues++ }
             } catch { }
@@ -6561,7 +6561,7 @@ function Invoke-CLIAction {
                 foreach ($d in $devices) {
                     $depPath = $d.Dependent
                     if ($depPath -match 'DeviceID="(.+)"') {
-                        $regexMatches = $Matches; $devId = $regexMatches[1] -replace '\\\\', '\'
+                        $regexMatches = $matches; $devId = $regexMatches[1] -replace '\\\\', '\'
                         if ($seen.ContainsKey($devId)) { continue }
                         $seen[$devId] = $true
                         try {
@@ -7118,8 +7118,8 @@ function Invoke-CLIAction {
             try {
                 $winhttp = & netsh winhttp show proxy 2>&1
                 $winhttpStr = $winhttp -join ' '
-                $proxyConfig['WinHTTPProxy'] = if ($winhttpStr -match 'Proxy Server.*:\s*(\S+)') { $regexMatches = $Matches; $regexMatches[1] } else { 'Direct' }
-                $proxyConfig['WinHTTPBypass'] = if ($winhttpStr -match 'Bypass List.*:\s*(.+)') { $regexMatches = $Matches; $regexMatches[1].Trim() } else { '' }
+                $proxyConfig['WinHTTPProxy'] = if ($winhttpStr -match 'Proxy Server.*:\s*(\S+)') { $regexMatches = $matches; $regexMatches[1] } else { 'Direct' }
+                $proxyConfig['WinHTTPBypass'] = if ($winhttpStr -match 'Bypass List.*:\s*(.+)') { $regexMatches = $matches; $regexMatches[1].Trim() } else { '' }
             } catch { }
 
             # Environment proxy
@@ -7357,7 +7357,7 @@ function Invoke-CLIAction {
             Write-OutputColor "  Auditing Kerberos configuration..." -color "Info"
             Write-OutputColor "" -color "Info"
             $kbIssues = 0; $tickets = @(); $kerbConfig = @{}
-            try { $klistOutput = & klist 2>&1; $klistStr = $klistOutput -join "`n"; $ticketCount = 0; if ($klistStr -match 'Cached Tickets:\s*(\d+)') { $regexMatches = $Matches; $ticketCount = [int]$regexMatches[1] }; $kerbConfig['CachedTickets'] = $ticketCount } catch { }
+            try { $klistOutput = & klist 2>&1; $klistStr = $klistOutput -join "`n"; $ticketCount = 0; if ($klistStr -match 'Cached Tickets:\s*(\d+)') { $regexMatches = $matches; $ticketCount = [int]$regexMatches[1] }; $kerbConfig['CachedTickets'] = $ticketCount } catch { }
             try { $krbReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters' -ErrorAction SilentlyContinue; if ($null -ne $krbReg) { $kerbConfig['MaxTokenSize'] = $krbReg.MaxTokenSize; $kerbConfig['MaxPacketSize'] = $krbReg.MaxPacketSize } } catch { }
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  KERBEROS AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
@@ -7440,7 +7440,7 @@ function Invoke-CLIAction {
             $scIssues = 0; $scStatus = @{}
             try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; $scStatus['DomainJoined'] = $cs.PartOfDomain -eq $true; $scStatus['Domain'] = "$($cs.Domain)" } catch { }
             if ($scStatus['DomainJoined']) {
-                try { $nltest = & nltest /sc_query:$($scStatus['Domain']) 2>&1; $nltestStr = $nltest -join ' '; $scStatus['SecureChannel'] = if ($nltestStr -match 'NERR_Success') { 'OK' } else { 'FAIL' }; if ($scStatus['SecureChannel'] -ne 'OK') { $scIssues++ }; if ($nltestStr -match 'Trusted DC Name\s*(.+?)(?:\s|$)') { $regexMatches = $Matches; $scStatus['TrustedDC'] = $regexMatches[1].Trim() } } catch { $scStatus['SecureChannel'] = 'Error' }
+                try { $nltest = & nltest /sc_query:$($scStatus['Domain']) 2>&1; $nltestStr = $nltest -join ' '; $scStatus['SecureChannel'] = if ($nltestStr -match 'NERR_Success') { 'OK' } else { 'FAIL' }; if ($scStatus['SecureChannel'] -ne 'OK') { $scIssues++ }; if ($nltestStr -match 'Trusted DC Name\s*(.+?)(?:\s|$)') { $regexMatches = $matches; $scStatus['TrustedDC'] = $regexMatches[1].Trim() } } catch { $scStatus['SecureChannel'] = 'Error' }
             } else { $scStatus['SecureChannel'] = 'N/A (not domain-joined)' }
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  SECURE CHANNEL AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
@@ -7480,7 +7480,7 @@ function Invoke-CLIAction {
                 try { $logLines = Get-Content -LiteralPath $logPath -Tail 500 -ErrorAction Stop | Where-Object { $_ -notmatch '^#' -and $_ -match '\S' }
                     $drops = @($logLines | Where-Object { $_ -match '\bDROP\b' }); $allows = @($logLines | Where-Object { $_ -match '\bALLOW\b' })
                     $logStats['TotalLines'] = @($logLines).Count; $logStats['Drops'] = @($drops).Count; $logStats['Allows'] = @($allows).Count
-                    foreach ($d in ($drops | Select-Object -Last 10)) { if ($d -match '(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s+DROP\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)') { $regexMatches = $Matches; $recentDrops += @{ Date = $regexMatches[1]; Time = $regexMatches[2]; Protocol = $regexMatches[3]; SrcIP = $regexMatches[4]; DstIP = $regexMatches[5]; SrcPort = $regexMatches[6]; DstPort = $regexMatches[7] } } }
+                    foreach ($d in ($drops | Select-Object -Last 10)) { if ($d -match '(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s+DROP\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)') { $regexMatches = $matches; $recentDrops += @{ Date = $regexMatches[1]; Time = $regexMatches[2]; Protocol = $regexMatches[3]; SrcIP = $regexMatches[4]; DstIP = $regexMatches[5]; SrcPort = $regexMatches[6]; DstPort = $regexMatches[7] } } }
                 } catch { }
             }
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
