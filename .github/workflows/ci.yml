@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || 'self-hosted' }}
     defaults:
       run:
-        shell: powershell
+        shell: pwsh
 
     steps:
       - uses: actions/checkout@v4
@@ -25,9 +25,16 @@ jobs:
       - name: Generate monolithic
         run: .\sync-to-monolithic.ps1
 
-      - name: Run tests
+      - name: PSScriptAnalyzer
+        run: .\Tests\pssa-check.ps1
+
+      - name: Parse check
+        run: .\Tests\parse-check.ps1
+
+      - name: Run tests (core)
         run: |
-          # Run tests directly
+          # Core tests: parse, module load, function existence, validation, navigation
+          # Each step gets a fresh PowerShell process to avoid cumulative OOM
           & .\Tests\Run-Tests.ps1 -Quick
           exit $LASTEXITCODE
 
@@ -40,6 +47,3 @@ jobs:
             builds/RackStack v*.ps1
             Tests/*.log
           retention-days: 7
-
-      - name: PSScriptAnalyzer
-        run: .\Tests\pssa-check.ps1

@@ -585,14 +585,18 @@ function Invoke-WithTimeout {
     Write-Host ""
 
     if (-not $handle.IsCompleted) {
-        # Fire-and-forget cleanup — $ps.Stop() can itself hang if CIM/WMI ignores cancellation
-        # (common on Server 2025 cold WMI initialization). Dispose in background to avoid blocking.
-        $psRef = $ps
-        $null = [System.Threading.ThreadPool]::QueueUserWorkItem([System.Threading.WaitCallback]{
-            param($state)
-            try { $state.Stop() } catch { }
-            try { $state.Dispose() } catch { }
-        }, $psRef)
+        # Non-blocking stop — BeginStop sends cancellation without waiting for completion.
+        # If the underlying CIM/WMI call ignores cancellation (Server 2025 cold WMI),
+        # the runspace stays alive briefly but doesn't block this thread.
+        try { $null = $ps.BeginStop($null, $null) } catch { }
+        # Dispose on a background thread to avoid blocking if Stop hangs
+        try {
+            $null = [System.Threading.Tasks.Task]::Run([Action]{ $ps.Dispose() })
+        }
+        catch {
+            # Fallback: just dispose synchronously (may block briefly)
+            try { $ps.Dispose() } catch { }
+        }
         return @{ TimedOut = $true; Result = $null; Failed = $false; Error = "Timed out after $TimeoutSeconds seconds" }
     }
 
