@@ -8846,6 +8846,7 @@ if (Test-Path $monolithicPath) {
             if ($line -match '^\s*function\s+([\w-]+)') {
                 $regexMatches = $matches
                 $monolithicFunctions[$regexMatches[1]] = $true
+            }
         }
 
         # Functions in modular but NOT in monolithic (sync failure)
