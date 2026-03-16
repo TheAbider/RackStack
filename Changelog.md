@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.67.3
+
+- **Improvement:** Menu speed — added cache durations to timezone (120s), license status (300s), and power plan (60s) queries that were uncached and re-queried on every menu render.
+- **Fix:** Install-Prerequisites.ps1 now detects Windows 7/8/8.1 (not just Server editions) and uses `$env:SystemDrive` instead of hardcoded `C:\Temp`.
+- 65 modules, 3851 tests
+
 ## v1.67.2
 
 - **Fix:** OS build detection used `[Environment]::OSVersion` which returns compat-shimmed build 9200 in PS 5.1 / ps2exe. Replaced with registry `CurrentBuildNumber` in Win11 UI Cleanup and Console VT/color detection. This caused "not Windows 11" false negative on actual Windows 11 systems.

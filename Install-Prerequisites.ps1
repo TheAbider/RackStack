@@ -62,24 +62,24 @@ if ($buildNumber -eq 7601) {
     $downloadUrl = "https://download.microsoft.com/download/6/F/5/6F5FF66C-6775-42B0-86C4-47D41F2DA187/Win7AndW2K8R2-KB3191566-x64.zip"
     $fileName = "Win7AndW2K8R2-KB3191566-x64.zip"
     $isZip = $true
-    Write-Host "  Detected: Server 2008 R2 SP1" -ForegroundColor Yellow
+    Write-Host "  Detected: Windows 7 SP1 / Server 2008 R2 SP1" -ForegroundColor Yellow
 }
 elseif ($buildNumber -eq 9200) {
-    # Server 2012
+    # Server 2012 / Windows 8
     $downloadUrl = "https://download.microsoft.com/download/6/F/5/6F5FF66C-6775-42B0-86C4-47D41F2DA187/W2K12-KB3191565-x64.msu"
     $fileName = "W2K12-KB3191565-x64.msu"
-    Write-Host "  Detected: Server 2012" -ForegroundColor Yellow
+    Write-Host "  Detected: Windows 8 / Server 2012" -ForegroundColor Yellow
 }
 elseif ($buildNumber -eq 9600) {
-    # Server 2012 R2
+    # Server 2012 R2 / Windows 8.1
     $downloadUrl = "https://download.microsoft.com/download/6/F/5/6F5FF66C-6775-42B0-86C4-47D41F2DA187/Win8.1AndW2K12R2-KB3191564-x64.msu"
     $fileName = "Win8.1AndW2K12R2-KB3191564-x64.msu"
-    Write-Host "  Detected: Server 2012 R2" -ForegroundColor Yellow
+    Write-Host "  Detected: Windows 8.1 / Server 2012 R2" -ForegroundColor Yellow
 }
 else {
     Write-Host "  ERROR: Unsupported OS (build $buildNumber)." -ForegroundColor Red
-    Write-Host "  WMF 5.1 supports Server 2008 R2 SP1, 2012, and 2012 R2." -ForegroundColor Red
-    Write-Host "  Server 2016+ already includes PowerShell 5.1." -ForegroundColor Yellow
+    Write-Host "  WMF 5.1 supports Windows 7 SP1+, Server 2008 R2 SP1, 2012, 2012 R2." -ForegroundColor Red
+    Write-Host "  Windows 10+ and Server 2016+ already include PowerShell 5.1." -ForegroundColor Yellow
     Write-Host ""
     exit 1
 }
@@ -134,7 +134,7 @@ if ($confirm -match '^[Nn]') {
 }
 
 # Download
-$tempDir = "C:\Temp"
+$tempDir = "$env:SystemDrive\Temp"
 if (-not (Test-Path $tempDir)) { New-Item -Path $tempDir -ItemType Directory -Force | Out-Null }
 $downloadPath = Join-Path $tempDir $fileName
 

@@ -276,9 +276,11 @@ function Show-SystemConfigMenu {
     $isDomainJoined = $csResult.PartOfDomain
     $domainColor = if ($isDomainJoined) { "Success" } else { "Warning" }
     $hostColor = if ($hostdisplay -match '^WIN-|^DESKTOP-') { "Warning" } else { "Success" }
-    $tzObj = Get-TimeZone -ErrorAction SilentlyContinue
-    $timezonedisplay = if ($tzObj) { $tzObj.Id } else { "Unknown" }
-    $powerPlan = Get-CachedValue -Key "PowerPlan" -FetchScript { (Get-CurrentPowerPlan).Name }
+    $timezonedisplay = Get-CachedValue -Key "TimezoneId" -FetchScript {
+        $tz = Get-TimeZone -ErrorAction SilentlyContinue
+        if ($tz) { $tz.Id } else { "Unknown" }
+    } -CacheSeconds 120
+    $powerPlan = Get-CachedValue -Key "PowerPlan" -FetchScript { (Get-CurrentPowerPlan).Name } -CacheSeconds 60
     $powerColor = if ($powerPlan -match "High") { "Success" } else { "Warning" }
 
     if ($hostdisplay.Length -gt 15) { $hostdisplay = $hostdisplay.Substring(0, 12) + "..." }
@@ -300,7 +302,7 @@ function Show-SystemConfigMenu {
     Write-MenuItem "[5]  Windows Updates ►"
     $licStatus = Get-CachedValue -Key "LicenseActivated" -FetchScript {
         if (Test-WindowsActivated) { "Activated" } else { "Not Activated" }
-    }
+    } -CacheSeconds 300
     $licColor = if ($licStatus -eq "Activated") { "Success" } else { "Warning" }
     Write-MenuItem "[6]  License Server" -Status $licStatus -StatusColor $licColor
     Write-MenuItem "[7]  Set Power Plan" -Status $powerPlan -StatusColor $powerColor
