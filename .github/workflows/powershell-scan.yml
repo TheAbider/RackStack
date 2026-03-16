@@ -103,7 +103,7 @@ jobs:
               }
           }
           $jsonGrouped = if ($normalizedGroups.Count -gt 0) {
-              $normalizedGroups | ConvertTo-Json -Depth 10 -AsArray
+              @($normalizedGroups) | ConvertTo-Json -Depth 10
           } else {
               "[]"
           }
