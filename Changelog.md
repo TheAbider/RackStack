@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.80.3
+
+- **Enhancement:** Compliance readiness checks now include disk timeout validation for iSCSI hosts, consistent with Server Readiness dashboard (v1.80.2).
+- 65 modules, 3982 tests, 132 CLI actions
+
 ## v1.80.2
 
 - **Enhancement:** Server Readiness dashboard now checks disk timeout on iSCSI hosts — flags <60s timeout that causes BSODs during SAN failover/maintenance.

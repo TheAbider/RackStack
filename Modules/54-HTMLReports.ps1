@@ -968,6 +968,18 @@ function Get-ReadinessChecks {
         $checks.Add(@{ Category = "System"; Name = "Time Sync"; Value = "Unable to check"; Status = "Warn" })
     }
 
+    # Disk timeout (iSCSI/SAN environments)
+    $iscsiCheck = Get-Service -Name MSiSCSI -ErrorAction SilentlyContinue
+    if ($null -ne $iscsiCheck -and $iscsiCheck.Status -eq 'Running') {
+        $dtVal = try { (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Disk' -Name 'TimeOutValue' -ErrorAction SilentlyContinue).TimeOutValue } catch { $null }
+        $dtNum = if ($null -ne $dtVal) { $dtVal } else { 60 }
+        if ($dtNum -ge 60) {
+            $checks.Add(@{ Category = "Storage"; Name = "Disk Timeout"; Value = "${dtNum}s"; Status = "OK" })
+        } else {
+            $checks.Add(@{ Category = "Storage"; Name = "Disk Timeout"; Value = "${dtNum}s (need 60+ for SAN)"; Status = "Fail" })
+        }
+    }
+
     # Windows Defender
     try {
         $mpStat = Get-MpComputerStatus -ErrorAction Stop
