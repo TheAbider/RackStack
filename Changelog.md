@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.80.5
+
+- **Enhancement:** Help search now includes "CLI Actions" topic — searching for "cli", "action", "fleet", or "automation" surfaces CLI headless mode documentation.
+- 65 modules, 3985 tests, 132 CLI actions
+
 ## v1.80.4
 
 - **Tests:** Added changelog version validation (current version entry exists, is first entry), WmiObject extinction guard (verifies zero `Get-WmiObject` across all 65 modules), compliance readiness disk timeout. 3985 tests.
