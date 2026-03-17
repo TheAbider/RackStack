@@ -363,6 +363,16 @@ function Export-HTMLHealthReport {
     if (Test-RebootPending) { $issues += "Reboot pending" }
     if ($null -ne $timeSyncOffset -and [math]::Abs($timeSyncOffset) -gt 30) { $issues += "Time sync offset > 30s" }
     if ($timeSyncSource -match 'Free-Running|Local CMOS') { $issues += "No external time source configured" }
+    # Event log capacity check
+    try {
+        foreach ($logName in @('Application', 'System', 'Security')) {
+            $evtLog = Get-WinEvent -ListLog $logName -ErrorAction SilentlyContinue
+            if ($null -ne $evtLog -and $evtLog.MaximumSizeInBytes -gt 0) {
+                $logPct = [math]::Round(($evtLog.FileSize / $evtLog.MaximumSizeInBytes) * 100, 1)
+                if ($logPct -ge 90) { $issues += "$logName event log near capacity ($logPct%)" }
+            }
+        }
+    } catch { }
     try {
         foreach ($fwProf in $fwProfiles) {
             if ($fwProf.Enabled -ne $true) { $issues += "Firewall profile '$($fwProf.Name)' disabled"; break }

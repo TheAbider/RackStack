@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.80.1
+
+- **Enhancement:** HTML health report now includes event log capacity in the issues summary — flags Application, System, and Security logs >=90% full alongside other health indicators.
+- 65 modules, 3982 tests, 132 CLI actions
+
 ## v1.80.0
 
 - **New CLI Action:** `DiskLatencyAudit` — checks physical disk read/write latency and queue lengths via performance counters. Flags disks with >10ms latency (warning) or >20ms (critical) and saturated queues (>4). Supports JSON output for fleet monitoring.
