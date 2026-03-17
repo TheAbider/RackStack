@@ -681,8 +681,8 @@ function Show-SystemHealthCheck {
     $cimResult = Invoke-WithTimeout -ScriptBlock {
         @{
             OS  = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-            CS  = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
-            CPU = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+            CS  = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            CPU = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         }
     } -TimeoutSeconds 15 -Activity "Querying system info"
 
@@ -761,7 +761,7 @@ function Show-SystemHealthCheck {
     # Disk Space
     Write-OutputColor "=== DISK SPACE ===" -color "Success"
     $diskResult = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+        Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Querying disk info"
     $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
     if ($diskResult.TimedOut) {
@@ -1103,6 +1103,25 @@ function Show-SystemHealthCheck {
         Domain  = $fwState['Domain']
         Private = $fwState['Private']
         Public  = $fwState['Public']
+    }
+    Write-OutputColor "" -color "Info"
+
+    # Event Log Capacity (v1.80.0)
+    Write-OutputColor "=== EVENT LOG CAPACITY ===" -color "Success"
+    try {
+        $criticalLogNames = @('Application', 'System', 'Security')
+        foreach ($logName in $criticalLogNames) {
+            $evtLog = Get-WinEvent -ListLog $logName -ErrorAction SilentlyContinue
+            if ($null -ne $evtLog -and $evtLog.MaximumSizeInBytes -gt 0) {
+                $pct = [math]::Round(($evtLog.FileSize / $evtLog.MaximumSizeInBytes) * 100, 1)
+                $logColor = if ($pct -ge 90) { "Error" } elseif ($pct -ge 75) { "Warning" } else { "Success" }
+                Write-OutputColor "  ${logName}: $pct% ($([math]::Round($evtLog.FileSize/1MB,1))MB / $([math]::Round($evtLog.MaximumSizeInBytes/1MB,1))MB)" -color $logColor
+                if ($pct -ge 90) { $issues += "$logName event log near capacity ($pct%)" }
+            }
+        }
+    }
+    catch {
+        Write-OutputColor "  Event log capacity check unavailable." -color "Debug"
     }
     Write-OutputColor "" -color "Info"
 

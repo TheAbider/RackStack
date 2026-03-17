@@ -37,7 +37,7 @@ function Show-MainMenu {
     $criticalThreshold = if ($null -ne $script:DashboardCriticalPercent) { $script:DashboardCriticalPercent } else { 90 }
 
     $dashOS = Get-CachedValue -Key "DashOS" -FetchScript {
-        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         if ($os) {
             $caption = $os.Caption -replace 'Microsoft ', ''
             $uptime = [DateTime]::UtcNow - $os.LastBootUpTime.ToUniversalTime()
@@ -52,7 +52,7 @@ function Show-MainMenu {
 
     $dashCPU = Get-CachedValue -Key "DashCPU" -FetchScript {
         try {
-            $cpuMeasure = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
+            $cpuMeasure = Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
             if ($null -ne $cpuMeasure.Average) { [math]::Round($cpuMeasure.Average) } else { 0 }
         }
         catch { 0 }
@@ -267,7 +267,7 @@ function Show-SystemConfigMenu {
     Clear-Host
 
     $csResult = Get-CachedValue -Key "SysConfigCS" -FetchScript {
-        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         if ($cs) { @{ Name = $cs.Name; Domain = $cs.Domain; PartOfDomain = $cs.PartOfDomain } }
         else { @{ Name = $env:COMPUTERNAME; Domain = "Unknown"; PartOfDomain = $false } }
     } -CacheSeconds 30

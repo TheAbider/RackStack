@@ -488,8 +488,8 @@ function Set-PagefileConfiguration {
         $pfCim = Invoke-WithTimeout -ScriptBlock {
             @{
                 Settings = Get-CimInstance Win32_PageFileSetting -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-                Usage    = @(Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue)
-                CompSys  = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+                Usage    = @(Get-CimInstance Win32_PageFileUsage -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
+                CompSys  = Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             }
         } -TimeoutSeconds 10 -Activity "Querying pagefile info"
         if ($pfCim.TimedOut) {
@@ -649,7 +649,7 @@ function Set-PagefileConfiguration {
                     }
                 }
                 $diskCim = Invoke-WithTimeout -ScriptBlock {
-                    Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$currentDrive'" -ErrorAction SilentlyContinue
+                    Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$currentDrive'" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
                 } -TimeoutSeconds 10 -Activity "Checking disk space"
                 $disk = if ($diskCim.TimedOut) { $null } else { $diskCim.Result }
                 if ($null -ne $disk) {

@@ -1617,7 +1617,7 @@ function Show-DriverHealthCheck {
     $drvCim = Invoke-WithTimeout -ScriptBlock {
         @{
             Devices = @(Get-CimInstance Win32_PnPEntity -OperationTimeoutSec 8 -ErrorAction Stop)
-            SignedDrivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue)
+            SignedDrivers = @(Get-CimInstance Win32_PnPSignedDriver -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
         }
     } -TimeoutSeconds 30 -Activity "Scanning device drivers"
 
@@ -1709,7 +1709,7 @@ function Show-DiskSpaceAnalyzer {
 
     # Show all volumes
     $volCim = Invoke-WithTimeout -ScriptBlock {
-        @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop)
+        @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction Stop)
     } -TimeoutSeconds 15 -Activity "Querying disk volumes"
     if ($volCim.TimedOut) {
         Write-OutputColor "  Disk volume query timed out." -color "Error"
@@ -2240,8 +2240,8 @@ function Show-MemoryDiagnostics {
     $memCim = Invoke-WithTimeout -ScriptBlock {
         @{
             OS     = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-            PF     = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue
-            PerfOS = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory -ErrorAction SilentlyContinue
+            PF     = Get-CimInstance Win32_PageFileUsage -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            PerfOS = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         }
     } -TimeoutSeconds 10 -Activity "Querying memory info"
     if ($memCim.TimedOut) {

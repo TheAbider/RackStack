@@ -117,8 +117,6 @@ function Show-EventLogViewer {
             default { Write-OutputColor "  Invalid choice. Enter 1-9 or B." -color "Error"; Start-Sleep -Seconds 1; continue }
         }
 
-        if ($choice -eq "8") { continue }
-
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

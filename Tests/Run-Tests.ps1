@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.79.0
+    Automated Test Runner for RackStack v1.80.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -148,7 +148,7 @@ try {
 }
 } # end if (-not $Quick) — skip monolithic parse in Quick mode
 
-# 1b. All 59 module files parse
+# 1b. All 65 module files parse
 $moduleFiles = Get-ChildItem -Path $modulesPath -Filter "*.ps1" | Sort-Object Name
 
 foreach ($moduleFile in $moduleFiles) {
@@ -471,7 +471,44 @@ $requiredFunctions = @(
     # Role Templates (37)
     "Show-RoleTemplates",
     # Audit Log (04)
-    "Show-AuditLog"
+    "Show-AuditLog",
+    # Storage Backends (59)
+    "Get-DetectedStorageBackend",
+    # Server Role Templates (60)
+    "Test-CustomRoleTemplate",
+    # Active Directory (61)
+    "Test-ADDSReplicationHealth",
+    # Hyper-V Replica (62)
+    "Show-ReplicaPartnershipHealth",
+    # Scheduled Tasks (63)
+    "Show-ScheduledTaskViewer",
+    # System Debloat (64)
+    "Start-SystemDebloat",
+    # Deployment / VM (44)
+    "Start-VMDeployment",
+    "Get-NextAvailableVMName",
+    # Batch Config (36)
+    "New-ScenarioBatchConfig",
+    # Storage Manager (38)
+    "Get-DriveLetterMap",
+    "Move-OpticalDriveLetter",
+    # HealthCheck extras (37)
+    "Show-MemoryDiagnostics",
+    "Show-DiskSpaceAnalyzer",
+    # Disk Cleanup (20)
+    "Invoke-FullEnhancedCleanup",
+    # iSCSI (10)
+    "Show-iSCSIStatus",
+    # Licensing (21)
+    "Show-LicenseStatus",
+    # Password (22)
+    "Show-PasswordStrength",
+    # NTP (19)
+    "Show-NTPStatus",
+    # Defender (17)
+    "Show-DefenderStatus",
+    # Firewall Templates (18)
+    "Export-FirewallRuleAudit"
 )
 
 $funcCheckPassed = 0
@@ -3691,6 +3728,11 @@ try {
 
     Write-TestResult "37-HealthCheck: readiness checks C: drive space" ($hcContent -match 'C: Drive Space' -and $hcContent -match 'Get-Volume.*-DriveLetter C')
     Write-TestResult "37-HealthCheck: readiness checks DNS resolution" ($hcContent -match 'DNS Resolution' -and $hcContent -match 'Resolve-DnsName')
+
+    # v1.80.0 — Event log capacity in HealthCheck
+    Write-TestResult "37-HealthCheck: has event log capacity section" ($hcContent -match 'EVENT LOG CAPACITY')
+    Write-TestResult "37-HealthCheck: checks Application log capacity" ($hcContent -match 'Application.*System.*Security')
+    Write-TestResult "37-HealthCheck: flags near-capacity logs" ($hcContent -match 'event log near capacity')
 } catch {
     Write-TestResult "37-HealthCheck: readiness dashboard" $false $_.Exception.Message
 }
@@ -8325,8 +8367,8 @@ Write-TestResult "48-MenuDisplay: all CS CIM calls are cached" ($mdBareCSCount -
 
 # 05-SystemCheck: Hyper-V pre-flight batches CIM with timeout
 $scContent2 = Get-Content -LiteralPath "$modulesPath\05-SystemCheck.ps1" -Raw
-Write-TestResult "05-SystemCheck: HyperV preflight uses Invoke-WithTimeout" ($scContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}Checking Hyper-V prerequisites')
-Write-TestResult "05-SystemCheck: Cluster preflight uses Invoke-WithTimeout" ($scContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,500}Checking cluster prerequisites')
+Write-TestResult "05-SystemCheck: HyperV preflight uses Invoke-WithTimeout" ($scContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,600}Checking Hyper-V prerequisites')
+Write-TestResult "05-SystemCheck: Cluster preflight uses Invoke-WithTimeout" ($scContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,600}Checking cluster prerequisites')
 
 # 45-ConfigExport: config export system info uses Invoke-WithTimeout
 $ceContent3 = Get-Content -LiteralPath "$modulesPath\45-ConfigExport.ps1" -Raw
@@ -11051,12 +11093,52 @@ try {
         Write-TestResult "50-EntryPoint: $action Action field" ($mod50 -match "Action\s*=\s*'$action'")
     }
 
-    # v1.68.0-v1.69.0 — Win11 Cleanup, Theme, and infrastructure audit actions
-    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit')) {
+    # v1.68.0+ — Win11 Cleanup, Theme, and infrastructure audit actions
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
-        Write-TestResult "Install-RackStack: $action in ValidateSet" ($mod50 -match "'$action'\s*\{")
+        Write-TestResult "Install-RackStack: $action in ValidateSet" ($bootstrapContent -match "ValidateSet.*$action")
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
     }
+
+    # v1.80.0 — DiskLatencyAudit implementation
+    Write-TestResult "50-EntryPoint: DiskLatencyAudit uses perf counters" ($mod50 -match "'DiskLatencyAudit'[\s\S]{0,800}Win32_PerfFormattedData_PerfDisk_PhysicalDisk")
+    Write-TestResult "50-EntryPoint: DiskLatencyAudit checks read latency" ($mod50 -match "'DiskLatencyAudit'[\s\S]{0,2000}AvgDiskSecPerRead")
+    Write-TestResult "50-EntryPoint: DiskLatencyAudit checks write latency" ($mod50 -match "'DiskLatencyAudit'[\s\S]{0,2000}AvgDiskSecPerWrite")
+    Write-TestResult "50-EntryPoint: DiskLatencyAudit JSON output" ($mod50 -match "'DiskLatencyAudit'[\s\S]{0,4000}CLIOutputFormat.*eq.*JSON")
+    Write-TestResult "50-EntryPoint: DiskLatencyAudit Action field" ($mod50 -match "'DiskLatencyAudit'[\s\S]{0,4000}Action\s*=\s*'DiskLatencyAudit'")
+
+    # v1.80.0 — NICOffloadAudit implementation
+    Write-TestResult "50-EntryPoint: NICOffloadAudit checks RSS" ($mod50 -match "'NICOffloadAudit'[\s\S]{0,2000}Get-NetAdapterRss")
+    Write-TestResult "50-EntryPoint: NICOffloadAudit checks VMQ" ($mod50 -match "'NICOffloadAudit'[\s\S]{0,3000}Get-NetAdapterVmq")
+    Write-TestResult "50-EntryPoint: NICOffloadAudit checks RDMA" ($mod50 -match "'NICOffloadAudit'[\s\S]{0,4000}Get-NetAdapterRdma")
+    Write-TestResult "50-EntryPoint: NICOffloadAudit JSON output" ($mod50 -match "'NICOffloadAudit'[\s\S]{0,6000}CLIOutputFormat.*eq.*JSON")
+    Write-TestResult "50-EntryPoint: NICOffloadAudit Action field" ($mod50 -match "'NICOffloadAudit'[\s\S]{0,6000}Action\s*=\s*'NICOffloadAudit'")
+
+    # v1.80.0 — StorageTimeoutAudit implementation
+    Write-TestResult "50-EntryPoint: StorageTimeoutAudit checks disk timeout" ($mod50 -match "'StorageTimeoutAudit'[\s\S]{0,1000}Services\\Disk.*TimeOutValue")
+    Write-TestResult "50-EntryPoint: StorageTimeoutAudit checks iSCSI" ($mod50 -match "'StorageTimeoutAudit'[\s\S]{0,3000}MSiSCSI")
+    Write-TestResult "50-EntryPoint: StorageTimeoutAudit checks MPIO" ($mod50 -match "'StorageTimeoutAudit'[\s\S]{0,5000}mpio")
+    Write-TestResult "50-EntryPoint: StorageTimeoutAudit JSON output" ($mod50 -match "'StorageTimeoutAudit'[\s\S]{0,8000}CLIOutputFormat.*eq.*JSON")
+    Write-TestResult "50-EntryPoint: StorageTimeoutAudit Action field" ($mod50 -match "'StorageTimeoutAudit'[\s\S]{0,8000}Action\s*=\s*'StorageTimeoutAudit'")
+
+    # v1.80.0 — EventLogCapacityAudit implementation
+    Write-TestResult "50-EntryPoint: EventLogCapacityAudit uses Get-WinEvent" ($mod50 -match "'EventLogCapacityAudit'[\s\S]{0,1000}Get-WinEvent -ListLog")
+    Write-TestResult "50-EntryPoint: EventLogCapacityAudit checks critical logs" ($mod50 -match "'EventLogCapacityAudit'[\s\S]{0,500}Application.*System.*Security")
+    Write-TestResult "50-EntryPoint: EventLogCapacityAudit checks capacity percent" ($mod50 -match "'EventLogCapacityAudit'[\s\S]{0,3000}MaximumSizeInBytes")
+    Write-TestResult "50-EntryPoint: EventLogCapacityAudit JSON output" ($mod50 -match "'EventLogCapacityAudit'[\s\S]{0,6000}CLIOutputFormat.*eq.*JSON")
+    Write-TestResult "50-EntryPoint: EventLogCapacityAudit Action field" ($mod50 -match "'EventLogCapacityAudit'[\s\S]{0,6000}Action\s*=\s*'EventLogCapacityAudit'")
+
+    # v1.80.0 — TcpSettingsAudit + WinRMAudit
+    Write-TestResult "50-EntryPoint: TcpSettingsAudit checks auto-tuning" ($mod50 -match "'TcpSettingsAudit'[\s\S]{0,1000}Auto-Tuning")
+    Write-TestResult "50-EntryPoint: TcpSettingsAudit JSON output" ($mod50 -match "'TcpSettingsAudit'[\s\S]{0,4000}CLIOutputFormat.*eq.*JSON")
+    Write-TestResult "50-EntryPoint: WinRMAudit checks listeners" ($mod50 -match "'WinRMAudit'[\s\S]{0,2000}WSMan:\\localhost\\Listener")
+    Write-TestResult "50-EntryPoint: WinRMAudit checks auth methods" ($mod50 -match "'WinRMAudit'[\s\S]{0,3000}Service\\Auth")
+    Write-TestResult "50-EntryPoint: WinRMAudit checks TrustedHosts" ($mod50 -match "'WinRMAudit'[\s\S]{0,4000}TrustedHosts")
+    Write-TestResult "50-EntryPoint: WinRMAudit JSON output" ($mod50 -match "'WinRMAudit'[\s\S]{0,6000}CLIOutputFormat.*eq.*JSON")
+
+    # v1.80.0 — BatchConfig validation improvements
+    Write-TestResult "50-EntryPoint: BatchConfig validates adapter existence" ($mod50 -match 'AdapterName.*does not exist.*Available')
+    Write-TestResult "50-EntryPoint: BatchConfig detects duplicate vNIC names" ($mod50 -match 'duplicate name.*unique')
 
     # v1.79.0 — -OutputFile parameter
     Write-TestResult "Header: -OutputFile param exists" ($headerContent -match '\[string\]\$OutputFile')

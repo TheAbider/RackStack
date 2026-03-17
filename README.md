@@ -339,26 +339,26 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 126 CLI Actions
+### 132 CLI Actions
 
 | Category | Actions |
 |----------|---------|
 | **System Ops** | `Cleanup` `Debloat` `HealthCheck` `QuickScan` `Batch` `Remediate` `Win11Cleanup` `DarkMode` `LightMode` |
 | **Inventory** | `Inventory` `Export` `SysInfoAudit` `BIOSAudit` `SoftwareList` `HotfixAudit` `FeatureAudit` `DotNetAudit` `WindowsCapabilityAudit` |
-| **Monitoring** | `Snapshot` `Trend` `Watch` `Alert` `Uptime` `CPUAudit` `MemoryAudit` `DiskAudit` `TempAudit` |
+| **Monitoring** | `Snapshot` `Trend` `Watch` `Alert` `Uptime` `CPUAudit` `MemoryAudit` `DiskAudit` `TempAudit` `EventLogCapacityAudit` |
 | **Compliance** | `Compliance` `DriftCheck` `Diff` `Baseline` `Compare` `Aggregate` `ReportHTML` |
 | **Security** | `Harden` `RegistryAudit` `TLSAudit` `CredGuardAudit` `AuditPolicyAudit` `AppLockerAudit` `DefenderExclusionAudit` `TokenPrivilegeAudit` |
 | **Identity** | `UserAudit` `LocalGroupAudit` `LogonAudit` `ServiceAccountAudit` `KerberosAudit` `ACLAudit` |
-| **Network** | `NetInfo` `DNSAudit` `NetworkAudit` `ListeningPorts` `NetStatAudit` `PortAudit` `ProxyAudit` `DHCPAudit` `VPNAudit` `ARPTableAudit` `NICTeamAudit` |
+| **Network** | `NetInfo` `DNSAudit` `NetworkAudit` `ListeningPorts` `NetStatAudit` `PortAudit` `ProxyAudit` `DHCPAudit` `VPNAudit` `ARPTableAudit` `NICTeamAudit` `TcpSettingsAudit` |
 | **Firewall** | `FirewallAudit` `FirewallLogAudit` |
 | **Storage** | `StorageAudit` `ShareAudit` `SMBAudit` `SMBSessionAudit` `BitLockerAudit` `NTFSAudit` `PageFileAudit` `ProfileAudit` `iSCSIAudit` |
-| **Services** | `ServiceAudit` `TaskAudit` `TaskHistoryAudit` `EventAudit` `PrintAudit` `IISAudit` `SSHAudit` |
-| **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` |
+| **Services** | `ServiceAudit` `TaskAudit` `TaskHistoryAudit` `EventAudit` `PrintAudit` `IISAudit` `SSHAudit` `WinRMAudit` |
+| **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` `NICOffloadAudit` |
 | **Time/Boot** | `TimeAudit` `BootAudit` `PendingRebootAudit` `ScheduledRebootAudit` `RecoveryAudit` `LocaleAudit` |
 | **Patching** | `PatchStatus` `WindowsUpdateAudit` `CertCheck` `UpdatePolicyAudit` `LicenseAudit` `AntivirusAudit` |
 | **Infra** | `HyperVAudit` `ClusterAudit` `ClusterQuorumAudit` `ClusterNetworkAudit` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` |
 | **Hyper-V** | `VMOvercommitAudit` `ReplicaLagAudit` `LiveMigrationAudit` `VirtualSwitchAudit` |
-| **Storage** (ext) | `S2DAudit` `DedupAudit` `MPIOPathAudit` `ShadowCopyAudit` `QoSPolicyAudit` |
+| **Storage** (ext) | `S2DAudit` `DedupAudit` `MPIOPathAudit` `ShadowCopyAudit` `QoSPolicyAudit` `DiskLatencyAudit` `StorageTimeoutAudit` |
 | **Services** (ext) | `ServiceRecoveryAudit` `HandleLeakAudit` |
 | **Persistence** | `AutoStartAudit` `EventSubAudit` `ComObjectAudit` `SymlinkAudit` `StartupScriptAudit` `HostsFileAudit` |
 | **Domain** | `SecureChannelAudit` `DomainTrustAudit` `ScheduledExport` `ValidateConfig` `EnvAudit` `CrashAudit` `ProcessAudit` |
@@ -382,7 +382,7 @@ RackStack/
 │   ├── ...                     # 61 more modules
 │   └── 64-SystemDebloat.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 3800+ automated tests
+│   ├── Run-Tests.ps1           # 3980+ automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -418,7 +418,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 powershell -ExecutionPolicy Bypass -File Tests\Validate-Release.ps1
 ```
 
-Tests cover parsing, module loading, function existence (600+), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
+Tests cover parsing, module loading, function existence (629 functions), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
 
 ## Development
 

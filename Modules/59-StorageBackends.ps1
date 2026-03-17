@@ -114,7 +114,7 @@ function Test-StorageBackendCompatibility {
             }
         }
         'FC' {
-            $fcAdapters = @(Get-WmiObject -Class MSFC_FibrePortHBAAttributes -Namespace 'root\WMI' -ErrorAction SilentlyContinue)
+            $fcAdapters = @(Get-CimInstance -ClassName MSFC_FibrePortHBAAttributes -Namespace 'root\WMI' -ErrorAction SilentlyContinue)
             if ($fcAdapters.Count -eq 0) {
                 Write-OutputColor "  No Fibre Channel HBAs detected" -color "Warning"
                 return $false

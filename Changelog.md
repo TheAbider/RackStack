@@ -1,5 +1,25 @@
 ﻿# Changelog
 
+## v1.80.0
+
+- **New CLI Action:** `DiskLatencyAudit` — checks physical disk read/write latency and queue lengths via performance counters. Flags disks with >10ms latency (warning) or >20ms (critical) and saturated queues (>4). Supports JSON output for fleet monitoring.
+- **New CLI Action:** `NICOffloadAudit` — inventories NIC offload settings (RSS, VMQ, RDMA, RSC, checksum offload, LSO) across all active physical adapters. Flags disabled RSS. Critical for diagnosing Hyper-V network performance issues on converged NICs.
+- **New CLI Action:** `StorageTimeoutAudit` — checks disk timeout, iSCSI MaxRequestHoldTime/LinkDownTime, MPIO PDORemovePeriod, and StorPort IoTimeout. Flags low timeout values that cause BSODs during SAN maintenance windows.
+- **New CLI Action:** `EventLogCapacityAudit` — checks event log sizes, capacity utilization, and retention mode for all critical logs (Application, System, Security, Setup, Hyper-V). Flags logs near 90% capacity and logs in Retain mode that will stop recording when full.
+- **Fix:** `ShadowCopyAudit` crashed when `InstallDate` was a DateTime object (from `Get-CimInstance`) instead of a string — `.Substring()` called on DateTime. Now handles both types.
+- **Fix:** Replaced last 2 `Get-WmiObject` calls with `Get-CimInstance` (MPIO disk info in EntryPoint, Fibre Channel HBA detection in StorageBackends).
+- **Fix:** Added `-OperationTimeoutSec 8` to 9 CIM queries inside `Invoke-WithTimeout` scriptblocks across 6 modules (05-SystemCheck, 28-PerformanceDashboard, 35-Utilities, 37-HealthCheck, 40-HostStorage, 45-ConfigExport). Prevents CIM from blocking indefinitely on cold WMI.
+- **Fix:** `Install-RackStack.ps1` ValidateSet was missing 14 CLI actions added since v1.68.0 — users running `Install-RackStack.ps1 -Action LiveMigrationAudit` etc. would get validation errors. Now synced.
+- **Cleanup:** Removed dead code in EventLogViewer (unreachable `continue` after switch block).
+- **New CLI Action:** `TcpSettingsAudit` — checks TCP auto-tuning level, chimney offload, congestion provider, ECN, RFC 1323 timestamps, RSS-enabled adapter count, and dynamic port range. Helps diagnose network performance tuning.
+- **New CLI Action:** `WinRMAudit` — checks WinRM service status, listeners (HTTP/HTTPS), auth methods (Basic/Kerberos/Negotiate/CredSSP), trusted hosts, and encryption settings. Flags Basic auth enabled, wildcard trusted hosts, and unencrypted transport.
+- **Enhancement:** HealthCheck now includes event log capacity monitoring — flags Application, System, and Security logs that are >=90% full.
+- **Enhancement:** Batch config validation (`Test-BatchConfig`) now checks adapter existence before network configuration, detects duplicate vNIC names, warns about PromoteToDC + DomainJoin conflicts, and validates InitializeHostStorage requires Hyper-V.
+- **Consistency:** Added missing `Timestamp` and `Hostname` fields to JSON output for 9 older CLI actions (Cleanup, Debloat, HealthCheck, QuickScan, Inventory, DriftCheck, Snapshot, Aggregate, Compare) — now all 132 actions follow the same JSON schema for fleet automation.
+- **Hardening:** Added `-OperationTimeoutSec 8` to 8 more CIM queries in 54-HTMLReports, 55-QoLFeatures, 48-MenuDisplay, and 28-PerformanceDashboard. Total CIM timeout coverage now comprehensive across all modules.
+- **Tests:** Added 20 function existence tests for previously untested critical functions (629 total functions now covered).
+- 65 modules, 3982 tests, 132 CLI actions
+
 ## v1.79.0
 
 - **New CLI Action:** `LiveMigrationAudit` — checks live migration enabled/disabled, auth type, performance option, migration networks, and surfaces recent migration failures from Hyper-V event logs (last 7 days).

@@ -14,7 +14,7 @@ function Show-PerformanceDashboard {
         $cimResult = Invoke-WithTimeout -ScriptBlock {
             @{
                 CPU = Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-                OS  = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+                OS  = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             }
         } -TimeoutSeconds 10 -Activity "Refreshing metrics"
 
@@ -232,7 +232,7 @@ function Show-PerformanceDashboard {
 
 # Collect disk I/O latency metrics from performance counters
 function Show-DiskIOMetrics {
-    $diskPerf = Get-CimInstance Win32_PerfFormattedData_PerfDisk_PhysicalDisk -ErrorAction SilentlyContinue |
+    $diskPerf = Get-CimInstance Win32_PerfFormattedData_PerfDisk_PhysicalDisk -OperationTimeoutSec 8 -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -ne "_Total" }
 
     if (-not $diskPerf) { return @() }

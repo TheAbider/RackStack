@@ -574,8 +574,8 @@ function Test-FeaturePrerequisites {
             $hvCim = Invoke-WithTimeout -ScriptBlock {
                 @{
                     CPU  = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
-                    CS   = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
-                    Disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction SilentlyContinue
+                    CS   = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                    Disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
                 }
             } -TimeoutSeconds 10 -Activity "Checking Hyper-V prerequisites"
 

@@ -76,8 +76,8 @@ function Export-HTMLHealthReport {
     $cimResult = Invoke-WithTimeout -ScriptBlock {
         @{
             OS  = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-            CS  = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
-            CPU = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+            CS  = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            CPU = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         }
     } -TimeoutSeconds 15 -Activity "Querying system info"
 
@@ -110,7 +110,7 @@ function Export-HTMLHealthReport {
     $diskHtml = ""
     if ($includeStorage) {
         $diskResult = Invoke-WithTimeout -ScriptBlock {
-            Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+            Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         } -TimeoutSeconds 10 -Activity "Querying disk info"
         $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
         if (-not $disks) {
@@ -1179,8 +1179,8 @@ function Save-PerformanceSnapshot {
         $cimSnap = Invoke-WithTimeout -ScriptBlock {
             @{
                 OS   = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-                CPU  = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
-                Disk = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+                CPU  = Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                Disk = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             }
         } -TimeoutSeconds 15 -Activity "Collecting metrics"
 

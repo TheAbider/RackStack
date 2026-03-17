@@ -50,8 +50,8 @@ function Export-ServerConfiguration {
         $sysInfo = Invoke-WithTimeout -ScriptBlock {
             @{
                 CS   = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-                OS   = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
-                CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+                OS   = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                CPU  = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
             }
         } -TimeoutSeconds 15 -Activity "Querying system info"
         if ($sysInfo.TimedOut) {
@@ -2137,10 +2137,10 @@ function Get-ServerInventory {
     $sysInfo = Invoke-WithTimeout -ScriptBlock {
         @{
             CS   = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-            OS   = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
-            CPU  = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
-            BIOS = Get-CimInstance -ClassName Win32_BIOS -ErrorAction SilentlyContinue
-            MB   = Get-CimInstance -ClassName Win32_BaseBoard -ErrorAction SilentlyContinue
+            OS   = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            CPU  = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
+            BIOS = Get-CimInstance -ClassName Win32_BIOS -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            MB   = Get-CimInstance -ClassName Win32_BaseBoard -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         }
     } -TimeoutSeconds 15 -Activity "Querying system info"
 
@@ -2552,7 +2552,7 @@ function Test-WatchThresholds {
     if ($Thresholds.Disk -and $null -ne $Thresholds.Disk.MaxUsedPercent) {
         try {
             $diskCim = Invoke-WithTimeout -ScriptBlock {
-                Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+                Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
             } -TimeoutSeconds $script:Timeouts.CIMQuery -Activity "Disk check"
             if (-not $diskCim.TimedOut -and $null -ne $diskCim.Result) {
                 foreach ($disk in @($diskCim.Result)) {

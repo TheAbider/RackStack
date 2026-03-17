@@ -280,6 +280,12 @@ function Assert-Elevation {
                 @{ Action = 'QoSPolicyAudit'; Description = 'Network QoS policies + bandwidth reservations' }
                 @{ Action = 'LiveMigrationAudit'; Description = 'Hyper-V live migration config + failures' }
                 @{ Action = 'DomainTrustAudit'; Description = 'AD trust relationships + secure channel' }
+                @{ Action = 'DiskLatencyAudit'; Description = 'Physical disk latency + queue lengths' }
+                @{ Action = 'NICOffloadAudit'; Description = 'NIC offload settings (RSS/VMQ/RDMA/RSC)' }
+                @{ Action = 'StorageTimeoutAudit'; Description = 'Disk timeout + iSCSI + MPIO retry settings' }
+                @{ Action = 'EventLogCapacityAudit'; Description = 'Event log sizes + retention + capacity warnings' }
+                @{ Action = 'TcpSettingsAudit'; Description = 'TCP auto-tuning + chimney + congestion + RSS global' }
+                @{ Action = 'WinRMAudit'; Description = 'WinRM listeners + auth + trusted hosts + HTTPS' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -339,11 +345,13 @@ function Invoke-CLIAction {
             Write-OutputColor "  Cleanup complete." -color "Success"
             if ($script:CLIOutputFormat -eq 'JSON') {
                 $jsonResult = @{
-                    Tool    = $script:ToolFullName
-                    Version = $script:ScriptVersion
-                    Action  = 'Cleanup'
-                    Profile = $script:CLIProfile
-                    Status  = 'Complete'
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Cleanup'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Profile   = $script:CLIProfile
+                    Status    = 'Complete'
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
@@ -362,11 +370,13 @@ function Invoke-CLIAction {
             Write-OutputColor "  Debloat complete." -color "Success"
             if ($script:CLIOutputFormat -eq 'JSON') {
                 $jsonResult = @{
-                    Tool    = $script:ToolFullName
-                    Version = $script:ScriptVersion
-                    Action  = 'Debloat'
-                    Profile = $script:CLIProfile
-                    Status  = 'Complete'
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'Debloat'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Profile   = $script:CLIProfile
+                    Status    = 'Complete'
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
@@ -375,10 +385,12 @@ function Invoke-CLIAction {
             $healthReport = Show-SystemHealthCheck
             if ($script:CLIOutputFormat -eq 'JSON' -and $null -ne $healthReport) {
                 $jsonResult = @{
-                    Tool    = $script:ToolFullName
-                    Version = $script:ScriptVersion
-                    Action  = 'HealthCheck'
-                    Report  = $healthReport
+                    Tool      = $script:ToolFullName
+                    Version   = $script:ScriptVersion
+                    Action    = 'HealthCheck'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
+                    Report    = $healthReport
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
@@ -426,6 +438,8 @@ function Invoke-CLIAction {
                     Tool        = $script:ToolFullName
                     Version     = $script:ScriptVersion
                     Action      = 'QuickScan'
+                    Timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname    = $env:COMPUTERNAME
                     Health      = $healthReport
                     DiskCleanup = $cleanupReport
                     Debloat     = $debloatReport
@@ -440,6 +454,8 @@ function Invoke-CLIAction {
                     Tool      = $script:ToolFullName
                     Version   = $script:ScriptVersion
                     Action    = 'Inventory'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname  = $env:COMPUTERNAME
                     Inventory = $inventoryReport
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
@@ -542,11 +558,13 @@ function Invoke-CLIAction {
                 if ($script:CLIOutputFormat -eq 'JSON') {
                     $snapshotData = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
                     $jsonResult = @{
-                        Tool     = $script:ToolFullName
-                        Version  = $script:ScriptVersion
-                        Action   = 'Snapshot'
-                        Snapshot = $snapshotData
-                        SavedTo  = $snapshotPath
+                        Tool      = $script:ToolFullName
+                        Version   = $script:ScriptVersion
+                        Action    = 'Snapshot'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                        Hostname  = $env:COMPUTERNAME
+                        Snapshot  = $snapshotData
+                        SavedTo   = $snapshotPath
                     }
                     Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
                 }
@@ -582,6 +600,7 @@ function Invoke-CLIAction {
                         Tool       = $script:ToolFullName
                         Version    = $script:ScriptVersion
                         Action     = 'DriftCheck'
+                        Timestamp  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
                         Hostname   = $env:COMPUTERNAME
                         Baseline   = $script:CLIConfig
                         Checks     = $driftItems
@@ -602,6 +621,7 @@ function Invoke-CLIAction {
                             Tool      = $script:ToolFullName
                             Version   = $script:ScriptVersion
                             Action    = 'DriftCheck'
+                            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
                             Mode      = 'Capture'
                             Hostname  = $env:COMPUTERNAME
                             Baseline  = $baselineData
@@ -728,6 +748,7 @@ function Invoke-CLIAction {
                     Version      = $script:ScriptVersion
                     Action       = 'Aggregate'
                     Timestamp    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname     = $env:COMPUTERNAME
                     TotalReports = $aggResult.TotalReports
                     Hosts        = $aggResult.Hosts
                     ActionTypes  = $aggResult.ActionTypes
@@ -780,6 +801,7 @@ function Invoke-CLIAction {
                     Version     = $script:ScriptVersion
                     Action      = 'Compare'
                     Timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname    = $env:COMPUTERNAME
                     HostA       = $compareResult.HostA
                     HostB       = $compareResult.HostB
                     CompareType = $compareResult.Action
@@ -8123,7 +8145,7 @@ function Invoke-CLIAction {
             $supportedHW = @(Get-MSDSMSupportedHW -ErrorAction SilentlyContinue)
             Write-OutputColor "  Claimed HW IDs: $($supportedHW.Count)" -color "Info"
             # Check MPIO disks
-            $mpioDevices = @(Get-WmiObject -Namespace root\wmi -Class MPIO_DISK_INFO -ErrorAction SilentlyContinue)
+            $mpioDevices = @(Get-CimInstance -Namespace root\wmi -ClassName MPIO_DISK_INFO -ErrorAction SilentlyContinue)
             if ($mpioDevices.Count -eq 0) {
                 Write-OutputColor "  No MPIO devices found." -color "Info"
             }
@@ -8410,7 +8432,9 @@ function Invoke-CLIAction {
                         if ($volShadows.Count -gt 0) {
                             $newest = ($volShadows | Sort-Object InstallDate -Descending | Select-Object -First 1)
                             $oldest = ($volShadows | Sort-Object InstallDate | Select-Object -First 1)
-                            Write-OutputColor "    Copies: $($volShadows.Count)  Newest: $($newest.InstallDate.Substring(0,8))  Oldest: $($oldest.InstallDate.Substring(0,8))" -color "Info"
+                            $newestDate = if ($newest.InstallDate -is [DateTime]) { $newest.InstallDate.ToString("yyyy-MM-dd") } else { "$($newest.InstallDate)".Substring(0, 8) }
+                            $oldestDate = if ($oldest.InstallDate -is [DateTime]) { $oldest.InstallDate.ToString("yyyy-MM-dd") } else { "$($oldest.InstallDate)".Substring(0, 8) }
+                            Write-OutputColor "    Copies: $($volShadows.Count)  Newest: $newestDate  Oldest: $oldestDate" -color "Info"
                         }
                     }
                 }
@@ -8571,6 +8595,451 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($dtIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DiskLatencyAudit' {
+            Write-OutputColor "  Auditing physical disk latency..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $dlIssues = 0
+            try {
+                $diskPerf = @(Get-CimInstance -ClassName Win32_PerfFormattedData_PerfDisk_PhysicalDisk -OperationTimeoutSec 8 -ErrorAction Stop |
+                    Where-Object { $_.Name -ne '_Total' })
+                if ($diskPerf.Count -eq 0) {
+                    Write-OutputColor "  No physical disk performance data available." -color "Warning"
+                }
+                else {
+                    Write-OutputColor "  Physical Disks: $($diskPerf.Count)" -color "Info"
+                    Write-OutputColor "" -color "Info"
+                    foreach ($disk in $diskPerf) {
+                        $readMs = $disk.AvgDiskSecPerRead * 1000
+                        $writeMs = $disk.AvgDiskSecPerWrite * 1000
+                        $queueLen = $disk.CurrentDiskQueueLength
+                        $diskName = $disk.Name
+                        if ($diskName.Length -gt 40) { $diskName = $diskName.Substring(0, 37) + "..." }
+                        $latColor = if ($readMs -gt 20 -or $writeMs -gt 20) { "Error" } elseif ($readMs -gt 10 -or $writeMs -gt 10) { "Warning" } else { "Success" }
+                        $qColor = if ($queueLen -gt 4) { "Error" } elseif ($queueLen -gt 2) { "Warning" } else { "Success" }
+                        Write-OutputColor "  $diskName" -color "Info"
+                        Write-OutputColor "    Read: $([math]::Round($readMs, 2))ms  Write: $([math]::Round($writeMs, 2))ms  Queue: $queueLen" -color $latColor
+                        if ($readMs -gt 20 -or $writeMs -gt 20) {
+                            Write-OutputColor "    HIGH LATENCY — reads/writes >20ms" -color "Error"
+                            $dlIssues++
+                        }
+                        elseif ($readMs -gt 10 -or $writeMs -gt 10) {
+                            Write-OutputColor "    Elevated latency — reads/writes >10ms" -color "Warning"
+                            $dlIssues++
+                        }
+                        if ($queueLen -gt 4) {
+                            Write-OutputColor "    HIGH QUEUE — disk may be saturated" -color "Error"
+                            $dlIssues++
+                        }
+                    }
+                }
+            }
+            catch {
+                Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"
+                $dlIssues++
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonDisks = @()
+                if ($diskPerf) {
+                    $jsonDisks = @($diskPerf | ForEach-Object {
+                        @{
+                            Name = $_.Name
+                            ReadLatencyMs = [math]::Round($_.AvgDiskSecPerRead * 1000, 2)
+                            WriteLatencyMs = [math]::Round($_.AvgDiskSecPerWrite * 1000, 2)
+                            QueueLength = $_.CurrentDiskQueueLength
+                            ReadsPerSec = $_.DiskReadsPerSec
+                            WritesPerSec = $_.DiskWritesPerSec
+                            ReadBytesPerSec = $_.DiskReadBytesPerSec
+                            WriteBytesPerSec = $_.DiskWriteBytesPerSec
+                        }
+                    })
+                }
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DiskLatencyAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Disks = $diskPerf.Count; Issues = $dlIssues }; Disks = $jsonDisks }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($dlIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NICOffloadAudit' {
+            Write-OutputColor "  Auditing NIC offload settings..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $noIssues = 0
+            $adapters = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })
+            if ($adapters.Count -eq 0) {
+                Write-OutputColor "  No active physical adapters found." -color "Warning"
+            }
+            else {
+                Write-OutputColor "  Physical Adapters: $($adapters.Count)" -color "Info"
+                Write-OutputColor "" -color "Info"
+                foreach ($nic in $adapters) {
+                    $nicName = $nic.Name
+                    if ($nicName.Length -gt 30) { $nicName = $nicName.Substring(0, 27) + "..." }
+                    Write-OutputColor "  $nicName ($($nic.LinkSpeed))" -color "Info"
+                    # RSS
+                    $rss = Get-NetAdapterRss -Name $nic.Name -ErrorAction SilentlyContinue
+                    if ($null -ne $rss) {
+                        $rssColor = if ($rss.Enabled) { "Success" } else { "Warning" }
+                        Write-OutputColor "    RSS: $(if ($rss.Enabled) { 'Enabled' } else { 'Disabled' })  Queues: $($rss.NumberOfReceiveQueues)" -color $rssColor
+                        if (-not $rss.Enabled) { $noIssues++ }
+                    }
+                    # VMQ
+                    $vmq = Get-NetAdapterVmq -Name $nic.Name -ErrorAction SilentlyContinue
+                    if ($null -ne $vmq) {
+                        $vmqColor = if ($vmq.Enabled) { "Success" } else { "Info" }
+                        Write-OutputColor "    VMQ: $(if ($vmq.Enabled) { 'Enabled' } else { 'Disabled' })" -color $vmqColor
+                    }
+                    # RDMA
+                    $rdma = Get-NetAdapterRdma -Name $nic.Name -ErrorAction SilentlyContinue
+                    if ($null -ne $rdma) {
+                        Write-OutputColor "    RDMA: $(if ($rdma.Enabled) { 'Enabled' } else { 'Disabled' })" -color $(if ($rdma.Enabled) { "Success" } else { "Info" })
+                    }
+                    # RSC (Receive Segment Coalescing)
+                    $rsc = Get-NetAdapterRsc -Name $nic.Name -ErrorAction SilentlyContinue
+                    if ($null -ne $rsc) {
+                        $rscV4 = if ($rsc.IPv4Enabled) { "v4" } else { "" }
+                        $rscV6 = if ($rsc.IPv6Enabled) { "v6" } else { "" }
+                        $rscStr = @($rscV4, $rscV6) | Where-Object { $_ } | ForEach-Object { $_ }
+                        $rscDisplay = if ($rscStr) { ($rscStr -join '+') } else { "Disabled" }
+                        Write-OutputColor "    RSC: $rscDisplay" -color "Info"
+                    }
+                    # Checksum offload
+                    $cso = Get-NetAdapterChecksumOffload -Name $nic.Name -ErrorAction SilentlyContinue
+                    if ($null -ne $cso) {
+                        Write-OutputColor "    Checksum: IPv4Rx=$($cso.IPv4Receive) IPv4Tx=$($cso.IPv4Transmit) TCPRx=$($cso.TcpIPv4Receive) TCPTx=$($cso.TcpIPv4Transmit)" -color "Info"
+                    }
+                    # LSO (Large Send Offload)
+                    $lso = Get-NetAdapterLso -Name $nic.Name -ErrorAction SilentlyContinue
+                    if ($null -ne $lso) {
+                        Write-OutputColor "    LSO: v1=$($lso.V1IPv4Enabled) v2IPv4=$($lso.IPv4Enabled) v2IPv6=$($lso.IPv6Enabled)" -color "Info"
+                    }
+                }
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonAdapters = @($adapters | ForEach-Object {
+                    $n = $_.Name
+                    $rssInfo = Get-NetAdapterRss -Name $n -ErrorAction SilentlyContinue
+                    $vmqInfo = Get-NetAdapterVmq -Name $n -ErrorAction SilentlyContinue
+                    $rdmaInfo = Get-NetAdapterRdma -Name $n -ErrorAction SilentlyContinue
+                    @{
+                        Name = $n
+                        Speed = "$($_.LinkSpeed)"
+                        RSS = if ($rssInfo) { @{ Enabled = $rssInfo.Enabled; Queues = $rssInfo.NumberOfReceiveQueues } } else { $null }
+                        VMQ = if ($vmqInfo) { @{ Enabled = $vmqInfo.Enabled } } else { $null }
+                        RDMA = if ($rdmaInfo) { @{ Enabled = $rdmaInfo.Enabled } } else { $null }
+                    }
+                })
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NICOffloadAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Adapters = $adapters.Count; Issues = $noIssues }; Adapters = $jsonAdapters }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($noIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'StorageTimeoutAudit' {
+            Write-OutputColor "  Auditing storage timeout settings..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $stIssues = 0
+            # 1. Disk timeout (default 60s, should be 60+ for iSCSI/SAN)
+            $diskTimeout = $null
+            try {
+                $diskTimeout = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Disk' -Name 'TimeOutValue' -ErrorAction SilentlyContinue).TimeOutValue
+            } catch { }
+            $diskTimeoutDisplay = if ($null -ne $diskTimeout) { "${diskTimeout}s" } else { "Default (60s)" }
+            $dtColor = if ($null -ne $diskTimeout -and $diskTimeout -lt 60) { "Warning" } else { "Success" }
+            Write-OutputColor "  Disk Timeout: $diskTimeoutDisplay" -color $dtColor
+            if ($null -ne $diskTimeout -and $diskTimeout -lt 60) {
+                Write-OutputColor "    LOW — recommend 60s+ for SAN environments (prevents BSOD during failover)" -color "Warning"
+                $stIssues++
+            }
+            # 2. iSCSI settings
+            $iscsiService = Get-Service -Name MSiSCSI -ErrorAction SilentlyContinue
+            if ($null -ne $iscsiService) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  iSCSI Initiator Service: $($iscsiService.Status)" -color $(if ($iscsiService.Status -eq 'Running') { "Success" } else { "Info" })
+                if ($iscsiService.Status -eq 'Running') {
+                    # Login timeout
+                    $loginTimeout = $null
+                    try {
+                        $loginTimeout = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\iSCSI' -Name 'MaxRequestHoldTime' -ErrorAction SilentlyContinue).MaxRequestHoldTime
+                    } catch { }
+                    if ($null -ne $loginTimeout) {
+                        Write-OutputColor "  iSCSI MaxRequestHoldTime: ${loginTimeout}s" -color $(if ($loginTimeout -ge 60) { "Success" } else { "Warning" })
+                        if ($loginTimeout -lt 60) { $stIssues++ }
+                    }
+                    # LinkDown timeout
+                    $linkDown = $null
+                    try {
+                        $linkDown = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\iScsiPrt\Parameters' -Name 'LinkDownTime' -ErrorAction SilentlyContinue).LinkDownTime
+                    } catch { }
+                    if ($null -ne $linkDown) {
+                        Write-OutputColor "  iSCSI LinkDownTime: ${linkDown}s" -color $(if ($linkDown -ge 30) { "Success" } else { "Warning" })
+                        if ($linkDown -lt 15) { $stIssues++ }
+                    }
+                    # Active sessions
+                    $sessions = @(Get-IscsiSession -ErrorAction SilentlyContinue)
+                    Write-OutputColor "  iSCSI Sessions: $($sessions.Count)" -color $(if ($sessions.Count -gt 0) { "Success" } else { "Info" })
+                    foreach ($sess in $sessions | Select-Object -First 5) {
+                        $targetLine = "$($sess.TargetNodeAddress)"
+                        if ($targetLine.Length -gt 60) { $targetLine = $targetLine.Substring(0, 57) + "..." }
+                        Write-OutputColor "    $targetLine" -color "Info"
+                    }
+                    if ($sessions.Count -gt 5) {
+                        Write-OutputColor "    ... and $($sessions.Count - 5) more" -color "Info"
+                    }
+                }
+            }
+            # 3. MPIO settings
+            $mpioInstalled = $null -ne (Get-Command Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue)
+            if ($mpioInstalled) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  MPIO Installed: Yes" -color "Success"
+                $lbPolicy = Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue
+                if ($lbPolicy) {
+                    Write-OutputColor "  Global LB Policy: $lbPolicy" -color "Info"
+                }
+                $retryCount = $null
+                try {
+                    $retryCount = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\mpio\Parameters' -Name 'PathRecoveryInterval' -ErrorAction SilentlyContinue).PathRecoveryInterval
+                } catch { }
+                if ($null -ne $retryCount) {
+                    Write-OutputColor "  MPIO PathRecoveryInterval: ${retryCount}s" -color "Info"
+                }
+                $retryInterval = $null
+                try {
+                    $retryInterval = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\mpio\Parameters' -Name 'PDORemovePeriod' -ErrorAction SilentlyContinue).PDORemovePeriod
+                } catch { }
+                if ($null -ne $retryInterval) {
+                    $riColor = if ($retryInterval -ge 120) { "Success" } else { "Warning" }
+                    Write-OutputColor "  MPIO PDORemovePeriod: ${retryInterval}s" -color $riColor
+                    if ($retryInterval -lt 60) {
+                        Write-OutputColor "    LOW — recommend 120s+ to prevent premature path removal during SAN maintenance" -color "Warning"
+                        $stIssues++
+                    }
+                }
+            }
+            # 4. StorPort timeout
+            $storportTimeout = $null
+            try {
+                $storportTimeout = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\storahci\Parameters\Device' -Name 'IoTimeoutValue' -ErrorAction SilentlyContinue).IoTimeoutValue
+            } catch { }
+            if ($null -ne $storportTimeout) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  StorPort IoTimeout: ${storportTimeout}s" -color "Info"
+            }
+            if ($stIssues -eq 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  No storage timeout issues detected." -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'StorageTimeoutAudit'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Issues = $stIssues }
+                    DiskTimeout = if ($null -ne $diskTimeout) { $diskTimeout } else { 60 }
+                    iSCSI = @{
+                        ServiceRunning = ($null -ne $iscsiService -and $iscsiService.Status -eq 'Running')
+                        Sessions = if ($sessions) { $sessions.Count } else { 0 }
+                    }
+                    MPIO = @{
+                        Installed = $mpioInstalled
+                        LBPolicy = "$lbPolicy"
+                    }
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($stIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'EventLogCapacityAudit' {
+            Write-OutputColor "  Auditing event log capacity..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $elIssues = 0
+            try {
+                $logs = @(Get-WinEvent -ListLog * -ErrorAction SilentlyContinue | Where-Object { $_.RecordCount -gt 0 -or $_.IsEnabled })
+                $criticalLogs = @('Application', 'System', 'Security', 'Setup', 'Microsoft-Windows-Hyper-V-VMMS-Admin')
+                Write-OutputColor "  Event Logs: $($logs.Count) total" -color "Info"
+                Write-OutputColor "" -color "Info"
+                # Check critical logs
+                foreach ($logName in $criticalLogs) {
+                    $log = $logs | Where-Object { $_.LogName -eq $logName } | Select-Object -First 1
+                    if ($null -ne $log) {
+                        $usedMB = [math]::Round($log.FileSize / 1MB, 1)
+                        $maxMB = [math]::Round($log.MaximumSizeInBytes / 1MB, 1)
+                        $pct = if ($log.MaximumSizeInBytes -gt 0) { [math]::Round(($log.FileSize / $log.MaximumSizeInBytes) * 100, 1) } else { 0 }
+                        $retention = if ($log.LogMode -eq 'Circular') { "Circular" } elseif ($log.LogMode -eq 'Retain') { "Retain (no overwrite)" } else { "$($log.LogMode)" }
+                        $displayName = $logName
+                        if ($displayName.Length -gt 40) { $displayName = $displayName.Substring(0, 37) + "..." }
+                        $color = if ($pct -ge 90) { "Error" } elseif ($pct -ge 75) { "Warning" } else { "Success" }
+                        Write-OutputColor "  $displayName" -color "Info"
+                        Write-OutputColor "    Size: ${usedMB}MB / ${maxMB}MB ($pct%)  Records: $($log.RecordCount)  Mode: $retention" -color $color
+                        if ($pct -ge 90) {
+                            Write-OutputColor "    NEAR CAPACITY — may stop recording events" -color "Error"
+                            $elIssues++
+                        }
+                        if ($log.LogMode -eq 'Retain' -and $pct -ge 50) {
+                            Write-OutputColor "    WARNING: Retain mode — log will STOP when full (no auto-overwrite)" -color "Warning"
+                            $elIssues++
+                        }
+                    }
+                }
+                # Find any other logs near capacity
+                $nearFull = @($logs | Where-Object {
+                    $_.LogName -notin $criticalLogs -and
+                    $_.MaximumSizeInBytes -gt 0 -and
+                    ($_.FileSize / $_.MaximumSizeInBytes) -ge 0.9
+                })
+                if ($nearFull.Count -gt 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Other logs near capacity ($($nearFull.Count)):" -color "Warning"
+                    foreach ($nf in $nearFull | Select-Object -First 10) {
+                        $nfName = $nf.LogName
+                        if ($nfName.Length -gt 50) { $nfName = $nfName.Substring(0, 47) + "..." }
+                        $nfPct = [math]::Round(($nf.FileSize / $nf.MaximumSizeInBytes) * 100, 1)
+                        Write-OutputColor "    $nfName ($nfPct%)" -color "Warning"
+                    }
+                    $elIssues += $nearFull.Count
+                }
+            }
+            catch {
+                Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"
+                $elIssues++
+            }
+            if ($elIssues -eq 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  All event logs within capacity." -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonLogs = @($criticalLogs | ForEach-Object {
+                    $l = $logs | Where-Object { $_.LogName -eq $_ } | Select-Object -First 1
+                    if ($l) {
+                        @{
+                            Name = $l.LogName
+                            SizeBytes = $l.FileSize
+                            MaxBytes = $l.MaximumSizeInBytes
+                            UsedPercent = if ($l.MaximumSizeInBytes -gt 0) { [math]::Round(($l.FileSize / $l.MaximumSizeInBytes) * 100, 1) } else { 0 }
+                            Records = $l.RecordCount
+                            Mode = "$($l.LogMode)"
+                            Enabled = $l.IsEnabled
+                        }
+                    }
+                })
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'EventLogCapacityAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ TotalLogs = $logs.Count; NearCapacity = $nearFull.Count; Issues = $elIssues }; CriticalLogs = $jsonLogs }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($elIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TcpSettingsAudit' {
+            Write-OutputColor "  Auditing TCP/IP stack settings..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $tcpIssues = 0
+            # Auto-tuning level
+            try {
+                $autoTuning = netsh int tcp show global 2>&1
+                $tuningLevel = ($autoTuning | Where-Object { $_ -match 'Receive Window Auto-Tuning Level' }) -replace '.*:\s*', ''
+                Write-OutputColor "  Auto-Tuning Level: $($tuningLevel.Trim())" -color $(if ($tuningLevel -match 'normal') { "Success" } else { "Warning" })
+                # Chimney offload
+                $chimney = ($autoTuning | Where-Object { $_ -match 'Chimney Offload' }) -replace '.*:\s*', ''
+                if ($chimney) { Write-OutputColor "  Chimney Offload: $($chimney.Trim())" -color "Info" }
+                # Congestion provider
+                $congestion = ($autoTuning | Where-Object { $_ -match 'Congestion Control Provider|Add-On Congestion' }) -replace '.*:\s*', ''
+                if ($congestion) { Write-OutputColor "  Congestion Provider: $($congestion.Trim())" -color "Info" }
+                # ECN
+                $ecn = ($autoTuning | Where-Object { $_ -match 'ECN Capability' }) -replace '.*:\s*', ''
+                if ($ecn) { Write-OutputColor "  ECN Capability: $($ecn.Trim())" -color "Info" }
+                # Timestamps
+                $timestamps = ($autoTuning | Where-Object { $_ -match 'RFC 1323 Timestamps' }) -replace '.*:\s*', ''
+                if ($timestamps) { Write-OutputColor "  RFC 1323 Timestamps: $($timestamps.Trim())" -color "Info" }
+            } catch {
+                Write-OutputColor "  Failed to query TCP global: $($_.Exception.Message)" -color "Warning"
+            }
+            # RSS global
+            Write-OutputColor "" -color "Info"
+            try {
+                $rssGlobal = Get-NetAdapterRss -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }
+                $rssCount = @($rssGlobal).Count
+                Write-OutputColor "  RSS-Enabled Adapters: $rssCount" -color $(if ($rssCount -gt 0) { "Success" } else { "Warning" })
+                if ($rssCount -eq 0) { $tcpIssues++ }
+            } catch { }
+            # TCP port range
+            try {
+                $dynPorts = netsh int ipv4 show dynamicport tcp 2>&1
+                $startPort = ($dynPorts | Where-Object { $_ -match 'Start Port' }) -replace '.*:\s*', ''
+                $numPorts = ($dynPorts | Where-Object { $_ -match 'Number of Ports' }) -replace '.*:\s*', ''
+                if ($startPort -and $numPorts) {
+                    Write-OutputColor "  Dynamic Port Range: $($startPort.Trim())-$([int]$startPort.Trim() + [int]$numPorts.Trim() - 1) ($($numPorts.Trim()) ports)" -color "Info"
+                }
+            } catch { }
+            if ($tcpIssues -eq 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  No TCP stack issues detected." -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'TcpSettingsAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $tcpIssues; RSSAdapters = $rssCount }; AutoTuning = "$($tuningLevel)".Trim(); DynamicPortStart = "$($startPort)".Trim(); DynamicPortCount = "$($numPorts)".Trim() }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($tcpIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'WinRMAudit' {
+            Write-OutputColor "  Auditing WinRM configuration..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $wrIssues = 0
+            # Service status
+            $winrmSvc = Get-Service -Name WinRM -ErrorAction SilentlyContinue
+            $svcStatus = if ($winrmSvc) { "$($winrmSvc.Status)" } else { "Not Installed" }
+            $svcStart = if ($winrmSvc) { "$($winrmSvc.StartType)" } else { "N/A" }
+            Write-OutputColor "  WinRM Service: $svcStatus (StartType: $svcStart)" -color $(if ($svcStatus -eq 'Running') { "Success" } else { "Warning" })
+            if ($svcStatus -ne 'Running') { $wrIssues++ }
+            # Listeners
+            Write-OutputColor "" -color "Info"
+            try {
+                $listeners = @(Get-ChildItem -Path WSMan:\localhost\Listener -ErrorAction Stop 2>$null)
+                Write-OutputColor "  Listeners: $($listeners.Count)" -color $(if ($listeners.Count -gt 0) { "Success" } else { "Warning" })
+                foreach ($listener in $listeners) {
+                    $transport = (Get-ChildItem -Path "WSMan:\localhost\Listener\$($listener.Name)" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Transport' }).Value
+                    $port = (Get-ChildItem -Path "WSMan:\localhost\Listener\$($listener.Name)" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Port' }).Value
+                    $addr = (Get-ChildItem -Path "WSMan:\localhost\Listener\$($listener.Name)" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Address' }).Value
+                    Write-OutputColor "    $transport on port $port (Address: $addr)" -color $(if ($transport -eq 'HTTPS') { "Success" } else { "Info" })
+                }
+                if ($listeners.Count -eq 0) { $wrIssues++ }
+            } catch {
+                Write-OutputColor "  Could not enumerate listeners: $($_.Exception.Message)" -color "Warning"
+            }
+            # Auth methods
+            Write-OutputColor "" -color "Info"
+            try {
+                $authBasic = (Get-Item -Path WSMan:\localhost\Service\Auth\Basic -ErrorAction SilentlyContinue).Value
+                $authKerberos = (Get-Item -Path WSMan:\localhost\Service\Auth\Kerberos -ErrorAction SilentlyContinue).Value
+                $authNegotiate = (Get-Item -Path WSMan:\localhost\Service\Auth\Negotiate -ErrorAction SilentlyContinue).Value
+                $authCredSSP = (Get-Item -Path WSMan:\localhost\Service\Auth\CredSSP -ErrorAction SilentlyContinue).Value
+                Write-OutputColor "  Auth Methods:" -color "Info"
+                Write-OutputColor "    Basic: $authBasic  Kerberos: $authKerberos  Negotiate: $authNegotiate  CredSSP: $authCredSSP" -color "Info"
+                if ("$authBasic" -eq "true") {
+                    Write-OutputColor "    WARNING: Basic auth enabled — credentials sent in cleartext" -color "Warning"
+                    $wrIssues++
+                }
+            } catch { }
+            # Trusted hosts
+            try {
+                $trustedHosts = (Get-Item -Path WSMan:\localhost\Client\TrustedHosts -ErrorAction SilentlyContinue).Value
+                $thDisplay = if ($trustedHosts) { $trustedHosts } else { "(empty)" }
+                if ($thDisplay.Length -gt 60) { $thDisplay = $thDisplay.Substring(0, 57) + "..." }
+                Write-OutputColor "  Trusted Hosts: $thDisplay" -color $(if ($trustedHosts -eq '*') { "Warning" } else { "Info" })
+                if ($trustedHosts -eq '*') {
+                    Write-OutputColor "    WARNING: TrustedHosts='*' trusts ALL hosts" -color "Warning"
+                    $wrIssues++
+                }
+            } catch { }
+            # Encryption
+            try {
+                $allowUnencrypted = (Get-Item -Path WSMan:\localhost\Service\AllowUnencrypted -ErrorAction SilentlyContinue).Value
+                Write-OutputColor "  AllowUnencrypted: $allowUnencrypted" -color $(if ("$allowUnencrypted" -eq "false") { "Success" } else { "Error" })
+                if ("$allowUnencrypted" -eq "true") { $wrIssues++ }
+            } catch { }
+            if ($wrIssues -eq 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  No WinRM security issues detected." -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'WinRMAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $wrIssues; ServiceStatus = $svcStatus; Listeners = $listeners.Count }; Auth = @{ Basic = "$authBasic"; Kerberos = "$authKerberos"; Negotiate = "$authNegotiate"; CredSSP = "$authCredSSP" }; TrustedHosts = "$trustedHosts" }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($wrIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
@@ -8786,6 +9255,40 @@ function Test-BatchConfig {
     # DisableBuiltInAdmin without CreateLocalAdmin
     if ($Config.DisableBuiltInAdmin -and -not $Config.CreateLocalAdmin) {
         $null = $warnings.Add("DisableBuiltInAdmin is set without CreateLocalAdmin. Ensure another admin account exists.")
+    }
+
+    # Adapter existence pre-flight check
+    if ($Config.AdapterName) {
+        $adapterExists = Get-NetAdapter -Name $Config.AdapterName -ErrorAction SilentlyContinue
+        if (-not $adapterExists) {
+            $available = @(Get-NetAdapter -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name) -join "', '"
+            $null = $errors.Add("AdapterName '$($Config.AdapterName)' does not exist. Available: '$available'.")
+        }
+    }
+
+    # Duplicate vNIC names
+    if ($Config.CustomVNICs -and $Config.CustomVNICs -is [array] -and $Config.CustomVNICs.Count -gt 1) {
+        $vnicNames = @($Config.CustomVNICs | Where-Object { $_.Name } | ForEach-Object { $_.Name })
+        $dupes = @($vnicNames | Group-Object | Where-Object { $_.Count -gt 1 })
+        foreach ($dupe in $dupes) {
+            $null = $errors.Add("CustomVNICs has duplicate name '$($dupe.Name)'. Each vNIC must have a unique name.")
+        }
+    }
+
+    # PromoteToDC + DomainJoin conflict
+    if ($Config.PromoteToDC -and $Config.DomainName -and $Config.PromoteToDC) {
+        $promoType = if ($Config.DCPromoType) { $Config.DCPromoType } else { "NewForest" }
+        if ($promoType -eq "NewForest") {
+            $null = $warnings.Add("DomainName is set but PromoteToDC=NewForest creates a new forest. DomainName will be used as domain join target before promotion — verify this is intentional.")
+        }
+    }
+
+    # InitializeHostStorage without Hyper-V
+    if ($Config.InitializeHostStorage -and -not $Config.InstallHyperV) {
+        $hvInstalled = Test-HyperVInstalled
+        if (-not $hvInstalled) {
+            $null = $warnings.Add("InitializeHostStorage is set but Hyper-V is not installed and InstallHyperV is not enabled. Storage paths may not be useful without Hyper-V.")
+        }
     }
 
     return @{

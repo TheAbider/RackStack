@@ -110,7 +110,7 @@ function Move-OpticalDriveFromD {
     try {
         # Try using diskpart-style approach via WMI/CIM
         $volCim = Invoke-WithTimeout -ScriptBlock {
-            Get-CimInstance -ClassName Win32_Volume -Filter "DriveLetter='D:'" -ErrorAction SilentlyContinue
+            Get-CimInstance -ClassName Win32_Volume -Filter "DriveLetter='D:'" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         } -TimeoutSeconds 10 -Activity "Querying D: volume"
         $volume = if ($volCim.TimedOut) { $null } else { $volCim.Result }
 
