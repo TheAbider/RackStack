@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.80.3
+    Automated Test Runner for RackStack v1.80.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -3060,6 +3060,14 @@ foreach ($funcName in $progressFunctions) {
 
 Write-SectionHeader "SECTION 40: CIM DEDUP VERIFICATION"
 
+# No Get-WmiObject remaining in any module (all should use Get-CimInstance)
+$wmiCount = 0
+Get-ChildItem -Path $modulesPath -Filter "*.ps1" | ForEach-Object {
+    $moduleContent = Get-Content $_.FullName -Raw
+    $wmiCount += ([regex]::Matches($moduleContent, 'Get-WmiObject')).Count
+}
+Write-TestResult "No Get-WmiObject in any module (all CimInstance)" ($wmiCount -eq 0)
+
 # 28-PerformanceDashboard should NOT have two Win32_OperatingSystem calls
 try {
     $pdContent = Get-Content (Join-Path $modulesPath "28-PerformanceDashboard.ps1") -Raw
@@ -4347,6 +4355,8 @@ try {
     Write-TestResult "Show-Changelog: mentions Pre-flight validation" ($changelogContent -match 'Pre-flight validation')
     Write-TestResult "Show-Changelog: mentions Role Templates" ($changelogContent -match 'Role Templates')
     Write-TestResult "Show-Changelog: mentions audit log" ($changelogContent -match 'audit log')
+    Write-TestResult "Show-Changelog: has entry for current version" ($changelogContent -match "## v$($script:ScriptVersion)")
+    Write-TestResult "Show-Changelog: current version is first entry" ($changelogContent -match "# Changelog\s+## v$($script:ScriptVersion)")
 } catch {
     Write-TestResult "Show-Changelog: changelog content" $false $_.Exception.Message
 }

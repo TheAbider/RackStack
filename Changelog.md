@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.80.4
+
+- **Tests:** Added changelog version validation (current version entry exists, is first entry), WmiObject extinction guard (verifies zero `Get-WmiObject` across all 65 modules), compliance readiness disk timeout. 3985 tests.
+- 65 modules, 3985 tests, 132 CLI actions
+
 ## v1.80.3
 
 - **Enhancement:** Compliance readiness checks now include disk timeout validation for iSCSI hosts, consistent with Server Readiness dashboard (v1.80.2).
