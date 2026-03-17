@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.80.2
+
+- **Enhancement:** Server Readiness dashboard now checks disk timeout on iSCSI hosts — flags <60s timeout that causes BSODs during SAN failover/maintenance.
+- 65 modules, 3982 tests, 132 CLI actions
+
 ## v1.80.1
 
 - **Enhancement:** HTML health report now includes event log capacity in the issues summary — flags Application, System, and Security logs >=90% full alongside other health indicators.

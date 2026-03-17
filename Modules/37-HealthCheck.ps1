@@ -1403,6 +1403,20 @@ function Show-ServerReadiness {
         }
     }
 
+    # Disk timeout check (iSCSI/SAN environments need >=60s)
+    $iscsiSvc = Get-Service -Name MSiSCSI -ErrorAction SilentlyContinue
+    if ($null -ne $iscsiSvc -and $iscsiSvc.Status -eq 'Running') {
+        $total++
+        $diskTimeout = try { (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Disk' -Name 'TimeOutValue' -ErrorAction SilentlyContinue).TimeOutValue } catch { $null }
+        $dtVal = if ($null -ne $diskTimeout) { $diskTimeout } else { 60 }
+        if ($dtVal -ge 60) {
+            $ready++
+            $items += @{ Category = "STORAGE"; Name = "Disk Timeout"; Value = "${dtVal}s"; Color = "Success"; Symbol = "[OK]" }
+        } else {
+            $items += @{ Category = "STORAGE"; Name = "Disk Timeout"; Value = "${dtVal}s (need 60+ for SAN)"; Color = "Error"; Symbol = "[!!]" }
+        }
+    }
+
     # --- SECURITY ---
     # Certificate expiration check - scan LocalMachine\My for certs expiring within 30 days
     $total++
