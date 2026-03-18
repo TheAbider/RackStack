@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.83.0
+
+- **New CLI Action:** `SCCMClientAudit` — checks SCCM/MECM client service status, client version, cache size/location, last policy request, management point, and site code. Detects if client is installed and healthy.
+- **New CLI Action:** `SCOMAgentAudit` — checks SCOM (System Center Operations Manager) agent service, management group registrations, and agent version. Detects missing management group connections.
+- **New CLI Action:** `WACConnectivityAudit` — verifies Windows Admin Center readiness: WinRM service, PS Remoting endpoints, HTTPS server auth certificates, CredSSP status, and WAC gateway service detection.
+- 65 modules, 4193 tests, 145 CLI actions
+
 ## v1.82.11
 
 - **New CLI Action:** `HealthDashboard` — all-in-one health summary designed for monitoring systems. Returns CPU load, memory usage, disk capacity per volume, uptime, reboot pending status, critical event count (24h), certificate expiry, and Hyper-V VM counts in a single JSON blob. Status field: Healthy/Warning/Critical with issue count. The one action your monitoring system needs.

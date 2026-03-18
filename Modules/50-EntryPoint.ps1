@@ -296,6 +296,9 @@ function Assert-Elevation {
                 @{ Action = 'NICErrorAudit'; Description = 'Network adapter errors, resets, discards' }
                 @{ Action = 'VMResourceWaste'; Description = 'VMs with oversized RAM/CPU allocations' }
                 @{ Action = 'HealthDashboard'; Description = 'All-in-one health summary for monitoring' }
+                @{ Action = 'SCCMClientAudit'; Description = 'SCCM/MECM client health + cache + policy' }
+                @{ Action = 'SCOMAgentAudit'; Description = 'SCOM agent status + management groups' }
+                @{ Action = 'WACConnectivityAudit'; Description = 'Windows Admin Center readiness check' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9668,6 +9671,156 @@ function Invoke-CLIAction {
                 Write-Output ($dashboard | ConvertTo-Json -Depth 10)
             }
             if ($hdIssues -gt 2) { [Environment]::Exit(1) }
+        }
+        'SCCMClientAudit' {
+            Write-OutputColor "  Auditing SCCM/MECM client..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $sccmIssues = 0
+            $sccmData = @{}
+            # Check if SCCM client is installed
+            $ccmService = Get-Service -Name CcmExec -ErrorAction SilentlyContinue
+            if ($null -eq $ccmService) {
+                Write-OutputColor "  SCCM client not installed." -color "Info"
+                $sccmData.Installed = $false
+            }
+            else {
+                $sccmData.Installed = $true
+                $sccmData.ServiceStatus = "$($ccmService.Status)"
+                Write-OutputColor "  Service: $($ccmService.Status)" -color $(if ($ccmService.Status -eq 'Running') { "Success" } else { "Error" })
+                if ($ccmService.Status -ne 'Running') { $sccmIssues++ }
+                # Client version
+                try {
+                    $ccmClient = Get-CimInstance -Namespace 'root\ccm' -ClassName SMS_Client -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                    if ($ccmClient) {
+                        $sccmData.ClientVersion = "$($ccmClient.ClientVersion)"
+                        Write-OutputColor "  Version: $($ccmClient.ClientVersion)" -color "Info"
+                    }
+                } catch { }
+                # Cache size
+                try {
+                    $cache = Get-CimInstance -Namespace 'root\ccm\SoftMgmtAgent' -ClassName CacheConfig -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                    if ($cache) {
+                        $sccmData.CacheSizeMB = $cache.Size
+                        $sccmData.CacheLocation = "$($cache.Location)"
+                        Write-OutputColor "  Cache: $($cache.Size)MB at $($cache.Location)" -color "Info"
+                    }
+                } catch { }
+                # Last policy request
+                try {
+                    $policyAgent = Get-CimInstance -Namespace 'root\ccm' -ClassName SMS_PolicyAgent -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                    if ($policyAgent -and $policyAgent.LastPolicyRequest) {
+                        $lastPolicy = $policyAgent.LastPolicyRequest
+                        $sccmData.LastPolicyRequest = "$lastPolicy"
+                        Write-OutputColor "  Last Policy: $lastPolicy" -color "Info"
+                    }
+                } catch { }
+                # Management point
+                try {
+                    $mp = Get-CimInstance -Namespace 'root\ccm' -ClassName SMS_Authority -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                    if ($mp) {
+                        $sccmData.ManagementPoint = "$($mp.CurrentManagementPoint)"
+                        $sccmData.SiteCode = "$($mp.Name -replace 'SMS:', '')"
+                        Write-OutputColor "  Site: $($sccmData.SiteCode)  MP: $($sccmData.ManagementPoint)" -color "Success"
+                    }
+                } catch { }
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SCCMClientAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $sccmIssues }; Client = $sccmData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($sccmIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SCOMAgentAudit' {
+            Write-OutputColor "  Auditing SCOM agent..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $scomIssues = 0
+            $scomData = @{}
+            $scomService = Get-Service -Name HealthService -ErrorAction SilentlyContinue
+            if ($null -eq $scomService) {
+                Write-OutputColor "  SCOM agent not installed." -color "Info"
+                $scomData.Installed = $false
+            }
+            else {
+                $scomData.Installed = $true
+                $scomData.ServiceStatus = "$($scomService.Status)"
+                Write-OutputColor "  Service: $($scomService.Status)" -color $(if ($scomService.Status -eq 'Running') { "Success" } else { "Error" })
+                if ($scomService.Status -ne 'Running') { $scomIssues++ }
+                # Management groups
+                try {
+                    $mgGroups = @(Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Microsoft Operations Manager\3.0\Agent Management Groups\*' -ErrorAction SilentlyContinue)
+                    $scomData.ManagementGroups = $mgGroups.Count
+                    Write-OutputColor "  Management Groups: $($mgGroups.Count)" -color $(if ($mgGroups.Count -gt 0) { "Success" } else { "Warning" })
+                    foreach ($mg in $mgGroups) {
+                        $mgName = Split-Path $mg.PSPath -Leaf
+                        Write-OutputColor "    $mgName" -color "Info"
+                    }
+                    if ($mgGroups.Count -eq 0) { $scomIssues++ }
+                } catch { }
+                # Agent version
+                try {
+                    $agentPath = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Microsoft Operations Manager\3.0\Setup' -Name 'InstallDirectory' -ErrorAction SilentlyContinue).InstallDirectory
+                    if ($agentPath) {
+                        $healthExe = Join-Path $agentPath "HealthService.exe"
+                        if (Test-Path $healthExe) {
+                            $ver = (Get-Item $healthExe -ErrorAction SilentlyContinue).VersionInfo.FileVersion
+                            $scomData.AgentVersion = "$ver"
+                            Write-OutputColor "  Agent Version: $ver" -color "Info"
+                        }
+                    }
+                } catch { }
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SCOMAgentAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $scomIssues }; Agent = $scomData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($scomIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'WACConnectivityAudit' {
+            Write-OutputColor "  Checking Windows Admin Center readiness..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $wacIssues = 0
+            # WinRM (required for WAC)
+            $winrmSvc = Get-Service -Name WinRM -ErrorAction SilentlyContinue
+            $winrmOk = $null -ne $winrmSvc -and $winrmSvc.Status -eq 'Running'
+            Write-OutputColor "  WinRM: $(if ($winrmOk) { 'Running' } else { 'NOT Running' })" -color $(if ($winrmOk) { "Success" } else { "Error" })
+            if (-not $winrmOk) { $wacIssues++ }
+            # PS Remoting
+            try {
+                $psConfig = @(Get-PSSessionConfiguration -ErrorAction Stop 2>$null)
+                Write-OutputColor "  PS Remoting: $($psConfig.Count) endpoint(s)" -color $(if ($psConfig.Count -gt 0) { "Success" } else { "Warning" })
+                if ($psConfig.Count -eq 0) { $wacIssues++ }
+            } catch {
+                Write-OutputColor "  PS Remoting: Not configured" -color "Warning"
+                $wacIssues++
+            }
+            # HTTPS certificate
+            try {
+                $httpsBindings = @(Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Where-Object {
+                    $_.EnhancedKeyUsageList.FriendlyName -contains 'Server Authentication' -and $_.NotAfter -gt (Get-Date)
+                })
+                Write-OutputColor "  HTTPS Certs: $($httpsBindings.Count) valid server auth cert(s)" -color $(if ($httpsBindings.Count -gt 0) { "Success" } else { "Warning" })
+            } catch { }
+            # CredSSP
+            try {
+                $credSSP = (Get-Item -Path WSMan:\localhost\Service\Auth\CredSSP -ErrorAction SilentlyContinue).Value
+                Write-OutputColor "  CredSSP: $credSSP" -color $(if ("$credSSP" -eq "true") { "Info" } else { "Info" })
+            } catch { }
+            # WAC gateway detection
+            $wacService = Get-Service -Name ServerManagementGateway -ErrorAction SilentlyContinue
+            if ($null -ne $wacService) {
+                Write-OutputColor "  WAC Gateway: $($wacService.Status)" -color $(if ($wacService.Status -eq 'Running') { "Success" } else { "Warning" })
+            } else {
+                Write-OutputColor "  WAC Gateway: Not installed (this server is a managed node, not gateway)" -color "Info"
+            }
+            if ($wacIssues -eq 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Server is ready for Windows Admin Center management." -color "Success"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'WACConnectivityAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $wacIssues; WinRM = $winrmOk; WACGateway = ($null -ne $wacService) } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($wacIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
