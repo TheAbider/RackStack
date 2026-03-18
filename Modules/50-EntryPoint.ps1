@@ -299,6 +299,7 @@ function Assert-Elevation {
                 @{ Action = 'SCCMClientAudit'; Description = 'SCCM/MECM client health + cache + policy' }
                 @{ Action = 'SCOMAgentAudit'; Description = 'SCOM agent status + management groups' }
                 @{ Action = 'WACConnectivityAudit'; Description = 'Windows Admin Center readiness check' }
+                @{ Action = 'AzureADAudit'; Description = 'Azure AD / Entra ID join + Intune enrollment' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9821,6 +9822,63 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($wacIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'AzureADAudit' {
+            Write-OutputColor "  Auditing Azure AD / Entra ID status..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $aadIssues = 0
+            $aadData = @{}
+            try {
+                $dsregOutput = dsregcmd /status 2>&1
+                $dsregText = $dsregOutput -join "`n"
+                # Parse device state (use $regexMatches per codebase convention)
+                $azureAdJoined = $false; if ($dsregText -match 'AzureAdJoined\s*:\s*(YES|NO)') { $regexMatches = $matches; $azureAdJoined = $regexMatches[1] -eq 'YES' }
+                $domainJoined = $false; if ($dsregText -match 'DomainJoined\s*:\s*(YES|NO)') { $regexMatches = $matches; $domainJoined = $regexMatches[1] -eq 'YES' }
+                $workplaceJoined = $false; if ($dsregText -match 'WorkplaceJoined\s*:\s*(YES|NO)') { $regexMatches = $matches; $workplaceJoined = $regexMatches[1] -eq 'YES' }
+                $aadData.AzureADJoined = $azureAdJoined
+                $aadData.DomainJoined = $domainJoined
+                $aadData.WorkplaceJoined = $workplaceJoined
+                $joinType = if ($azureAdJoined -and $domainJoined) { "Hybrid Azure AD" } elseif ($azureAdJoined) { "Azure AD Joined" } elseif ($workplaceJoined) { "Workplace Joined" } elseif ($domainJoined) { "Domain Only" } else { "Not Joined" }
+                Write-OutputColor "  Join Type: $joinType" -color $(if ($azureAdJoined) { "Success" } elseif ($domainJoined) { "Info" } else { "Warning" })
+                # Tenant info
+                $tenantName = $null; if ($dsregText -match 'TenantName\s*:\s*(.+)') { $regexMatches = $matches; $tenantName = $regexMatches[1].Trim() }
+                $tenantId = $null; if ($dsregText -match 'TenantId\s*:\s*(.+)') { $regexMatches = $matches; $tenantId = $regexMatches[1].Trim() }
+                if ($tenantName) {
+                    $aadData.TenantName = $tenantName
+                    Write-OutputColor "  Tenant: $tenantName" -color "Info"
+                }
+                if ($tenantId) { $aadData.TenantId = $tenantId }
+                # MDM enrollment
+                $mdmUrl = $null; if ($dsregText -match 'MdmUrl\s*:\s*(.+)') { $regexMatches = $matches; $mdmUrl = $regexMatches[1].Trim() }
+                $mdmEnrolled = $null -ne $mdmUrl -and $mdmUrl -ne ''
+                $aadData.MDMEnrolled = $mdmEnrolled
+                if ($mdmEnrolled) {
+                    Write-OutputColor "  MDM/Intune: Enrolled" -color "Success"
+                    Write-OutputColor "  MDM URL: $mdmUrl" -color "Info"
+                    $aadData.MDMUrl = $mdmUrl
+                } else {
+                    Write-OutputColor "  MDM/Intune: Not Enrolled" -color "Info"
+                }
+                # Device compliance
+                $compliant = $null; if ($dsregText -match 'IsDeviceCompliant\s*:\s*(YES|NO)') { $regexMatches = $matches; $compliant = $regexMatches[1] -eq 'YES' }
+                if ($null -ne $compliant) {
+                    $aadData.DeviceCompliant = $compliant
+                    Write-OutputColor "  Compliance: $(if ($compliant) { 'Compliant' } else { 'NOT Compliant' })" -color $(if ($compliant) { "Success" } else { "Error" })
+                    if (-not $compliant) { $aadIssues++ }
+                }
+                # SSO state
+                $ssoState = $false; if ($dsregText -match 'AzureAdPrt\s*:\s*(YES|NO)') { $regexMatches = $matches; $ssoState = $regexMatches[1] -eq 'YES' }
+                $aadData.SSOEnabled = $ssoState
+                Write-OutputColor "  SSO (PRT): $(if ($ssoState) { 'Active' } else { 'Inactive' })" -color $(if ($ssoState) { "Success" } else { "Info" })
+            }
+            catch {
+                Write-OutputColor "  dsregcmd not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'AzureADAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $aadIssues; JoinType = "$joinType" }; Device = $aadData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($aadIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

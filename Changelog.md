@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.83.2
+
+- **New CLI Action:** `AzureADAudit` — checks Azure AD / Entra ID join status (Azure AD Joined, Hybrid, Workplace Joined, Domain Only), tenant name/ID, MDM/Intune enrollment status, device compliance, and SSO (Primary Refresh Token) state. Uses `dsregcmd /status` for reliable data without Azure modules.
+- **Docs:** README CLI table updated with System Center category (SCCM, SCOM, WAC, AzureAD).
+- 65 modules, 4200 tests, 146 CLI actions
+
 ## v1.83.1
 
 - **Tests:** Function coverage reached **99.5%** (616/619) — **100% of all testable functions**. The remaining 3 are nested helpers (`Add-ReadinessRow`, `Enter-ManualKey`, `Set-DNSFromPreset`) that exist only inside their parent function scope and cannot be tested from global scope. 4197 tests total — 284 new this session.
