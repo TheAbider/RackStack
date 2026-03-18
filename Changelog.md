@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.82.11
+
+- **New CLI Action:** `HealthDashboard` — all-in-one health summary designed for monitoring systems. Returns CPU load, memory usage, disk capacity per volume, uptime, reboot pending status, critical event count (24h), certificate expiry, and Hyper-V VM counts in a single JSON blob. Status field: Healthy/Warning/Critical with issue count. The one action your monitoring system needs.
+- **Tests:** 18 new function tests pushing to 98.9% coverage. 4184 total (271 new this session).
+- 65 modules, 4184 tests, 142 CLI actions
+
 ## v1.82.10
 
 - **Tests:** Added 12 more function tests (network adapter selectors, drive letter picker, partition selector, cluster drain/resume, shadow copy cleanup, NIC identification, Defender exclusion removal). **4181 tests** — 268 new this session. **Function coverage: 98.9%** (612/619 — practical ceiling reached).

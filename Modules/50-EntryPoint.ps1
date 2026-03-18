@@ -295,6 +295,7 @@ function Assert-Elevation {
                 @{ Action = 'VolumeLabelAudit'; Description = 'Volume labels + unlabeled drive detection' }
                 @{ Action = 'NICErrorAudit'; Description = 'Network adapter errors, resets, discards' }
                 @{ Action = 'VMResourceWaste'; Description = 'VMs with oversized RAM/CPU allocations' }
+                @{ Action = 'HealthDashboard'; Description = 'All-in-one health summary for monitoring' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9584,6 +9585,89 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($rwIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'HealthDashboard' {
+            Write-OutputColor "  Collecting health dashboard metrics..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $hdIssues = 0
+            $dashboard = @{
+                Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'HealthDashboard'
+                Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            }
+            # CPU
+            try {
+                $cpuResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average } -TimeoutSeconds 10 -Activity "CPU"
+                $cpuLoad = if (-not $cpuResult.TimedOut -and $cpuResult.Result) { [math]::Round($cpuResult.Result.Average) } else { -1 }
+                $dashboard.CPU = @{ LoadPercent = $cpuLoad }
+                Write-OutputColor "  CPU: ${cpuLoad}%" -color $(if ($cpuLoad -gt 80) { "Error" } elseif ($cpuLoad -gt 50) { "Warning" } else { "Success" })
+                if ($cpuLoad -gt 80) { $hdIssues++ }
+            } catch { $dashboard.CPU = @{ LoadPercent = -1 } }
+            # Memory
+            try {
+                $osResult = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Memory"
+                if (-not $osResult.TimedOut -and $osResult.Result) {
+                    $os = $osResult.Result
+                    $totalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+                    $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+                    $usedPct = if ($totalGB -gt 0) { [math]::Round((($totalGB - $freeGB) / $totalGB) * 100, 1) } else { 0 }
+                    $dashboard.Memory = @{ TotalGB = $totalGB; FreeGB = $freeGB; UsedPercent = $usedPct }
+                    Write-OutputColor "  Memory: $usedPct% ($freeGB GB free / $totalGB GB)" -color $(if ($usedPct -gt 90) { "Error" } elseif ($usedPct -gt 75) { "Warning" } else { "Success" })
+                    if ($usedPct -gt 90) { $hdIssues++ }
+                    # Uptime
+                    $uptime = (Get-Date) - $os.LastBootUpTime
+                    $dashboard.Uptime = @{ Days = [math]::Floor($uptime.TotalDays); LastBoot = $os.LastBootUpTime.ToString("yyyy-MM-ddTHH:mm:ss") }
+                    Write-OutputColor "  Uptime: $([math]::Floor($uptime.TotalDays)) days" -color $(if ($uptime.TotalDays -gt 60) { "Warning" } else { "Info" })
+                }
+            } catch { }
+            # Disk
+            try {
+                $volumes = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' -and $_.Size -gt 0 })
+                $diskData = @()
+                foreach ($vol in $volumes) {
+                    $usedPct = [math]::Round((($vol.Size - $vol.SizeRemaining) / $vol.Size) * 100, 1)
+                    $diskData += @{ Drive = "$($vol.DriveLetter):"; SizeGB = [math]::Round($vol.Size/1GB, 1); FreeGB = [math]::Round($vol.SizeRemaining/1GB, 1); UsedPercent = $usedPct }
+                    if ($usedPct -gt 90) { $hdIssues++ }
+                }
+                $dashboard.Disks = $diskData
+                $critDisks = @($diskData | Where-Object { $_.UsedPercent -gt 90 })
+                Write-OutputColor "  Disks: $($volumes.Count) volumes, $($critDisks.Count) critical" -color $(if ($critDisks.Count -gt 0) { "Error" } else { "Success" })
+            } catch { }
+            # Reboot pending
+            $dashboard.RebootPending = Test-RebootPending
+            if ($dashboard.RebootPending) { $hdIssues++; Write-OutputColor "  Reboot: PENDING" -color "Warning" } else { Write-OutputColor "  Reboot: Not needed" -color "Success" }
+            # Event log errors (24h)
+            try {
+                $critEvents = @(Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 50 -ErrorAction SilentlyContinue)
+                $dashboard.Events24h = @{ Critical = $critEvents.Count }
+                Write-OutputColor "  Events (24h): $($critEvents.Count) critical/error" -color $(if ($critEvents.Count -ge 10) { "Error" } elseif ($critEvents.Count -gt 0) { "Warning" } else { "Success" })
+                if ($critEvents.Count -ge 10) { $hdIssues++ }
+            } catch { $dashboard.Events24h = @{ Critical = 0 } }
+            # Certificate expiry
+            try {
+                $expiringSoon = @(Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter -lt (Get-Date).AddDays(30) -and $_.NotAfter -gt (Get-Date) })
+                $expired = @(Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter -le (Get-Date) })
+                $dashboard.Certificates = @{ Expired = $expired.Count; ExpiringSoon = $expiringSoon.Count }
+                if ($expired.Count -gt 0) { $hdIssues++ }
+            } catch { }
+            # Hyper-V VMs (if available)
+            try {
+                $vms = @(Get-VM -ErrorAction SilentlyContinue)
+                if ($vms.Count -gt 0) {
+                    $running = @($vms | Where-Object { $_.State -eq 'Running' }).Count
+                    $dashboard.HyperV = @{ Total = $vms.Count; Running = $running; Off = $vms.Count - $running }
+                    Write-OutputColor "  Hyper-V: $running/$($vms.Count) running" -color "Info"
+                }
+            } catch { }
+            # Overall status
+            $dashboard.Issues = $hdIssues
+            $dashboard.Status = if ($hdIssues -eq 0) { "Healthy" } elseif ($hdIssues -le 2) { "Warning" } else { "Critical" }
+            Write-OutputColor "" -color "Info"
+            $statusColor = if ($hdIssues -eq 0) { "Success" } elseif ($hdIssues -le 2) { "Warning" } else { "Error" }
+            Write-OutputColor "  Status: $($dashboard.Status) ($hdIssues issue(s))" -color $statusColor
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                Write-Output ($dashboard | ConvertTo-Json -Depth 10)
+            }
+            if ($hdIssues -gt 2) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
