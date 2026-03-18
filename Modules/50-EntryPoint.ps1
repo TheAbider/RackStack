@@ -288,6 +288,7 @@ function Assert-Elevation {
                 @{ Action = 'WinRMAudit'; Description = 'WinRM listeners + auth + trusted hosts + HTTPS' }
                 @{ Action = 'ClusterHealthScore'; Description = 'Unified 0-100 cluster health score' }
                 @{ Action = 'VMInventoryExport'; Description = 'Full VM inventory with resources + state' }
+                @{ Action = 'VMSnapshotAudit'; Description = 'Checkpoint age, size, count per VM' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9199,6 +9200,81 @@ function Invoke-CLIAction {
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
+        }
+        'VMSnapshotAudit' {
+            Write-OutputColor "  Auditing VM checkpoints..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $snapIssues = 0
+            $vmSnapData = @()
+            try {
+                $vms = @(Get-VM -ErrorAction Stop)
+                if ($vms.Count -eq 0) {
+                    Write-OutputColor "  No VMs found." -color "Info"
+                }
+                else {
+                    $totalSnapCount = 0
+                    $totalSnapSizeGB = 0
+                    foreach ($vm in $vms) {
+                        $snaps = @(Get-VMCheckpoint -VM $vm -ErrorAction SilentlyContinue)
+                        if ($snaps.Count -eq 0) { continue }
+                        $totalSnapCount += $snaps.Count
+                        $oldest = ($snaps | Sort-Object CreationTime | Select-Object -First 1).CreationTime
+                        $newest = ($snaps | Sort-Object CreationTime -Descending | Select-Object -First 1).CreationTime
+                        $ageDays = [math]::Floor(((Get-Date) - $oldest).TotalDays)
+                        # Estimate size from AVHD files
+                        $snapSizeGB = 0
+                        try {
+                            $vmPath = $vm.Path
+                            if ($vmPath -and (Test-Path -LiteralPath $vmPath -ErrorAction SilentlyContinue)) {
+                                $avhds = @(Get-ChildItem -LiteralPath $vmPath -Recurse -Filter "*.avhd*" -ErrorAction SilentlyContinue)
+                                $snapSizeGB = [math]::Round(($avhds | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum / 1GB, 2)
+                                $totalSnapSizeGB += $snapSizeGB
+                            }
+                        } catch { }
+                        $vmName = $vm.Name
+                        if ($vmName.Length -gt 25) { $vmName = $vmName.Substring(0, 22) + "..." }
+                        $color = if ($ageDays -gt 30) { "Error" } elseif ($ageDays -gt 7 -or $snaps.Count -gt 5) { "Warning" } else { "Info" }
+                        Write-OutputColor "  $vmName  Snapshots: $($snaps.Count)  Oldest: ${ageDays}d  Size: ${snapSizeGB}GB" -color $color
+                        if ($ageDays -gt 30) {
+                            Write-OutputColor "    CRITICAL: Checkpoint >30 days old — merge immediately" -color "Error"
+                            $snapIssues++
+                        } elseif ($ageDays -gt 7) {
+                            Write-OutputColor "    WARNING: Checkpoint >7 days old" -color "Warning"
+                            $snapIssues++
+                        }
+                        if ($snaps.Count -gt 5) {
+                            Write-OutputColor "    WARNING: $($snaps.Count) checkpoints — deep tree degrades performance" -color "Warning"
+                            $snapIssues++
+                        }
+                        $vmSnapData += @{
+                            VM = $vm.Name
+                            Count = $snaps.Count
+                            OldestDays = $ageDays
+                            Oldest = $oldest.ToString("yyyy-MM-dd")
+                            Newest = $newest.ToString("yyyy-MM-dd")
+                            SizeGB = $snapSizeGB
+                            State = "$($vm.State)"
+                        }
+                    }
+                    $vmsWithSnaps = $vmSnapData.Count
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Summary: $vmsWithSnaps VM(s) with checkpoints, $totalSnapCount total, $([math]::Round($totalSnapSizeGB, 1))GB" -color $(if ($snapIssues -gt 0) { "Warning" } else { "Success" })
+                    if ($snapIssues -eq 0 -and $totalSnapCount -gt 0) {
+                        Write-OutputColor "  All checkpoints within healthy limits." -color "Success"
+                    }
+                    if ($totalSnapCount -eq 0) {
+                        Write-OutputColor "  No checkpoints found on any VM." -color "Success"
+                    }
+                }
+            }
+            catch {
+                Write-OutputColor "  Hyper-V not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VMSnapshotAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ VMsWithSnapshots = $vmSnapData.Count; TotalSnapshots = $totalSnapCount; TotalSizeGB = [math]::Round($totalSnapSizeGB, 1); Issues = $snapIssues }; VMs = $vmSnapData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($snapIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

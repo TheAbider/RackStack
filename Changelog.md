@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.2
+
+- **New CLI Action:** `VMSnapshotAudit` — comprehensive VM checkpoint health report: per-VM snapshot count, oldest/newest timestamps, age in days, estimated AVHD disk usage. Flags checkpoints >7 days (warning), >30 days (critical), and VMs with >5 deep checkpoint trees. JSON output includes full VM snapshot inventory for fleet monitoring.
+- 65 modules, 4011 tests, 135 CLI actions
+
 ## v1.81.1
 
 - **Enhancement:** HyperVAudit now detects checkpoints older than 7 days (not just count >3). Old checkpoints silently consume disk space and degrade VM performance. JSON output includes `OldCheckpoints` count per VM.
