@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.7
+    Automated Test Runner for RackStack v1.82.8
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -613,7 +613,28 @@ $requiredFunctions = @(
     "Start-Show-SecurityAccessMenu",
     "Start-Show-StorageClusteringMenu",
     "Start-Show-ToolsUtilitiesMenu",
-    "Start-Show-SettingsMenu"
+    "Start-Show-SettingsMenu",
+    # v1.82.7 — remaining Test-* and helper functions
+    "Test-AllConnectivity",
+    "Test-BitLockerRecoveryBackup",
+    "Test-ClusterConnection",
+    "Test-ClusterNetworkLatency",
+    "Test-ClusterQuorumHealth",
+    "Test-HyperVConnection",
+    "Test-HyperVInstallation",
+    "Test-HyperVMinimumSpecs",
+    "Test-LocalAdminCreation",
+    "Test-ServerActivated",
+    "Test-SetTeamHealth",
+    "Test-SSDPresent",
+    "Test-VMNameExists",
+    "Test-VMNameInDNS",
+    "Search-HelpTopics",
+    "Stop-ScriptTranscript",
+    "Find-LocalCluster",
+    "Format-SessionDuration",
+    "Start-Show-HostNetworkMenu",
+    "Start-Show-SystemConfigMenu"
 )
 
 $funcCheckPassed = 0

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.82.8
+
+- **Tests:** Added 20 function tests (14 Test-* validation functions, Search-HelpTopics, Stop-ScriptTranscript, Find-LocalCluster, Format-SessionDuration, 2 menu starters). **4151 tests** — 238 new this session. **Function coverage: 94%** (582/619 functions).
+- 65 modules, 4151 tests, 141 CLI actions
+
 ## v1.82.7
 
 - **Tests:** Added 15 more function tests (Connect-FailoverCluster, Connect-StandaloneHost, Show-ServiceDependencies, Show-TimezoneRegionPicker, Show-VMDeploymentModeMenu, Start-BatchDeployment, Start-ClusterNodeDrain, and 8 menu loop starters). **4131 tests** — 218 new this session. Function coverage: 88.4% → 90.1%.
