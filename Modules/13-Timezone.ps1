@@ -416,6 +416,7 @@ function Set-SelectedTimezone {
 
         if ($LASTEXITCODE -eq 0) {
             Write-OutputColor "  Time synchronized successfully." -color "Success"
+            Add-SessionChange -Category "System" -Description "Time synchronized after timezone change"
         }
         else {
             if ($syncText -match "service has not been started|not running") {

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.11
+
+- **Enhancement:** Time sync after timezone change is now tracked as a session change for audit trail completeness.
+- 65 modules, 4044 tests, 137 CLI actions
+
 ## v1.81.10
 
 - **Enhancement:** StorageManager `Select-Disk` now detects and warns about USB and SD card drives with `[USB]`/`[SD Card]` markers in yellow. Prevents accidental initialization of removable media.
