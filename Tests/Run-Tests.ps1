@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.9
+    Automated Test Runner for RackStack v1.82.10
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -653,7 +653,20 @@ $requiredFunctions = @(
     "Save-StoredCredential",
     "Select-DebloatProfile",
     "Select-Disk",
-    "Suspend-ClusterNodeForMaintenance"
+    "Suspend-ClusterNodeForMaintenance",
+    # v1.82.10 — push to 98%+
+    "Select-Host-Network-Adapter",
+    "Select-VM-Network-Adapter",
+    "Select-iSCSI-Adapters",
+    "Select-Partition",
+    "Select-DriveLetterSmart",
+    "Start-Show-HostNetworkIPMenu",
+    "Start-Show-VM-NetworkMenu",
+    "Resume-ClusterNodeFromDrain",
+    "Clear-ShadowCopies",
+    "Clear-UserProfileTemp",
+    "Disable-NICForIdentification",
+    "Remove-DefenderExclusion"
 )
 
 $funcCheckPassed = 0

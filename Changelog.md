@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.82.10
+
+- **Tests:** Added 12 more function tests (network adapter selectors, drive letter picker, partition selector, cluster drain/resume, shadow copy cleanup, NIC identification, Defender exclusion removal). **4181 tests** — 268 new this session. **Function coverage: 98.9%** (612/619 — practical ceiling reached).
+- 65 modules, 4181 tests, 141 CLI actions
+
 ## v1.82.9
 
 - **Tests:** Added 18 function tests, pushing function coverage to **96.9%** (600/619). Only 19 internal helpers remain untested. **4169 tests** total — 256 new this session.
