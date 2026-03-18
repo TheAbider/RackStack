@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.83.3
+
+- **Enhancement:** HealthDashboard now includes NIC error totals and key service health (W32Time, WinRM, EventLog, Winmgmt) in the monitoring JSON blob. Issues flagged for >100 NIC errors or stopped key services.
+- 65 modules, 4200 tests, 146 CLI actions
+
 ## v1.83.2
 
 - **New CLI Action:** `AzureADAudit` — checks Azure AD / Entra ID join status (Azure AD Joined, Hybrid, Workplace Joined, Domain Only), tenant name/ID, MDM/Intune enrollment status, device compliance, and SSO (Primary Refresh Token) state. Uses `dsregcmd /status` for reliable data without Azure modules.

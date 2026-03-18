@@ -9662,6 +9662,24 @@ function Invoke-CLIAction {
                     Write-OutputColor "  Hyper-V: $running/$($vms.Count) running" -color "Info"
                 }
             } catch { }
+            # NIC errors
+            try {
+                $nicStats = @(Get-NetAdapterStatistics -ErrorAction SilentlyContinue)
+                $totalNicErrors = ($nicStats | ForEach-Object { $_.InErrors + $_.OutErrors + $_.InDiscards } | Measure-Object -Sum).Sum
+                $dashboard.NICErrors = @{ Total = $totalNicErrors; Adapters = $nicStats.Count }
+                if ($totalNicErrors -gt 100) { $hdIssues++ }
+            } catch { }
+            # Key services
+            try {
+                $keySvcs = @('W32Time', 'WinRM', 'EventLog', 'Winmgmt')
+                $stoppedKey = @()
+                foreach ($sn in $keySvcs) {
+                    $svc = Get-Service -Name $sn -ErrorAction SilentlyContinue
+                    if ($null -ne $svc -and $svc.Status -ne 'Running') { $stoppedKey += $sn }
+                }
+                $dashboard.Services = @{ KeyStopped = $stoppedKey.Count; StoppedNames = $stoppedKey }
+                if ($stoppedKey.Count -gt 0) { $hdIssues++ }
+            } catch { }
             # Overall status
             $dashboard.Issues = $hdIssues
             $dashboard.Status = if ($hdIssues -eq 0) { "Healthy" } elseif ($hdIssues -le 2) { "Warning" } else { "Critical" }
