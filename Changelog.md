@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.82.5
+
+- **Fix:** Windows activation error handling now covers 3 additional error codes: 0xC004E002 (timeout/network), 0xC004C003 (blocked key), 0xC004D307 (KMS unavailable). Users get actionable guidance instead of raw error text.
+- **Docs:** CONTRIBUTING.md test count updated from "1,854+" to "4,100+" (was 2+ years outdated).
+- 65 modules, 4101 tests, 141 CLI actions
+
 ## v1.82.4
 
 - **Tests:** Added 15 more function existence tests (Show-LocalAccountAudit, Show-NetworkBandwidth, Show-PasswordStrength, Show-RebootPendingDetails, Show-ScheduledTaskOverview, Show-SMBShareAudit, Show-StandardVMTemplates, Show-StorageClusteringMenu, Show-TaskHealthStatus, Show-UptimeRebootHistory, Show-VHDHealthStatus, Show-WindowsUpdateStatus, Show-VMConfigSummary, Show-VMQueueManagement, Show-iSCSIAutoConfigMenu). **4101 tests** — crossed 4100 milestone.

@@ -147,6 +147,15 @@ function Enable-ServerActivation {
             } elseif ($ipkText -match "0x80070005") {
                 Write-OutputColor "  Access denied. Ensure you are running as Administrator." -color "Error"
                 Write-OutputColor "  Tip: Right-click the script and select 'Run as Administrator'." -color "Warning"
+            } elseif ($ipkText -match "0xC004E002") {
+                Write-OutputColor "  Activation timeout — network or KMS server unreachable." -color "Error"
+                Write-OutputColor "  Check network connectivity and KMS server availability." -color "Warning"
+            } elseif ($ipkText -match "0xC004C003") {
+                Write-OutputColor "  This product key has been blocked by Microsoft." -color "Error"
+                Write-OutputColor "  Contact your volume license administrator for a replacement key." -color "Warning"
+            } elseif ($ipkText -match "0xC004D307") {
+                Write-OutputColor "  KMS host could not be reached." -color "Error"
+                Write-OutputColor "  Verify KMS server is configured: slmgr /skms <server>:<port>" -color "Warning"
             } else {
                 Write-OutputColor "  Detail: $ipkText" -color "Debug"
             }
