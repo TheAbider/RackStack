@@ -300,6 +300,7 @@ function Assert-Elevation {
                 @{ Action = 'SCOMAgentAudit'; Description = 'SCOM agent status + management groups' }
                 @{ Action = 'WACConnectivityAudit'; Description = 'Windows Admin Center readiness check' }
                 @{ Action = 'AzureADAudit'; Description = 'Azure AD / Entra ID join + Intune enrollment' }
+                @{ Action = 'ServerScore'; Description = 'Unified 0-100 server health + compliance score' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9897,6 +9898,95 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($aadIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ServerScore' {
+            Write-OutputColor "  Computing unified server score..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $categories = @()
+            $totalScore = 0
+            $maxScore = 0
+            # 1. CPU (15 points)
+            $cpuScore = 15
+            try {
+                $cpuCim = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average } -TimeoutSeconds 10 -Activity "CPU"
+                $cpuLoad = if (-not $cpuCim.TimedOut -and $cpuCim.Result) { [math]::Round($cpuCim.Result.Average) } else { 0 }
+                if ($cpuLoad -gt 90) { $cpuScore = 0 } elseif ($cpuLoad -gt 80) { $cpuScore = 5 } elseif ($cpuLoad -gt 50) { $cpuScore = 10 }
+                $categories += @{ Name = "CPU"; Score = $cpuScore; Max = 15; Detail = "${cpuLoad}% load" }
+                Write-OutputColor "  CPU: ${cpuLoad}% ($cpuScore/15)" -color $(if ($cpuScore -ge 10) { "Success" } elseif ($cpuScore -ge 5) { "Warning" } else { "Error" })
+            } catch { $categories += @{ Name = "CPU"; Score = 0; Max = 15; Detail = "Query failed" } }
+            # 2. Memory (15 points)
+            $memScore = 15
+            try {
+                $osCim = Invoke-WithTimeout -ScriptBlock { Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue } -TimeoutSeconds 10 -Activity "Memory"
+                if (-not $osCim.TimedOut -and $osCim.Result) {
+                    $memPct = [math]::Round((($osCim.Result.TotalVisibleMemorySize - $osCim.Result.FreePhysicalMemory) / $osCim.Result.TotalVisibleMemorySize) * 100)
+                    if ($memPct -gt 95) { $memScore = 0 } elseif ($memPct -gt 90) { $memScore = 5 } elseif ($memPct -gt 75) { $memScore = 10 }
+                    $categories += @{ Name = "Memory"; Score = $memScore; Max = 15; Detail = "${memPct}% used" }
+                    Write-OutputColor "  Memory: ${memPct}% ($memScore/15)" -color $(if ($memScore -ge 10) { "Success" } elseif ($memScore -ge 5) { "Warning" } else { "Error" })
+                }
+            } catch { $categories += @{ Name = "Memory"; Score = 0; Max = 15; Detail = "Query failed" } }
+            # 3. Disk (20 points)
+            $diskScore = 20
+            try {
+                $vols = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' -and $_.Size -gt 0 })
+                $critVols = @($vols | Where-Object { (($_.Size - $_.SizeRemaining) / $_.Size * 100) -gt 90 }).Count
+                $warnVols = @($vols | Where-Object { (($_.Size - $_.SizeRemaining) / $_.Size * 100) -gt 80 -and (($_.Size - $_.SizeRemaining) / $_.Size * 100) -le 90 }).Count
+                $diskScore = [math]::Max(0, 20 - ($critVols * 10) - ($warnVols * 3))
+                $categories += @{ Name = "Disk"; Score = $diskScore; Max = 20; Detail = "$($vols.Count) volumes, $critVols critical" }
+                Write-OutputColor "  Disk: $($vols.Count) volumes ($diskScore/20)" -color $(if ($diskScore -ge 15) { "Success" } elseif ($diskScore -ge 10) { "Warning" } else { "Error" })
+            } catch { $categories += @{ Name = "Disk"; Score = 0; Max = 20; Detail = "Query failed" } }
+            # 4. Security (20 points)
+            $secScore = 20
+            $reboot = Test-RebootPending; if ($reboot) { $secScore -= 5 }
+            $expired = @(Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter -le (Get-Date) }).Count
+            if ($expired -gt 0) { $secScore -= 5 }
+            try { $fw = Get-FirewallState; if ($fw.Domain -ne 'Enabled' -or $fw.Private -ne 'Enabled') { $secScore -= 5 } } catch { }
+            try { $def = Get-MpComputerStatus -ErrorAction SilentlyContinue; if (-not $def.RealTimeProtectionEnabled) { $secScore -= 5 } } catch { }
+            $secScore = [math]::Max(0, $secScore)
+            $categories += @{ Name = "Security"; Score = $secScore; Max = 20; Detail = "Reboot=$(if ($reboot) {'pending'} else {'ok'}) Certs=$expired expired" }
+            Write-OutputColor "  Security: ($secScore/20)" -color $(if ($secScore -ge 15) { "Success" } elseif ($secScore -ge 10) { "Warning" } else { "Error" })
+            # 5. Events (10 points)
+            $evtScore = 10
+            try {
+                $critEvts = @(Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 50 -ErrorAction SilentlyContinue).Count
+                if ($critEvts -ge 20) { $evtScore = 0 } elseif ($critEvts -ge 10) { $evtScore = 3 } elseif ($critEvts -gt 0) { $evtScore = 7 }
+                $categories += @{ Name = "Events"; Score = $evtScore; Max = 10; Detail = "$critEvts critical/error (24h)" }
+                Write-OutputColor "  Events: $critEvts issues ($evtScore/10)" -color $(if ($evtScore -ge 7) { "Success" } elseif ($evtScore -ge 3) { "Warning" } else { "Error" })
+            } catch { $categories += @{ Name = "Events"; Score = 10; Max = 10; Detail = "Query failed (assumed ok)" } }
+            # 6. Uptime (10 points)
+            $uptScore = 10
+            try {
+                if ($osCim -and -not $osCim.TimedOut -and $osCim.Result) {
+                    $uptDays = [math]::Floor(((Get-Date) - $osCim.Result.LastBootUpTime).TotalDays)
+                    if ($uptDays -gt 90) { $uptScore = 0 } elseif ($uptDays -gt 60) { $uptScore = 3 } elseif ($uptDays -gt 30) { $uptScore = 7 }
+                    $categories += @{ Name = "Uptime"; Score = $uptScore; Max = 10; Detail = "${uptDays} days" }
+                    Write-OutputColor "  Uptime: ${uptDays}d ($uptScore/10)" -color $(if ($uptScore -ge 7) { "Success" } elseif ($uptScore -ge 3) { "Warning" } else { "Error" })
+                }
+            } catch { $categories += @{ Name = "Uptime"; Score = 10; Max = 10; Detail = "Unknown" } }
+            # 7. Network (10 points)
+            $netScore = 10
+            try {
+                $nicErrs = ($categories | Out-Null); $stats = @(Get-NetAdapterStatistics -ErrorAction SilentlyContinue)
+                $totalErrs = ($stats | ForEach-Object { $_.InErrors + $_.OutErrors } | Measure-Object -Sum).Sum
+                if ($totalErrs -gt 1000) { $netScore = 0 } elseif ($totalErrs -gt 100) { $netScore = 5 }
+                $categories += @{ Name = "Network"; Score = $netScore; Max = 10; Detail = "$totalErrs NIC errors" }
+                Write-OutputColor "  Network: $totalErrs errors ($netScore/10)" -color $(if ($netScore -ge 7) { "Success" } else { "Warning" })
+            } catch { $categories += @{ Name = "Network"; Score = 10; Max = 10; Detail = "Query failed" } }
+            # Calculate total
+            $totalScore = ($categories | Measure-Object -Property Score -Sum).Sum
+            $maxScore = ($categories | Measure-Object -Property Max -Sum).Sum
+            $pct = if ($maxScore -gt 0) { [math]::Round(($totalScore / $maxScore) * 100) } else { 0 }
+            $grade = if ($pct -ge 95) { "A+" } elseif ($pct -ge 90) { "A" } elseif ($pct -ge 80) { "B" } elseif ($pct -ge 70) { "C" } elseif ($pct -ge 60) { "D" } else { "F" }
+            $color = if ($pct -ge 90) { "Success" } elseif ($pct -ge 70) { "Warning" } else { "Error" }
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color $color
+            Write-OutputColor "  ║$("       SERVER SCORE: $totalScore/$maxScore ($pct%) — Grade: $grade".PadRight(72))║" -color $color
+            Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color $color
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ServerScore'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Score = $totalScore; MaxScore = $maxScore; Percent = $pct; Grade = $grade; Categories = $categories }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($pct -lt 70) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

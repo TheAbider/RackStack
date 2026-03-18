@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.84.0
+
+- **New CLI Action:** `ServerScore` — unified 0-100 server health and compliance score with weighted categories: CPU (15pts), Memory (15pts), Disk capacity (20pts), Security (20pts — reboot, certs, firewall, Defender), Events (10pts), Uptime (10pts), Network (10pts). Returns letter grade (A+ to F). Designed as the ultimate single-number fleet health indicator.
+- **Enhancement:** HealthDashboard now includes NIC error totals and key service health in the monitoring JSON.
+- **New Wiki:** Monitoring Integration page — SCOM, Zabbix, PRTG, fleet scanning integration examples.
+- 65 modules, 4203 tests, 147 CLI actions
+
 ## v1.83.3
 
 - **Enhancement:** HealthDashboard now includes NIC error totals and key service health (W32Time, WinRM, EventLog, Winmgmt) in the monitoring JSON blob. Issues flagged for >100 NIC errors or stopped key services.
