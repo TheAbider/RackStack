@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.81.0
+
+- **New CLI Action:** `ClusterHealthScore` — computes a unified 0-100 health score for failover clusters by aggregating node health (25pts), resource health (25pts), CSV health (25pts), and quorum health (25pts). Outputs letter grade (A+ to F). Designed for fleet dashboard monitoring via JSON output.
+- **New CLI Action:** `VMInventoryExport` — exports comprehensive VM inventory including state, CPU, memory (startup + assigned + type), disk paths/sizes/types, NIC switch/VLAN/IP, checkpoint count, replication state, and VM notes. Ideal for capacity planning and documentation.
+- 65 modules, 4003 tests, 134 CLI actions
+
 ## v1.80.6
 
 - **Fix:** `Test-CredentialExpired` returned `$false` when credentials were null in remote mode — stale/cleared credentials were silently treated as valid, causing "access denied" errors on subsequent VM deployments. Now correctly distinguishes standalone (no cred needed) from remote (null = expired).

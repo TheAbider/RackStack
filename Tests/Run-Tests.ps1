@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.80.6
+    Automated Test Runner for RackStack v1.81.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11104,7 +11104,7 @@ try {
     }
 
     # v1.68.0+ — Win11 Cleanup, Theme, and infrastructure audit actions
-    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit')) {
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
         Write-TestResult "Install-RackStack: $action in ValidateSet" ($bootstrapContent -match "ValidateSet.*$action")
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
@@ -11145,6 +11145,22 @@ try {
     Write-TestResult "50-EntryPoint: WinRMAudit checks auth methods" ($mod50 -match "'WinRMAudit'[\s\S]{0,3000}Service\\Auth")
     Write-TestResult "50-EntryPoint: WinRMAudit checks TrustedHosts" ($mod50 -match "'WinRMAudit'[\s\S]{0,4000}TrustedHosts")
     Write-TestResult "50-EntryPoint: WinRMAudit JSON output" ($mod50 -match "'WinRMAudit'[\s\S]{0,6000}CLIOutputFormat.*eq.*JSON")
+
+    # v1.81.0 — ClusterHealthScore
+    Write-TestResult "50-EntryPoint: ClusterHealthScore checks nodes" ($mod50 -match "'ClusterHealthScore'[\s\S]{0,2000}Get-ClusterNode")
+    Write-TestResult "50-EntryPoint: ClusterHealthScore checks resources" ($mod50 -match "'ClusterHealthScore'[\s\S]{0,3000}Get-ClusterResource")
+    Write-TestResult "50-EntryPoint: ClusterHealthScore checks CSVs" ($mod50 -match "'ClusterHealthScore'[\s\S]{0,4000}Get-ClusterSharedVolume")
+    Write-TestResult "50-EntryPoint: ClusterHealthScore checks quorum" ($mod50 -match "'ClusterHealthScore'[\s\S]{0,5000}Get-ClusterQuorum")
+    Write-TestResult "50-EntryPoint: ClusterHealthScore computes grade" ($mod50 -match "'ClusterHealthScore'[\s\S]{0,6000}Grade")
+    Write-TestResult "50-EntryPoint: ClusterHealthScore JSON output" ($mod50 -match "'ClusterHealthScore'[\s\S]{0,8000}CLIOutputFormat.*eq.*JSON")
+
+    # v1.81.0 — VMInventoryExport
+    Write-TestResult "50-EntryPoint: VMInventoryExport queries Get-VM" ($mod50 -match "'VMInventoryExport'[\s\S]{0,1000}Get-VM")
+    Write-TestResult "50-EntryPoint: VMInventoryExport collects disk info" ($mod50 -match "'VMInventoryExport'[\s\S]{0,3000}Get-VMHardDiskDrive")
+    Write-TestResult "50-EntryPoint: VMInventoryExport collects NIC info" ($mod50 -match "'VMInventoryExport'[\s\S]{0,4000}Get-VMNetworkAdapter")
+    Write-TestResult "50-EntryPoint: VMInventoryExport checks replication" ($mod50 -match "'VMInventoryExport'[\s\S]{0,5000}Get-VMReplication")
+    Write-TestResult "50-EntryPoint: VMInventoryExport JSON has VMs array" ($mod50 -match "'VMInventoryExport'[\s\S]{0,8000}VMs\s*=")
+    Write-TestResult "50-EntryPoint: VMInventoryExport JSON output" ($mod50 -match "'VMInventoryExport'[\s\S]{0,8000}CLIOutputFormat.*eq.*JSON")
 
     # v1.80.0 — BatchConfig validation improvements
     Write-TestResult "50-EntryPoint: BatchConfig validates adapter existence" ($mod50 -match 'AdapterName.*does not exist.*Available')

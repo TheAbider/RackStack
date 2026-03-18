@@ -286,6 +286,8 @@ function Assert-Elevation {
                 @{ Action = 'EventLogCapacityAudit'; Description = 'Event log sizes + retention + capacity warnings' }
                 @{ Action = 'TcpSettingsAudit'; Description = 'TCP auto-tuning + chimney + congestion + RSS global' }
                 @{ Action = 'WinRMAudit'; Description = 'WinRM listeners + auth + trusted hosts + HTTPS' }
+                @{ Action = 'ClusterHealthScore'; Description = 'Unified 0-100 cluster health score' }
+                @{ Action = 'VMInventoryExport'; Description = 'Full VM inventory with resources + state' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9040,6 +9042,160 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($wrIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'ClusterHealthScore' {
+            Write-OutputColor "  Computing cluster health score..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $score = 100
+            $checks = @()
+            $clusterName = $null
+            try {
+                $cluster = Get-Cluster -ErrorAction Stop
+                $clusterName = $cluster.Name
+                Write-OutputColor "  Cluster: $clusterName" -color "Info"
+                Write-OutputColor "" -color "Info"
+                # Node health (25 points)
+                $nodes = @(Get-ClusterNode -ErrorAction Stop)
+                $upNodes = @($nodes | Where-Object { $_.State -eq 'Up' })
+                $downNodes = @($nodes | Where-Object { $_.State -ne 'Up' })
+                $nodeScore = if ($nodes.Count -gt 0) { [math]::Round(($upNodes.Count / $nodes.Count) * 25) } else { 0 }
+                $checks += @{ Check = "Nodes"; Score = $nodeScore; Max = 25; Detail = "$($upNodes.Count)/$($nodes.Count) up" }
+                Write-OutputColor "  Nodes: $($upNodes.Count)/$($nodes.Count) up ($nodeScore/25)" -color $(if ($nodeScore -eq 25) { "Success" } else { "Error" })
+                foreach ($dn in $downNodes) { Write-OutputColor "    DOWN: $($dn.Name)" -color "Error" }
+                # Resource health (25 points)
+                $resources = @(Get-ClusterResource -ErrorAction SilentlyContinue)
+                $onlineRes = @($resources | Where-Object { $_.State -eq 'Online' })
+                $failedRes = @($resources | Where-Object { $_.State -eq 'Failed' })
+                $resScore = if ($resources.Count -gt 0) { [math]::Round(($onlineRes.Count / $resources.Count) * 25) } else { 25 }
+                $checks += @{ Check = "Resources"; Score = $resScore; Max = 25; Detail = "$($onlineRes.Count)/$($resources.Count) online, $($failedRes.Count) failed" }
+                Write-OutputColor "  Resources: $($onlineRes.Count)/$($resources.Count) online ($resScore/25)" -color $(if ($failedRes.Count -eq 0) { "Success" } else { "Error" })
+                # CSV health (25 points)
+                $csvs = @(Get-ClusterSharedVolume -ErrorAction SilentlyContinue)
+                $onlineCsv = @($csvs | Where-Object { $_.State -eq 'Online' })
+                $csvScore = if ($csvs.Count -gt 0) { [math]::Round(($onlineCsv.Count / $csvs.Count) * 25) } else { 25 }
+                $checks += @{ Check = "CSVs"; Score = $csvScore; Max = 25; Detail = "$($onlineCsv.Count)/$($csvs.Count) online" }
+                Write-OutputColor "  CSVs: $($onlineCsv.Count)/$($csvs.Count) online ($csvScore/25)" -color $(if ($csvScore -eq 25) { "Success" } else { "Warning" })
+                # Quorum health (25 points)
+                $quorumScore = 25
+                try {
+                    $quorum = Get-ClusterQuorum -ErrorAction Stop
+                    $witnessOk = $true
+                    if ($null -ne $quorum.QuorumResource -and $quorum.QuorumResource.State -ne 'Online') { $witnessOk = $false; $quorumScore -= 15 }
+                    $checks += @{ Check = "Quorum"; Score = $quorumScore; Max = 25; Detail = "Type: $($quorum.QuorumType), Witness: $(if ($witnessOk) { 'OK' } else { 'OFFLINE' })" }
+                    Write-OutputColor "  Quorum: $($quorum.QuorumType) ($quorumScore/25)" -color $(if ($quorumScore -eq 25) { "Success" } else { "Warning" })
+                } catch {
+                    $quorumScore = 0
+                    $checks += @{ Check = "Quorum"; Score = 0; Max = 25; Detail = "Query failed" }
+                }
+                $score = $nodeScore + $resScore + $csvScore + $quorumScore
+                Write-OutputColor "" -color "Info"
+                $scoreColor = if ($score -ge 90) { "Success" } elseif ($score -ge 70) { "Warning" } else { "Error" }
+                $grade = if ($score -ge 95) { "A+" } elseif ($score -ge 90) { "A" } elseif ($score -ge 80) { "B" } elseif ($score -ge 70) { "C" } elseif ($score -ge 60) { "D" } else { "F" }
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color $scoreColor
+                Write-OutputColor "  │$("  CLUSTER HEALTH SCORE: $score/100 ($grade)".PadRight(72))│" -color $scoreColor
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color $scoreColor
+            }
+            catch {
+                Write-OutputColor "  Failover Clustering not available: $($_.Exception.Message)" -color "Warning"
+                $score = 0
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ClusterHealthScore'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; ClusterName = "$clusterName"; Score = $score; Grade = "$grade"; Checks = $checks }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($score -lt 70) { [Environment]::Exit(1) }
+        }
+        'VMInventoryExport' {
+            Write-OutputColor "  Exporting VM inventory..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            try {
+                $vms = @(Get-VM -ErrorAction Stop | Sort-Object Name)
+                if ($vms.Count -eq 0) {
+                    Write-OutputColor "  No virtual machines found." -color "Info"
+                }
+                else {
+                    Write-OutputColor "  VMs: $($vms.Count)" -color "Info"
+                    Write-OutputColor "" -color "Info"
+                    $vmData = @()
+                    foreach ($vm in $vms) {
+                        $vmName = $vm.Name
+                        if ($vmName.Length -gt 30) { $vmName = $vmName.Substring(0, 27) + "..." }
+                        $stateColor = switch ("$($vm.State)") { "Running" { "Success" } "Off" { "Info" } "Saved" { "Warning" } default { "Error" } }
+                        $memGB = [math]::Round($vm.MemoryAssigned / 1GB, 1)
+                        $memStartGB = [math]::Round($vm.MemoryStartup / 1GB, 1)
+                        Write-OutputColor "  $vmName  State: $($vm.State)  CPU: $($vm.ProcessorCount)  RAM: ${memGB}GB" -color $stateColor
+                        # Collect disk info
+                        $disks = @()
+                        try {
+                            $vhds = @(Get-VMHardDiskDrive -VM $vm -ErrorAction SilentlyContinue)
+                            foreach ($vhd in $vhds) {
+                                $vhdInfo = try { Get-VHD -Path $vhd.Path -ErrorAction SilentlyContinue } catch { $null }
+                                $disks += @{
+                                    Path = "$($vhd.Path)"
+                                    SizeGB = if ($vhdInfo) { [math]::Round($vhdInfo.Size / 1GB, 1) } else { 0 }
+                                    UsedGB = if ($vhdInfo -and $vhdInfo.FileSize) { [math]::Round($vhdInfo.FileSize / 1GB, 1) } else { 0 }
+                                    Type = if ($vhdInfo) { "$($vhdInfo.VhdType)" } else { "Unknown" }
+                                }
+                            }
+                        } catch { }
+                        # Collect NIC info
+                        $nics = @()
+                        try {
+                            $vmNics = @(Get-VMNetworkAdapter -VM $vm -ErrorAction SilentlyContinue)
+                            foreach ($nic in $vmNics) {
+                                $nics += @{
+                                    SwitchName = "$($nic.SwitchName)"
+                                    MacAddress = "$($nic.MacAddress)"
+                                    Status = "$($nic.Status)"
+                                    IPAddresses = @($nic.IPAddresses | Where-Object { $_ -and $_ -notmatch ':' })
+                                    VLAN = if ($nic.VlanSetting.AccessVlanId) { $nic.VlanSetting.AccessVlanId } else { 0 }
+                                }
+                            }
+                        } catch { }
+                        # Checkpoints
+                        $snapCount = @(Get-VMCheckpoint -VM $vm -ErrorAction SilentlyContinue).Count
+                        # Replication
+                        $replState = try { $r = Get-VMReplication -VM $vm -ErrorAction SilentlyContinue; if ($r) { "$($r.State)" } else { "None" } } catch { "None" }
+                        $vmData += @{
+                            Name = $vm.Name
+                            State = "$($vm.State)"
+                            Generation = $vm.Generation
+                            Version = "$($vm.Version)"
+                            CPUs = $vm.ProcessorCount
+                            MemoryStartupGB = $memStartGB
+                            MemoryAssignedGB = $memGB
+                            MemoryType = if ($vm.DynamicMemoryEnabled) { "Dynamic" } else { "Static" }
+                            Uptime = if ($vm.Uptime) { "$($vm.Uptime)" } else { "0" }
+                            Disks = $disks
+                            NICs = $nics
+                            Checkpoints = $snapCount
+                            Replication = $replState
+                            Path = "$($vm.Path)"
+                            Notes = "$($vm.Notes)" -replace "`r`n|`n", " "
+                        }
+                    }
+                    # Summary
+                    $running = @($vms | Where-Object { $_.State -eq "Running" }).Count
+                    $off = @($vms | Where-Object { $_.State -eq "Off" }).Count
+                    $totalCPU = ($vms | Measure-Object -Property ProcessorCount -Sum).Sum
+                    $totalMemGB = [math]::Round(($vms | Where-Object { $_.State -eq "Running" } | Measure-Object -Property MemoryAssigned -Sum).Sum / 1GB, 1)
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Summary: $running running, $off off, $($vms.Count) total" -color "Info"
+                    Write-OutputColor "  Total vCPUs: $totalCPU  Running RAM: ${totalMemGB}GB" -color "Info"
+                }
+            }
+            catch {
+                Write-OutputColor "  Hyper-V not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VMInventoryExport'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Summary = @{ Total = $vms.Count; Running = $running; Off = $off; TotalvCPUs = $totalCPU; RunningMemoryGB = $totalMemGB }
+                    VMs = $vmData
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
