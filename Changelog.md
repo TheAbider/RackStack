@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.8
+
+- **Tests:** Added CLI action count guard (verifies >= 137 actions, catches accidental removals). 4044 tests.
+- 65 modules, 4044 tests, 137 CLI actions
+
 ## v1.81.7
 
 - **Fix:** BitLocker AD recovery key verification could fail with confusing error when `Get-ADComputer` returned null. Now uses explicit error handling with separate catch for "computer not found in AD" vs "AD tools not available."

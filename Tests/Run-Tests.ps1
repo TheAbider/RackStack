@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.81.7
+    Automated Test Runner for RackStack v1.81.8
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -4382,6 +4382,11 @@ try {
     Write-TestResult "Show-Changelog: mentions audit log" ($changelogContent -match 'audit log')
     Write-TestResult "Show-Changelog: has entry for current version" ($changelogContent -match "## v$($script:ScriptVersion)")
     Write-TestResult "Show-Changelog: current version is first entry" ($changelogContent -match "# Changelog\s+## v$($script:ScriptVersion)")
+
+    # CLI action count sanity check — catches accidental action removals
+    $epContent = Get-Content -LiteralPath (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    $actionListCount = ([regex]::Matches($epContent, "@\{\s*Action\s*=")).Count
+    Write-TestResult "CLI action count >= 137" ($actionListCount -ge 137)
 } catch {
     Write-TestResult "Show-Changelog: changelog content" $false $_.Exception.Message
 }
