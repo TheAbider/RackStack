@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.5
+    Automated Test Runner for RackStack v1.82.6
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -581,7 +581,23 @@ $requiredFunctions = @(
     "Show-WindowsUpdateStatus",
     "Show-VMConfigSummary",
     "Show-VMQueueManagement",
-    "Show-iSCSIAutoConfigMenu"
+    "Show-iSCSIAutoConfigMenu",
+    # v1.82.5 additions
+    "Invoke-CustomDebloat",
+    "New-ClusterWizard",
+    "Show-ClusterResourceStatus",
+    "Show-EventLogCustomSearch",
+    "Show-NetworkMenu",
+    "Show-NICIdentificationMenu",
+    "Show-OfflineCustomizationPrompt",
+    "Show-RegionTimezones",
+    "Show-ReplicationMonitor",
+    "Show-RolesFeaturesMenu",
+    "Show-SecurityAccessMenu",
+    "Show-ToolsUtilitiesMenu",
+    "Show-WindowsUpdatesMenu",
+    "Set-DeploymentSiteNumber",
+    "Set-iSCSIConfiguration"
 )
 
 $funcCheckPassed = 0

@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.82.6
+
+- **Tests:** Added 15 more function existence tests (cluster, network, debloat, deployment, iSCSI, security, event log, replication, timezone menus). 4116 total — 203 new tests this session.
+- **Wiki:** Configuration page updated with CLIDefaults documentation.
+- 65 modules, 4116 tests, 141 CLI actions
+
 ## v1.82.5
 
 - **Fix:** Windows activation error handling now covers 3 additional error codes: 0xC004E002 (timeout/network), 0xC004C003 (blocked key), 0xC004D307 (KMS unavailable). Users get actionable guidance instead of raw error text.
