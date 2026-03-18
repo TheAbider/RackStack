@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.82.2
+
+- **Tests:** Added 15 function existence tests (Export-ProfileComparisonHTML, Show-AllVolumes, Show-CertificateExpiryCheck, Show-CheckpointAgeWarnings, Show-ClusterStatus, Show-CriticalEventSummary, Show-CSVHealth, Show-DedupSavings, Show-DetailedTimeStatus, Show-DiskIOMetrics, Show-DriveLetterMap, Show-InstalledSoftware, Show-ListeningPorts, Show-VSSWriterStatus, New-DiskPartition). 4071 tests.
+- **Docs:** README CLI table updated with NICErrorAudit, VMResourceWaste.
+- 65 modules, 4071 tests, 141 CLI actions
+
 ## v1.82.1
 
 - **New CLI Action:** `NICErrorAudit` — detailed per-adapter error counts (InErrors, OutErrors, InDiscards, OutDiscards) plus driver reset count. Flags adapters with >100 total errors. Critical for diagnosing network packet loss and adapter instability.

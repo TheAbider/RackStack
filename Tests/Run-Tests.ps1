@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.1
+    Automated Test Runner for RackStack v1.82.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -533,7 +533,23 @@ $requiredFunctions = @(
     # Credentials (45)
     "Get-StoredCredential",
     # Cluster (27)
-    "Set-ClusterQuorum"
+    "Set-ClusterQuorum",
+    # v1.82.1 additions
+    "Export-ProfileComparisonHTML",
+    "New-DiskPartition",
+    "Show-AllVolumes",
+    "Show-CertificateExpiryCheck",
+    "Show-CheckpointAgeWarnings",
+    "Show-ClusterStatus",
+    "Show-CriticalEventSummary",
+    "Show-CSVHealth",
+    "Show-DedupSavings",
+    "Show-DetailedTimeStatus",
+    "Show-DiskIOMetrics",
+    "Show-DriveLetterMap",
+    "Show-InstalledSoftware",
+    "Show-ListeningPorts",
+    "Show-VSSWriterStatus"
 )
 
 $funcCheckPassed = 0

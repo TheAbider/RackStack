@@ -353,11 +353,11 @@ $report.Issues
 | **Firewall** | `FirewallAudit` `FirewallLogAudit` |
 | **Storage** | `StorageAudit` `ShareAudit` `SMBAudit` `SMBSessionAudit` `BitLockerAudit` `NTFSAudit` `PageFileAudit` `ProfileAudit` `iSCSIAudit` |
 | **Services** | `ServiceAudit` `TaskAudit` `TaskHistoryAudit` `EventAudit` `PrintAudit` `IISAudit` `SSHAudit` `WinRMAudit` |
-| **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` `NICOffloadAudit` |
+| **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` `NICOffloadAudit` `NICErrorAudit` |
 | **Time/Boot** | `TimeAudit` `BootAudit` `PendingRebootAudit` `ScheduledRebootAudit` `RecoveryAudit` `LocaleAudit` |
 | **Patching** | `PatchStatus` `WindowsUpdateAudit` `CertCheck` `UpdatePolicyAudit` `LicenseAudit` `AntivirusAudit` |
 | **Infra** | `HyperVAudit` `ClusterAudit` `ClusterQuorumAudit` `ClusterNetworkAudit` `ClusterHealthScore` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` |
-| **Hyper-V** | `VMOvercommitAudit` `ReplicaLagAudit` `LiveMigrationAudit` `VirtualSwitchAudit` `VMInventoryExport` `VMSnapshotAudit` |
+| **Hyper-V** | `VMOvercommitAudit` `ReplicaLagAudit` `LiveMigrationAudit` `VirtualSwitchAudit` `VMInventoryExport` `VMSnapshotAudit` `VMResourceWaste` |
 | **Storage** (ext) | `S2DAudit` `DedupAudit` `MPIOPathAudit` `ShadowCopyAudit` `QoSPolicyAudit` `DiskLatencyAudit` `StorageTimeoutAudit` `StorageHealthScore` `VolumeLabelAudit` |
 | **Services** (ext) | `ServiceRecoveryAudit` `HandleLeakAudit` |
 | **Persistence** | `AutoStartAudit` `EventSubAudit` `ComObjectAudit` `SymlinkAudit` `StartupScriptAudit` `HostsFileAudit` |
