@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.84.3
+
+- **Docs:** Help search CLI topic updated to mention 147 actions, ServerScore, HealthDashboard. README ServerScore in CLI table, test badge updated to 4200+.
+- 65 modules, 4203 tests, 147 CLI actions
+
 ## v1.84.2
 
 - **Docs:** README updated — features section now highlights monitoring capabilities (ServerScore, HealthDashboard, System Center, Azure AD). Updated intro to mention 147 CLI actions. Added Monitoring section to features list.

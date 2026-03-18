@@ -18,7 +18,7 @@
   <img alt="CI" src="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml/badge.svg">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="4150+ Tests" src="https://img.shields.io/badge/tests-4150%2B-brightgreen">
+  <img alt="4200+ Tests" src="https://img.shields.io/badge/tests-4200%2B-brightgreen">
 </p>
 
 ---
@@ -359,7 +359,7 @@ $report.Issues
 | **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` `NICOffloadAudit` `NICErrorAudit` |
 | **Time/Boot** | `TimeAudit` `BootAudit` `PendingRebootAudit` `ScheduledRebootAudit` `RecoveryAudit` `LocaleAudit` |
 | **Patching** | `PatchStatus` `WindowsUpdateAudit` `CertCheck` `UpdatePolicyAudit` `LicenseAudit` `AntivirusAudit` |
-| **Infra** | `HyperVAudit` `ClusterAudit` `ClusterQuorumAudit` `ClusterNetworkAudit` `ClusterHealthScore` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` `HealthDashboard` |
+| **Infra** | `HyperVAudit` `ClusterAudit` `ClusterQuorumAudit` `ClusterNetworkAudit` `ClusterHealthScore` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` `HealthDashboard` `ServerScore` |
 | **System Center** | `SCCMClientAudit` `SCOMAgentAudit` `WACConnectivityAudit` `AzureADAudit` |
 | **Hyper-V** | `VMOvercommitAudit` `ReplicaLagAudit` `LiveMigrationAudit` `VirtualSwitchAudit` `VMInventoryExport` `VMSnapshotAudit` `VMResourceWaste` |
 | **Storage** (ext) | `S2DAudit` `DedupAudit` `MPIOPathAudit` `ShadowCopyAudit` `QoSPolicyAudit` `DiskLatencyAudit` `StorageTimeoutAudit` `StorageHealthScore` `VolumeLabelAudit` |
