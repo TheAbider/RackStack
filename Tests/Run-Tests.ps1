@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.3
+    Automated Test Runner for RackStack v1.82.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -565,7 +565,23 @@ $requiredFunctions = @(
     "Show-FirewallRuleSearch",
     "Show-FirewallRuleSummary",
     "Show-HostNetworkMenu",
-    "Show-UpdateHistory"
+    "Show-UpdateHistory",
+    # v1.82.3 additions
+    "Show-LocalAccountAudit",
+    "Show-NetworkBandwidth",
+    "Show-PasswordStrength",
+    "Show-RebootPendingDetails",
+    "Show-ScheduledTaskOverview",
+    "Show-SMBShareAudit",
+    "Show-StandardVMTemplates",
+    "Show-StorageClusteringMenu",
+    "Show-TaskHealthStatus",
+    "Show-UptimeRebootHistory",
+    "Show-VHDHealthStatus",
+    "Show-WindowsUpdateStatus",
+    "Show-VMConfigSummary",
+    "Show-VMQueueManagement",
+    "Show-iSCSIAutoConfigMenu"
 )
 
 $funcCheckPassed = 0

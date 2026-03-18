@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.82.4
+
+- **Tests:** Added 15 more function existence tests (Show-LocalAccountAudit, Show-NetworkBandwidth, Show-PasswordStrength, Show-RebootPendingDetails, Show-ScheduledTaskOverview, Show-SMBShareAudit, Show-StandardVMTemplates, Show-StorageClusteringMenu, Show-TaskHealthStatus, Show-UptimeRebootHistory, Show-VHDHealthStatus, Show-WindowsUpdateStatus, Show-VMConfigSummary, Show-VMQueueManagement, Show-iSCSIAutoConfigMenu). **4101 tests** — crossed 4100 milestone.
+- **Docs:** Updated README test count to 4080+.
+- 65 modules, 4101 tests, 141 CLI actions
+
 ## v1.82.3
 
 - **Tests:** Added 15 function existence tests (Invoke-ServerDebloat, Invoke-WorkstationDebloat, Invoke-PathMtuDiscovery, Invoke-UdpPortTest, Invoke-RecycleBinCleanup, Show-AdapterStatus, Show-AllSystemTimezones, Show-DiskPartitions, Show-DriverHealthCheck, Show-EventLogAlerts, Show-ExistingVMs, Show-FirewallRuleSearch, Show-FirewallRuleSummary, Show-HostNetworkMenu, Show-UpdateHistory). 4086 tests total.

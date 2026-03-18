@@ -382,7 +382,7 @@ RackStack/
 │   ├── ...                     # 61 more modules
 │   └── 64-SystemDebloat.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 3980+ automated tests
+│   ├── Run-Tests.ps1           # 4080+ automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
