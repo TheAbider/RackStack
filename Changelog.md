@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.10
+
+- **Enhancement:** StorageManager `Select-Disk` now detects and warns about USB and SD card drives with `[USB]`/`[SD Card]` markers in yellow. Prevents accidental initialization of removable media.
+- 65 modules, 4044 tests, 137 CLI actions
+
 ## v1.81.9
 
 - **Fix:** LocalAdmin account creation prompt said "alphanumeric" but regex also accepts underscores and hyphens. Prompt now accurately describes all valid characters.

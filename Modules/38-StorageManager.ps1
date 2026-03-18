@@ -344,8 +344,16 @@ function Select-Disk {
             $osMarker = " [Boot]"
         }
 
+        # Warn about USB/removable disks
+        $busMarker = ""
+        if ($disk.BusType -eq "USB") { $busMarker = " [USB]" }
+        elseif ($disk.BusType -eq "SD") { $busMarker = " [SD Card]" }
+
         if ($osMarker -and -not $AllowOSDisk) {
-            Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$osMarker" -color "Warning"
+            Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$osMarker$busMarker" -color "Warning"
+        }
+        elseif ($busMarker) {
+            Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$busMarker" -color "Warning"
         }
         else {
             Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$osMarker" -color "Success"
