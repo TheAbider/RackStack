@@ -339,7 +339,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 136 CLI Actions
+### 137 CLI Actions
 
 | Category | Actions |
 |----------|---------|

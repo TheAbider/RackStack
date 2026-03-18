@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.5
+
+- **New CLI Action:** `CSVSpaceAudit` — reports Cluster Shared Volume capacity, free space, used percentage, state, and owner node. Flags CSVs at >85% (warning) and >95% (critical) capacity. Critical for preventing CSV-full emergencies in Hyper-V cluster environments.
+- 65 modules, 4043 tests, 137 CLI actions
+
 ## v1.81.4
 
 - **Tests:** Added 17 function existence tests for VM deployment, storage, debloat, network, and cluster helpers. 4036 tests.

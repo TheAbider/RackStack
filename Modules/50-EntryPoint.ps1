@@ -290,6 +290,7 @@ function Assert-Elevation {
                 @{ Action = 'VMInventoryExport'; Description = 'Full VM inventory with resources + state' }
                 @{ Action = 'VMSnapshotAudit'; Description = 'Checkpoint age, size, count per VM' }
                 @{ Action = 'StorageHealthScore'; Description = 'Unified 0-100 storage health score' }
+                @{ Action = 'CSVSpaceAudit'; Description = 'Cluster Shared Volume capacity + free space' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9357,6 +9358,69 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($sScore -lt 70) { [Environment]::Exit(1) }
+        }
+        'CSVSpaceAudit' {
+            Write-OutputColor "  Auditing Cluster Shared Volumes..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $csvIssues = 0
+            try {
+                $csvs = @(Get-ClusterSharedVolume -ErrorAction Stop)
+                if ($csvs.Count -eq 0) {
+                    Write-OutputColor "  No Cluster Shared Volumes found." -color "Info"
+                }
+                else {
+                    Write-OutputColor "  CSVs: $($csvs.Count)" -color "Info"
+                    Write-OutputColor "" -color "Info"
+                    $csvData = @()
+                    $totalGB = 0
+                    $totalFreeGB = 0
+                    foreach ($csv in $csvs) {
+                        $volInfo = $csv.SharedVolumeInfo
+                        $friendlyName = if ($volInfo -and $volInfo.FriendlyVolumeName) { $volInfo.FriendlyVolumeName } else { $csv.Name }
+                        $partition = if ($volInfo) { $volInfo.Partition } else { $null }
+                        $sizeGB = if ($partition -and $partition.Size) { [math]::Round($partition.Size / 1GB, 1) } else { 0 }
+                        $freeGB = if ($partition -and $partition.FreeSpace) { [math]::Round($partition.FreeSpace / 1GB, 1) } else { 0 }
+                        $usedPct = if ($sizeGB -gt 0) { [math]::Round((($sizeGB - $freeGB) / $sizeGB) * 100, 1) } else { 0 }
+                        $totalGB += $sizeGB
+                        $totalFreeGB += $freeGB
+                        $state = "$($csv.State)"
+                        $owner = "$($csv.OwnerNode)"
+                        $displayName = $friendlyName
+                        if ($displayName.Length -gt 35) { $displayName = $displayName.Substring(0, 32) + "..." }
+                        $color = if ($usedPct -ge 95) { "Error" } elseif ($usedPct -ge 85) { "Warning" } else { "Success" }
+                        $stateColor = if ($state -eq "Online") { "Success" } else { "Error" }
+                        Write-OutputColor "  $displayName  $state  Owner: $owner" -color $stateColor
+                        Write-OutputColor "    Size: ${sizeGB}GB  Free: ${freeGB}GB  Used: $usedPct%" -color $color
+                        if ($usedPct -ge 95) {
+                            Write-OutputColor "    CRITICAL: <5% free — immediate action needed" -color "Error"
+                            $csvIssues++
+                        } elseif ($usedPct -ge 85) {
+                            Write-OutputColor "    WARNING: <15% free — plan capacity expansion" -color "Warning"
+                            $csvIssues++
+                        }
+                        if ($state -ne "Online") { $csvIssues++ }
+                        $csvData += @{
+                            Name = $friendlyName
+                            State = $state
+                            Owner = $owner
+                            SizeGB = $sizeGB
+                            FreeGB = $freeGB
+                            UsedPercent = $usedPct
+                        }
+                    }
+                    $totalUsedPct = if ($totalGB -gt 0) { [math]::Round((($totalGB - $totalFreeGB) / $totalGB) * 100, 1) } else { 0 }
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Total: $([math]::Round($totalGB, 0))GB  Free: $([math]::Round($totalFreeGB, 0))GB  Used: $totalUsedPct%" -color $(if ($totalUsedPct -ge 85) { "Warning" } else { "Success" })
+                }
+            }
+            catch {
+                Write-OutputColor "  Failover Clustering not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'CSVSpaceAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ CSVCount = $csvs.Count; TotalGB = [math]::Round($totalGB, 0); FreeGB = [math]::Round($totalFreeGB, 0); UsedPercent = $totalUsedPct; Issues = $csvIssues }; CSVs = $csvData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($csvIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
