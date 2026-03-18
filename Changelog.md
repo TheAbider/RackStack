@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.82.0
+
+- **New CLI Action:** `SMBConnectionAudit` — reports active SMB sessions with client/user/file counts, open file totals, and non-system share inventory. Flags high open file counts (>50). JSON output for fleet monitoring.
+- **New CLI Action:** `VolumeLabelAudit` — lists all fixed volumes with labels, filesystem type, size, and free space. Flags unlabeled non-C: drives (common oversight that makes disk identification difficult in multi-drive servers).
+- **Fix:** Timezone sync `$LASTEXITCODE` captured immediately after `w32tm /resync` to prevent race condition with subsequent PowerShell operations overwriting it.
+- 65 modules, 4050 tests, 139 CLI actions
+
 ## v1.81.11
 
 - **Enhancement:** Time sync after timezone change is now tracked as a session change for audit trail completeness.

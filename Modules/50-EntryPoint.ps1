@@ -291,6 +291,8 @@ function Assert-Elevation {
                 @{ Action = 'VMSnapshotAudit'; Description = 'Checkpoint age, size, count per VM' }
                 @{ Action = 'StorageHealthScore'; Description = 'Unified 0-100 storage health score' }
                 @{ Action = 'CSVSpaceAudit'; Description = 'Cluster Shared Volume capacity + free space' }
+                @{ Action = 'SMBConnectionAudit'; Description = 'Active SMB sessions + open files + shares' }
+                @{ Action = 'VolumeLabelAudit'; Description = 'Volume labels + unlabeled drive detection' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9421,6 +9423,79 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($csvIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SMBConnectionAudit' {
+            Write-OutputColor "  Auditing SMB connections..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $smbcIssues = 0
+            try {
+                # Active sessions
+                $sessions = @(Get-SmbSession -ErrorAction SilentlyContinue)
+                Write-OutputColor "  Active Sessions: $($sessions.Count)" -color $(if ($sessions.Count -gt 0) { "Info" } else { "Info" })
+                foreach ($sess in $sessions | Select-Object -First 10) {
+                    $client = if ($sess.ClientComputerName) { $sess.ClientComputerName } else { "Unknown" }
+                    $user = if ($sess.ClientUserName) { $sess.ClientUserName } else { "Unknown" }
+                    if ($client.Length -gt 20) { $client = $client.Substring(0, 17) + "..." }
+                    if ($user.Length -gt 25) { $user = $user.Substring(0, 22) + "..." }
+                    Write-OutputColor "    $client  User: $user  Files: $($sess.NumOpens)" -color "Info"
+                }
+                if ($sessions.Count -gt 10) { Write-OutputColor "    ... and $($sessions.Count - 10) more" -color "Info" }
+                # Open files
+                $openFiles = @(Get-SmbOpenFile -ErrorAction SilentlyContinue)
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Open Files: $($openFiles.Count)" -color $(if ($openFiles.Count -gt 50) { "Warning" } else { "Info" })
+                if ($openFiles.Count -gt 50) { $smbcIssues++ }
+                # Share stats
+                $shares = @(Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { -not $_.Special })
+                Write-OutputColor "  Non-System Shares: $($shares.Count)" -color "Info"
+                foreach ($sh in $shares | Select-Object -First 10) {
+                    $shName = $sh.Name
+                    if ($shName.Length -gt 20) { $shName = $shName.Substring(0, 17) + "..." }
+                    Write-OutputColor "    $shName  Path: $($sh.Path)" -color "Info"
+                }
+            }
+            catch {
+                Write-OutputColor "  SMB query failed: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SMBConnectionAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Sessions = $sessions.Count; OpenFiles = $openFiles.Count; Shares = $shares.Count; Issues = $smbcIssues } }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($smbcIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'VolumeLabelAudit' {
+            Write-OutputColor "  Auditing volume labels..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $vlIssues = 0
+            try {
+                $volumes = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' -and $_.Size -gt 0 } | Sort-Object DriveLetter)
+                $volData = @()
+                foreach ($vol in $volumes) {
+                    $label = if ($vol.FileSystemLabel) { $vol.FileSystemLabel } else { "(unlabeled)" }
+                    $sizeGB = [math]::Round($vol.Size / 1GB, 1)
+                    $freeGB = [math]::Round($vol.SizeRemaining / 1GB, 1)
+                    $usedPct = [math]::Round((($vol.Size - $vol.SizeRemaining) / $vol.Size) * 100, 1)
+                    $hasLabel = [bool]$vol.FileSystemLabel
+                    $color = if (-not $hasLabel -and $vol.DriveLetter -ne 'C') { "Warning" } else { "Info" }
+                    Write-OutputColor "  $($vol.DriveLetter):  Label: $label  FS: $($vol.FileSystem)  Size: ${sizeGB}GB  Free: ${freeGB}GB ($usedPct%)" -color $color
+                    if (-not $hasLabel -and $vol.DriveLetter -ne 'C') {
+                        Write-OutputColor "    Missing label — consider labeling for identification" -color "Warning"
+                        $vlIssues++
+                    }
+                    $volData += @{ DriveLetter = "$($vol.DriveLetter)"; Label = $label; FileSystem = "$($vol.FileSystem)"; SizeGB = $sizeGB; FreeGB = $freeGB; UsedPercent = $usedPct; HasLabel = $hasLabel }
+                }
+                Write-OutputColor "" -color "Info"
+                $labeled = @($volumes | Where-Object { $_.FileSystemLabel }).Count
+                Write-OutputColor "  Labeled: $labeled/$($volumes.Count)" -color $(if ($vlIssues -gt 0) { "Warning" } else { "Success" })
+            }
+            catch {
+                Write-OutputColor "  Volume query failed: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VolumeLabelAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Total = $volumes.Count; Labeled = $labeled; Unlabeled = $vlIssues; Issues = $vlIssues }; Volumes = $volData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($vlIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

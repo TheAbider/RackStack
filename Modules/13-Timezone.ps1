@@ -412,9 +412,10 @@ function Set-SelectedTimezone {
 
         Write-OutputColor "  Synchronizing system time..." -color "Info"
         $syncResult = w32tm /resync 2>&1
+        $syncExitCode = $LASTEXITCODE
         $syncText = $syncResult -join ' '
 
-        if ($LASTEXITCODE -eq 0) {
+        if ($syncExitCode -eq 0) {
             Write-OutputColor "  Time synchronized successfully." -color "Success"
             Add-SessionChange -Category "System" -Description "Time synchronized after timezone change"
         }
