@@ -1846,7 +1846,7 @@ function Show-RoleTemplates {
             $templateName = "HYPER-V HOST"
             $checks = @(
                 @{ Name = "Hostname Set";              Test = { $env:COMPUTERNAME -notmatch '^WIN-|^DESKTOP-|^YOURSERVERNAME' }; Action = "Set-HostName"; Category = "Identity" }
-                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
+                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
                 @{ Name = "RDP Enabled";               Test = { (Get-RDPState) -eq "Enabled" }; Action = "Enable-RDP"; Category = "Access" }
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
                 @{ Name = "Hyper-V Installed";         Test = { Test-HyperVInstalled }; Action = "Install-HyperVRole"; Category = "Roles" }
@@ -1859,7 +1859,7 @@ function Show-RoleTemplates {
             $templateName = "STANDALONE SERVER"
             $checks = @(
                 @{ Name = "Hostname Set";              Test = { $env:COMPUTERNAME -notmatch '^WIN-|^DESKTOP-|^YOURSERVERNAME' }; Action = "Set-HostName"; Category = "Identity" }
-                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
+                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
                 @{ Name = "RDP Enabled";               Test = { (Get-RDPState) -eq "Enabled" }; Action = "Enable-RDP"; Category = "Access" }
                 @{ Name = "WinRM Enabled";             Test = { (Get-WinRMState) -match "Enabled|Running" }; Action = "Enable-PSRemoting"; Category = "Access" }
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
@@ -1871,7 +1871,7 @@ function Show-RoleTemplates {
             $templateName = "CLUSTER NODE"
             $checks = @(
                 @{ Name = "Hostname Set";              Test = { $env:COMPUTERNAME -notmatch '^WIN-|^DESKTOP-|^YOURSERVERNAME' }; Action = "Set-HostName"; Category = "Identity" }
-                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
+                @{ Name = "Domain Joined";             Test = { (Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).PartOfDomain }; Action = "Join-Domain"; Category = "Identity" }
                 @{ Name = "RDP Enabled";               Test = { (Get-RDPState) -eq "Enabled" }; Action = "Enable-RDP"; Category = "Access" }
                 @{ Name = "High Performance Power";    Test = { (Get-CurrentPowerPlan).Name -match "High" }; Action = "Set-ServerPowerPlan"; Category = "System" }
                 @{ Name = "Hyper-V Installed";         Test = { Test-HyperVInstalled }; Action = "Install-HyperVRole"; Category = "Roles" }

@@ -574,7 +574,11 @@ function Save-ConfigurationProfile {
     }
 
     try {
-        $configProfile | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
+        # Atomic write: write to temp, then rename to prevent partial/corrupt files
+        $tempSavePath = "$savePath.tmp"
+        $configProfile | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $tempSavePath -Encoding UTF8 -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $savePath) { Remove-Item -LiteralPath $savePath -Force -ErrorAction SilentlyContinue }
+        Move-Item -LiteralPath $tempSavePath -Destination $savePath -Force -ErrorAction Stop
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Configuration profile saved successfully!" -color "Success"

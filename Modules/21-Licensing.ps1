@@ -18,7 +18,12 @@ function Get-WindowsVersionInfo {
 
         if ($isServer) {
             # Windows Server versions
-            if ($build -ge 26100) { $windowsVersion = "Windows Server 2025" }
+            if ($build -gt 26100) {
+                # Future Server OS — use registry ProductName as primary
+                $regProduct = try { (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue).ProductName } catch { $null }
+                $windowsVersion = if ($regProduct -and $regProduct -match 'Windows Server') { $regProduct } else { "Windows Server (Build $build)" }
+            }
+            elseif ($build -ge 26100) { $windowsVersion = "Windows Server 2025" }
             elseif ($build -ge 20348) { $windowsVersion = "Windows Server 2022" }
             elseif ($build -ge 17763) { $windowsVersion = "Windows Server 2019" }
             elseif ($build -ge 14393) { $windowsVersion = "Windows Server 2016" }

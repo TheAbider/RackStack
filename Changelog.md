@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.84.1
+
+- **Hardening:** Added `-OperationTimeoutSec 8` to 3 remaining CIM queries in HealthCheck readiness checks (Server 2025 hang prevention).
+- **Fix:** Future OS detection — Server builds beyond 2025 now fall back to registry ProductName instead of generic "Windows Server". Forward-compatible with Server vNext.
+- **Fix:** ConfigExport profile save now uses atomic write (temp file + rename) to prevent partial/corrupt exports from disk full or file lock races.
+- 65 modules, 4203 tests, 147 CLI actions
+
 ## v1.84.0
 
 - **New CLI Action:** `ServerScore` — unified 0-100 server health and compliance score with weighted categories: CPU (15pts), Memory (15pts), Disk capacity (20pts), Security (20pts — reboot, certs, firewall, Defender), Events (10pts), Uptime (10pts), Network (10pts). Returns letter grade (A+ to F). Designed as the ultimate single-number fleet health indicator.
