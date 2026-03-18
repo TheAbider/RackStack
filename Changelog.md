@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.81.4
+
+- **Tests:** Added 17 function existence tests for VM deployment, storage, debloat, network, and cluster helpers. 4036 tests.
+- **Docs:** Updated README with StorageHealthScore in CLI actions table. Updated wiki: CLI Automation (3 new actions + StorageHealthScore), Batch Mode (new validation checks), Health Monitoring (event log capacity), Troubleshooting (CIM/WMI timeout guide).
+- 65 modules, 4036 tests, 136 CLI actions
+
 ## v1.81.3
 
 - **New CLI Action:** `StorageHealthScore` — unified 0-100 storage health score aggregating physical disk health (40pts), volume capacity (30pts), disk latency (20pts), and MPIO path redundancy (10pts). Returns letter grade. Pairs with `ClusterHealthScore` for comprehensive fleet dashboard monitoring.

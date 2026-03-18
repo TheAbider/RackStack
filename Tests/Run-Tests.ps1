@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.81.3
+    Automated Test Runner for RackStack v1.81.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -508,7 +508,32 @@ $requiredFunctions = @(
     # Defender (17)
     "Show-DefenderStatus",
     # Firewall Templates (18)
-    "Export-FirewallRuleAudit"
+    "Export-FirewallRuleAudit",
+    # VM Deployment helpers (44)
+    "Get-AvailableVMStoragePaths",
+    "Get-RequiredDiskSpace",
+    "Set-VMConfigName",
+    # System info helpers (05, 35)
+    "Get-WindowsVersionInfo",
+    "Get-RebootReasons",
+    "Get-GatewayAddress",
+    "Get-IPAddressAndSubnet",
+    # Storage helpers (38)
+    "Set-VolumeDriveLetter",
+    "Set-VolumeLabel",
+    "Set-DiskOnlineStatus",
+    # Debloat (64)
+    "Get-RemovableAppxPackages",
+    "Get-DisableableServices",
+    "Get-TelemetryTasks",
+    # Network/iSCSI (10, 19)
+    "Set-NTPServer",
+    # Agent (57)
+    "Get-InstalledAgentVersion",
+    # Credentials (45)
+    "Get-StoredCredential",
+    # Cluster (27)
+    "Set-ClusterQuorum"
 )
 
 $funcCheckPassed = 0
