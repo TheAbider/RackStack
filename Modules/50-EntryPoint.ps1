@@ -293,6 +293,8 @@ function Assert-Elevation {
                 @{ Action = 'CSVSpaceAudit'; Description = 'Cluster Shared Volume capacity + free space' }
                 @{ Action = 'SMBConnectionAudit'; Description = 'Active SMB sessions + open files + shares' }
                 @{ Action = 'VolumeLabelAudit'; Description = 'Volume labels + unlabeled drive detection' }
+                @{ Action = 'NICErrorAudit'; Description = 'Network adapter errors, resets, discards' }
+                @{ Action = 'VMResourceWaste'; Description = 'VMs with oversized RAM/CPU allocations' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9496,6 +9498,92 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($vlIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NICErrorAudit' {
+            Write-OutputColor "  Auditing network adapter errors..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $neIssues = 0
+            try {
+                $stats = @(Get-NetAdapterStatistics -ErrorAction Stop)
+                $nicData = @()
+                foreach ($nic in $stats) {
+                    $totalErrors = $nic.InErrors + $nic.OutErrors + $nic.InDiscards + $nic.OutDiscards
+                    $resets = try { (Get-NetAdapter -Name $nic.Name -ErrorAction SilentlyContinue).DriverResetCount } catch { 0 }
+                    $color = if ($totalErrors -gt 100) { "Error" } elseif ($totalErrors -gt 0) { "Warning" } else { "Success" }
+                    $nicName = $nic.Name
+                    if ($nicName.Length -gt 25) { $nicName = $nicName.Substring(0, 22) + "..." }
+                    Write-OutputColor "  $nicName" -color "Info"
+                    Write-OutputColor "    InErrors: $($nic.InErrors)  OutErrors: $($nic.OutErrors)  InDiscards: $($nic.InDiscards)  OutDiscards: $($nic.OutDiscards)" -color $color
+                    if ($resets -and $resets -gt 0) { Write-OutputColor "    Driver Resets: $resets" -color "Warning" }
+                    if ($totalErrors -gt 100) { $neIssues++ }
+                    $nicData += @{ Name = $nic.Name; InErrors = $nic.InErrors; OutErrors = $nic.OutErrors; InDiscards = $nic.InDiscards; OutDiscards = $nic.OutDiscards; TotalErrors = $totalErrors; Resets = $resets }
+                }
+                Write-OutputColor "" -color "Info"
+                $totalAllErrors = ($nicData | Measure-Object -Property TotalErrors -Sum).Sum
+                Write-OutputColor "  Total errors across all adapters: $totalAllErrors" -color $(if ($totalAllErrors -gt 0) { "Warning" } else { "Success" })
+            }
+            catch {
+                Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NICErrorAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Adapters = $nicData.Count; TotalErrors = $totalAllErrors; Issues = $neIssues }; Adapters = $nicData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($neIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'VMResourceWaste' {
+            Write-OutputColor "  Analyzing VM resource utilization..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $rwIssues = 0
+            try {
+                $vms = @(Get-VM -ErrorAction Stop | Where-Object { $_.State -eq 'Running' })
+                if ($vms.Count -eq 0) {
+                    Write-OutputColor "  No running VMs to analyze." -color "Info"
+                }
+                else {
+                    $wasteData = @()
+                    foreach ($vm in $vms) {
+                        $issues = @()
+                        # Check memory waste: dynamic memory VMs where assigned << max
+                        if ($vm.DynamicMemoryEnabled) {
+                            $assignedGB = [math]::Round($vm.MemoryAssigned / 1GB, 1)
+                            $maxGB = [math]::Round($vm.MemoryMaximum / 1GB, 1)
+                            $demandMB = try { (Get-VMMemory -VM $vm -ErrorAction SilentlyContinue).Demand / 1MB } catch { 0 }
+                            $startupGB = [math]::Round($vm.MemoryStartup / 1GB, 1)
+                            if ($startupGB -gt 16 -and $demandMB -gt 0 -and $demandMB -lt ($startupGB * 1024 * 0.3)) {
+                                $issues += "Startup RAM ${startupGB}GB but demand is only $([math]::Round($demandMB/1024, 1))GB"
+                            }
+                        } else {
+                            $staticGB = [math]::Round($vm.MemoryStartup / 1GB, 1)
+                            if ($staticGB -gt 32) { $issues += "Static ${staticGB}GB RAM — consider dynamic memory" }
+                        }
+                        # Check vCPU waste: >8 vCPUs on a VM that might not need them
+                        if ($vm.ProcessorCount -gt 8) { $issues += "$($vm.ProcessorCount) vCPUs allocated" }
+                        if ($issues.Count -gt 0) {
+                            $vmName = $vm.Name
+                            if ($vmName.Length -gt 25) { $vmName = $vmName.Substring(0, 22) + "..." }
+                            Write-OutputColor "  $vmName" -color "Warning"
+                            foreach ($i in $issues) { Write-OutputColor "    $i" -color "Warning" }
+                            $rwIssues++
+                            $wasteData += @{ VM = $vm.Name; Issues = $issues; CPUs = $vm.ProcessorCount; MemoryGB = [math]::Round($vm.MemoryAssigned / 1GB, 1) }
+                        }
+                    }
+                    if ($rwIssues -eq 0) {
+                        Write-OutputColor "  No resource waste detected across $($vms.Count) running VMs." -color "Success"
+                    } else {
+                        Write-OutputColor "" -color "Info"
+                        Write-OutputColor "  $rwIssues VM(s) with potential resource waste." -color "Warning"
+                    }
+                }
+            }
+            catch {
+                Write-OutputColor "  Hyper-V not available: $($_.Exception.Message)" -color "Warning"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VMResourceWaste'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ RunningVMs = $vms.Count; WasteDetected = $rwIssues }; WasteVMs = $wasteData }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($rwIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

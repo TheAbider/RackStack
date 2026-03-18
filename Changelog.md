@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.82.1
+
+- **New CLI Action:** `NICErrorAudit` — detailed per-adapter error counts (InErrors, OutErrors, InDiscards, OutDiscards) plus driver reset count. Flags adapters with >100 total errors. Critical for diagnosing network packet loss and adapter instability.
+- **New CLI Action:** `VMResourceWaste` — analyzes running VMs for oversized resource allocations: high startup RAM with low actual demand, static memory >32GB without dynamic, and >8 vCPU allocations. Helps with capacity right-sizing.
+- **Docs:** Updated README CLI action table with SMBConnectionAudit, VolumeLabelAudit. Updated wiki.
+- 65 modules, 4056 tests, 141 CLI actions
+
 ## v1.82.0
 
 - **New CLI Action:** `SMBConnectionAudit` — reports active SMB sessions with client/user/file counts, open file totals, and non-system share inventory. Flags high open file counts (>50). JSON output for fleet monitoring.
