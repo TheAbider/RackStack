@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.2
+    Automated Test Runner for RackStack v1.82.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -549,7 +549,23 @@ $requiredFunctions = @(
     "Show-DriveLetterMap",
     "Show-InstalledSoftware",
     "Show-ListeningPorts",
-    "Show-VSSWriterStatus"
+    "Show-VSSWriterStatus",
+    # v1.82.2 additions
+    "Invoke-ServerDebloat",
+    "Invoke-WorkstationDebloat",
+    "Invoke-PathMtuDiscovery",
+    "Invoke-UdpPortTest",
+    "Invoke-RecycleBinCleanup",
+    "Show-AdapterStatus",
+    "Show-AllSystemTimezones",
+    "Show-DiskPartitions",
+    "Show-DriverHealthCheck",
+    "Show-EventLogAlerts",
+    "Show-ExistingVMs",
+    "Show-FirewallRuleSearch",
+    "Show-FirewallRuleSummary",
+    "Show-HostNetworkMenu",
+    "Show-UpdateHistory"
 )
 
 $funcCheckPassed = 0

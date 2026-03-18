@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.82.3
+
+- **Tests:** Added 15 function existence tests (Invoke-ServerDebloat, Invoke-WorkstationDebloat, Invoke-PathMtuDiscovery, Invoke-UdpPortTest, Invoke-RecycleBinCleanup, Show-AdapterStatus, Show-AllSystemTimezones, Show-DiskPartitions, Show-DriverHealthCheck, Show-EventLogAlerts, Show-ExistingVMs, Show-FirewallRuleSearch, Show-FirewallRuleSummary, Show-HostNetworkMenu, Show-UpdateHistory). 4086 tests total.
+- **Wiki:** Added CLI action tables to Storage-Backends, Cluster-Management, and Hyper-V-Replica pages.
+- 65 modules, 4086 tests, 141 CLI actions
+
 ## v1.82.2
 
 - **Tests:** Added 15 function existence tests (Export-ProfileComparisonHTML, Show-AllVolumes, Show-CertificateExpiryCheck, Show-CheckpointAgeWarnings, Show-ClusterStatus, Show-CriticalEventSummary, Show-CSVHealth, Show-DedupSavings, Show-DetailedTimeStatus, Show-DiskIOMetrics, Show-DriveLetterMap, Show-InstalledSoftware, Show-ListeningPorts, Show-VSSWriterStatus, New-DiskPartition). 4071 tests.
