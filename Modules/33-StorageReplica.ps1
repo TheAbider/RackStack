@@ -304,10 +304,14 @@ function Show-StorageReplicaManagement {
                     if ($navResult.ShouldReturn) { return }
                     if ($pNum -match '^\d+$' -and [int]$pNum -ge 1 -and [int]$pNum -le $partnerships.Count) {
                         $sel = $partnerships[[int]$pNum - 1]
-                        if (Confirm-UserAction -Message "Remove this partnership?") {
+                        $matchedParts = @(Get-SRPartnership | Where-Object { $_.SourceComputerName -eq $sel.SourceComputerName })
+                        if ($matchedParts.Count -gt 1) {
+                            Write-OutputColor "  WARNING: $($matchedParts.Count) partnerships match source '$($sel.SourceComputerName)'" -color "Warning"
+                        }
+                        if (Confirm-UserAction -Message "Remove $(if ($matchedParts.Count -gt 1) { "all $($matchedParts.Count) matching " })partnership(s)?") {
                             try {
-                                Get-SRPartnership | Where-Object { $_.SourceComputerName -eq $sel.SourceComputerName } | Remove-SRPartnership -Confirm:$false -ErrorAction Stop
-                                Write-OutputColor "  Partnership removed." -color "Success"
+                                $matchedParts | Remove-SRPartnership -Confirm:$false -ErrorAction Stop
+                                Write-OutputColor "  Removed $($matchedParts.Count) partnership(s)." -color "Success"
                             }
                             catch {
                                 Write-OutputColor "  Failed: $_" -color "Error"

@@ -268,7 +268,7 @@ function Show-LocalAccountAudit {
             "Never"
         } elseif ($null -ne $user.PasswordLastSet) {
             try {
-                $maxPwdAge = (Get-LocalUser $user.Name -ErrorAction SilentlyContinue).PasswordExpires
+                $maxPwdAge = $user.PasswordExpires
                 if ($null -ne $maxPwdAge) {
                     $expiryDays = [math]::Floor(($maxPwdAge - $now).TotalDays)
                     if ($expiryDays -lt 0) { "EXPIRED" } else { "${expiryDays}d" }

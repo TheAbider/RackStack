@@ -257,7 +257,7 @@ function Show-CleanupAnalysis {
     # Windows Update cache
     $wuPath = "$env:SystemRoot\SoftwareDistribution\Download"
     if (Test-Path -LiteralPath $wuPath) {
-        $wuSize = (Get-ChildItem -LiteralPath $wuPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+        $wuSize = [long](Get-ChildItem -LiteralPath $wuPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         $wuMB = [math]::Round($wuSize / 1MB, 0)
         $totalSavings += $wuSize
         Write-OutputColor "  Windows Update Cache: ${wuMB} MB" -color $(if ($wuMB -gt 100) { "Warning" } else { "Info" })
@@ -268,7 +268,7 @@ function Show-CleanupAnalysis {
     $tempTotal = 0
     foreach ($tempPath in $tempPaths) {
         if (Test-Path -LiteralPath $tempPath) {
-            $tempSize = (Get-ChildItem -LiteralPath $tempPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+            $tempSize = [long](Get-ChildItem -LiteralPath $tempPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
             $tempTotal += $tempSize
         }
     }
@@ -279,7 +279,7 @@ function Show-CleanupAnalysis {
     # CBS logs
     $cbsPath = "$env:SystemRoot\Logs\CBS"
     if (Test-Path -LiteralPath $cbsPath) {
-        $cbsSize = (Get-ChildItem -LiteralPath $cbsPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+        $cbsSize = [long](Get-ChildItem -LiteralPath $cbsPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         $cbsMB = [math]::Round($cbsSize / 1MB, 0)
         $totalSavings += $cbsSize
         Write-OutputColor "  CBS Logs: ${cbsMB} MB" -color $(if ($cbsMB -gt 200) { "Warning" } else { "Info" })

@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.81.6
+
+- **Fix:** `Show-CleanupAnalysis` null arithmetic — 3 `Measure-Object .Sum` calls lacked null-safe `[long]` cast and `-ErrorAction SilentlyContinue`, causing potential arithmetic failures on empty directories.
+- **Fix:** Password expiry calculation used redundant `Get-LocalUser` re-fetch per user (N+1 performance issue). Now uses `$user.PasswordExpires` directly.
+- **Fix:** Storage Replica partnership removal could silently delete multiple partnerships matching the same source. Now counts matches, warns, and confirms before bulk removal.
+- 65 modules, 4043 tests, 137 CLI actions
+
 ## v1.81.5
 
 - **New CLI Action:** `CSVSpaceAudit` — reports Cluster Shared Volume capacity, free space, used percentage, state, and owner node. Flags CSVs at >85% (warning) and >95% (critical) capacity. Critical for preventing CSV-full emergencies in Hyper-V cluster environments.
