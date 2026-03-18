@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.84.2
+
+- **Docs:** README updated — features section now highlights monitoring capabilities (ServerScore, HealthDashboard, System Center, Azure AD). Updated intro to mention 147 CLI actions. Added Monitoring section to features list.
+- 65 modules, 4203 tests, 147 CLI actions
+
 ## v1.84.1
 
 - **Hardening:** Added `-OperationTimeoutSec 8` to 3 remaining CIM queries in HealthCheck readiness checks (Server 2025 hang prevention).
