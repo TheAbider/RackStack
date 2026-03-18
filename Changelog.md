@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.81.9
+
+- **Fix:** LocalAdmin account creation prompt said "alphanumeric" but regex also accepts underscores and hyphens. Prompt now accurately describes all valid characters.
+- **Fix:** RDP port display now validates port range (1-65535), shows "default" when not set, and highlights non-standard ports.
+- 65 modules, 4044 tests, 137 CLI actions
+
 ## v1.81.8
 
 - **Tests:** Added CLI action count guard (verifies >= 137 actions, catches accidental removals). 4044 tests.

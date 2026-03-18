@@ -39,7 +39,7 @@ function Add-LocalAdminAccount {
     Write-OutputColor "  Default account name: $localadminaccountname" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Use default account name ($localadminaccountname)?" -DefaultYes)) {
-        Write-OutputColor "  Enter account name (alphanumeric, 1-20 chars):" -color "Info"
+        Write-OutputColor "  Enter account name (letters, numbers, underscore, hyphen; 1-20 chars):" -color "Info"
         $customName = Read-Host
         $navResult = Test-NavigationCommand -UserInput $customName
         if ($navResult.ShouldReturn) { return }

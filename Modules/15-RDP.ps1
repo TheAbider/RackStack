@@ -133,7 +133,9 @@ function Show-RDPSecurityStatus {
     # Check listening port
     try {
         $port = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'PortNumber' -ErrorAction SilentlyContinue).PortNumber
-        Write-OutputColor "  Listening Port: $port" -color "Info"
+        $portDisplay = if ($null -ne $port -and $port -ge 1 -and $port -le 65535) { $port } else { "3389 (default)" }
+        $portColor = if ($port -ne 3389 -and $null -ne $port) { "Warning" } else { "Info" }
+        Write-OutputColor "  Listening Port: $portDisplay" -color $portColor
     } catch { }
 }
 
