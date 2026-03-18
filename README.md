@@ -18,6 +18,7 @@
   <img alt="CI" src="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml/badge.svg">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
+  <img alt="4150+ Tests" src="https://img.shields.io/badge/tests-4150%2B-brightgreen">
 </p>
 
 ---

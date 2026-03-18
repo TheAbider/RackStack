@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.82.9
+
+- **Tests:** Added 18 function tests, pushing function coverage to **96.9%** (600/619). Only 19 internal helpers remain untested. **4169 tests** total — 256 new this session.
+- **Docs:** Added test count badge to README.
+- 65 modules, 4169 tests, 141 CLI actions
+
 ## v1.82.8
 
 - **Tests:** Added 20 function tests (14 Test-* validation functions, Search-HelpTopics, Stop-ScriptTranscript, Find-LocalCluster, Format-SessionDuration, 2 menu starters). **4151 tests** — 238 new this session. **Function coverage: 94%** (582/619 functions).

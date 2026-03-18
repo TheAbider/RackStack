@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.8
+    Automated Test Runner for RackStack v1.82.9
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -634,7 +634,26 @@ $requiredFunctions = @(
     "Find-LocalCluster",
     "Format-SessionDuration",
     "Start-Show-HostNetworkMenu",
-    "Start-Show-SystemConfigMenu"
+    "Start-Show-SystemConfigMenu",
+    # v1.82.8 — push toward 95%
+    "Add-HyperVDefenderExclusions",
+    "Add-NodeToCluster",
+    "Clear-BrowserCaches",
+    "Clear-WindowsOld",
+    "Compress-DiskVolume",
+    "Edit-ClusterSharedVolume",
+    "Enable-ServerActivation",
+    "Expand-DiskVolume",
+    "Find-ReachableSANTargets",
+    "Initialize-MPIOForISCSI",
+    "Initialize-NewDisk",
+    "Remove-OldTranscripts",
+    "Rename-NetworkAdapter",
+    "Resume-ClusterNodeFromMaintenance",
+    "Save-StoredCredential",
+    "Select-DebloatProfile",
+    "Select-Disk",
+    "Suspend-ClusterNodeForMaintenance"
 )
 
 $funcCheckPassed = 0
