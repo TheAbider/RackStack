@@ -204,7 +204,9 @@ function Find-LocalCluster {
 # Function to check if stored VM deployment credentials have expired (30 min timeout)
 function Test-CredentialExpired {
     if ($null -eq $script:VMDeploymentCredential) {
-        return $false
+        # Null credential in standalone mode = not needed, not expired
+        # Null credential in remote/cluster mode = cleared/expired, need re-prompt
+        return ($script:VMDeploymentMode -ne "Standalone" -and $null -ne $script:VMDeploymentTarget)
     }
     if ($null -eq $script:VMCredentialTimestamp) {
         return $true

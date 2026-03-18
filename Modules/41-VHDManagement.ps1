@@ -90,6 +90,7 @@ function Get-SyspreppedVHD {
     # Check if already cached
     $cached = Test-CachedVHD -OSVersion $OSVersion
 
+    $sizeMismatch = $false
     if ($cached.Exists) {
         # Integrity check: size mismatch = corrupt or incomplete transfer
         $remoteSize = Get-FileServerFileSize -FilePath $driveFile.FilePath
@@ -98,6 +99,8 @@ function Get-SyspreppedVHD {
             if (Confirm-UserAction -Message "Delete mismatched cache and re-download?") {
                 Remove-Item -LiteralPath $cached.Path -Force -ErrorAction SilentlyContinue
                 $cached = @{ Exists = $false; Path = $null; Size = 0 }
+            } else {
+                $sizeMismatch = $true
             }
         }
 
@@ -137,7 +140,13 @@ function Get-SyspreppedVHD {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        Write-OutputColor "  [1] Use this cached VHD" -color "Success"
+        if ($sizeMismatch) {
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Warning"
+            Write-OutputColor "  │$("  WARNING: Size mismatch detected — cached VHD may be corrupt".PadRight(72))│" -color "Error"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Warning"
+            Write-OutputColor "" -color "Info"
+        }
+        Write-OutputColor "  [1] Use this cached VHD$(if ($sizeMismatch) { ' (NOT RECOMMENDED)' })" -color $(if ($sizeMismatch) { "Warning" } else { "Success" })
         Write-OutputColor "  [2] Re-download (replace cached copy)" -color "Success"
         Write-OutputColor "  [3] Cancel" -color "Info"
         Write-OutputColor "" -color "Info"

@@ -302,8 +302,14 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
         }
         if ($mountedVHD) {
             Start-Sleep -Seconds 2
-            Dismount-VHD -Path $VHDPath -ErrorAction SilentlyContinue
-            Write-OutputColor "  VHD dismounted." -color "Info"
+            try {
+                Dismount-VHD -Path $VHDPath -ErrorAction Stop
+                Write-OutputColor "  VHD dismounted." -color "Info"
+            }
+            catch {
+                Write-OutputColor "  WARNING: Failed to dismount VHD — may still be mounted." -color "Warning"
+                Write-OutputColor "  Run: Dismount-VHD -Path '$VHDPath' -Force" -color "Info"
+            }
         }
     }
 }
@@ -383,7 +389,9 @@ function Show-OfflineCustomizationPrompt {
 # Function to show VHD mount status
 function Show-MountedVHDStatus {
     try {
-        $mounted = Get-VHD -Path * -ErrorAction SilentlyContinue | Where-Object { $_.Attached -eq $true }
+        $mounted = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.Location -like "*.vhd*" } | ForEach-Object {
+            try { Get-VHD -Path $_.Location -ErrorAction SilentlyContinue } catch { }
+        } | Where-Object { $_.Attached -eq $true })
 
         if ($null -eq $mounted -or @($mounted).Count -eq 0) {
             Write-OutputColor "  No VHDs currently mounted" -color "Info"

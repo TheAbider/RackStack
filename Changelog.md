@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.80.6
+
+- **Fix:** `Test-CredentialExpired` returned `$false` when credentials were null in remote mode — stale/cleared credentials were silently treated as valid, causing "access denied" errors on subsequent VM deployments. Now correctly distinguishes standalone (no cred needed) from remote (null = expired).
+- **Fix:** `Show-MountedVHDStatus` used `Get-VHD -Path *` which scans the filesystem with wildcards — hangs on hosts with many VHD files. Now uses `Get-Disk` to find VHD-backed disks directly.
+- **Fix:** VHD dismount in offline customization always reported "VHD dismounted" even if dismount failed. Now catches errors and shows the manual dismount command.
+- **Fix:** VHD size mismatch warning — if user declined to delete a mismatched cached VHD and then chose "use cached," no warning was shown. Now displays a prominent "NOT RECOMMENDED" warning banner.
+- 65 modules, 3985 tests, 132 CLI actions
+
 ## v1.80.5
 
 - **Enhancement:** Help search now includes "CLI Actions" topic — searching for "cli", "action", "fleet", or "automation" surfaces CLI headless mode documentation.
