@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.81.2
+    Automated Test Runner for RackStack v1.81.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11104,7 +11104,7 @@ try {
     }
 
     # v1.68.0+ — Win11 Cleanup, Theme, and infrastructure audit actions
-    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit')) {
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit','StorageHealthScore')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
         Write-TestResult "Install-RackStack: $action in ValidateSet" ($bootstrapContent -match "ValidateSet.*$action")
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
@@ -11168,6 +11168,13 @@ try {
     Write-TestResult "50-EntryPoint: VMSnapshotAudit flags >5 count" ($mod50 -match "'VMSnapshotAudit'[\s\S]{0,5000}deep tree")
     Write-TestResult "50-EntryPoint: VMSnapshotAudit estimates AVHD size" ($mod50 -match "'VMSnapshotAudit'[\s\S]{0,3000}avhd")
     Write-TestResult "50-EntryPoint: VMSnapshotAudit JSON output" ($mod50 -match "'VMSnapshotAudit'[\s\S]{0,8000}CLIOutputFormat.*eq.*JSON")
+
+    # v1.81.2 — StorageHealthScore
+    Write-TestResult "50-EntryPoint: StorageHealthScore checks disk health" ($mod50 -match "'StorageHealthScore'[\s\S]{0,2000}Get-PhysicalDisk")
+    Write-TestResult "50-EntryPoint: StorageHealthScore checks capacity" ($mod50 -match "'StorageHealthScore'[\s\S]{0,3000}Get-Volume")
+    Write-TestResult "50-EntryPoint: StorageHealthScore checks latency" ($mod50 -match "'StorageHealthScore'[\s\S]{0,5000}AvgDiskSecPerRead")
+    Write-TestResult "50-EntryPoint: StorageHealthScore computes grade" ($mod50 -match "'StorageHealthScore'[\s\S]{0,8000}Grade")
+    Write-TestResult "50-EntryPoint: StorageHealthScore JSON output" ($mod50 -match "'StorageHealthScore'[\s\S]{0,8000}CLIOutputFormat.*eq.*JSON")
 
     # v1.80.0 — BatchConfig validation improvements
     Write-TestResult "50-EntryPoint: BatchConfig validates adapter existence" ($mod50 -match 'AdapterName.*does not exist.*Available')

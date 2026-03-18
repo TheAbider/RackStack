@@ -289,6 +289,7 @@ function Assert-Elevation {
                 @{ Action = 'ClusterHealthScore'; Description = 'Unified 0-100 cluster health score' }
                 @{ Action = 'VMInventoryExport'; Description = 'Full VM inventory with resources + state' }
                 @{ Action = 'VMSnapshotAudit'; Description = 'Checkpoint age, size, count per VM' }
+                @{ Action = 'StorageHealthScore'; Description = 'Unified 0-100 storage health score' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9275,6 +9276,87 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($snapIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'StorageHealthScore' {
+            Write-OutputColor "  Computing storage health score..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $sScore = 100
+            $sChecks = @()
+            # 1. Physical disk health (40 points)
+            $diskScore = 40
+            try {
+                $physDisks = @(Get-PhysicalDisk -ErrorAction Stop)
+                $healthy = @($physDisks | Where-Object { $_.HealthStatus -eq 'Healthy' })
+                $unhealthy = @($physDisks | Where-Object { $_.HealthStatus -ne 'Healthy' })
+                if ($physDisks.Count -gt 0) {
+                    $diskScore = [math]::Round(($healthy.Count / $physDisks.Count) * 40)
+                }
+                $sChecks += @{ Check = "Disk Health"; Score = $diskScore; Max = 40; Detail = "$($healthy.Count)/$($physDisks.Count) healthy" }
+                Write-OutputColor "  Disk Health: $($healthy.Count)/$($physDisks.Count) healthy ($diskScore/40)" -color $(if ($diskScore -eq 40) { "Success" } else { "Error" })
+            } catch {
+                $diskScore = 0
+                $sChecks += @{ Check = "Disk Health"; Score = 0; Max = 40; Detail = "Query failed" }
+                Write-OutputColor "  Disk Health: Unable to query ($diskScore/40)" -color "Warning"
+            }
+            # 2. Volume capacity (30 points)
+            $capScore = 30
+            try {
+                $volumes = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' -and $_.Size -gt 0 })
+                $critVols = @($volumes | Where-Object { (($_.Size - $_.SizeRemaining) / $_.Size * 100) -gt 90 })
+                $warnVols = @($volumes | Where-Object { (($_.Size - $_.SizeRemaining) / $_.Size * 100) -gt 80 -and (($_.Size - $_.SizeRemaining) / $_.Size * 100) -le 90 })
+                if ($critVols.Count -gt 0) { $capScore = [math]::Max(0, 30 - ($critVols.Count * 15)) }
+                elseif ($warnVols.Count -gt 0) { $capScore = [math]::Max(10, 30 - ($warnVols.Count * 5)) }
+                $sChecks += @{ Check = "Capacity"; Score = $capScore; Max = 30; Detail = "$($volumes.Count) volumes, $($critVols.Count) critical, $($warnVols.Count) warning" }
+                Write-OutputColor "  Capacity: $($volumes.Count) volumes ($capScore/30)" -color $(if ($capScore -ge 25) { "Success" } elseif ($capScore -ge 15) { "Warning" } else { "Error" })
+                foreach ($cv in $critVols) { Write-OutputColor "    CRITICAL: $($cv.DriveLetter): >90% used" -color "Error" }
+            } catch {
+                $capScore = 0
+                $sChecks += @{ Check = "Capacity"; Score = 0; Max = 30; Detail = "Query failed" }
+            }
+            # 3. Disk latency (20 points)
+            $latScore = 20
+            try {
+                $perf = @(Get-CimInstance Win32_PerfFormattedData_PerfDisk_PhysicalDisk -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne '_Total' })
+                $highLat = @($perf | Where-Object { ($_.AvgDiskSecPerRead * 1000) -gt 20 -or ($_.AvgDiskSecPerWrite * 1000) -gt 20 })
+                $medLat = @($perf | Where-Object { (($_.AvgDiskSecPerRead * 1000) -gt 10 -or ($_.AvgDiskSecPerWrite * 1000) -gt 10) -and (($_.AvgDiskSecPerRead * 1000) -le 20 -and ($_.AvgDiskSecPerWrite * 1000) -le 20) })
+                if ($highLat.Count -gt 0) { $latScore = [math]::Max(0, 20 - ($highLat.Count * 10)) }
+                elseif ($medLat.Count -gt 0) { $latScore = [math]::Max(5, 20 - ($medLat.Count * 5)) }
+                $sChecks += @{ Check = "Latency"; Score = $latScore; Max = 20; Detail = "$($highLat.Count) high, $($medLat.Count) elevated" }
+                Write-OutputColor "  Latency: $($perf.Count) disks ($latScore/20)" -color $(if ($latScore -ge 15) { "Success" } elseif ($latScore -ge 10) { "Warning" } else { "Error" })
+            } catch {
+                $latScore = 20
+                $sChecks += @{ Check = "Latency"; Score = 20; Max = 20; Detail = "Counters unavailable (assumed OK)" }
+            }
+            # 4. MPIO/redundancy (10 points)
+            $mpioScore = 10
+            $mpioInstalled = $null -ne (Get-Command Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue)
+            if ($mpioInstalled) {
+                try {
+                    $mpioDevs = @(Get-CimInstance -Namespace root\wmi -ClassName MPIO_DISK_INFO -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
+                    $singlePath = 0
+                    foreach ($dev in $mpioDevs) { if ($dev.NumberPaths -and $dev.NumberPaths -lt 2) { $singlePath++ } }
+                    if ($singlePath -gt 0) { $mpioScore = [math]::Max(0, 10 - ($singlePath * 5)) }
+                    $sChecks += @{ Check = "Redundancy"; Score = $mpioScore; Max = 10; Detail = "MPIO: $($mpioDevs.Count) devices, $singlePath single-path" }
+                    Write-OutputColor "  Redundancy: MPIO $($mpioDevs.Count) devices ($mpioScore/10)" -color $(if ($mpioScore -eq 10) { "Success" } else { "Warning" })
+                } catch {
+                    $sChecks += @{ Check = "Redundancy"; Score = 10; Max = 10; Detail = "MPIO query failed" }
+                }
+            } else {
+                $sChecks += @{ Check = "Redundancy"; Score = 10; Max = 10; Detail = "MPIO not installed (N/A)" }
+                Write-OutputColor "  Redundancy: MPIO not installed (10/10)" -color "Info"
+            }
+            $sScore = $diskScore + $capScore + $latScore + $mpioScore
+            $sGrade = if ($sScore -ge 95) { "A+" } elseif ($sScore -ge 90) { "A" } elseif ($sScore -ge 80) { "B" } elseif ($sScore -ge 70) { "C" } elseif ($sScore -ge 60) { "D" } else { "F" }
+            $sColor = if ($sScore -ge 90) { "Success" } elseif ($sScore -ge 70) { "Warning" } else { "Error" }
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color $sColor
+            Write-OutputColor "  │$("  STORAGE HEALTH SCORE: $sScore/100 ($sGrade)".PadRight(72))│" -color $sColor
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color $sColor
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'StorageHealthScore'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Score = $sScore; Grade = $sGrade; Checks = $sChecks }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($sScore -lt 70) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

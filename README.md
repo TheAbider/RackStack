@@ -339,7 +339,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 135 CLI Actions
+### 136 CLI Actions
 
 | Category | Actions |
 |----------|---------|
@@ -357,7 +357,7 @@ $report.Issues
 | **Time/Boot** | `TimeAudit` `BootAudit` `PendingRebootAudit` `ScheduledRebootAudit` `RecoveryAudit` `LocaleAudit` |
 | **Patching** | `PatchStatus` `WindowsUpdateAudit` `CertCheck` `UpdatePolicyAudit` `LicenseAudit` `AntivirusAudit` |
 | **Infra** | `HyperVAudit` `ClusterAudit` `ClusterQuorumAudit` `ClusterNetworkAudit` `ClusterHealthScore` `BackupAudit` `GPOAudit` `WMIAudit` `PowerShellAudit` `RouteTableAudit` |
-| **Hyper-V** | `VMOvercommitAudit` `ReplicaLagAudit` `LiveMigrationAudit` `VirtualSwitchAudit` `VMInventoryExport` |
+| **Hyper-V** | `VMOvercommitAudit` `ReplicaLagAudit` `LiveMigrationAudit` `VirtualSwitchAudit` `VMInventoryExport` `VMSnapshotAudit` |
 | **Storage** (ext) | `S2DAudit` `DedupAudit` `MPIOPathAudit` `ShadowCopyAudit` `QoSPolicyAudit` `DiskLatencyAudit` `StorageTimeoutAudit` |
 | **Services** (ext) | `ServiceRecoveryAudit` `HandleLeakAudit` |
 | **Persistence** | `AutoStartAudit` `EventSubAudit` `ComObjectAudit` `SymlinkAudit` `StartupScriptAudit` `HostsFileAudit` |

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.3
+
+- **New CLI Action:** `StorageHealthScore` — unified 0-100 storage health score aggregating physical disk health (40pts), volume capacity (30pts), disk latency (20pts), and MPIO path redundancy (10pts). Returns letter grade. Pairs with `ClusterHealthScore` for comprehensive fleet dashboard monitoring.
+- 65 modules, 4019 tests, 136 CLI actions
+
 ## v1.81.2
 
 - **New CLI Action:** `VMSnapshotAudit` — comprehensive VM checkpoint health report: per-VM snapshot count, oldest/newest timestamps, age in days, estimated AVHD disk usage. Flags checkpoints >7 days (warning), >30 days (critical), and VMs with >5 deep checkpoint trees. JSON output includes full VM snapshot inventory for fleet monitoring.
