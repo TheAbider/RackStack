@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.1
+
+- **Enhancement:** HyperVAudit now detects checkpoints older than 7 days (not just count >3). Old checkpoints silently consume disk space and degrade VM performance. JSON output includes `OldCheckpoints` count per VM.
+- 65 modules, 4003 tests, 134 CLI actions
+
 ## v1.81.0
 
 - **New CLI Action:** `ClusterHealthScore` — computes a unified 0-100 health score for failover clusters by aggregating node health (25pts), resource health (25pts), CSV health (25pts), and quorum health (25pts). Outputs letter grade (A+ to F). Designed for fleet dashboard monitoring via JSON output.

@@ -4665,6 +4665,8 @@ function Invoke-CLIAction {
 
                         $checkpoints = @(Get-VMCheckpoint -VMName $vm.Name -ErrorAction SilentlyContinue)
                         if (@($checkpoints).Count -gt 3) { $health = 'WARN'; $hvIssues++ }
+                        $oldCheckpoints = @($checkpoints | Where-Object { $_.CreationTime -lt (Get-Date).AddDays(-7) })
+                        if ($oldCheckpoints.Count -gt 0) { $health = 'WARN'; $hvIssues++ }
 
                         $repl = $null
                         try {
@@ -4676,14 +4678,15 @@ function Invoke-CLIAction {
                         } catch { }
 
                         $vmResults += @{
-                            Name        = $vm.Name
-                            State       = "$($vm.State)"
-                            CPUCount    = $vm.ProcessorCount
-                            MemoryMB    = [math]::Round($vm.MemoryAssigned / 1MB, 0)
-                            Uptime      = if ($vm.Uptime) { "$($vm.Uptime)" } else { "" }
-                            Checkpoints = @($checkpoints).Count
-                            Replication = $repl
-                            Health      = $health
+                            Name             = $vm.Name
+                            State            = "$($vm.State)"
+                            CPUCount         = $vm.ProcessorCount
+                            MemoryMB         = [math]::Round($vm.MemoryAssigned / 1MB, 0)
+                            Uptime           = if ($vm.Uptime) { "$($vm.Uptime)" } else { "" }
+                            Checkpoints      = @($checkpoints).Count
+                            OldCheckpoints   = $oldCheckpoints.Count
+                            Replication      = $repl
+                            Health           = $health
                         }
                     }
                 } catch {
