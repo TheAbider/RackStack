@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.81.7
+
+- **Fix:** BitLocker AD recovery key verification could fail with confusing error when `Get-ADComputer` returned null. Now uses explicit error handling with separate catch for "computer not found in AD" vs "AD tools not available."
+- 65 modules, 4043 tests, 137 CLI actions
+
 ## v1.81.6
 
 - **Fix:** `Show-CleanupAnalysis` null arithmetic — 3 `Measure-Object .Sum` calls lacked null-safe `[long]` cast and `-ErrorAction SilentlyContinue`, causing potential arithmetic failures on empty directories.

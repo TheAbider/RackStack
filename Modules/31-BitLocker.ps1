@@ -48,9 +48,12 @@ function Test-BitLockerRecoveryBackup {
 
             # Check if recovery key is backed up to AD
             try {
-                $adBackup = Get-ADObject -Filter "objectClass -eq 'msFVE-RecoveryInformation'" -SearchBase (Get-ADComputer $env:COMPUTERNAME).DistinguishedName -ErrorAction SilentlyContinue
+                $adComputer = Get-ADComputer $env:COMPUTERNAME -ErrorAction Stop
+                $adBackup = Get-ADObject -Filter "objectClass -eq 'msFVE-RecoveryInformation'" -SearchBase $adComputer.DistinguishedName -ErrorAction SilentlyContinue
                 if ($null -ne $adBackup) {
                     Write-OutputColor "    AD Backup: Found ($(@($adBackup).Count) key(s))" -color "Success"
+                } else {
+                    Write-OutputColor "    AD Backup: No recovery keys found in AD" -color "Warning"
                 }
             } catch {
                 Write-OutputColor "    AD Backup: Cannot verify (not domain-joined or AD tools not available)" -color "Info"
