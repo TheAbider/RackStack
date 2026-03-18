@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.82.6
+    Automated Test Runner for RackStack v1.82.7
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -597,7 +597,23 @@ $requiredFunctions = @(
     "Show-ToolsUtilitiesMenu",
     "Show-WindowsUpdatesMenu",
     "Set-DeploymentSiteNumber",
-    "Set-iSCSIConfiguration"
+    "Set-iSCSIConfiguration",
+    # v1.82.6 additions
+    "Connect-FailoverCluster",
+    "Connect-StandaloneHost",
+    "Show-ServiceDependencies",
+    "Show-TimezoneRegionPicker",
+    "Show-VMDeploymentModeMenu",
+    "Start-BatchDeployment",
+    "Start-ClusterNodeDrain",
+    "Start-Show-Mainmenu",
+    "Start-Show-ConfigureServerMenu",
+    "Start-Show-NetworkMenu",
+    "Start-Show-RolesFeaturesMenu",
+    "Start-Show-SecurityAccessMenu",
+    "Start-Show-StorageClusteringMenu",
+    "Start-Show-ToolsUtilitiesMenu",
+    "Start-Show-SettingsMenu"
 )
 
 $funcCheckPassed = 0

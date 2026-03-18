@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.82.7
+
+- **Tests:** Added 15 more function tests (Connect-FailoverCluster, Connect-StandaloneHost, Show-ServiceDependencies, Show-TimezoneRegionPicker, Show-VMDeploymentModeMenu, Start-BatchDeployment, Start-ClusterNodeDrain, and 8 menu loop starters). **4131 tests** — 218 new this session. Function coverage: 88.4% → 90.1%.
+- 65 modules, 4131 tests, 141 CLI actions
+
 ## v1.82.6
 
 - **Tests:** Added 15 more function existence tests (cluster, network, debloat, deployment, iSCSI, security, event log, replication, timezone menus). 4116 total — 203 new tests this session.
