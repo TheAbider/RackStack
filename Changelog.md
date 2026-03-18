@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.83.1
+
+- **Tests:** Function coverage reached **99.5%** (616/619) — **100% of all testable functions**. The remaining 3 are nested helpers (`Add-ReadinessRow`, `Enter-ManualKey`, `Set-DNSFromPreset`) that exist only inside their parent function scope and cannot be tested from global scope. 4197 tests total — 284 new this session.
+- 65 modules, 4197 tests, 145 CLI actions
+
 ## v1.83.0
 
 - **New CLI Action:** `SCCMClientAudit` — checks SCCM/MECM client service status, client version, cache size/location, last policy request, management point, and site code. Detects if client is installed and healthy.

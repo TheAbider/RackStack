@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.83.0
+    Automated Test Runner for RackStack v1.83.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.83.0 — push to 98%+
+    # v1.83.1 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -666,7 +666,12 @@ $requiredFunctions = @(
     "Clear-ShadowCopies",
     "Clear-UserProfileTemp",
     "Disable-NICForIdentification",
-    "Remove-DefenderExclusion"
+    "Remove-DefenderExclusion",
+    # Final 4 — reaching 100% of top-level functions
+    "Clear-DiskData",
+    "Format-DiskVolume",
+    "Invoke-CustomDebloatExecution",
+    "Remove-DiskPartition"
 )
 
 $funcCheckPassed = 0
