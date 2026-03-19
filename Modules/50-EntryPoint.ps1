@@ -301,6 +301,7 @@ function Assert-Elevation {
                 @{ Action = 'WACConnectivityAudit'; Description = 'Windows Admin Center readiness check' }
                 @{ Action = 'AzureADAudit'; Description = 'Azure AD / Entra ID join + Intune enrollment' }
                 @{ Action = 'ServerScore'; Description = 'Unified 0-100 server health + compliance score' }
+                @{ Action = 'FleetReport'; Description = 'Aggregate health reports from multiple servers' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -9987,6 +9988,63 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($pct -lt 70) { [Environment]::Exit(1) }
+        }
+        'FleetReport' {
+            # Reads HealthDashboard/ServerScore JSON files from a directory and produces aggregate summary
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config required. Provide path to directory containing JSON health reports." -color "Error"
+                Write-OutputColor "  Usage: RackStack.exe -Action FleetReport -Config ""C:\health-reports""" -color "Info"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $script:CLIConfig -PathType Container)) {
+                Write-OutputColor "  ERROR: Directory not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+            Write-OutputColor "  Generating fleet health report..." -color "Info"
+            Write-OutputColor "  Source: $($script:CLIConfig)" -color "Info"
+            Write-OutputColor "" -color "Info"
+            $jsonFiles = @(Get-ChildItem -LiteralPath $script:CLIConfig -Filter "*.json" -File -ErrorAction SilentlyContinue)
+            if ($jsonFiles.Count -eq 0) {
+                Write-OutputColor "  No JSON files found in directory." -color "Warning"
+                [Environment]::Exit(1)
+            }
+            $servers = @()
+            $healthy = 0; $warning = 0; $critical = 0; $parseErrors = 0
+            foreach ($jf in $jsonFiles) {
+                try {
+                    $data = Get-Content -LiteralPath $jf.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                    $hostname = if ($data.Hostname) { $data.Hostname } else { $jf.BaseName }
+                    $status = if ($data.Status) { $data.Status } elseif ($data.Grade) { $data.Grade } else { "Unknown" }
+                    $score = if ($data.Score -or $data.Percent) { if ($data.Percent) { $data.Percent } else { $data.Score } } else { -1 }
+                    $issues = if ($data.Issues) { $data.Issues } else { 0 }
+                    $servers += @{ Hostname = $hostname; Status = $status; Score = $score; Issues = $issues; File = $jf.Name }
+                    if ($status -match 'Healthy|A\+|A$|B') { $healthy++ }
+                    elseif ($status -match 'Warning|C') { $warning++ }
+                    else { $critical++ }
+                } catch { $parseErrors++ }
+            }
+            # Display summary
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  FLEET HEALTH REPORT ($($servers.Count) servers)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Healthy: $healthy   Warning: $warning   Critical: $critical   Errors: $parseErrors".PadRight(72))│" -color $(if ($critical -gt 0) { "Error" } elseif ($warning -gt 0) { "Warning" } else { "Success" })
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            # Show worst performers
+            $worst = @($servers | Where-Object { $_.Score -ge 0 } | Sort-Object Score | Select-Object -First 5)
+            if ($worst.Count -gt 0) {
+                Write-OutputColor "  │$("  WORST PERFORMERS:".PadRight(72))│" -color "Warning"
+                foreach ($w in $worst) {
+                    $line = "  $($w.Hostname): Score $($w.Score) ($($w.Status)) — $($w.Issues) issue(s)"
+                    if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($line.PadRight(72))│" -color $(if ($w.Score -lt 70) { "Error" } else { "Warning" })
+                }
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'FleetReport'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Total = $servers.Count; Healthy = $healthy; Warning = $warning; Critical = $critical; ParseErrors = $parseErrors }; Servers = $servers }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($critical -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
