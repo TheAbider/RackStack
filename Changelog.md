@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.85.1
+
+- **Docs:** README updated to 148 CLI actions everywhere, FleetReport in Fleet CLI table. CONTRIBUTING.md test count updated to 4200+.
+- 65 modules, 4206 tests, 148 CLI actions
+
 ## v1.85.0
 
 - **New CLI Action:** `FleetReport` — reads HealthDashboard/ServerScore JSON files from a directory and generates an aggregate fleet health report. Shows healthy/warning/critical server counts, worst performers with scores, and common issues. Designed for fleet dashboards where each server saves its health JSON to a shared directory.
