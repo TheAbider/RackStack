@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.85.3
+    Automated Test Runner for RackStack v1.85.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.85.3 — push to 98%+
+    # v1.85.4 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -11404,9 +11404,9 @@ try {
     Write-TestResult "50-EntryPoint: FleetReport validates directory exists" ($mod50 -match "'FleetReport'[\s\S]{0,600}Test-Path.*Container")
     Write-TestResult "50-EntryPoint: FleetReport reads JSON files" ($mod50 -match "'FleetReport'[\s\S]{0,1000}Get-ChildItem[\s\S]{0,100}\*\.json")
     Write-TestResult "50-EntryPoint: FleetReport parses JSON with ConvertFrom-Json" ($mod50 -match "'FleetReport'[\s\S]{0,2000}ConvertFrom-Json")
-    Write-TestResult "50-EntryPoint: FleetReport tracks healthy count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}\\\$healthy")
-    Write-TestResult "50-EntryPoint: FleetReport tracks warning count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}\\\$warning")
-    Write-TestResult "50-EntryPoint: FleetReport tracks critical count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}\\\$critical")
+    Write-TestResult "50-EntryPoint: FleetReport tracks healthy count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}healthy\+\+")
+    Write-TestResult "50-EntryPoint: FleetReport tracks warning count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}warning\+\+")
+    Write-TestResult "50-EntryPoint: FleetReport tracks critical count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}critical\+\+")
     Write-TestResult "50-EntryPoint: FleetReport shows worst performers" ($mod50 -match "'FleetReport'[\s\S]{0,5000}WORST PERFORMERS")
     Write-TestResult "50-EntryPoint: FleetReport JSON output" ($mod50 -match "'FleetReport'[\s\S]{0,6000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: FleetReport exits 1 on critical" ($mod50 -match "'FleetReport'[\s\S]{0,7000}critical.*Exit\(1\)")
