@@ -303,6 +303,7 @@ function Assert-Elevation {
                 @{ Action = 'ServerScore'; Description = 'Unified 0-100 server health + compliance score' }
                 @{ Action = 'FleetReport'; Description = 'Aggregate health reports from multiple servers' }
                 @{ Action = 'PasswordPolicy'; Description = 'Local password policy + lockout settings' }
+                @{ Action = 'FirewallRuleAudit'; Description = 'Firewall rule summary + overly permissive rules' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -10118,6 +10119,74 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($ppIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'FirewallRuleAudit' {
+            Write-OutputColor "  Auditing firewall rules..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $fwIssues = 0
+            $fwSummary = @{}
+            try {
+                $rules = @(Get-NetFirewallRule -ErrorAction Stop)
+                $enabled = @($rules | Where-Object { $_.Enabled -eq 'True' })
+                $disabled = @($rules | Where-Object { $_.Enabled -ne 'True' })
+                $inbound = @($enabled | Where-Object { $_.Direction -eq 'Inbound' })
+                $outbound = @($enabled | Where-Object { $_.Direction -eq 'Outbound' })
+                $allowIn = @($inbound | Where-Object { $_.Action -eq 'Allow' })
+                $blockIn = @($inbound | Where-Object { $_.Action -eq 'Block' })
+                $allowOut = @($outbound | Where-Object { $_.Action -eq 'Allow' })
+                # Find overly permissive inbound allow rules (any remote address + any port)
+                $permissive = @()
+                foreach ($r in $allowIn) {
+                    try {
+                        $af = $r | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue
+                        $pf = $r | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
+                        if ($af.RemoteAddress -eq 'Any' -and $pf.LocalPort -eq 'Any' -and $pf.Protocol -ne 'ICMPv4' -and $pf.Protocol -ne 'ICMPv6') {
+                            $permissive += @{ Name = $r.DisplayName; Protocol = "$($pf.Protocol)"; Profile = "$($r.Profile)" }
+                        }
+                    } catch { }
+                }
+                $fwSummary = @{
+                    TotalRules = $rules.Count
+                    Enabled = $enabled.Count
+                    Disabled = $disabled.Count
+                    InboundAllow = $allowIn.Count
+                    InboundBlock = $blockIn.Count
+                    OutboundAllow = $allowOut.Count
+                    OverlyPermissive = $permissive.Count
+                    PermissiveRules = $permissive
+                }
+                if ($permissive.Count -gt 0) { $fwIssues += $permissive.Count }
+                # Display
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  FIREWALL RULE SUMMARY".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Total Rules:          $($rules.Count) ($($enabled.Count) enabled, $($disabled.Count) disabled)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Inbound Allow:        $($allowIn.Count)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Inbound Block:        $($blockIn.Count)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Outbound Allow:       $($allowOut.Count)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Overly Permissive:    $($permissive.Count)".PadRight(72))│" -color $(if ($permissive.Count -eq 0) { "Success" } else { "Error" })
+                if ($permissive.Count -gt 0) {
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  PERMISSIVE RULES (any remote + any port):".PadRight(72))│" -color "Warning"
+                    foreach ($p in ($permissive | Select-Object -First 10)) {
+                        $pLine = "  $($p.Name) [$($p.Protocol)]"
+                        if ($pLine.Length -gt 72) { $pLine = $pLine.Substring(0, 69) + "..." }
+                        Write-OutputColor "  │$($pLine.PadRight(72))│" -color "Error"
+                    }
+                    if ($permissive.Count -gt 10) {
+                        Write-OutputColor "  │$("  ... and $($permissive.Count - 10) more".PadRight(72))│" -color "Error"
+                    }
+                }
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            } catch {
+                Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
+                $fwIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'FirewallRuleAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $fwIssues; Summary = $fwSummary }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($fwIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

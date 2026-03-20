@@ -23,7 +23,7 @@
 
 ---
 
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Think of it as **sconfig for the modern era** -- but instead of 15 options, you get 149 CLI actions and 60+ interactive menus covering network configuration, Hyper-V deployment, SAN/iSCSI setup, domain join, licensing, VM creation, health monitoring, drift detection, and batch automation -- all through an interactive console UI with undo support, transaction rollback, and audit logging.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Think of it as **sconfig for the modern era** -- but instead of 15 options, you get 150 CLI actions and 60+ interactive menus covering network configuration, Hyper-V deployment, SAN/iSCSI setup, domain join, licensing, VM creation, health monitoring, drift detection, and batch automation -- all through an interactive console UI with undo support, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
 
@@ -41,7 +41,7 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Automation** -- JSON-driven batch mode (24 idempotent steps with transaction rollback), Quick Setup Wizard, configuration export/import, HTML reports, JSON audit logging with rotation
 
-**Monitoring** -- 149 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
+**Monitoring** -- 150 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
 
 **Monitoring & Diagnostics** -- Health dashboard (disk I/O latency, NIC errors, memory pressure, Hyper-V guest health, top CPU processes), performance snapshots with trend reports and "days until full" estimates, event log viewer, service manager, network diagnostics (ping, traceroute, port test, subnet sweep, DNS, ARP)
 
@@ -342,7 +342,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 149 CLI Actions
+### 150 CLI Actions
 
 | Category | Actions |
 |----------|---------|
@@ -353,7 +353,7 @@ $report.Issues
 | **Security** | `Harden` `RegistryAudit` `TLSAudit` `CredGuardAudit` `AuditPolicyAudit` `AppLockerAudit` `DefenderExclusionAudit` `TokenPrivilegeAudit` `PasswordPolicy` |
 | **Identity** | `UserAudit` `LocalGroupAudit` `LogonAudit` `ServiceAccountAudit` `KerberosAudit` `ACLAudit` |
 | **Network** | `NetInfo` `DNSAudit` `NetworkAudit` `ListeningPorts` `NetStatAudit` `PortAudit` `ProxyAudit` `DHCPAudit` `VPNAudit` `ARPTableAudit` `NICTeamAudit` `TcpSettingsAudit` `SMBConnectionAudit` |
-| **Firewall** | `FirewallAudit` `FirewallLogAudit` |
+| **Firewall** | `FirewallAudit` `FirewallLogAudit` `FirewallRuleAudit` |
 | **Storage** | `StorageAudit` `ShareAudit` `SMBAudit` `SMBSessionAudit` `BitLockerAudit` `NTFSAudit` `PageFileAudit` `ProfileAudit` `iSCSIAudit` |
 | **Services** | `ServiceAudit` `TaskAudit` `TaskHistoryAudit` `EventAudit` `PrintAudit` `IISAudit` `SSHAudit` `WinRMAudit` |
 | **Drivers/HW** | `DriverAudit` `USBDeviceAudit` `PowerAudit` `NUMAAudit` `NICOffloadAudit` `NICErrorAudit` |

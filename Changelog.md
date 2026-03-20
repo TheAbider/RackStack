@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.86.1
+
+- **New CLI Action:** `FirewallRuleAudit` — summarizes all firewall rules (enabled/disabled, inbound/outbound, allow/block counts), detects overly permissive inbound allow rules (any remote address + any port), and lists the top offenders. JSON output, exit code 1 on permissive rules.
+- 65 modules, 4249 tests, 150 CLI actions
+
 ## v1.86.0
 
 - **New CLI Action:** `PasswordPolicy` — audits local password policy (min length, complexity, max/min age, history, reversible encryption) and lockout policy (threshold, duration, reset window) via secedit export. Color-coded thresholds, JSON output, exit code 1 on security issues.

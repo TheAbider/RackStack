@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.86.0
+    Automated Test Runner for RackStack v1.86.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.86.0 — push to 98%+
+    # v1.86.1 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -11272,7 +11272,7 @@ try {
     }
 
     # v1.68.0+ — Win11 Cleanup, Theme, and infrastructure audit actions
-    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit','StorageHealthScore','CSVSpaceAudit','SMBConnectionAudit','VolumeLabelAudit','NICErrorAudit','VMResourceWaste','HealthDashboard','SCCMClientAudit','SCOMAgentAudit','WACConnectivityAudit','AzureADAudit','ServerScore','FleetReport','PasswordPolicy')) {
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit','StorageHealthScore','CSVSpaceAudit','SMBConnectionAudit','VolumeLabelAudit','NICErrorAudit','VMResourceWaste','HealthDashboard','SCCMClientAudit','SCOMAgentAudit','WACConnectivityAudit','AzureADAudit','ServerScore','FleetReport','PasswordPolicy','FirewallRuleAudit')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
         Write-TestResult "Install-RackStack: $action in ValidateSet" ($bootstrapContent -match "ValidateSet.*$action")
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
@@ -11425,8 +11425,16 @@ try {
     Write-TestResult "50-EntryPoint: PasswordPolicy JSON output" ($mod50 -match "'PasswordPolicy'[\s\S]{0,8000}ConvertTo-Json")
     Write-TestResult "50-EntryPoint: PasswordPolicy in ListActions table" ($mod50 -match "Action\s*=\s*'PasswordPolicy'[\s\S]{0,100}Description")
 
+    # FirewallRuleAudit implementation checks
+    Write-TestResult "50-EntryPoint: FirewallRuleAudit case exists" ($mod50 -match "'FirewallRuleAudit'\s*\{")
+    Write-TestResult "50-EntryPoint: FirewallRuleAudit uses Get-NetFirewallRule" ($mod50 -match "'FirewallRuleAudit'[\s\S]{0,1000}Get-NetFirewallRule")
+    Write-TestResult "50-EntryPoint: FirewallRuleAudit checks inbound direction" ($mod50 -match "'FirewallRuleAudit'[\s\S]{0,2000}Inbound")
+    Write-TestResult "50-EntryPoint: FirewallRuleAudit detects permissive rules" ($mod50 -match "'FirewallRuleAudit'[\s\S]{0,4000}RemoteAddress.*Any")
+    Write-TestResult "50-EntryPoint: FirewallRuleAudit JSON output" ($mod50 -match "'FirewallRuleAudit'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: FirewallRuleAudit in ListActions table" ($mod50 -match "Action\s*=\s*'FirewallRuleAudit'[\s\S]{0,100}Description")
+
 } catch {
-    Write-TestResult "ServerScore + FleetReport + PasswordPolicy tests" $false $_.Exception.Message
+    Write-TestResult "ServerScore + FleetReport + PasswordPolicy + FirewallRuleAudit tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime
