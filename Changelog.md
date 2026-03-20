@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.86.3
+
+- **New CLI Action:** `DNSCacheAudit` — dumps and analyzes the DNS client cache. Shows total entries, unique names, record type breakdown, and negative cache (failed lookups). JSON output with full cache sample.
+- 65 modules, 4255 tests, 152 CLI actions
+
 ## v1.86.2
 
 - **New CLI Action:** `GPResultAudit` — exports and parses Group Policy results (gpresult /X). Shows applied computer and user GPOs, domain, last refresh time, and flags access-denied GPOs. Graceful handling for non-domain-joined servers. JSON output.

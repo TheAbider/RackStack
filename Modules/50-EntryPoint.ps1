@@ -305,6 +305,7 @@ function Assert-Elevation {
                 @{ Action = 'PasswordPolicy'; Description = 'Local password policy + lockout settings' }
                 @{ Action = 'FirewallRuleAudit'; Description = 'Firewall rule summary + overly permissive rules' }
                 @{ Action = 'GPResultAudit'; Description = 'Applied Group Policy results (computer + user)' }
+                @{ Action = 'DNSCacheAudit'; Description = 'DNS client cache entries + stale/suspicious records' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -10256,6 +10257,61 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($gpIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'DNSCacheAudit' {
+            Write-OutputColor "  Auditing DNS client cache..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $dnsIssues = 0
+            $dnsResults = @{ Entries = @(); Stats = @{} }
+            try {
+                $cache = @(Get-DnsClientCache -ErrorAction Stop)
+                $uniqueNames = @($cache | Select-Object -ExpandProperty Entry -Unique)
+                $typeGroups = @($cache | Group-Object Type | Sort-Object Count -Descending)
+                $statusGroups = @($cache | Group-Object Status | Sort-Object Count -Descending)
+                $negativeEntries = @($cache | Where-Object { $_.Status -ne 'Success' })
+                $dnsResults.Stats = @{
+                    TotalEntries = $cache.Count
+                    UniqueNames = $uniqueNames.Count
+                    NegativeCache = $negativeEntries.Count
+                    TypeBreakdown = @($typeGroups | ForEach-Object { @{ Type = "$($_.Name)"; Count = $_.Count } })
+                }
+                # Sample entries (first 50)
+                $dnsResults.Entries = @($cache | Select-Object -First 50 | ForEach-Object {
+                    @{ Name = "$($_.Entry)"; Type = "$($_.Type)"; Data = "$($_.Data)"; TTL = $_.TimeToLive; Status = "$($_.Status)" }
+                })
+                # Display
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  DNS CLIENT CACHE".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Total Entries:         $($cache.Count)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Unique Names:          $($uniqueNames.Count)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Negative Cache:        $($negativeEntries.Count)".PadRight(72))│" -color $(if ($negativeEntries.Count -gt 20) { "Warning" } else { "Info" })
+                if ($typeGroups.Count -gt 0) {
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  RECORD TYPES:".PadRight(72))│" -color "Info"
+                    foreach ($tg in ($typeGroups | Select-Object -First 5)) {
+                        Write-OutputColor "  │$("  $($tg.Name): $($tg.Count)".PadRight(72))│" -color "Info"
+                    }
+                }
+                if ($negativeEntries.Count -gt 0) {
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  NEGATIVE CACHE (failed lookups):".PadRight(72))│" -color "Warning"
+                    foreach ($ne in ($negativeEntries | Select-Object -First 10)) {
+                        $neLine = "  $($ne.Entry) [$($ne.Status)]"
+                        if ($neLine.Length -gt 72) { $neLine = $neLine.Substring(0, 69) + "..." }
+                        Write-OutputColor "  │$($neLine.PadRight(72))│" -color "Warning"
+                    }
+                }
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            } catch {
+                Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
+                $dnsIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DNSCacheAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $dnsIssues; Cache = $dnsResults }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($dnsIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

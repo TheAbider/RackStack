@@ -247,7 +247,7 @@ function Search-HelpTopics {
         @{ Title = "Performance"; Keywords = @("performance", "cpu", "memory", "disk", "io", "bandwidth", "dashboard", "process"); Description = "Live performance dashboard with CPU, memory, disk I/O, and network bandwidth monitoring" }
         @{ Title = "Licensing & NTP"; Keywords = @("license", "activation", "kms", "avma", "ntp", "time", "timezone", "clock"); Description = "Windows licensing status (KMS/AVMA/Retail), NTP configuration, time sync, and timezone setup" }
         @{ Title = "VM Management"; Keywords = @("checkpoint", "snapshot", "export", "import", "migration", "vhd", "iso"); Description = "VM checkpoints, export/import, migration readiness, VHD health, and ISO inventory" }
-        @{ Title = "CLI Actions"; Keywords = @("cli", "action", "headless", "automation", "fleet", "json", "audit", "scan", "score", "dashboard", "monitor"); Description = "151 CLI actions for headless automation. Run -ListActions to see all. JSON output via -OutputFormat JSON. Key: ServerScore, HealthDashboard, FleetReport, ClusterHealthScore, StorageHealthScore." }
+        @{ Title = "CLI Actions"; Keywords = @("cli", "action", "headless", "automation", "fleet", "json", "audit", "scan", "score", "dashboard", "monitor"); Description = "152 CLI actions for headless automation. Run -ListActions to see all. JSON output via -OutputFormat JSON. Key: ServerScore, HealthDashboard, FleetReport, ClusterHealthScore, StorageHealthScore." }
     )
 
     $found = @()
