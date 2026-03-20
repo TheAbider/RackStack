@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.86.0
+
+- **New CLI Action:** `PasswordPolicy` — audits local password policy (min length, complexity, max/min age, history, reversible encryption) and lockout policy (threshold, duration, reset window) via secedit export. Color-coded thresholds, JSON output, exit code 1 on security issues.
+- 65 modules, 4240 tests, 149 CLI actions
+
 ## v1.85.4
 
 - **Fix:** FleetReport test regex patterns — escaped `$` variable references caused invalid regex on CI runner. Changed to match `healthy++`/`warning++`/`critical++` patterns instead.

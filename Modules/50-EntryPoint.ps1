@@ -302,6 +302,7 @@ function Assert-Elevation {
                 @{ Action = 'AzureADAudit'; Description = 'Azure AD / Entra ID join + Intune enrollment' }
                 @{ Action = 'ServerScore'; Description = 'Unified 0-100 server health + compliance score' }
                 @{ Action = 'FleetReport'; Description = 'Aggregate health reports from multiple servers' }
+                @{ Action = 'PasswordPolicy'; Description = 'Local password policy + lockout settings' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -10045,6 +10046,78 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($critical -gt 0) { [Environment]::Exit(1) }
+        }
+        'PasswordPolicy' {
+            Write-OutputColor "  Auditing local password policy..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $ppIssues = 0
+            $ppResults = @{}
+            try {
+                $secEdit = "$env:TEMP\secpol_$([guid]::NewGuid().ToString('N').Substring(0,8)).cfg"
+                $seceditProc = Start-Process -FilePath "secedit.exe" -ArgumentList "/export /cfg `"$secEdit`"" -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
+                if ($seceditProc.ExitCode -eq 0 -and (Test-Path -LiteralPath $secEdit)) {
+                    $cfg = Get-Content -LiteralPath $secEdit -ErrorAction Stop
+                    Remove-Item -LiteralPath $secEdit -Force -ErrorAction SilentlyContinue
+                    # Parse password policy
+                    $minLen = ($cfg | Where-Object { $_ -match '^MinimumPasswordLength\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $complexity = ($cfg | Where-Object { $_ -match '^PasswordComplexity\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $maxAge = ($cfg | Where-Object { $_ -match '^MaximumPasswordAge\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $minAge = ($cfg | Where-Object { $_ -match '^MinimumPasswordAge\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $history = ($cfg | Where-Object { $_ -match '^PasswordHistorySize\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $reversible = ($cfg | Where-Object { $_ -match '^ClearTextPassword\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    # Parse lockout policy
+                    $lockThreshold = ($cfg | Where-Object { $_ -match '^LockoutBadCount\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $lockDuration = ($cfg | Where-Object { $_ -match '^LockoutDuration\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $lockWindow = ($cfg | Where-Object { $_ -match '^ResetLockoutCount\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
+                    $ppResults = @{
+                        MinLength = if ($null -ne $minLen) { $minLen } else { 0 }
+                        ComplexityEnabled = ($complexity -eq 1)
+                        MaxAgeDays = if ($null -ne $maxAge) { $maxAge } else { 0 }
+                        MinAgeDays = if ($null -ne $minAge) { $minAge } else { 0 }
+                        HistoryCount = if ($null -ne $history) { $history } else { 0 }
+                        ReversibleEncryption = ($reversible -eq 1)
+                        LockoutThreshold = if ($null -ne $lockThreshold) { $lockThreshold } else { 0 }
+                        LockoutDurationMin = if ($null -ne $lockDuration) { $lockDuration } else { 0 }
+                        LockoutWindowMin = if ($null -ne $lockWindow) { $lockWindow } else { 0 }
+                    }
+                    # Display
+                    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                    Write-OutputColor "  │$("  PASSWORD POLICY".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    $lenStatus = if ($ppResults.MinLength -ge 14) { "Success" } elseif ($ppResults.MinLength -ge 8) { "Warning" } else { "Error" }
+                    if ($ppResults.MinLength -lt 8) { $ppIssues++ }
+                    Write-OutputColor "  │$("  Min Length:           $($ppResults.MinLength) chars".PadRight(72))│" -color $lenStatus
+                    Write-OutputColor "  │$("  Complexity Required:  $(if ($ppResults.ComplexityEnabled) { 'Yes' } else { 'No' })".PadRight(72))│" -color $(if ($ppResults.ComplexityEnabled) { "Success" } else { "Error" })
+                    if (-not $ppResults.ComplexityEnabled) { $ppIssues++ }
+                    Write-OutputColor "  │$("  Max Age:              $($ppResults.MaxAgeDays) days".PadRight(72))│" -color $(if ($ppResults.MaxAgeDays -gt 0 -and $ppResults.MaxAgeDays -le 90) { "Success" } elseif ($ppResults.MaxAgeDays -eq 0) { "Warning" } else { "Warning" })
+                    Write-OutputColor "  │$("  Min Age:              $($ppResults.MinAgeDays) days".PadRight(72))│" -color $(if ($ppResults.MinAgeDays -ge 1) { "Success" } else { "Warning" })
+                    Write-OutputColor "  │$("  History:              $($ppResults.HistoryCount) passwords".PadRight(72))│" -color $(if ($ppResults.HistoryCount -ge 12) { "Success" } elseif ($ppResults.HistoryCount -ge 1) { "Warning" } else { "Error" })
+                    Write-OutputColor "  │$("  Reversible Encrypt:   $(if ($ppResults.ReversibleEncryption) { 'ENABLED (BAD)' } else { 'Disabled' })".PadRight(72))│" -color $(if ($ppResults.ReversibleEncryption) { "Error" } else { "Success" })
+                    if ($ppResults.ReversibleEncryption) { $ppIssues++ }
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  LOCKOUT POLICY".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  Lockout Threshold:    $($ppResults.LockoutThreshold) attempts".PadRight(72))│" -color $(if ($ppResults.LockoutThreshold -ge 3 -and $ppResults.LockoutThreshold -le 10) { "Success" } elseif ($ppResults.LockoutThreshold -eq 0) { "Error" } else { "Warning" })
+                    if ($ppResults.LockoutThreshold -eq 0) { $ppIssues++ }
+                    Write-OutputColor "  │$("  Lockout Duration:     $($ppResults.LockoutDurationMin) min".PadRight(72))│" -color $(if ($ppResults.LockoutDurationMin -ge 15) { "Success" } else { "Warning" })
+                    Write-OutputColor "  │$("  Reset Window:         $($ppResults.LockoutWindowMin) min".PadRight(72))│" -color $(if ($ppResults.LockoutWindowMin -ge 15) { "Success" } else { "Warning" })
+                    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Issues: $ppIssues" -color $(if ($ppIssues -eq 0) { "Success" } else { "Error" })
+                }
+                else {
+                    Write-OutputColor "  ERROR: secedit export failed (exit code $($seceditProc.ExitCode))" -color "Error"
+                    $ppIssues = 1
+                }
+            } catch {
+                Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
+                $ppIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PasswordPolicy'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $ppIssues; Policy = $ppResults }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($ppIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

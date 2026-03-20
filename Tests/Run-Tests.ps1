@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.85.4
+    Automated Test Runner for RackStack v1.86.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.85.4 — push to 98%+
+    # v1.86.0 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -11272,7 +11272,7 @@ try {
     }
 
     # v1.68.0+ — Win11 Cleanup, Theme, and infrastructure audit actions
-    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit','StorageHealthScore','CSVSpaceAudit','SMBConnectionAudit','VolumeLabelAudit','NICErrorAudit','VMResourceWaste','HealthDashboard','SCCMClientAudit','SCOMAgentAudit','WACConnectivityAudit','AzureADAudit','ServerScore','FleetReport')) {
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit','StorageHealthScore','CSVSpaceAudit','SMBConnectionAudit','VolumeLabelAudit','NICErrorAudit','VMResourceWaste','HealthDashboard','SCCMClientAudit','SCOMAgentAudit','WACConnectivityAudit','AzureADAudit','ServerScore','FleetReport','PasswordPolicy')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
         Write-TestResult "Install-RackStack: $action in ValidateSet" ($bootstrapContent -match "ValidateSet.*$action")
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")
@@ -11414,8 +11414,19 @@ try {
     # FleetReport in ListActions
     Write-TestResult "50-EntryPoint: FleetReport in ListActions table" ($mod50 -match "Action\s*=\s*'FleetReport'[\s\S]{0,100}Description")
 
+    # PasswordPolicy implementation checks
+    Write-TestResult "50-EntryPoint: PasswordPolicy case exists" ($mod50 -match "'PasswordPolicy'\s*\{")
+    Write-TestResult "50-EntryPoint: PasswordPolicy uses secedit export" ($mod50 -match "'PasswordPolicy'[\s\S]{0,1000}secedit.*export")
+    Write-TestResult "50-EntryPoint: PasswordPolicy checks MinimumPasswordLength" ($mod50 -match "'PasswordPolicy'[\s\S]{0,3000}MinimumPasswordLength")
+    Write-TestResult "50-EntryPoint: PasswordPolicy checks PasswordComplexity" ($mod50 -match "'PasswordPolicy'[\s\S]{0,3000}PasswordComplexity")
+    Write-TestResult "50-EntryPoint: PasswordPolicy checks LockoutBadCount" ($mod50 -match "'PasswordPolicy'[\s\S]{0,4000}LockoutBadCount")
+    Write-TestResult "50-EntryPoint: PasswordPolicy checks LockoutDuration" ($mod50 -match "'PasswordPolicy'[\s\S]{0,4000}LockoutDuration")
+    Write-TestResult "50-EntryPoint: PasswordPolicy checks reversible encryption" ($mod50 -match "'PasswordPolicy'[\s\S]{0,3000}ClearTextPassword")
+    Write-TestResult "50-EntryPoint: PasswordPolicy JSON output" ($mod50 -match "'PasswordPolicy'[\s\S]{0,8000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: PasswordPolicy in ListActions table" ($mod50 -match "Action\s*=\s*'PasswordPolicy'[\s\S]{0,100}Description")
+
 } catch {
-    Write-TestResult "ServerScore + FleetReport tests" $false $_.Exception.Message
+    Write-TestResult "ServerScore + FleetReport + PasswordPolicy tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime
