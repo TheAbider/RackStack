@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.86.2
+
+- **New CLI Action:** `GPResultAudit` — exports and parses Group Policy results (gpresult /X). Shows applied computer and user GPOs, domain, last refresh time, and flags access-denied GPOs. Graceful handling for non-domain-joined servers. JSON output.
+- 65 modules, 4252 tests, 151 CLI actions
+
 ## v1.86.1
 
 - **New CLI Action:** `FirewallRuleAudit` — summarizes all firewall rules (enabled/disabled, inbound/outbound, allow/block counts), detects overly permissive inbound allow rules (any remote address + any port), and lists the top offenders. JSON output, exit code 1 on permissive rules.

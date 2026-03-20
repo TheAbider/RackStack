@@ -304,6 +304,7 @@ function Assert-Elevation {
                 @{ Action = 'FleetReport'; Description = 'Aggregate health reports from multiple servers' }
                 @{ Action = 'PasswordPolicy'; Description = 'Local password policy + lockout settings' }
                 @{ Action = 'FirewallRuleAudit'; Description = 'Firewall rule summary + overly permissive rules' }
+                @{ Action = 'GPResultAudit'; Description = 'Applied Group Policy results (computer + user)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -10187,6 +10188,74 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($fwIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'GPResultAudit' {
+            Write-OutputColor "  Auditing applied Group Policy..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $gpIssues = 0
+            $gpResults = @{ Computer = @(); User = @(); LastRefresh = $null; Domain = $null }
+            try {
+                $gpXml = "$env:TEMP\gpresult_$([guid]::NewGuid().ToString('N').Substring(0,8)).xml"
+                $gpProc = Start-Process -FilePath "gpresult.exe" -ArgumentList "/X `"$gpXml`" /F" -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
+                if ($gpProc.ExitCode -eq 0 -and (Test-Path -LiteralPath $gpXml)) {
+                    [xml]$gp = Get-Content -LiteralPath $gpXml -ErrorAction Stop
+                    Remove-Item -LiteralPath $gpXml -Force -ErrorAction SilentlyContinue
+                    # Computer GPOs
+                    $compNode = $gp.Rsop.ComputerResults
+                    if ($compNode) {
+                        $gpResults.Domain = "$($compNode.Domain)"
+                        $lastTime = $compNode.ExtensionData | ForEach-Object { $_.Extension } | Where-Object { $_.LastGPApplicationTime } | Select-Object -First 1
+                        if ($lastTime) { $gpResults.LastRefresh = "$($lastTime.LastGPApplicationTime)" }
+                        $compGPOs = @($compNode.GPO | Where-Object { $_.Name })
+                        foreach ($cg in $compGPOs) {
+                            $gpResults.Computer += @{ Name = "$($cg.Name)"; Link = "$($cg.Link.SOMPath)"; Enabled = ($cg.Enabled -eq 'true'); AccessDenied = ($cg.AccessDenied -eq 'true') }
+                            if ($cg.AccessDenied -eq 'true') { $gpIssues++ }
+                        }
+                    }
+                    # User GPOs
+                    $userNode = $gp.Rsop.UserResults
+                    if ($userNode) {
+                        $userGPOs = @($userNode.GPO | Where-Object { $_.Name })
+                        foreach ($ug in $userGPOs) {
+                            $gpResults.User += @{ Name = "$($ug.Name)"; Link = "$($ug.Link.SOMPath)"; Enabled = ($ug.Enabled -eq 'true'); AccessDenied = ($ug.AccessDenied -eq 'true') }
+                            if ($ug.AccessDenied -eq 'true') { $gpIssues++ }
+                        }
+                    }
+                    # Display
+                    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                    Write-OutputColor "  │$("  GROUP POLICY RESULTS".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  Domain:               $($gpResults.Domain)".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  │$("  Last Refresh:         $($gpResults.LastRefresh)".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  │$("  Computer GPOs:        $($gpResults.Computer.Count)".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  │$("  User GPOs:            $($gpResults.User.Count)".PadRight(72))│" -color "Info"
+                    Write-OutputColor "  │$("  Access Denied GPOs:   $gpIssues".PadRight(72))│" -color $(if ($gpIssues -eq 0) { "Success" } else { "Error" })
+                    if ($gpResults.Computer.Count -gt 0) {
+                        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                        Write-OutputColor "  │$("  COMPUTER GPOs:".PadRight(72))│" -color "Info"
+                        foreach ($c in $gpResults.Computer) {
+                            $cLine = "  $($c.Name)"
+                            if ($c.AccessDenied) { $cLine += " [ACCESS DENIED]" }
+                            if ($cLine.Length -gt 72) { $cLine = $cLine.Substring(0, 69) + "..." }
+                            Write-OutputColor "  │$($cLine.PadRight(72))│" -color $(if ($c.AccessDenied) { "Error" } else { "Success" })
+                        }
+                    }
+                    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                }
+                else {
+                    Write-OutputColor "  Not domain-joined or gpresult failed (exit code $($gpProc.ExitCode))." -color "Warning"
+                    $gpResults = @{ Status = "NotDomainJoined"; ExitCode = $gpProc.ExitCode }
+                    Remove-Item -LiteralPath $gpXml -Force -ErrorAction SilentlyContinue
+                }
+            } catch {
+                Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
+                $gpIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'GPResultAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $gpIssues; GPO = $gpResults }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($gpIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"
