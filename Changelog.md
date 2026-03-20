@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.85.2
+
+- **Fix:** Help search CLI topic updated to 148 actions, added FleetReport mention.
+- 65 modules, 4206 tests, 148 CLI actions
+
 ## v1.85.1
 
 - **Docs:** README updated to 148 CLI actions everywhere, FleetReport in Fleet CLI table. CONTRIBUTING.md test count updated to 4200+.
