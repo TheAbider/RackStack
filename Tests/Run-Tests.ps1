@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.85.2
+    Automated Test Runner for RackStack v1.85.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.85.2 — push to 98%+
+    # v1.85.3 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -11377,6 +11377,45 @@ try {
 
 } catch {
     Write-TestResult "CLI headless mode tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 156: SERVERSCORE + FLEETREPORT IMPLEMENTATION (v1.85.0)
+# ============================================================================
+
+Write-SectionHeader "SECTION 156: SERVERSCORE + FLEETREPORT IMPLEMENTATION"
+
+try {
+    $mod50 = Get-Content -LiteralPath (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw -ErrorAction Stop
+
+    # ServerScore implementation checks
+    Write-TestResult "50-EntryPoint: ServerScore case exists" ($mod50 -match "'ServerScore'\s*\{")
+    Write-TestResult "50-EntryPoint: ServerScore computes CPU component" ($mod50 -match "'ServerScore'[\s\S]{0,4000}CPU[\s\S]{0,200}15")
+    Write-TestResult "50-EntryPoint: ServerScore computes Memory component" ($mod50 -match "'ServerScore'[\s\S]{0,4000}Memory[\s\S]{0,200}15")
+    Write-TestResult "50-EntryPoint: ServerScore computes Disk component" ($mod50 -match "'ServerScore'[\s\S]{0,6000}Disk[\s\S]{0,200}20")
+    Write-TestResult "50-EntryPoint: ServerScore computes Security component" ($mod50 -match "'ServerScore'[\s\S]{0,8000}Security[\s\S]{0,200}20")
+    Write-TestResult "50-EntryPoint: ServerScore assigns letter grade" ($mod50 -match "'ServerScore'[\s\S]{0,12000}Grade")
+    Write-TestResult "50-EntryPoint: ServerScore JSON output" ($mod50 -match "'ServerScore'[\s\S]{0,14000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: ServerScore Action field in JSON" ($mod50 -match "'ServerScore'[\s\S]{0,14000}Action\s*=\s*'ServerScore'")
+
+    # FleetReport implementation checks
+    Write-TestResult "50-EntryPoint: FleetReport case exists" ($mod50 -match "'FleetReport'\s*\{")
+    Write-TestResult "50-EntryPoint: FleetReport requires -Config" ($mod50 -match "'FleetReport'[\s\S]{0,300}CLIConfig")
+    Write-TestResult "50-EntryPoint: FleetReport validates directory exists" ($mod50 -match "'FleetReport'[\s\S]{0,600}Test-Path.*Container")
+    Write-TestResult "50-EntryPoint: FleetReport reads JSON files" ($mod50 -match "'FleetReport'[\s\S]{0,1000}Get-ChildItem[\s\S]{0,100}\*\.json")
+    Write-TestResult "50-EntryPoint: FleetReport parses JSON with ConvertFrom-Json" ($mod50 -match "'FleetReport'[\s\S]{0,2000}ConvertFrom-Json")
+    Write-TestResult "50-EntryPoint: FleetReport tracks healthy count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}\\\$healthy")
+    Write-TestResult "50-EntryPoint: FleetReport tracks warning count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}\\\$warning")
+    Write-TestResult "50-EntryPoint: FleetReport tracks critical count" ($mod50 -match "'FleetReport'[\s\S]{0,3000}\\\$critical")
+    Write-TestResult "50-EntryPoint: FleetReport shows worst performers" ($mod50 -match "'FleetReport'[\s\S]{0,5000}WORST PERFORMERS")
+    Write-TestResult "50-EntryPoint: FleetReport JSON output" ($mod50 -match "'FleetReport'[\s\S]{0,6000}ConvertTo-Json")
+    Write-TestResult "50-EntryPoint: FleetReport exits 1 on critical" ($mod50 -match "'FleetReport'[\s\S]{0,7000}critical.*Exit\(1\)")
+
+    # FleetReport in ListActions
+    Write-TestResult "50-EntryPoint: FleetReport in ListActions table" ($mod50 -match "Action\s*=\s*'FleetReport'[\s\S]{0,100}Description")
+
+} catch {
+    Write-TestResult "ServerScore + FleetReport tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

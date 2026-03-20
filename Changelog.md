@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.85.3
+
+- **Tests:** Added 22 implementation tests for ServerScore (8) and FleetReport (14) — validates case blocks, JSON output, grade assignment, directory validation, worst performers display.
+- 65 modules, 4228 tests, 148 CLI actions
+
 ## v1.85.2
 
 - **Fix:** Help search CLI topic updated to 148 actions, added FleetReport mention.
