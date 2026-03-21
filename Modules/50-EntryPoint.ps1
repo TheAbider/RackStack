@@ -306,6 +306,7 @@ function Assert-Elevation {
                 @{ Action = 'FirewallRuleAudit'; Description = 'Firewall rule summary + overly permissive rules' }
                 @{ Action = 'GPResultAudit'; Description = 'Applied Group Policy results (computer + user)' }
                 @{ Action = 'DNSCacheAudit'; Description = 'DNS client cache entries + stale/suspicious records' }
+                @{ Action = 'InsecureServiceAudit'; Description = 'Unquoted service paths + non-system LocalSystem services' }
                 @{ Action = 'TPMAudit'; Description = 'TPM presence, version, readiness, and attestation' }
                 @{ Action = 'SecureBootAudit'; Description = 'UEFI Secure Boot status + boot mode' }
                 @{ Action = 'TimeSkewAudit'; Description = 'NTP sync accuracy + time source + skew detection' }
@@ -10316,6 +10317,61 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($dnsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'InsecureServiceAudit' {
+            Write-OutputColor "  Auditing service security..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $svcIssues = 0
+            $unquoted = @()
+            $localSystemNonDefault = @()
+            try {
+                # Check for unquoted service paths (privilege escalation vector)
+                $services = @(Get-CimInstance -ClassName Win32_Service -Property Name, DisplayName, PathName, StartMode, StartName -OperationTimeoutSec 15 -ErrorAction Stop)
+                foreach ($svc in $services) {
+                    if ($null -eq $svc.PathName -or $svc.PathName.Length -eq 0) { continue }
+                    $path = $svc.PathName
+                    # Skip paths that are already quoted or don't contain spaces
+                    if ($path.StartsWith('"') -or $path.StartsWith("'")) { continue }
+                    # Extract exe path (before any arguments)
+                    $exePath = if ($path -match '^([a-zA-Z]:\\[^/]+\.exe)') { $regexMatches = $matches; $regexMatches[0] } else { $path }
+                    if ($exePath -match '\s' -and -not $exePath.StartsWith('"')) {
+                        $unquoted += @{ Name = "$($svc.Name)"; DisplayName = "$($svc.DisplayName)"; Path = "$($svc.PathName)"; StartMode = "$($svc.StartMode)" }
+                    }
+                }
+                # Check for non-default services running as LocalSystem
+                $defaultSystemSvcs = @('EventLog', 'PlugPlay', 'Power', 'Winmgmt', 'W32Time', 'TrustedInstaller', 'msiserver', 'WSearch', 'LanmanServer', 'Schedule', 'SENS', 'gpsvc', 'ProfSvc', 'Themes', 'AudioSrv', 'wuauserv', 'CryptSvc', 'Dhcp', 'Dnscache', 'lmhosts', 'nsi', 'RpcSs', 'RpcEptMapper', 'SamSs', 'Spooler', 'BFE', 'MpsSvc', 'vmms', 'vmcompute', 'ClusSvc', 'NTDS', 'DNS', 'IsmServ', 'DFSR', 'KDC', 'Netlogon')
+                foreach ($svc in ($services | Where-Object { "$($_.StartName)" -match 'LocalSystem' -and "$($_.StartMode)" -ne 'Disabled' })) {
+                    if ($svc.Name -notin $defaultSystemSvcs -and $svc.Name -notmatch '^(svc|wmi|dcom|lsa|rpc)') {
+                        $localSystemNonDefault += @{ Name = "$($svc.Name)"; DisplayName = "$($svc.DisplayName)"; StartMode = "$($svc.StartMode)" }
+                    }
+                }
+                $svcIssues = $unquoted.Count
+                # Display
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  SERVICE SECURITY AUDIT".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Total Services:         $($services.Count)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Unquoted Paths:         $($unquoted.Count)".PadRight(72))│" -color $(if ($unquoted.Count -eq 0) { "Success" } else { "Error" })
+                Write-OutputColor "  │$("  Non-default LocalSystem: $($localSystemNonDefault.Count)".PadRight(72))│" -color $(if ($localSystemNonDefault.Count -le 5) { "Info" } else { "Warning" })
+                if ($unquoted.Count -gt 0) {
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    Write-OutputColor "  │$("  UNQUOTED SERVICE PATHS (privesc risk):".PadRight(72))│" -color "Error"
+                    foreach ($u in ($unquoted | Select-Object -First 10)) {
+                        $uLine = "  $($u.DisplayName)"
+                        if ($uLine.Length -gt 72) { $uLine = $uLine.Substring(0, 69) + "..." }
+                        Write-OutputColor "  │$($uLine.PadRight(72))│" -color "Error"
+                    }
+                }
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            } catch {
+                Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
+                $svcIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'InsecureServiceAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $svcIssues; UnquotedPaths = $unquoted; NonDefaultLocalSystem = $localSystemNonDefault }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($svcIssues -gt 0) { [Environment]::Exit(1) }
         }
         'TPMAudit' {
             Write-OutputColor "  Auditing TPM status..." -color "Info"

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.88.0
+
+- **New CLI Action:** `InsecureServiceAudit` — finds services with unquoted paths (classic privilege escalation vector where spaces in unquoted paths allow executable hijacking) and non-default services running as LocalSystem. JSON output with full details.
+- 65 modules, 4282 tests, 157 CLI actions
+
 ## v1.87.3
 
 - **Fix:** TimeSkewAudit used raw `$matches` instead of `$regexMatches` — caught by CI codebase scan. Fixed to follow the project convention of immediately capturing `$matches` to `$regexMatches`.
