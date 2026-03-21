@@ -10419,7 +10419,8 @@ function Invoke-CLIAction {
                     $stripResult = & w32tm /stripchart /computer:$source /samples:1 /dataonly 2>&1
                     $skewLine = $stripResult | Where-Object { $_ -match '[\d\.\+\-]+s' } | Select-Object -Last 1
                     if ($skewLine -match '([+-]?\d+\.?\d*)s') {
-                        $skewMs = [math]::Abs([double]$matches[1]) * 1000
+                        $regexMatches = $matches
+                        $skewMs = [math]::Abs([double]$regexMatches[1]) * 1000
                     }
                 } catch { }
                 $tsInfo = @{

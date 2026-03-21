@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.87.3
+
+- **Fix:** TimeSkewAudit used raw `$matches` instead of `$regexMatches` — caught by CI codebase scan. Fixed to follow the project convention of immediately capturing `$matches` to `$regexMatches`.
+- 65 modules, 4279 tests, 156 CLI actions
+
 ## v1.87.2
 
 - **Security (HIGH):** Self-update batch file now validates paths for cmd.exe injection characters (`& | < > ^ " %`). Aborts update with clear error if exe path contains unsafe characters instead of writing a vulnerable batch file.
