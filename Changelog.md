@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.87.2
+
+- **Security (HIGH):** Self-update batch file now validates paths for cmd.exe injection characters (`& | < > ^ " %`). Aborts update with clear error if exe path contains unsafe characters instead of writing a vulnerable batch file.
+- **Security (MEDIUM):** SMB3 UNC path validation tightened from `[^\\]+` (any character) to `[a-zA-Z0-9._-]+` (RFC 952/1123 DNS-safe characters only). Prevents server names with command syntax like `\\server;cmd\share`.
+- 65 modules, 4279 tests, 156 CLI actions
+
 ## v1.87.1
 
 - **Security:** Null byte injection prevention — all input validation functions (Test-ValidHostname, Test-ValidIPAddress, Test-ValidFilePath, Test-ValidUNCPath) now reject strings containing null bytes. Prevents truncation attacks where `"SERVER\0.evil.com"` could bypass validation.

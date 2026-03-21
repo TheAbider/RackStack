@@ -10696,7 +10696,7 @@ function Test-BatchConfig {
 
     # SMB3 path validation
     if ($Config.StorageBackendType -eq "SMB3" -and $Config.SMB3SharePath) {
-        if ($Config.SMB3SharePath -notmatch '^\\\\[^\\]+\\[^\\]+') {
+        if ($Config.SMB3SharePath -notmatch '^\\\\[a-zA-Z0-9._-]+\\[a-zA-Z0-9$._-]+') {
             $null = $errors.Add("SMB3SharePath must be a valid UNC path (e.g., \\\\server\\share). Got '$($Config.SMB3SharePath)'.")
         }
     }

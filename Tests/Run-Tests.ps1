@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.87.1
+    Automated Test Runner for RackStack v1.87.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.87.1 — push to 98%+
+    # v1.87.2 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -7221,7 +7221,7 @@ try {
     Write-TestResult "Test-PasswordComplexity: weak password rejected" ((Test-PasswordComplexity "short") -eq $false)
     Write-TestResult "Test-PasswordComplexity: no uppercase rejected" ((Test-PasswordComplexity "alllowercasenoups123!@") -eq $false)
     Write-TestResult "Test-PasswordComplexity: strong password accepted" ((Test-PasswordComplexity "MyStr0ngP@ssw0rd!") -eq $true)
-    # Leading character restrictions (v1.87.1)
+    # Leading character restrictions (v1.87.2)
     Write-TestResult "Test-PasswordComplexity: dollar-sign start rejected" ((Test-PasswordComplexity '$MyStr0ngP@ss!') -eq $false)
     Write-TestResult "Test-PasswordComplexity: hash start rejected" ((Test-PasswordComplexity '#MyStr0ngP@ss1!') -eq $false)
     Write-TestResult "Test-PasswordComplexity: dash start rejected" ((Test-PasswordComplexity '-MyStr0ngP@ss1!') -eq $false)
@@ -9356,7 +9356,7 @@ try {
     Write-TestResult "ValidFilePath: invalid chars" $false $_.Exception.Message
 }
 
-# Null byte injection prevention (v1.87.1)
+# Null byte injection prevention (v1.87.2)
 try {
     $nullHost = "SERVER" + [char]0 + "01"
     Write-TestResult "ValidHostname: null byte injection -> false" ((Test-ValidHostname $nullHost) -eq $false) ""

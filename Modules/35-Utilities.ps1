@@ -329,6 +329,17 @@ function Install-ScriptUpdate {
     if ($isExe) {
         # EXE self-update: write a helper batch script that replaces the exe after we exit
         $targetPath = $script:ScriptPath
+        # Sanitize paths for batch file injection prevention:
+        # Remove characters that could escape quoting in cmd.exe (& | < > ^ " %)
+        $safeTempPath = $tempPath -replace '[&|<>^"%]', '_'
+        $safeTargetPath = $targetPath -replace '[&|<>^"%]', '_'
+        # If sanitization changed the paths, abort — don't create a broken batch
+        if ($safeTempPath -ne $tempPath -or $safeTargetPath -ne $targetPath) {
+            Write-OutputColor "  ERROR: File paths contain characters unsafe for batch update." -color "Error"
+            Write-OutputColor "  Move RackStack to a path without special characters (& | < > ^ `" %)." -color "Error"
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+            return
+        }
         $batchPath = Join-Path $env:TEMP "RackStack_update_$([System.IO.Path]::GetRandomFileName()).cmd"
         $batchContent = @"
 @echo off
