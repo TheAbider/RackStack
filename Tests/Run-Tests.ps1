@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.86.4
+    Automated Test Runner for RackStack v1.87.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.86.4 — push to 98%+
+    # v1.87.0 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -7221,7 +7221,7 @@ try {
     Write-TestResult "Test-PasswordComplexity: weak password rejected" ((Test-PasswordComplexity "short") -eq $false)
     Write-TestResult "Test-PasswordComplexity: no uppercase rejected" ((Test-PasswordComplexity "alllowercasenoups123!@") -eq $false)
     Write-TestResult "Test-PasswordComplexity: strong password accepted" ((Test-PasswordComplexity "MyStr0ngP@ssw0rd!") -eq $true)
-    # Leading character restrictions (v1.86.4)
+    # Leading character restrictions (v1.87.0)
     Write-TestResult "Test-PasswordComplexity: dollar-sign start rejected" ((Test-PasswordComplexity '$MyStr0ngP@ss!') -eq $false)
     Write-TestResult "Test-PasswordComplexity: hash start rejected" ((Test-PasswordComplexity '#MyStr0ngP@ss1!') -eq $false)
     Write-TestResult "Test-PasswordComplexity: dash start rejected" ((Test-PasswordComplexity '-MyStr0ngP@ss1!') -eq $false)
@@ -11281,7 +11281,7 @@ try {
     }
 
     # v1.68.0+ — Win11 Cleanup, Theme, and infrastructure audit actions
-    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit','StorageHealthScore','CSVSpaceAudit','SMBConnectionAudit','VolumeLabelAudit','NICErrorAudit','VMResourceWaste','HealthDashboard','SCCMClientAudit','SCOMAgentAudit','WACConnectivityAudit','AzureADAudit','ServerScore','FleetReport','PasswordPolicy','FirewallRuleAudit','GPResultAudit','DNSCacheAudit')) {
+    foreach ($action in @('Win11Cleanup','DarkMode','LightMode','iSCSIAudit','NICTeamAudit','SMBSessionAudit','WindowsUpdateAudit','ClusterQuorumAudit','S2DAudit','VirtualSwitchAudit','MPIOPathAudit','ServiceRecoveryAudit','VMOvercommitAudit','DedupAudit','ClusterNetworkAudit','ReplicaLagAudit','HandleLeakAudit','ShadowCopyAudit','QoSPolicyAudit','LiveMigrationAudit','DomainTrustAudit','DiskLatencyAudit','NICOffloadAudit','StorageTimeoutAudit','EventLogCapacityAudit','TcpSettingsAudit','WinRMAudit','ClusterHealthScore','VMInventoryExport','VMSnapshotAudit','StorageHealthScore','CSVSpaceAudit','SMBConnectionAudit','VolumeLabelAudit','NICErrorAudit','VMResourceWaste','HealthDashboard','SCCMClientAudit','SCOMAgentAudit','WACConnectivityAudit','AzureADAudit','ServerScore','FleetReport','PasswordPolicy','FirewallRuleAudit','GPResultAudit','DNSCacheAudit','TPMAudit','SecureBootAudit','TimeSkewAudit','NetworkProfileAudit')) {
         Write-TestResult "Header: $action in ValidateSet" ($headerContent -match "ValidateSet.*$action")
         Write-TestResult "Install-RackStack: $action in ValidateSet" ($bootstrapContent -match "ValidateSet.*$action")
         Write-TestResult "50-EntryPoint: $action in ListActions" ($mod50 -match "Action\s*=\s*'$action'")

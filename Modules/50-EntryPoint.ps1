@@ -306,6 +306,10 @@ function Assert-Elevation {
                 @{ Action = 'FirewallRuleAudit'; Description = 'Firewall rule summary + overly permissive rules' }
                 @{ Action = 'GPResultAudit'; Description = 'Applied Group Policy results (computer + user)' }
                 @{ Action = 'DNSCacheAudit'; Description = 'DNS client cache entries + stale/suspicious records' }
+                @{ Action = 'TPMAudit'; Description = 'TPM presence, version, readiness, and attestation' }
+                @{ Action = 'SecureBootAudit'; Description = 'UEFI Secure Boot status + boot mode' }
+                @{ Action = 'TimeSkewAudit'; Description = 'NTP sync accuracy + time source + skew detection' }
+                @{ Action = 'NetworkProfileAudit'; Description = 'Network profile (Domain/Private/Public) per adapter' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -10312,6 +10316,179 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($dnsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TPMAudit' {
+            Write-OutputColor "  Auditing TPM status..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $tpmIssues = 0
+            $tpmInfo = @{}
+            try {
+                $tpm = Get-Tpm -ErrorAction Stop
+                $tpmInfo = @{
+                    Present = $tpm.TpmPresent
+                    Ready = $tpm.TpmReady
+                    Enabled = $tpm.TpmEnabled
+                    Activated = $tpm.TpmActivated
+                    Owned = $tpm.TpmOwned
+                    ManufacturerId = "$($tpm.ManufacturerId)"
+                    ManufacturerVersion = "$($tpm.ManufacturerVersion)"
+                }
+                # Get TPM version from WMI
+                try {
+                    $tpmWmi = Get-CimInstance -Namespace "root\cimv2\Security\MicrosoftTpm" -ClassName Win32_Tpm -OperationTimeoutSec 8 -ErrorAction Stop
+                    $specVer = if ($tpmWmi.SpecVersion) { ($tpmWmi.SpecVersion -split ',')[0].Trim() } else { "Unknown" }
+                    $tpmInfo.SpecVersion = $specVer
+                } catch { $tpmInfo.SpecVersion = "Unknown" }
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  TPM STATUS".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Present:       $(if ($tpm.TpmPresent) { 'Yes' } else { 'No' })".PadRight(72))│" -color $(if ($tpm.TpmPresent) { "Success" } else { "Error" })
+                Write-OutputColor "  │$("  Version:       $($tpmInfo.SpecVersion)".PadRight(72))│" -color $(if ($tpmInfo.SpecVersion -match '^2\.') { "Success" } else { "Warning" })
+                Write-OutputColor "  │$("  Ready:         $(if ($tpm.TpmReady) { 'Yes' } else { 'No' })".PadRight(72))│" -color $(if ($tpm.TpmReady) { "Success" } else { "Error" })
+                Write-OutputColor "  │$("  Enabled:       $(if ($tpm.TpmEnabled) { 'Yes' } else { 'No' })".PadRight(72))│" -color $(if ($tpm.TpmEnabled) { "Success" } else { "Error" })
+                Write-OutputColor "  │$("  Owned:         $(if ($tpm.TpmOwned) { 'Yes' } else { 'No' })".PadRight(72))│" -color $(if ($tpm.TpmOwned) { "Success" } else { "Warning" })
+                Write-OutputColor "  │$("  Manufacturer:  $($tpmInfo.ManufacturerId)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                if (-not $tpm.TpmPresent) { $tpmIssues++ }
+                if (-not $tpm.TpmReady) { $tpmIssues++ }
+                if (-not $tpm.TpmEnabled) { $tpmIssues++ }
+            } catch {
+                Write-OutputColor "  TPM not available or access denied: $($_.Exception.Message)" -color "Warning"
+                $tpmInfo = @{ Present = $false; Error = "$($_.Exception.Message)" }
+                $tpmIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'TPMAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $tpmIssues; TPM = $tpmInfo }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($tpmIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'SecureBootAudit' {
+            Write-OutputColor "  Auditing Secure Boot and boot mode..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $sbIssues = 0
+            $sbInfo = @{}
+            # Check boot mode (UEFI vs Legacy)
+            $firmware = try { Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State" -ErrorAction Stop; "UEFI" } catch { "Legacy/Unknown" }
+            $secureBoot = $false
+            try {
+                $sbState = Confirm-SecureBootUEFI -ErrorAction Stop
+                $secureBoot = $sbState
+            } catch { $secureBoot = $false }
+            # Check DEP/NX
+            $dep = try {
+                $depWmi = Get-CimInstance -ClassName Win32_OperatingSystem -Property DataExecutionPrevention_SupportPolicy -OperationTimeoutSec 8 -ErrorAction Stop
+                switch ($depWmi.DataExecutionPrevention_SupportPolicy) {
+                    0 { "AlwaysOff" }
+                    1 { "AlwaysOn" }
+                    2 { "OptIn (default)" }
+                    3 { "OptOut" }
+                    default { "Unknown" }
+                }
+            } catch { "Unknown" }
+            $sbInfo = @{ BootMode = $firmware; SecureBoot = $secureBoot; DEP = $dep }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  BOOT SECURITY".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            Write-OutputColor "  │$("  Boot Mode:     $firmware".PadRight(72))│" -color $(if ($firmware -eq "UEFI") { "Success" } else { "Warning" })
+            Write-OutputColor "  │$("  Secure Boot:   $(if ($secureBoot) { 'Enabled' } else { 'Disabled' })".PadRight(72))│" -color $(if ($secureBoot) { "Success" } else { "Error" })
+            Write-OutputColor "  │$("  DEP/NX:        $dep".PadRight(72))│" -color $(if ($dep -match 'OptIn|OptOut|AlwaysOn') { "Success" } else { "Error" })
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            if (-not $secureBoot) { $sbIssues++ }
+            if ($firmware -ne "UEFI") { $sbIssues++ }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SecureBootAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $sbIssues; Boot = $sbInfo }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($sbIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'TimeSkewAudit' {
+            Write-OutputColor "  Auditing time synchronization..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $tsIssues = 0
+            $tsInfo = @{}
+            try {
+                $w32tm = & w32tm /query /status 2>&1
+                $source = ($w32tm | Where-Object { $_ -match '^\s*Source:' }) -replace '.*Source:\s*', ''
+                $stratum = ($w32tm | Where-Object { $_ -match '^\s*Stratum:' }) -replace '.*Stratum:\s*', ''
+                $lastSync = ($w32tm | Where-Object { $_ -match '^\s*Last Successful Sync Time:' }) -replace '.*Time:\s*', ''
+                $pollInterval = ($w32tm | Where-Object { $_ -match '^\s*Poll Interval:' }) -replace '.*Interval:\s*', ''
+                # Check actual skew using w32tm /stripchart (quick single sample)
+                $skewMs = 0
+                try {
+                    $stripResult = & w32tm /stripchart /computer:$source /samples:1 /dataonly 2>&1
+                    $skewLine = $stripResult | Where-Object { $_ -match '[\d\.\+\-]+s' } | Select-Object -Last 1
+                    if ($skewLine -match '([+-]?\d+\.?\d*)s') {
+                        $skewMs = [math]::Abs([double]$matches[1]) * 1000
+                    }
+                } catch { }
+                $tsInfo = @{
+                    Source = if ($source) { $source.Trim() } else { "Unknown" }
+                    Stratum = if ($stratum) { $stratum.Trim() } else { "Unknown" }
+                    LastSync = if ($lastSync) { $lastSync.Trim() } else { "Unknown" }
+                    PollInterval = if ($pollInterval) { $pollInterval.Trim() } else { "Unknown" }
+                    SkewMs = [math]::Round($skewMs, 1)
+                }
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  TIME SYNCHRONIZATION".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Source:         $($tsInfo.Source)".PadRight(72))│" -color $(if ($tsInfo.Source -eq "Free-Running System Clock" -or $tsInfo.Source -eq "Local CMOS Clock") { "Error" } else { "Success" })
+                Write-OutputColor "  │$("  Stratum:        $($tsInfo.Stratum)".PadRight(72))│" -color $(if ($tsInfo.Stratum -match '^[12]') { "Success" } elseif ($tsInfo.Stratum -match '^[34]') { "Info" } else { "Warning" })
+                Write-OutputColor "  │$("  Last Sync:      $($tsInfo.LastSync)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Skew:           $($tsInfo.SkewMs) ms".PadRight(72))│" -color $(if ($skewMs -lt 1000) { "Success" } elseif ($skewMs -lt 5000) { "Warning" } else { "Error" })
+                Write-OutputColor "  │$("  Poll Interval:  $($tsInfo.PollInterval)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                if ($tsInfo.Source -eq "Free-Running System Clock" -or $tsInfo.Source -eq "Local CMOS Clock") { $tsIssues++ }
+                if ($skewMs -ge 5000) { $tsIssues++ }
+            } catch {
+                Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
+                $tsIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'TimeSkewAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $tsIssues; TimeSyncStatus = $tsInfo }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($tsIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'NetworkProfileAudit' {
+            Write-OutputColor "  Auditing network profiles..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            $npIssues = 0
+            $npResults = @()
+            try {
+                $profiles = @(Get-NetConnectionProfile -ErrorAction Stop)
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  NETWORK PROFILES ($($profiles.Count) adapters)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                foreach ($p in $profiles) {
+                    $category = "$($p.NetworkCategory)"
+                    $color = switch ($category) {
+                        "DomainAuthenticated" { "Success" }
+                        "Private" { "Info" }
+                        "Public" { "Error" }
+                        default { "Warning" }
+                    }
+                    if ($category -eq "Public") { $npIssues++ }
+                    $npResults += @{ Name = "$($p.Name)"; InterfaceAlias = "$($p.InterfaceAlias)"; Category = $category; IPv4 = "$($p.IPv4Connectivity)"; IPv6 = "$($p.IPv6Connectivity)" }
+                    $npLine = "  $($p.InterfaceAlias): $category"
+                    if ($p.Name -ne $p.InterfaceAlias) { $npLine += " ($($p.Name))" }
+                    if ($npLine.Length -gt 72) { $npLine = $npLine.Substring(0, 69) + "..." }
+                    Write-OutputColor "  │$($npLine.PadRight(72))│" -color $color
+                }
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                if ($npIssues -gt 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  WARNING: $npIssues adapter(s) on Public profile — firewall rules may block services." -color "Warning"
+                }
+            } catch {
+                Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
+                $npIssues = 1
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NetworkProfileAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $npIssues; Profiles = $npResults }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            if ($npIssues -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

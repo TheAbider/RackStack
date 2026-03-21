@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.87.0
+
+- **New CLI Action:** `TPMAudit` — TPM presence, version (1.2/2.0), readiness, enabled/owned status, manufacturer. Flags missing or unready TPM.
+- **New CLI Action:** `SecureBootAudit` — UEFI vs Legacy boot mode, Secure Boot enabled/disabled, DEP/NX policy. Flags Legacy boot and disabled Secure Boot.
+- **New CLI Action:** `TimeSkewAudit` — NTP source, stratum, last sync time, actual clock skew measurement via w32tm stripchart. Flags free-running clocks and >5s skew.
+- **New CLI Action:** `NetworkProfileAudit` — shows which network profile (Domain/Private/Public) each adapter is using. Flags Public profile adapters that may block services.
+- 65 modules, 4275 tests, 156 CLI actions
+
 ## v1.86.4
 
 - **Security:** Passwords can no longer start with `$` `#` `-` `'` or `"` — these characters break Unix crypt hashes, PowerShell variable interpolation, config file parsing, and command-line quoting. Visual checklist now includes "Safe starting character" check.
