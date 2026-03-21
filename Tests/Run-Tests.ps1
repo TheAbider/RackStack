@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.87.0
+    Automated Test Runner for RackStack v1.87.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.87.0 — push to 98%+
+    # v1.87.1 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -7221,7 +7221,7 @@ try {
     Write-TestResult "Test-PasswordComplexity: weak password rejected" ((Test-PasswordComplexity "short") -eq $false)
     Write-TestResult "Test-PasswordComplexity: no uppercase rejected" ((Test-PasswordComplexity "alllowercasenoups123!@") -eq $false)
     Write-TestResult "Test-PasswordComplexity: strong password accepted" ((Test-PasswordComplexity "MyStr0ngP@ssw0rd!") -eq $true)
-    # Leading character restrictions (v1.87.0)
+    # Leading character restrictions (v1.87.1)
     Write-TestResult "Test-PasswordComplexity: dollar-sign start rejected" ((Test-PasswordComplexity '$MyStr0ngP@ss!') -eq $false)
     Write-TestResult "Test-PasswordComplexity: hash start rejected" ((Test-PasswordComplexity '#MyStr0ngP@ss1!') -eq $false)
     Write-TestResult "Test-PasswordComplexity: dash start rejected" ((Test-PasswordComplexity '-MyStr0ngP@ss1!') -eq $false)
@@ -9354,6 +9354,32 @@ try {
     Write-TestResult "ValidFilePath: invalid chars (<>) -> false" ($result -eq $false) "Got: $result"
 } catch {
     Write-TestResult "ValidFilePath: invalid chars" $false $_.Exception.Message
+}
+
+# Null byte injection prevention (v1.87.1)
+try {
+    $nullHost = "SERVER" + [char]0 + "01"
+    Write-TestResult "ValidHostname: null byte injection -> false" ((Test-ValidHostname $nullHost) -eq $false) ""
+} catch {
+    Write-TestResult "ValidHostname: null byte injection" $false $_.Exception.Message
+}
+try {
+    $nullIP = "192.168" + [char]0 + ".1.1"
+    Write-TestResult "ValidIP: null byte injection -> false" ((Test-ValidIPAddress $nullIP) -eq $false) ""
+} catch {
+    Write-TestResult "ValidIP: null byte injection" $false $_.Exception.Message
+}
+try {
+    $nullPath = "C:\test" + [char]0 + ".txt"
+    Write-TestResult "ValidFilePath: null byte injection -> false" ((Test-ValidFilePath $nullPath) -eq $false) ""
+} catch {
+    Write-TestResult "ValidFilePath: null byte injection" $false $_.Exception.Message
+}
+try {
+    $nullUNC = "\\server" + [char]0 + "\share"
+    Write-TestResult "ValidUNCPath: null byte injection -> false" ((Test-ValidUNCPath $nullUNC) -eq $false) ""
+} catch {
+    Write-TestResult "ValidUNCPath: null byte injection" $false $_.Exception.Message
 }
 
 # ============================================================================

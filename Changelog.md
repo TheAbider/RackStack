@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.87.1
+
+- **Security:** Null byte injection prevention — all input validation functions (Test-ValidHostname, Test-ValidIPAddress, Test-ValidFilePath, Test-ValidUNCPath) now reject strings containing null bytes. Prevents truncation attacks where `"SERVER\0.evil.com"` could bypass validation.
+- 65 modules, 4279 tests, 156 CLI actions
+
 ## v1.87.0
 
 - **New CLI Action:** `TPMAudit` — TPM presence, version (1.2/2.0), readiness, enabled/owned status, manufacturer. Flags missing or unready TPM.

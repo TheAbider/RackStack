@@ -7,12 +7,16 @@ function Test-ValidHostname {
         [string]$Hostname
     )
 
+    # Reject null bytes (injection prevention)
+    if ($Hostname.Contains([char]0)) { return $false }
+
     # Check length (1-15 characters)
     if ($Hostname.Length -lt 1 -or $Hostname.Length -gt 15) {
         return $false
     }
 
     # Can contain letters, numbers, hyphens. Cannot start/end with hyphen
+    # ASCII-only regex naturally rejects Unicode lookalike characters
     if ($Hostname -notmatch '^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$' -and $Hostname -notmatch '^[a-zA-Z0-9]$') {
         return $false
     }
@@ -41,6 +45,9 @@ function Test-ValidIPAddress {
         [Parameter(Mandatory=$true)]
         [string]$IPAddress
     )
+
+    # Reject null bytes (injection prevention)
+    if ($IPAddress.Contains([char]0)) { return $false }
 
     # Remove CIDR if present
     $ip = $IPAddress -replace '/\d+$', ''
@@ -156,6 +163,8 @@ function Get-ValidatedInput {
 function Test-ValidUNCPath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    # Reject null bytes (injection prevention)
+    if ($Path.Contains([char]0)) { return $false }
     # Strip surrounding quotes (drag-and-drop paths)
     $Path = $Path.Trim('"', "'")
     # Must start with \\ and have at least server\share
@@ -179,6 +188,8 @@ function ConvertTo-SafeLDAPFilter {
 function Test-ValidFilePath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    # Reject null bytes (injection prevention)
+    if ($Path.Contains([char]0)) { return $false }
     $Path = $Path.Trim('"', "'")
     # Check for path traversal attempts
     if ($Path -match '\.\.[/\\]') { return $false }
