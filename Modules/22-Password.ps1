@@ -59,6 +59,14 @@ function Test-PasswordComplexity {
     if ($InputString -notmatch '[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]') {
         $errors += "At least one special character (!@#$%^&*...)"
     }
+    # Reject passwords starting with problematic characters:
+    # $ = Unix crypt hash prefix, PowerShell variable sigil, breaks interpolation
+    # # = comment character in many config formats
+    # - = can be misinterpreted as a command flag/switch
+    # ' or " = breaks quoting in scripts, config files, and command lines
+    if ($InputString -match '^[\$#\-''"]') {
+        $errors += "Cannot start with `$ # - ' or `" (breaks scripts/configs)"
+    }
 
     # Visual checklist showing pass/fail per requirement
     $hasLength  = $InputString.Length -ge $minLength
@@ -66,6 +74,7 @@ function Test-PasswordComplexity {
     $hasLower   = $InputString -cmatch "[a-z]"
     $hasDigit   = $InputString -match "\d"
     $hasSpecial = $InputString -match '[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]'
+    $safeStart  = $InputString -notmatch '^[\$#\-''"]'
 
     if ($errors.Count -gt 0) {
         Write-OutputColor "  Password check:" -color "Info"
@@ -74,6 +83,7 @@ function Test-PasswordComplexity {
         Write-OutputColor "    $(if($hasLower){'[OK]'}else{'[  ]'}) Lowercase letter" -color $(if($hasLower){"Success"}else{"Error"})
         Write-OutputColor "    $(if($hasDigit){'[OK]'}else{'[  ]'}) Number" -color $(if($hasDigit){"Success"}else{"Error"})
         Write-OutputColor "    $(if($hasSpecial){'[OK]'}else{'[  ]'}) Special character" -color $(if($hasSpecial){"Success"}else{"Error"})
+        Write-OutputColor "    $(if($safeStart){'[OK]'}else{'[  ]'}) Safe starting character" -color $(if($safeStart){"Success"}else{"Error"})
         return $false
     }
     return $true
@@ -147,6 +157,7 @@ function Get-SecurePassword {
     Write-OutputColor "  - At least 1 lowercase letter" -color "Info"
     Write-OutputColor "  - At least 1 number" -color "Info"
     Write-OutputColor "  - At least 1 special character" -color "Info"
+    Write-OutputColor "  - Cannot start with `$ # - ' or `"" -color "Info"
     Write-OutputColor "" -color "Info"
 
     $attempts = 0

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.86.3
+    Automated Test Runner for RackStack v1.86.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -654,7 +654,7 @@ $requiredFunctions = @(
     "Select-DebloatProfile",
     "Select-Disk",
     "Suspend-ClusterNodeForMaintenance",
-    # v1.86.3 — push to 98%+
+    # v1.86.4 — push to 98%+
     "Select-Host-Network-Adapter",
     "Select-VM-Network-Adapter",
     "Select-iSCSI-Adapters",
@@ -4547,6 +4547,8 @@ try {
     Write-TestResult "Password: checks lowercase" ($pwContent -match '\[a-z\]')
     Write-TestResult "Password: checks digits" ($pwContent -match '\\d')
     Write-TestResult "Password: checks special chars" ($pwContent -match '\[!@#\$%')
+    Write-TestResult "Password: rejects leading dollar sign" ($pwContent -match 'Cannot start with')
+    Write-TestResult "Password: checks safe starting character" ($pwContent -match 'safeStart')
 
     # Test-PasswordComplexity has ValidateNotNullOrEmpty
     Write-TestResult "Test-PasswordComplexity: has ValidateNotNullOrEmpty" ($pwContent -match 'function Test-PasswordComplexity[\s\S]{0,200}ValidateNotNullOrEmpty')
@@ -7219,6 +7221,13 @@ try {
     Write-TestResult "Test-PasswordComplexity: weak password rejected" ((Test-PasswordComplexity "short") -eq $false)
     Write-TestResult "Test-PasswordComplexity: no uppercase rejected" ((Test-PasswordComplexity "alllowercasenoups123!@") -eq $false)
     Write-TestResult "Test-PasswordComplexity: strong password accepted" ((Test-PasswordComplexity "MyStr0ngP@ssw0rd!") -eq $true)
+    # Leading character restrictions (v1.86.4)
+    Write-TestResult "Test-PasswordComplexity: dollar-sign start rejected" ((Test-PasswordComplexity '$MyStr0ngP@ss!') -eq $false)
+    Write-TestResult "Test-PasswordComplexity: hash start rejected" ((Test-PasswordComplexity '#MyStr0ngP@ss1!') -eq $false)
+    Write-TestResult "Test-PasswordComplexity: dash start rejected" ((Test-PasswordComplexity '-MyStr0ngP@ss1!') -eq $false)
+    Write-TestResult "Test-PasswordComplexity: quote start rejected" ((Test-PasswordComplexity "'MyStr0ngP@ss1!") -eq $false)
+    Write-TestResult "Test-PasswordComplexity: letter start accepted" ((Test-PasswordComplexity "MyStr0ngP@ssw0rd!") -eq $true)
+    Write-TestResult "Test-PasswordComplexity: number start accepted" ((Test-PasswordComplexity "1MyStr0ngP@ssw0rd!") -eq $true)
 
 } catch {
     Write-TestResult "Password Module Tests" $false $_.Exception.Message

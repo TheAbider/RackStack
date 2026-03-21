@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.86.4
+
+- **Security:** Passwords can no longer start with `$` `#` `-` `'` or `"` — these characters break Unix crypt hashes, PowerShell variable interpolation, config file parsing, and command-line quoting. Visual checklist now includes "Safe starting character" check.
+- 65 modules, 4263 tests, 152 CLI actions
+
 ## v1.86.3
 
 - **New CLI Action:** `DNSCacheAudit` — dumps and analyzes the DNS client cache. Shows total entries, unique names, record type breakdown, and negative cache (failed lookups). JSON output with full cache sample.
