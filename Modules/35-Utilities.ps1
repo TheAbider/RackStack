@@ -2435,5 +2435,43 @@ function Save-NetworkBaseline {
     }
 }
 
-# Function to compare current network state against a saved baseline
+# Function to show currently logged on users (RDP + console sessions)
+function Show-LoggedOnUsers {
+    Write-OutputColor "`n  Logged-On Users:" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    try {
+        $sessions = query session 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-OutputColor "  Unable to query sessions." -color "Warning"
+            return
+        }
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  USER SESSIONS".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        $activeCount = 0
+        foreach ($line in $sessions) {
+            $lineText = $line.ToString().Trim()
+            if ([string]::IsNullOrWhiteSpace($lineText)) { continue }
+            if ($lineText -match '^\s*SESSIONNAME') { continue }  # Skip header
+
+            $color = if ($lineText -match 'Active') { "Success" }
+                     elseif ($lineText -match 'Disc') { "Warning" }
+                     else { "Info" }
+
+            $display = "  $lineText"
+            if ($display.Length -gt 72) { $display = $display.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($display.PadRight(72))│" -color $color
+            if ($lineText -match 'Active') { $activeCount++ }
+        }
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "  Active sessions: $activeCount" -color "Info"
+    }
+    catch {
+        Write-OutputColor "  Failed to query sessions: $_" -color "Error"
+    }
+}
 #endregion

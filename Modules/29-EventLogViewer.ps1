@@ -24,6 +24,7 @@ function Show-EventLogViewer {
         Write-MenuItem "[7]  Custom Search"
         Write-MenuItem "[8]  Export Last Results to CSV"
         Write-MenuItem "[9]  Critical Event Summary"
+        Write-MenuItem "[10] Failed Logon Attempts (Last 24h)"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -114,7 +115,16 @@ function Show-EventLogViewer {
                 Write-PressEnter
                 continue
             }
-            default { Write-OutputColor "  Invalid choice. Enter 1-9 or B." -color "Error"; Start-Sleep -Seconds 1; continue }
+            "10" {
+                $title = "Failed Logon Attempts (Last 24h)"
+                $events = Get-WinEvent -FilterHashtable @{LogName='Security'; ID=4625; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 50 -ErrorAction SilentlyContinue
+                if ($null -eq $events -or @($events).Count -eq 0) {
+                    Write-OutputColor "`n  No failed logon attempts in the last 24 hours." -color "Success"
+                    Write-PressEnter
+                    continue
+                }
+            }
+            default { Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"; Start-Sleep -Seconds 1; continue }
         }
 
         Clear-Host

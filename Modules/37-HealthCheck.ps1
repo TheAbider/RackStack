@@ -555,6 +555,18 @@ function Get-SecurityHardeningChecks {
         $checks.Add(@{ Category = "Endpoint"; Name = "Antivirus Real-Time"; Value = "Defender unavailable"; Status = "Warn" })
     }
 
+    # Defender Exclusion count
+    try {
+        $mpPrefs = Get-MpPreference -ErrorAction SilentlyContinue
+        if ($null -ne $mpPrefs) {
+            $exclPaths = if ($null -ne $mpPrefs.ExclusionPath) { @($mpPrefs.ExclusionPath).Count } else { 0 }
+            $exclProcs = if ($null -ne $mpPrefs.ExclusionProcess) { @($mpPrefs.ExclusionProcess).Count } else { 0 }
+            $exclTotal = $exclPaths + $exclProcs
+            $exclStatus = if ($exclTotal -eq 0) { "Pass" } elseif ($exclTotal -le 10) { "Pass" } else { "Warn" }
+            $checks.Add(@{ Category = "Endpoint"; Name = "Defender Exclusions"; Value = "$exclPaths path(s), $exclProcs process(es)"; Status = $exclStatus })
+        }
+    } catch { }
+
     # BitLocker Status (C: drive)
     try {
         $blVolume = Get-BitLockerVolume -MountPoint "C:" -ErrorAction Stop

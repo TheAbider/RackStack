@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.89.3
+
+- **New:** Logged-On Users display in Operations menu — shows active RDP/console sessions with color-coded status (Active=green, Disconnected=yellow).
+- **New:** Failed Logon Attempts (Event 4625) viewer in Event Log Viewer — shows last 24h of failed authentication attempts from Security log.
+- **Enhanced:** Health check now reports Defender exclusion count (paths + processes). Flags if >10 exclusions configured.
+- 65 modules, 4423 tests, 157 CLI actions, 634 functions
+
 ## v1.89.2
 
 - **New:** WinRM subnet restriction — after enabling PowerShell Remoting, option to restrict WinRM access (ports 5985/5986) to a specific subnet. Same pattern as RDP restriction with undo support.

@@ -22,6 +22,7 @@ function Show-OperationsMenu {
         Write-MenuItem "[2]  VM Export / Import"
         Write-MenuItem "[31] Batch VM Cleanup"
         Write-MenuItem "[32] VM Migration Pre-Flight"
+        Write-MenuItem "[33] Logged-On Users"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -100,6 +101,7 @@ function Show-OperationsMenu {
                 @{Num="27"; Name="Scheduled Task Overview"};   @{Num="28"; Name="Firewall Rule Summary"}
                 @{Num="29"; Name="Reboot Pending Details"};    @{Num="30"; Name="Memory Pressure Diagnostics"}
                 @{Num="31"; Name="Batch VM Cleanup"};          @{Num="32"; Name="VM Migration Pre-Flight"}
+                @{Num="33"; Name="Logged-On Users"}
             )
             $matched = @($opsItems | Where-Object { $_.Name -match [regex]::Escape($searchTerm) })
             Write-OutputColor "" -color "Info"
@@ -261,10 +263,14 @@ function Show-OperationsMenu {
                 Test-VMMigrationReadiness
                 Write-PressEnter
             }
+            "33" {
+                Show-LoggedOnUsers
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-32, [/] to search, or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-33, [/] to search, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

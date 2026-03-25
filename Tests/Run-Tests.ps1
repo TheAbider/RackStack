@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.89.2
+    Automated Test Runner for RackStack v1.89.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8206,7 +8206,7 @@ Write-TestResult "30-ServiceManager: dependencies nav check" ($smContent -match 
 
 # EventLogViewer improved error
 $elvContent = Get-Content -LiteralPath "$modulesPath\29-EventLogViewer.ps1" -Raw
-Write-TestResult "29-EventLogViewer: specific invalid msg" ($elvContent -match 'Enter 1-9 or B')
+Write-TestResult "29-EventLogViewer: specific invalid msg" ($elvContent -match 'Enter 1-10 or B')
 
 # ScheduledTasks improved error
 $stContent = Get-Content -LiteralPath "$modulesPath\63-ScheduledTasks.ps1" -Raw
