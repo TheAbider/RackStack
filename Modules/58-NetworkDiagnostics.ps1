@@ -24,10 +24,15 @@ function Show-NetworkDiagnostics {
         Write-OutputColor "  │$("  DNS & ROUTING".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-MenuItem "[6]  DNS Lookup"
-        Write-MenuItem "[7]  Active Connections"
-        Write-MenuItem "[8]  ARP Table"
-        Write-MenuItem "[9]  Quick Port Scan (common services)"
-        Write-MenuItem "[10] Path MTU Discovery"
+        Write-MenuItem "[7]  Flush DNS Cache"
+        Write-MenuItem "[8]  Active Connections"
+        Write-MenuItem "[9]  ARP Table"
+        Write-MenuItem "[10] Quick Port Scan (common services)"
+        Write-MenuItem "[11] Path MTU Discovery"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  REPAIR".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem "[12] Reset Network Stack"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -45,16 +50,18 @@ function Show-NetworkDiagnostics {
             "4" { Invoke-TraceRoute }
             "5" { Invoke-SubnetSweep }
             "6" { Invoke-DnsLookup }
-            "7" { Show-ActiveConnections }
-            "8" { Show-ArpTable }
-            "9" { Invoke-QuickPortScan }
-            "10" { Invoke-PathMtuDiscovery }
+            "7" { Invoke-FlushDnsCache }
+            "8" { Show-ActiveConnections }
+            "9" { Show-ArpTable }
+            "10" { Invoke-QuickPortScan }
+            "11" { Invoke-PathMtuDiscovery }
+            "12" { Invoke-NetworkStackReset }
             "b" { return }
             "B" { return }
             "m" { $global:ReturnToMainMenu = $true; return }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-12 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -843,6 +850,144 @@ function Show-ArpTable {
     catch {
         Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"
     }
+    Write-PressEnter
+}
+
+function Invoke-FlushDnsCache {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Flushing DNS client cache..." -color "Info"
+
+    try {
+        # Show cache stats before flush
+        $cacheStats = Get-DnsClientCache -ErrorAction SilentlyContinue
+        $cacheCount = @($cacheStats).Count
+        if ($cacheCount -gt 0) {
+            Write-OutputColor "  Current cache entries: $cacheCount" -color "Info"
+        }
+
+        Clear-DnsClientCache -ErrorAction Stop
+        Write-OutputColor "  DNS client cache flushed successfully." -color "Success"
+
+        # Also flush via ipconfig for completeness (catches any native cache)
+        $null = ipconfig /flushdns 2>&1
+
+        # Register DNS if domain-joined
+        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 5 -ErrorAction SilentlyContinue
+        if ($null -ne $cs -and $cs.PartOfDomain) {
+            Write-OutputColor "  Registering DNS records (domain-joined)..." -color "Info"
+            $null = ipconfig /registerdns 2>&1
+            Write-OutputColor "  DNS registration initiated." -color "Success"
+        }
+
+        Add-SessionChange -Category "Network" -Description "Flushed DNS client cache ($cacheCount entries cleared)"
+    }
+    catch {
+        Write-OutputColor "  Failed to flush DNS cache: $_" -color "Error"
+    }
+
+    Write-PressEnter
+}
+
+function Invoke-NetworkStackReset {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Warning"
+    Write-OutputColor "  │$("  WARNING: Network Stack Reset").PadRight(72)│" -color "Warning"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Warning"
+    Write-OutputColor "  │$("  This will reset Winsock catalog, TCP/IP stack, and firewall rules.").PadRight(72)│" -color "Warning"
+    Write-OutputColor "  │$("  A REBOOT IS REQUIRED after this operation.").PadRight(72)│" -color "Warning"
+    Write-OutputColor "  │$("  Custom firewall rules may need to be re-applied.").PadRight(72)│" -color "Warning"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Warning"
+    Write-OutputColor "" -color "Info"
+
+    Write-OutputColor "  Which components do you want to reset?" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  [1]  Flush DNS cache only (safe, no reboot)" -color "Info"
+    Write-OutputColor "  [2]  Reset Winsock catalog (reboot required)" -color "Info"
+    Write-OutputColor "  [3]  Reset TCP/IP stack (reboot required)" -color "Info"
+    Write-OutputColor "  [4]  Full reset: Winsock + TCP/IP + DNS flush (reboot required)" -color "Info"
+    Write-OutputColor "  [B]  Cancel" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $choice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return }
+
+    switch ($choice) {
+        "1" {
+            Invoke-FlushDnsCache
+            return  # FlushDnsCache has its own PressEnter
+        }
+        "2" {
+            Write-OutputColor "  Resetting Winsock catalog..." -color "Info"
+            $result = netsh winsock reset 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-OutputColor "  Winsock reset failed: $($result -join ' ')" -color "Error"
+            } else {
+                Write-OutputColor "  Winsock catalog reset. REBOOT REQUIRED." -color "Warning"
+                $global:RebootNeeded = $true
+                Add-SessionChange -Category "Network" -Description "Reset Winsock catalog (reboot required)"
+            }
+        }
+        "3" {
+            Write-OutputColor "  Resetting TCP/IP stack..." -color "Info"
+            $result = netsh int ip reset 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-OutputColor "  TCP/IP reset failed: $($result -join ' ')" -color "Error"
+            } else {
+                Write-OutputColor "  TCP/IP stack reset. REBOOT REQUIRED." -color "Warning"
+                $global:RebootNeeded = $true
+                Add-SessionChange -Category "Network" -Description "Reset TCP/IP stack (reboot required)"
+            }
+        }
+        "4" {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Are you sure? This resets ALL network stack components. [Y/N]" -color "Warning"
+            $confirm = Read-Host "  Confirm"
+            if ($confirm -ne 'Y' -and $confirm -ne 'y') {
+                Write-OutputColor "  Cancelled." -color "Info"
+                Write-PressEnter
+                return
+            }
+
+            $resetErrors = 0
+
+            Write-OutputColor "  Flushing DNS cache..." -color "Info"
+            Clear-DnsClientCache -ErrorAction SilentlyContinue
+            $null = ipconfig /flushdns 2>&1
+            Write-OutputColor "  DNS cache flushed." -color "Success"
+
+            Write-OutputColor "  Resetting Winsock catalog..." -color "Info"
+            $null = netsh winsock reset 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-OutputColor "  Winsock reset encountered errors." -color "Warning"
+                $resetErrors++
+            } else {
+                Write-OutputColor "  Winsock catalog reset." -color "Success"
+            }
+
+            Write-OutputColor "  Resetting TCP/IP stack..." -color "Info"
+            $null = netsh int ip reset 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-OutputColor "  TCP/IP reset encountered errors." -color "Warning"
+                $resetErrors++
+            } else {
+                Write-OutputColor "  TCP/IP stack reset." -color "Success"
+            }
+
+            Write-OutputColor "" -color "Info"
+            if ($resetErrors -eq 0) {
+                Write-OutputColor "  Full network stack reset complete. REBOOT REQUIRED." -color "Warning"
+            } else {
+                Write-OutputColor "  Network stack reset completed with $resetErrors warning(s). REBOOT REQUIRED." -color "Warning"
+            }
+            $global:RebootNeeded = $true
+            Add-SessionChange -Category "Network" -Description "Full network stack reset (Winsock + TCP/IP + DNS)"
+        }
+        default {
+            Write-OutputColor "  Cancelled." -color "Info"
+        }
+    }
+
     Write-PressEnter
 }
 #endregion

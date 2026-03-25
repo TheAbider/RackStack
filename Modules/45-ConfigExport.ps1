@@ -3035,7 +3035,11 @@ function Save-FleetResults {
     foreach ($r in $Results) {
         if ($null -ne $r.Result) {
             $hostFile = Join-Path $OutputDir "$($r.Hostname)_${Action}_${timestamp}.json"
-            $r.Result | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $hostFile -Encoding UTF8 -Force
+            try {
+                $r.Result | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $hostFile -Encoding UTF8 -Force
+            } catch {
+                Write-OutputColor "  Warning: Failed to save results for $($r.Hostname): $_" -color "Warning"
+            }
         }
     }
 
@@ -3050,7 +3054,12 @@ function Save-FleetResults {
         TimedOut  = @($Results | Where-Object { $_.Status -eq 'Timeout' }).Count
         Results   = $Results
     }
-    $summary | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $summaryFile -Encoding UTF8 -Force
+    try {
+        $summary | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $summaryFile -Encoding UTF8 -Force
+    } catch {
+        Write-OutputColor "  Warning: Failed to save fleet summary: $_" -color "Warning"
+        return $null
+    }
 
     return $summaryFile
 }

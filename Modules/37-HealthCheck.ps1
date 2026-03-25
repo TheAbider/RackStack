@@ -534,6 +534,23 @@ function Get-SecurityHardeningChecks {
         } else {
             $checks.Add(@{ Category = "Endpoint"; Name = "Antivirus Real-Time"; Value = "DISABLED"; Status = "Fail" })
         }
+        # Signature age
+        $sigAge = $mpStat.AntivirusSignatureAge
+        if ($null -ne $sigAge) {
+            $sigStatus = if ($sigAge -le 3) { "Pass" } elseif ($sigAge -le 7) { "Warn" } else { "Fail" }
+            $checks.Add(@{ Category = "Endpoint"; Name = "Signature Age"; Value = "$sigAge day(s)"; Status = $sigStatus })
+        }
+        # Last scan
+        $lastFull = $mpStat.FullScanEndTime
+        $lastQuick = $mpStat.QuickScanEndTime
+        $lastScan = if ($null -ne $lastFull -and $null -ne $lastQuick) {
+            if ($lastFull -gt $lastQuick) { $lastFull } else { $lastQuick }
+        } elseif ($null -ne $lastFull) { $lastFull } elseif ($null -ne $lastQuick) { $lastQuick } else { $null }
+        if ($null -ne $lastScan -and $lastScan -gt [datetime]::MinValue) {
+            $scanDays = [math]::Floor(((Get-Date) - $lastScan).TotalDays)
+            $scanStatus = if ($scanDays -le 7) { "Pass" } elseif ($scanDays -le 30) { "Warn" } else { "Fail" }
+            $checks.Add(@{ Category = "Endpoint"; Name = "Last Scan"; Value = "$scanDays day(s) ago"; Status = $scanStatus })
+        }
     } catch {
         $checks.Add(@{ Category = "Endpoint"; Name = "Antivirus Real-Time"; Value = "Defender unavailable"; Status = "Warn" })
     }
@@ -791,7 +808,29 @@ function Show-SystemHealthCheck {
     foreach ($adapter in ($allAdapters | Where-Object { $_.Status -eq "Up" })) {
         $ip = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.Name } | Select-Object -First 1
         $ipStr = if ($ip) { $ip.IPAddress } else { "No IP" }
-        Write-OutputColor "  $($adapter.Name): $ipStr ($($adapter.LinkSpeed))" -color "Success"
+        # Flag slow physical adapters (100Mbps on what should be Gbps)
+        $speedWarning = ""
+        $adapterColor = "Success"
+        if (-not $adapter.Virtual -and $adapter.LinkSpeed -match '100\s*Mbps') {
+            $speedWarning = " [SLOW - check cable/switch]"
+            $adapterColor = "Warning"
+            $report.Issues += "Adapter '$($adapter.Name)' running at 100 Mbps (may indicate cabling issue)"
+        }
+        Write-OutputColor "  $($adapter.Name): $ipStr ($($adapter.LinkSpeed))$speedWarning" -color $adapterColor
+    }
+
+    # Check for adapter errors on up adapters
+    $adapterStats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
+    if ($null -ne $adapterStats) {
+        foreach ($stat in $adapterStats) {
+            $totalErrors = 0
+            if ($null -ne $stat.InErrors) { $totalErrors += $stat.InErrors }
+            if ($null -ne $stat.OutErrors) { $totalErrors += $stat.OutErrors }
+            if ($totalErrors -gt 0) {
+                Write-OutputColor "  $($stat.Name): $totalErrors packet errors detected" -color "Warning"
+                $report.Issues += "Adapter '$($stat.Name)' has $totalErrors packet errors"
+            }
+        }
     }
 
     foreach ($adapter in ($allAdapters | Where-Object { $_.Status -ne "Up" })) {
@@ -1502,8 +1541,14 @@ function Show-ServerReadiness {
     try {
         $mpStat = Get-MpComputerStatus -ErrorAction Stop
         if ($mpStat.RealTimeProtectionEnabled) {
-            $ready++
-            $items += @{ Category = "SECURITY"; Name = "Defender Real-Time"; Value = "Enabled"; Color = "Success"; Symbol = "[OK]" }
+            $sigAge = $mpStat.AntivirusSignatureAge
+            $sigLabel = if ($null -ne $sigAge) { ", sigs ${sigAge}d old" } else { "" }
+            if ($null -ne $sigAge -and $sigAge -gt 7) {
+                $items += @{ Category = "SECURITY"; Name = "Defender Real-Time"; Value = "Enabled$sigLabel"; Color = "Warning"; Symbol = "[--]" }
+            } else {
+                $ready++
+                $items += @{ Category = "SECURITY"; Name = "Defender Real-Time"; Value = "Enabled$sigLabel"; Color = "Success"; Symbol = "[OK]" }
+            }
         } else {
             $items += @{ Category = "SECURITY"; Name = "Defender Real-Time"; Value = "DISABLED"; Color = "Error"; Symbol = "[!!]" }
         }

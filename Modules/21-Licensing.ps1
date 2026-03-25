@@ -9,7 +9,7 @@ function Get-WindowsVersionInfo {
         $productName = $ntVersion.ProductName
 
         # Check if this is Server or Client
-        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
         $isServer = $osInfo.ProductType -ne 1
 
         # Determine Windows version based on build number
@@ -197,7 +197,7 @@ function Show-LicenseStatus {
     Write-OutputColor "`n  Windows License Status:" -color "Info"
 
     try {
-        $licenseInfo = Get-CimInstance -ClassName SoftwareLicensingProduct -ErrorAction Stop |
+        $licenseInfo = Get-CimInstance -ClassName SoftwareLicensingProduct -OperationTimeoutSec 10 -ErrorAction Stop |
             Where-Object { $_.PartialProductKey -and $_.ApplicationId -eq '55c92734-d682-4d71-983e-d6ec3f16059f' } |
             Select-Object -First 1
 

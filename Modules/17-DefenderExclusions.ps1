@@ -29,7 +29,13 @@ function Set-DefenderExclusions {
         Write-OutputColor "  │$("  CURRENT EXCLUSIONS".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-        $prefs = Get-MpPreference
+        $prefs = Get-MpPreference -ErrorAction SilentlyContinue
+        if ($null -eq $prefs) {
+            Write-OutputColor "  │$("  Unable to read Defender preferences".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+            Write-PressEnter
+            continue
+        }
         $pathExclusions = if ($null -ne $prefs.ExclusionPath) { @($prefs.ExclusionPath) } else { @() }
         $processExclusions = if ($null -ne $prefs.ExclusionProcess) { @($prefs.ExclusionProcess) } else { @() }
         $null = $prefs.ExclusionExtension  # Suppress unused warning

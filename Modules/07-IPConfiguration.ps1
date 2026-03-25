@@ -312,7 +312,7 @@ function Set-VMDNSAddress {
             # Add to undo stack
             Add-UndoAction -Category "Network" -Description "DNS change on $AdapterName" -UndoScript {
                 param($Adapter)
-                Set-DnsClientServerAddress -InterfaceAlias $Adapter -ResetServerAddresses
+                Set-DnsClientServerAddress -InterfaceAlias $Adapter -ResetServerAddresses -ErrorAction SilentlyContinue
             }.GetNewClosure() -UndoParams @{ Adapter = $AdapterName }
 
             return $true
@@ -495,6 +495,12 @@ function Show-IPConfigSummary {
     Write-OutputColor "`n  IP Configuration Summary:" -color "Info"
 
     try {
+        # DNS suffix search list (global)
+        $dnsSuffix = Get-DnsClientGlobalSetting -ErrorAction SilentlyContinue
+        if ($null -ne $dnsSuffix -and $null -ne $dnsSuffix.SuffixSearchList -and @($dnsSuffix.SuffixSearchList).Count -gt 0) {
+            Write-OutputColor "  DNS Suffix Search: $($dnsSuffix.SuffixSearchList -join ', ')" -color "Info"
+        }
+
         $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' }
 
         foreach ($adapter in $adapters) {
@@ -520,6 +526,12 @@ function Show-IPConfigSummary {
 
             if ($null -ne $dns -and @($dns).Count -gt 0) {
                 Write-OutputColor "    DNS: $($dns -join ', ')" -color "Info"
+            }
+
+            # Connection-specific DNS suffix
+            $adapterDnsSuffix = (Get-DnsClient -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue).ConnectionSpecificSuffix
+            if ($adapterDnsSuffix) {
+                Write-OutputColor "    DNS Suffix: $adapterDnsSuffix" -color "Info"
             }
         }
     } catch {

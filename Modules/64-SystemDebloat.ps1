@@ -5,6 +5,54 @@
 # All operations support WhatIf preview, undo where possible, and session change tracking.
 
 # ────────────────────────────────────────────────────────────────────────
+# Helper: Detect Windows version details for version-aware debloat
+# ────────────────────────────────────────────────────────────────────────
+function Get-WindowsDebloatInfo {
+    $ntVer = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue
+    $build = if ($ntVer) { [int]$ntVer.CurrentBuildNumber } else { 0 }
+    $displayVersion = if ($ntVer) { $ntVer.DisplayVersion } else { "" }  # "23H2", "24H2", "25H2", etc.
+    $productType = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\ProductOptions' -ErrorAction SilentlyContinue).ProductType
+
+    $isServer = ($productType -ne "WinNT")
+    $isWin11 = (-not $isServer -and $build -ge 22000)
+    $isWin10 = (-not $isServer -and $build -lt 22000 -and $build -ge 10240)
+
+    # Map builds to known versions
+    $versionTag = if ($isServer -and $build -ge 26100) { "Server2025" }
+        elseif ($isServer) { "ServerOlder" }
+        elseif ($build -ge 26100) { "Win11_24H2+" }      # 24H2 and later (26100+)
+        elseif ($build -ge 22631) { "Win11_23H2" }        # 23H2 (22631)
+        elseif ($build -ge 22621) { "Win11_22H2" }        # 22H2 (22621)
+        elseif ($build -ge 22000) { "Win11_21H2" }        # Original Win11
+        elseif ($build -ge 19045) { "Win10_22H2" }        # Last Win10 (19045)
+        elseif ($build -ge 19041) { "Win10_Older" }
+        else { "Legacy" }
+
+    # Server Core detection (no GUI shell)
+    $isServerCore = $false
+    if ($isServer) {
+        $serverLevels = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Server\ServerLevels' -ErrorAction SilentlyContinue
+        if ($null -ne $serverLevels) {
+            $hasGui = $serverLevels.'Server-Gui-Shell'
+            $isServerCore = -not $hasGui
+        } else {
+            # Fallback: check if explorer.exe exists
+            $isServerCore = -not (Test-Path "$env:SystemRoot\explorer.exe")
+        }
+    }
+
+    return @{
+        Build          = $build
+        DisplayVersion = $displayVersion
+        IsServer       = $isServer
+        IsServerCore   = $isServerCore
+        IsWin11        = $isWin11
+        IsWin10        = $isWin10
+        VersionTag     = $versionTag
+    }
+}
+
+# ────────────────────────────────────────────────────────────────────────
 # Helper: Get removable AppxPackages for a given profile
 # ────────────────────────────────────────────────────────────────────────
 function Get-RemovableAppxPackages {
@@ -14,7 +62,9 @@ function Get-RemovableAppxPackages {
         [string]$DebloatProfile
     )
 
-    # Light profile: obvious bloatware and rarely-used Store apps
+    $osInfo = Get-WindowsDebloatInfo
+
+    # ── Light profile: obvious bloatware and rarely-used Store apps ──
     $lightPackages = @(
         "king.com.CandyCrushSaga"
         "king.com.CandyCrushSodaSaga"
@@ -26,16 +76,52 @@ function Get-RemovableAppxPackages {
         "Microsoft.MixedReality.Portal"
         "Microsoft.MSPaint"                       # Paint 3D (not classic Paint)
         "Microsoft.SkypeApp"
-        "Microsoft.YourPhone"
         "Microsoft.GetHelp"
         "Microsoft.Getstarted"                    # Tips
         "Microsoft.WindowsFeedbackHub"
         "Microsoft.MicrosoftOfficeHub"
     )
 
-    # Standard adds media/social/Xbox apps
+    # Win10-specific light removals
+    if ($osInfo.IsWin10) {
+        $lightPackages += @(
+            "Microsoft.YourPhone"
+            "Microsoft.Print3D"
+            "Microsoft.OneConnect"                # Paid Wi-Fi & Cellular
+            "Microsoft.Wallet"
+        )
+    }
+
+    # Win11-specific light removals
+    if ($osInfo.IsWin11) {
+        $lightPackages += @(
+            "Microsoft.YourPhone"                 # Phone Link (renamed from Your Phone)
+            "MicrosoftWindows.Client.WebExperience"  # Widgets (Win11)
+            "Microsoft.WindowsMeetNow"            # Meet Now / Chat
+        )
+    }
+
+    # 24H2+ specific (build 26100+)
+    if ($osInfo.Build -ge 26100) {
+        $lightPackages += @(
+            "Microsoft.Windows.Ai.Copilot.Provider"  # Copilot provider
+            "Microsoft.Copilot"                       # Copilot app (24H2+)
+            "MicrosoftWindows.CrossDevice"            # Cross-device experience
+            "Microsoft.OutlookForWindows"             # New Outlook (replaces Mail)
+        )
+    }
+
+    # 25H2+ / 26H2+ specific (build 26200+)
+    if ($osInfo.Build -ge 26200) {
+        $lightPackages += @(
+            "MicrosoftWindows.AI.Recall"              # Windows Recall
+            "Microsoft.Windows.AI.Studio"             # AI Studio
+        )
+    }
+
+    # ── Standard adds media/social/Xbox apps ──
     $standardPackages = @(
-        "Microsoft.ZuneMusic"                     # Groove Music
+        "Microsoft.ZuneMusic"                     # Groove Music / Media Player
         "Microsoft.ZuneVideo"                     # Movies & TV
         "Microsoft.People"
         "Microsoft.WindowsMaps"
@@ -53,13 +139,27 @@ function Get-RemovableAppxPackages {
         "Clipchamp.Clipchamp"
     )
 
-    # Aggressive adds Edge, OneDrive, Teams consumer, Cortana
+    # Win11 23H2+ gets Dev Home and additional Microsoft apps
+    if ($osInfo.Build -ge 22631) {
+        $standardPackages += @(
+            "Microsoft.WindowsDevHome"            # Dev Home (23H2+)
+        )
+    }
+
+    # ── Aggressive adds Edge, OneDrive, Teams consumer, Cortana ──
     $aggressivePackages = @(
         "Microsoft.MicrosoftEdge.Stable"
         "Microsoft.OneDriveSync"
         "MicrosoftTeams"                          # Teams consumer (personal)
         "Microsoft.549981C3F5F10"                 # Cortana
     )
+
+    # Win11 aggressive: also remove Widgets backend and new Outlook
+    if ($osInfo.IsWin11) {
+        $aggressivePackages += @(
+            "Microsoft.Windows.ContentDeliveryManager" # Silently installs sponsored apps
+        )
+    }
 
     $result = [System.Collections.Generic.List[string]]::new()
     foreach ($pkg in $lightPackages) { $result.Add($pkg) }
@@ -138,7 +238,18 @@ function Get-TelemetryTasks {
         "\Microsoft\Windows\Feedback\Siuf\"
         "\Microsoft\Windows\Maps\"
         "\Microsoft\Windows\CloudExperienceHost\"
+        "\Microsoft\Windows\RetailDemo\"
+        "\Microsoft\Windows\MobilePC\"
     )
+
+    # Win11 24H2+ additional telemetry/AI paths
+    $osInfo = Get-WindowsDebloatInfo
+    if ($osInfo.Build -ge 26100) {
+        $taskPaths += @(
+            "\Microsoft\Windows\Shell\"
+            "\Microsoft\Windows\Cortana\"
+        )
+    }
 
     $tasks = [System.Collections.Generic.List[object]]::new()
     foreach ($taskPath in $taskPaths) {
@@ -222,14 +333,19 @@ function Start-SystemDebloat {
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        # Show current OS info
-        $osCaption = (Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
+        # Show current OS info (version-aware)
+        $menuOsInfo = Get-WindowsDebloatInfo
+        $osCaption = (Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).Caption
         if ($null -ne $osCaption) {
             Write-OutputColor "  OS: $osCaption" -color "Info"
         }
-        $isServer = ($null -ne $osCaption) -and ($osCaption -match "Server")
-        $modeTag = if ($isServer) { "Server detected" } else { "Workstation detected" }
-        Write-OutputColor "  Mode: $modeTag" -color "Info"
+        $isServer = $menuOsInfo.IsServer
+        $modeTag = if ($menuOsInfo.IsServerCore) { "Server Core" } elseif ($isServer) { "Server" } else { "Workstation" }
+        $verDisplay = if ($menuOsInfo.DisplayVersion) { " ($($menuOsInfo.DisplayVersion))" } else { "" }
+        Write-OutputColor "  Mode: $modeTag | Build: $($menuOsInfo.Build)$verDisplay | Profile: $($menuOsInfo.VersionTag)" -color "Info"
+        if ($menuOsInfo.IsServerCore) {
+            Write-OutputColor "  Note: Server Core — AppX and UI operations will be skipped" -color "Warning"
+        }
         Write-OutputColor "" -color "Info"
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -239,7 +355,7 @@ function Start-SystemDebloat {
         Write-MenuItem -Text "[2]  Server Debloat (services, optional features, telemetry)"
         Write-MenuItem -Text "[3]  Quick Scan (analyze only, no changes)"
         Write-MenuItem -Text "[4]  Custom Debloat (choose individual categories)"
-        Write-MenuItem -Text "[5]  Windows 11 / Server 2025 UI Cleanup"
+        Write-MenuItem -Text "[5]  Windows UI Cleanup (version-aware)"
         Write-MenuItem -Text "[6]  Toggle OS Dark / Light Theme"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
@@ -555,6 +671,114 @@ function Invoke-WorkstationDebloat {
             )
         }
 
+        # Version-specific registry tweaks (auto-detected)
+        $osInfo = Get-WindowsDebloatInfo
+
+        # Win11 22H2+ (build 22621+): disable additional telemetry
+        if ($osInfo.Build -ge 22621) {
+            $registryTweaks += @(
+                @{
+                    Path  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+                    Name  = "AllowTelemetry"
+                    Value = 0
+                    Type  = "DWord"
+                    Desc  = "Minimize diagnostic data (Win11 22H2+)"
+                }
+                @{
+                    Path  = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+                    Name  = "SubscribedContent-338389Enabled"
+                    Value = 0
+                    Type  = "DWord"
+                    Desc  = "Disable suggested content in Settings (Win11)"
+                }
+            )
+        }
+
+        # Win11 24H2+ (build 26100+): Copilot, Recall, AI
+        if ($osInfo.Build -ge 26100) {
+            $registryTweaks += @(
+                @{
+                    Path  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot"
+                    Name  = "TurnOffWindowsCopilot"
+                    Value = 1
+                    Type  = "DWord"
+                    Desc  = "Disable Copilot system-wide (24H2+ policy)"
+                }
+                @{
+                    Path  = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                    Name  = "ShowCopilotButton"
+                    Value = 0
+                    Type  = "DWord"
+                    Desc  = "Hide Copilot button from taskbar (24H2+)"
+                }
+            )
+        }
+
+        # Win11 25H2+ / 26H2+ (build 26200+): Recall, AI features
+        if ($osInfo.Build -ge 26200) {
+            $registryTweaks += @(
+                @{
+                    Path  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"
+                    Name  = "DisableAIDataAnalysis"
+                    Value = 1
+                    Type  = "DWord"
+                    Desc  = "Disable Windows Recall AI analysis (25H2+)"
+                }
+                @{
+                    Path  = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                    Name  = "RecallEnabled"
+                    Value = 0
+                    Type  = "DWord"
+                    Desc  = "Disable Recall timeline snapshots (25H2+)"
+                }
+            )
+        }
+
+        # Win10 specific: disable Cortana and web search
+        if ($osInfo.IsWin10) {
+            $registryTweaks += @(
+                @{
+                    Path  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+                    Name  = "AllowCortana"
+                    Value = 0
+                    Type  = "DWord"
+                    Desc  = "Disable Cortana (Win10)"
+                }
+                @{
+                    Path  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+                    Name  = "DisableWebSearch"
+                    Value = 1
+                    Type  = "DWord"
+                    Desc  = "Disable web search results in Start (Win10)"
+                }
+            )
+        }
+
+        # Startup bloat: Edge, OneDrive (Standard+)
+        $registryTweaks += @(
+            @{
+                Path  = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+                Name  = "StartupBoostEnabled"
+                Value = 0
+                Type  = "DWord"
+                Desc  = "Disable Edge startup boost (background process)"
+            }
+            @{
+                Path  = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+                Name  = "HubsSidebarEnabled"
+                Value = 0
+                Type  = "DWord"
+                Desc  = "Disable Edge sidebar"
+            }
+            @{
+                Path  = "HKLM:\SOFTWARE\Policies\Microsoft\OneDrive"
+                Name  = "PreventNetworkTrafficPreUserSignIn"
+                Value = 1
+                Type  = "DWord"
+                Desc  = "Prevent OneDrive from generating network traffic before sign-in"
+            }
+        )
+
         foreach ($tweak in $registryTweaks) {
             # Check current value
             $currentValue = $null
@@ -606,6 +830,61 @@ function Invoke-WorkstationDebloat {
                 $failedCount++
             }
         }
+        Write-OutputColor "" -color "Info"
+    }
+
+    # ── Phase 5: Startup Item Cleanup (Standard and Aggressive) ───────
+    if ($DebloatProfile -eq "Standard" -or $DebloatProfile -eq "Aggressive") {
+        Write-OutputColor "  ── Startup Item Cleanup ───────────────────────────────────────────" -color "Info"
+
+        # Known bloatware startup entries to auto-disable
+        $startupPatterns = @(
+            @{ Pattern = "OneDrive";          Desc = "OneDrive auto-start" }
+            @{ Pattern = "OneDriveSetup";     Desc = "OneDrive setup" }
+            @{ Pattern = "Teams";             Desc = "Teams auto-start" }
+            @{ Pattern = "com.squirrel";      Desc = "Teams updater (Squirrel)" }
+            @{ Pattern = "MicrosoftEdge";     Desc = "Edge auto-start" }
+            @{ Pattern = "CortanaStartup";    Desc = "Cortana startup" }
+            @{ Pattern = "SecurityHealth";    Desc = "Security Center notification" }
+        )
+
+        $runKeys = @(
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+        )
+
+        foreach ($runKey in $runKeys) {
+            if (-not (Test-Path -LiteralPath $runKey)) { continue }
+            $entries = Get-ItemProperty -LiteralPath $runKey -ErrorAction SilentlyContinue
+            if ($null -eq $entries) { continue }
+
+            foreach ($prop in $entries.PSObject.Properties) {
+                if ($prop.Name -like "PS*") { continue }  # Skip PS-added metadata properties
+
+                foreach ($bloat in $startupPatterns) {
+                    if ($prop.Name -match $bloat.Pattern -or $prop.Value -match $bloat.Pattern) {
+                        if ($PreviewOnly) {
+                            Write-OutputColor "  [WOULD REMOVE] $($bloat.Desc): $($prop.Name)" -color "Info"
+                            $removed++
+                        } else {
+                            try {
+                                $prevValue = $prop.Value
+                                Remove-ItemProperty -LiteralPath $runKey -Name $prop.Name -Force -ErrorAction Stop
+                                Write-OutputColor "  [REMOVED] $($bloat.Desc): $($prop.Name)" -color "Success"
+                                $removed++
+                                Add-SessionChange -Category "Debloat" -Description "Removed startup item: $($prop.Name)"
+                            }
+                            catch {
+                                Write-OutputColor "  [FAILED] $($bloat.Desc): $_" -color "Error"
+                                $failedCount++
+                            }
+                        }
+                        break  # Don't match same entry against multiple patterns
+                    }
+                }
+            }
+        }
+
         Write-OutputColor "" -color "Info"
     }
 
@@ -1634,10 +1913,12 @@ function Invoke-CustomDebloatExecution {
     if ($Selected.Startup) {
         Write-OutputColor "  ── Startup Programs ──────────────────────────────────────────────" -color "Info"
 
-        # Read startup items from registry Run keys
+        # Read startup items from registry Run/RunOnce keys
         $startupPaths = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
             "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
         )
 
         $startupItems = [System.Collections.Generic.List[object]]::new()
@@ -1726,38 +2007,34 @@ function Invoke-CustomDebloatExecution {
 # ════════════════════════════════════════════════════════════════════════
 function Invoke-Win11UICleanup {
     Clear-Host
-    Write-CenteredOutput "Windows 11 / Server 2025 UI Cleanup" -color "Info"
+    Write-CenteredOutput "Windows UI Cleanup" -color "Info"
 
-    # Detect OS build (registry is reliable; OSVersion returns compat-shimmed 9200 in PS 5.1)
-    $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction SilentlyContinue).CurrentBuildNumber
-    if ($build -lt 22000) {
-        Write-OutputColor "  This system is not Windows 11 or Server 2025 (build $build)." -color "Warning"
-        Write-OutputColor "  These tweaks target Windows 11 22H2+ and Server 2025." -color "Info"
+    $osInfo = Get-WindowsDebloatInfo
+
+    # Skip on Server Core — no GUI to customize
+    if ($osInfo.IsServerCore) {
+        Write-OutputColor "  Server Core detected — no GUI shell available." -color "Warning"
+        Write-OutputColor "  UI tweaks are not applicable on Server Core installations." -color "Info"
         return
     }
 
-    Write-OutputColor "  Detected build $build — applying Windows 10-style UI preferences." -color "Info"
+    if ($osInfo.Build -lt 22000 -and -not $osInfo.IsServer) {
+        # Win10 — apply Win10-specific UI tweaks
+        Write-OutputColor "  Detected Windows 10 (build $($osInfo.Build)) — applying UI preferences." -color "Info"
+    } elseif ($osInfo.Build -lt 22000) {
+        Write-OutputColor "  This system is older than Windows 11/Server 2025 (build $($osInfo.Build))." -color "Warning"
+        Write-OutputColor "  Limited UI tweaks available." -color "Info"
+    } else {
+        $verLabel = if ($osInfo.DisplayVersion) { $osInfo.DisplayVersion } else { "build $($osInfo.Build)" }
+        Write-OutputColor "  Detected $($osInfo.VersionTag) ($verLabel) — applying UI preferences." -color "Info"
+    }
     Write-OutputColor "" -color "Info"
 
     $applied = 0
     $failed = 0
 
+    # Base tweaks that apply to all Windows versions
     $tweaks = @(
-        @{
-            Name = "Classic right-click context menu"
-            Key  = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
-            Property = "(Default)"
-            Value = ""
-            Type = "String"
-            IsDefault = $true
-        }
-        @{
-            Name = "Left-align taskbar"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            Property = "TaskbarAl"
-            Value = 0
-            Type = "DWord"
-        }
         @{
             Name = "Show file extensions"
             Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
@@ -1773,69 +2050,163 @@ function Invoke-Win11UICleanup {
             Type = "DWord"
         }
         @{
-            Name = "Disable Widgets on taskbar"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            Property = "TaskbarDa"
-            Value = 0
-            Type = "DWord"
-        }
-        @{
-            Name = "Disable Chat/Teams on taskbar"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            Property = "TaskbarMn"
-            Value = 0
-            Type = "DWord"
-        }
-        @{
-            Name = "Minimize search box (icon only)"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
-            Property = "SearchboxTaskbarMode"
-            Value = 1
-            Type = "DWord"
-        }
-        @{
-            Name = "Disable Copilot"
-            Key  = "HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot"
-            Property = "TurnOffWindowsCopilot"
-            Value = 1
-            Type = "DWord"
-        }
-        @{
             Name = "File Explorer opens to This PC"
             Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
             Property = "LaunchTo"
             Value = 1
             Type = "DWord"
         }
-        @{
-            Name = "Disable Snap Layout flyout on maximize hover"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            Property = "EnableSnapAssistFlyout"
-            Value = 0
-            Type = "DWord"
-        }
-        @{
-            Name = "Disable Start menu recommendations"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            Property = "Start_IrisRecommendations"
-            Value = 0
-            Type = "DWord"
-        }
-        @{
-            Name = "Disable Gallery in File Explorer"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            Property = "ShowGalleryInExplorer"
-            Value = 0
-            Type = "DWord"
-        }
-        @{
-            Name = "Disable File Explorer Home page"
-            Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            Property = "ShowHome"
-            Value = 0
-            Type = "DWord"
-        }
     )
+
+    # Win11+ tweaks (build 22000+)
+    if ($osInfo.Build -ge 22000) {
+        $tweaks += @(
+            @{
+                Name = "Classic right-click context menu"
+                Key  = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
+                Property = "(Default)"
+                Value = ""
+                Type = "String"
+                IsDefault = $true
+            }
+            @{
+                Name = "Left-align taskbar"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "TaskbarAl"
+                Value = 0
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable Widgets on taskbar"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "TaskbarDa"
+                Value = 0
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable Chat/Teams on taskbar"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "TaskbarMn"
+                Value = 0
+                Type = "DWord"
+            }
+            @{
+                Name = "Minimize search box (icon only)"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
+                Property = "SearchboxTaskbarMode"
+                Value = 1
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable Copilot (user policy)"
+                Key  = "HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot"
+                Property = "TurnOffWindowsCopilot"
+                Value = 1
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable Snap Layout flyout on maximize hover"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "EnableSnapAssistFlyout"
+                Value = 0
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable Start menu recommendations"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "Start_IrisRecommendations"
+                Value = 0
+                Type = "DWord"
+            }
+        )
+    }
+
+    # Win11 23H2+ (build 22631+): Gallery, Home, Dev Home
+    if ($osInfo.Build -ge 22631) {
+        $tweaks += @(
+            @{
+                Name = "Disable Gallery in File Explorer"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "ShowGalleryInExplorer"
+                Value = 0
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable File Explorer Home page"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "ShowHome"
+                Value = 0
+                Type = "DWord"
+            }
+        )
+    }
+
+    # Win11 24H2+ (build 26100+): Copilot button, new taskbar elements
+    if ($osInfo.Build -ge 26100) {
+        $tweaks += @(
+            @{
+                Name = "Hide Copilot button from taskbar"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "ShowCopilotButton"
+                Value = 0
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable Copilot system-wide (machine policy)"
+                Key  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot"
+                Property = "TurnOffWindowsCopilot"
+                Value = 1
+                Type = "DWord"
+            }
+        )
+    }
+
+    # Win11 25H2+ (build 26200+): Recall, AI features
+    if ($osInfo.Build -ge 26200) {
+        $tweaks += @(
+            @{
+                Name = "Disable Windows Recall"
+                Key  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"
+                Property = "DisableAIDataAnalysis"
+                Value = 1
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable Recall user opt-in"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+                Property = "RecallEnabled"
+                Value = 0
+                Type = "DWord"
+            }
+        )
+    }
+
+    # Win10-specific tweaks
+    if ($osInfo.IsWin10) {
+        $tweaks += @(
+            @{
+                Name = "Disable Cortana on taskbar"
+                Key  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+                Property = "AllowCortana"
+                Value = 0
+                Type = "DWord"
+            }
+            @{
+                Name = "Disable web search results in Start"
+                Key  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+                Property = "DisableWebSearch"
+                Value = 1
+                Type = "DWord"
+            }
+            @{
+                Name = "Minimize search box (icon only)"
+                Key  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
+                Property = "SearchboxTaskbarMode"
+                Value = 1
+                Type = "DWord"
+            }
+        )
+    }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  APPLYING UI TWEAKS".PadRight(72))│" -color "Info"

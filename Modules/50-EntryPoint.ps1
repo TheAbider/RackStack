@@ -93,6 +93,7 @@ function Remove-OldTranscripts {
 function Assert-Elevation {
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         Write-RackStackError -Code "RS-1001"
+        $elevationFailed = $false
         try {
             $elevateArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
             if ($script:CLIAction)  { $elevateArgs += " -Action $($script:CLIAction)" }
@@ -107,8 +108,9 @@ function Assert-Elevation {
             Write-OutputColor "  Failed to elevate: $_" -color "Error"
             Write-OutputColor "  Please right-click and 'Run as Administrator'." -color "Warning"
             Read-Host "  Press Enter to exit"
+            $elevationFailed = $true
         }
-        [Environment]::Exit(0)
+        [Environment]::Exit($(if ($elevationFailed) { 1 } else { 0 }))
     }
     else {
         # Size and maximize console window before any output
@@ -431,8 +433,16 @@ function Invoke-CLIAction {
             }
             try {
                 $batchConfig = Get-Content -LiteralPath $script:CLIConfig -Raw | ConvertFrom-Json
+                if ($null -eq $batchConfig) {
+                    Write-OutputColor "  ERROR: Config file is empty or null." -color "Error"
+                    [Environment]::Exit(1)
+                }
                 $configHash = @{}
                 $batchConfig.PSObject.Properties | ForEach-Object { $configHash[$_.Name] = $_.Value }
+                if ($configHash.Count -eq 0) {
+                    Write-OutputColor "  ERROR: Config file contains no properties." -color "Error"
+                    [Environment]::Exit(1)
+                }
                 Start-BatchMode -Config $configHash
             }
             catch {
@@ -10926,6 +10936,11 @@ function Start-BatchMode {
     $skipped = 0
     $errors = 0
     $script:BatchUndoStack = [System.Collections.Generic.List[object]]::new()
+
+    # Ensure TempPath exists for batch undo state
+    if ($null -ne $script:TempPath -and -not (Test-Path -LiteralPath $script:TempPath)) {
+        New-Item -Path $script:TempPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+    }
     $batchUndoPath = Join-Path $script:TempPath "batch-undo.json"
 
     # Check for previous batch session recovery data (skip in dry-run mode)
@@ -11962,7 +11977,7 @@ function Start-BatchMode {
                     if ($script:iSCSICandidateAdapters) {
                         $iscsiAdapters = @($script:iSCSICandidateAdapters | ForEach-Object { $_.Adapter })
                     } else {
-                        $iscsiAdapters = @(Get-NetAdapter | Where-Object {
+                        $iscsiAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object {
                             $_.Name -notlike "vEthernet*" -and
                             $_.InterfaceDescription -notlike "*Hyper-V*" -and
                             $_.InterfaceDescription -notlike "*Virtual*"
@@ -12180,25 +12195,22 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Cluster validation: skipped" -color "Debug"
     }
 
-    # Step 25: Win11 / Server 2025 UI Cleanup (v1.71.0)
+    # Step 25: Windows UI Cleanup — version-aware (v1.89.0)
     $stepNum++
     if ($Config.Win11Cleanup) {
-        $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction SilentlyContinue).CurrentBuildNumber
-        if ($build -ge 22000) {
-            Write-OutputColor "  [$stepNum/$totalSteps] Applying Windows 11 UI cleanup..." -color "Info"
-            if ($script:DryRunMode) {
-                Write-OutputColor "           [DRY RUN] Would apply Win11 UI tweaks" -color "Info"
+        Write-OutputColor "  [$stepNum/$totalSteps] Applying Windows UI cleanup (version-aware)..." -color "Info"
+        if ($script:DryRunMode) {
+            Write-OutputColor "           [DRY RUN] Would apply UI tweaks for detected OS version" -color "Info"
+            $changesApplied++
+        }
+        else {
+            try {
+                Invoke-Win11UICleanup
                 $changesApplied++
             }
-            else {
-                try {
-                    Invoke-Win11UICleanup
-                    $changesApplied++
-                }
-                catch {
-                    Write-OutputColor "           Win11 cleanup failed: $_" -color "Warning"
-                    $errors++
-                }
+            catch {
+                Write-OutputColor "           UI cleanup failed: $_" -color "Warning"
+                $errors++
             }
         }
         else {

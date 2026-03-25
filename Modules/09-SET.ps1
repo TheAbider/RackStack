@@ -165,7 +165,7 @@ function Test-SetTeamHealth {
     $members = @($team.NetAdapterInterfaceDescription)
     $allHealthy = $true
     foreach ($member in $members) {
-        $adapter = Get-NetAdapter | Where-Object { $_.InterfaceDescription -eq $member }
+        $adapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceDescription -eq $member }
         if ($null -eq $adapter -or $adapter.Status -ne 'Up') {
             Write-OutputColor "  WARNING: Team member '$member' is not Up" -color "Warning"
             $allHealthy = $false

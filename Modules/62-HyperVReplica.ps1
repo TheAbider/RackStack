@@ -503,6 +503,7 @@ function Enable-VMReplicationWizard {
         30  { "30 seconds" }
         300 { "5 minutes" }
         900 { "15 minutes" }
+        default { "$freqSec seconds" }
     }
 
     # Step 7: Initial replication method

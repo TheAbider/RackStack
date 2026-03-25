@@ -34,7 +34,7 @@ function Test-HyperVInstallation {
 
     # Check virtualization support
     try {
-        $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+        $cpu = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -ne $cpu) {
             $virtEnabled = $cpu.VirtualizationFirmwareEnabled
             $color = if ($virtEnabled) { "Success" } else { "Error" }

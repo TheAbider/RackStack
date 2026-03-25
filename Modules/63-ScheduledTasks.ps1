@@ -662,7 +662,19 @@ function Import-ScheduledTaskXML {
     if (-not (Confirm-UserAction -Message "Import this task?")) { return }
 
     try {
-        Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Xml $xml -ErrorAction Stop | Out-Null
+        # Check if task already exists and offer overwrite
+        $existingTask = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+        if ($null -ne $existingTask) {
+            Write-OutputColor "  A task named '$taskName' already exists at $taskPath." -color "Warning"
+            if (Confirm-UserAction -Message "Overwrite existing task?") {
+                Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Xml $xml -Force -ErrorAction Stop | Out-Null
+            } else {
+                Write-OutputColor "  Import cancelled." -color "Info"
+                return
+            }
+        } else {
+            Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Xml $xml -ErrorAction Stop | Out-Null
+        }
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Task imported successfully!" -color "Success"
         Write-OutputColor "  Name: $taskName" -color "Info"
@@ -673,9 +685,6 @@ function Import-ScheduledTaskXML {
     catch {
         Write-RackStackError -Code "RS-7006" -Detail "Scheduled task registration failed for '$taskName': $($_.Exception.Message)"
         Write-OutputColor "  Error importing task: $_" -color "Error"
-        if ($_.Exception.Message -match 'already exists') {
-            Write-OutputColor "  Tip: A task with this name already exists. Use a different name or delete the existing task first." -color "Warning"
-        }
     }
 }
 #endregion

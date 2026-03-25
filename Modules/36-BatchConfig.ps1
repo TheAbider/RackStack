@@ -724,7 +724,12 @@ function Export-BatchConfigFromState {
             if (-not (Confirm-UserAction -Message "File already exists. Overwrite?")) { return }
         }
 
-        $config | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
+        try {
+            $config | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
+        } catch {
+            Write-OutputColor "  Failed to save batch config: $_" -color "Error"
+            return
+        }
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Batch config generated from current state: $savePath" -color "Success"

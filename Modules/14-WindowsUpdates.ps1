@@ -96,25 +96,38 @@ function Install-WindowsUpdates {
     Write-OutputColor "" -color "Info"
 
     try {
-        # Install NuGet provider if needed (suppress noisy PackageManagement prompts)
-        $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-        if (-not $nuget) {
-            Write-OutputColor "  Installing NuGet provider..." -color "Info"
-            $null = Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ForceBootstrap -Confirm:$false -ErrorAction Stop
-        }
+        # Suppress all PackageManagement/NuGet confirmation prompts
+        $savedConfirmPref = $ConfirmPreference
+        $ConfirmPreference = 'None'
+        $needsRedraw = $false
 
-        # Install PSWindowsUpdate module if needed
-        $psWindowsUpdate = Get-Module -ListAvailable -Name PSWindowsUpdate
-        if (-not $psWindowsUpdate) {
-            Write-OutputColor "  Installing PSWindowsUpdate module..." -color "Info"
-            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-            Install-Module -Name PSWindowsUpdate -Force -SkipPublisherCheck -ErrorAction Stop
+        try {
+            # Always ensure NuGet provider is bootstrapped (skip check — the check itself can prompt)
+            $nuget = Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue |
+                Where-Object { $_.Version -ge [version]'2.8.5.201' }
+            if (-not $nuget) {
+                Write-OutputColor "  Installing NuGet provider..." -color "Info"
+                $null = Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ForceBootstrap -Confirm:$false -ErrorAction Stop
+                $needsRedraw = $true
+            }
+
+            # Install PSWindowsUpdate module if needed
+            $psWindowsUpdate = Get-Module -ListAvailable -Name PSWindowsUpdate
+            if (-not $psWindowsUpdate) {
+                Write-OutputColor "  Installing PSWindowsUpdate module..." -color "Info"
+                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+                Install-Module -Name PSWindowsUpdate -Force -SkipPublisherCheck -Confirm:$false -ErrorAction Stop
+                $needsRedraw = $true
+            }
+        }
+        finally {
+            $ConfirmPreference = $savedConfirmPref
         }
 
         Import-Module PSWindowsUpdate -ErrorAction Stop
 
         # Redraw header if module installation pushed it off screen
-        if (-not $nuget -or -not $psWindowsUpdate) {
+        if ($needsRedraw) {
             Clear-Host
             Write-CenteredOutput "Windows Updates" -color "Info"
         }

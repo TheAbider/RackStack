@@ -71,7 +71,7 @@ function Show-MPIOStatusSummary {
 
             # Show active MPIO paths via WMI if available
             try {
-                $mpioDisks = @(Get-CimInstance -Namespace "root\wmi" -ClassName "MPIO_DISK_INFO" -ErrorAction SilentlyContinue)
+                $mpioDisks = @(Get-CimInstance -Namespace "root\wmi" -ClassName "MPIO_DISK_INFO" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
                 if ($mpioDisks.Count -gt 0) {
                     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
                     Write-OutputColor "  │$("  ACTIVE MULTIPATH DISKS".PadRight(72))│" -color "Info"

@@ -140,9 +140,24 @@ function Set-NTPServer {
             return
         }
 
-        # Restart time service
-        Restart-Service w32time -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
+        # Restart time service (validate it exists first)
+        $w32Svc = Get-Service -Name w32time -ErrorAction SilentlyContinue
+        if ($null -ne $w32Svc) {
+            if ($w32Svc.Status -ne 'Running') {
+                Start-Service w32time -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            } else {
+                Restart-Service w32time -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            }
+            # Verify service restarted
+            $w32Svc = Get-Service -Name w32time -ErrorAction SilentlyContinue
+            if ($null -ne $w32Svc -and $w32Svc.Status -ne 'Running') {
+                Write-OutputColor "  WARNING: W32Time service failed to restart." -color "Warning"
+            }
+        } else {
+            Write-OutputColor "  WARNING: W32Time service not found. Time sync may not work." -color "Warning"
+        }
 
         # Force sync
         $null = w32tm /resync /force 2>&1

@@ -78,9 +78,17 @@ function Show-MainMenu {
                   elseif ($dashCPU -ge $warningThreshold -or $dashOS.MemPct -ge $warningThreshold -or $dashDisk.UsedPct -ge ($warningThreshold + 5)) { "Warning" }
                   else { "Success" }
 
+    # Session changes indicator
+    $changeCount = $script:SessionChanges.Count
+    $undoCount = $script:UndoStack.Count
+    $sessionLabel = if ($changeCount -gt 0) { "$changeCount change(s)" + $(if ($undoCount -gt 0) { ", $undoCount undoable" } else { "" }) } else { "" }
+
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-MenuItem "$dashHost" -Status $dashOS.Caption -StatusColor "Info" -Color "Info"
     Write-MenuItem "Up: $($dashOS.Uptime)" -Status "CPU: $dashCPU%  RAM: $($dashOS.MemPct)%  C: $($dashDisk.FreeGB)GB free" -StatusColor $worstColor -Color "Info"
+    if ($sessionLabel) {
+        Write-MenuItem "Session" -Status $sessionLabel -StatusColor "Success" -Color "Info"
+    }
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -282,6 +290,10 @@ function Show-SystemConfigMenu {
     } -CacheSeconds 120
     $powerPlan = Get-CachedValue -Key "PowerPlan" -FetchScript { (Get-CurrentPowerPlan).Name } -CacheSeconds 60
     $powerColor = if ($powerPlan -match "High") { "Success" } else { "Warning" }
+    $licStatus = Get-CachedValue -Key "LicenseActivated" -FetchScript {
+        if (Test-WindowsActivated) { "Activated" } else { "Not Activated" }
+    } -CacheSeconds 300
+    $licColor = if ($licStatus -eq "Activated") { "Success" } else { "Warning" }
 
     if ($hostdisplay.Length -gt 15) { $hostdisplay = $hostdisplay.Substring(0, 12) + "..." }
     if ($domaindisplay.Length -gt 30) { $domaindisplay = $domaindisplay.Substring(0,27) + "..." }
@@ -289,9 +301,18 @@ function Show-SystemConfigMenu {
     if ($powerPlan.Length -gt 30) { $powerPlan = $powerPlan.Substring(0,27) + "..." }
 
     Write-OutputColor "" -color "Info"
+    # Uptime + last boot (cheap — no CIM call; TickCount64 needs .NET 4.8+, fallback to TickCount)
+    try { $uptimeMs = [Environment]::TickCount64 }
+    catch { $uptimeMs = [math]::Abs([Environment]::TickCount) }
+    $uptimeDays = [math]::Floor($uptimeMs / 86400000)
+    $uptimeHrs = [math]::Floor(($uptimeMs % 86400000) / 3600000)
+    $uptimeStr = if ($uptimeDays -gt 0) { "${uptimeDays}d ${uptimeHrs}h" } else { "${uptimeHrs}h" }
+    $lastBoot = (Get-Date).AddMilliseconds(-$uptimeMs).ToString("yyyy-MM-dd HH:mm")
+
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                         SYSTEM CONFIGURATION").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "  Uptime: $uptimeStr (booted $lastBoot)" -color "Info"
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -299,15 +320,35 @@ function Show-SystemConfigMenu {
     Write-MenuItem "[2]  Join a Domain" -Status $domaindisplay -StatusColor $domainColor
     Write-MenuItem "[3]  Promote to Domain Controller ►"
     Write-MenuItem "[4]  Set Timezone" -Status $timezonedisplay -StatusColor "Info"
-    Write-MenuItem "[5]  Windows Updates ►"
-    $licStatus = Get-CachedValue -Key "LicenseActivated" -FetchScript {
-        if (Test-WindowsActivated) { "Activated" } else { "Not Activated" }
+    $lastUpdate = Get-CachedValue -Key "LastUpdateDate" -FetchScript {
+        try {
+            # Fast: check last successful install from Event Log (ID 19 = installed, 20 = failed)
+            $evt = Get-WinEvent -LogName 'System' -FilterXPath "*[System[Provider[@Name='Microsoft-Windows-WindowsUpdateClient'] and EventID=19]]" -MaxEvents 1 -ErrorAction SilentlyContinue
+            if ($evt) {
+                $days = [math]::Floor(((Get-Date) - $evt.TimeCreated).TotalDays)
+                if ($days -eq 0) { "Today" } elseif ($days -eq 1) { "Yesterday" } else { "${days}d ago" }
+            } else { "" }
+        } catch { "" }
     } -CacheSeconds 300
-    $licColor = if ($licStatus -eq "Activated") { "Success" } else { "Warning" }
-    Write-MenuItem "[6]  License Server" -Status $licStatus -StatusColor $licColor
-    Write-MenuItem "[7]  Set Power Plan" -Status $powerPlan -StatusColor $powerColor
+    $updateColor = if ($lastUpdate -match "^\d+d" -and [int]($lastUpdate -replace 'd.*','') -gt 30) { "Warning" } else { "Info" }
+    if ($lastUpdate) {
+        Write-MenuItem "[5]  Windows Updates ►" -Status "Last: $lastUpdate" -StatusColor $updateColor
+    } else {
+        Write-MenuItem "[5]  Windows Updates ►"
+    }
+    Write-MenuItem "[6]  Sync Time"
+    Write-MenuItem "[7]  License Server" -Status $licStatus -StatusColor $licColor
+    Write-MenuItem "[8]  Set Power Plan" -Status $powerPlan -StatusColor $powerColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
+
+    # Pending reboot indicator
+    $windowsRebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 30
+    if ($global:RebootNeeded -or $windowsRebootPending) {
+        Write-OutputColor "  [!] Reboot pending" -color "Warning"
+        Write-OutputColor "" -color "Info"
+    }
+
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -383,10 +424,16 @@ function Show-SecurityAccessMenu {
     $defenderStatus = Get-CachedValue -Key "DefenderRT" -FetchScript {
         try {
             $mp = Get-MpComputerStatus -ErrorAction Stop
-            if ($mp.RealTimeProtectionEnabled) { "RT: On" } else { "RT: Off" }
+            $sigAge = $mp.AntivirusSignatureAge
+            $rtLabel = if ($mp.RealTimeProtectionEnabled) { "RT:On" } else { "RT:Off" }
+            $sigLabel = if ($null -ne $sigAge) { "Sigs:${sigAge}d" } else { "" }
+            if ($sigLabel) { "$rtLabel $sigLabel" } else { $rtLabel }
         } catch { "N/A" }
     } -CacheSeconds 60
-    $defenderColor = if ($defenderStatus -eq "RT: On") { "Success" } elseif ($defenderStatus -eq "N/A") { "Info" } else { "Error" }
+    $defenderColor = if ($defenderStatus -match "RT:On" -and $defenderStatus -match "Sigs:[0-2]d") { "Success" }
+        elseif ($defenderStatus -match "RT:On") { "Warning" }
+        elseif ($defenderStatus -eq "N/A") { "Info" }
+        else { "Error" }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -409,7 +456,7 @@ function Show-SecurityAccessMenu {
     Write-MenuItem "[4]  Firewall Rule Templates"
     Write-MenuItem "[5]  Firewall Rule Search ►"
     Write-MenuItem "[6]  Defender Exclusions" -Status $defenderStatus -StatusColor $defenderColor
-    Write-MenuItem "[7]  Defender Status Dashboard"
+    Write-MenuItem "[7]  Defender Status Dashboard" -Status $defenderStatus -StatusColor $defenderColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -455,7 +502,7 @@ function Show-ToolsUtilitiesMenu {
             $feat = Get-WindowsFeature -Name Windows-Server-Backup -ErrorAction SilentlyContinue
             if ($feat -and $feat.InstallState -eq "Installed") { "Installed" } else { "Not Installed" }
         } else { "N/A" }
-    }
+    } -CacheSeconds 300
     $backupColor = if ($backupStatus -eq "Installed") { "Success" } elseif ($backupStatus -eq "N/A") { "Info" } else { "Warning" }
 
     Write-OutputColor "" -color "Info"
@@ -517,7 +564,7 @@ function Show-StorageClusteringMenu {
             $feat = Get-WindowsFeature -Name FS-Data-Deduplication -ErrorAction SilentlyContinue
             if ($feat -and $feat.InstallState -eq "Installed") { "Installed" } else { "Not Installed" }
         } else { "N/A" }
-    }
+    } -CacheSeconds 300
     $dedupColor = if ($dedupStatus -eq "Installed") { "Success" } elseif ($dedupStatus -eq "N/A") { "Info" } else { "Warning" }
 
     Write-OutputColor "" -color "Info"
@@ -554,10 +601,26 @@ function Show-StorageClusteringMenu {
 function Show-NetworkMenu {
     Clear-Host
 
+    # Quick primary IP status (cached)
+    $primaryIP = Get-CachedValue -Key "PrimaryIP" -FetchScript {
+        $adapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+        if ($null -ne $adapter) {
+            $ip = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1
+            if ($null -ne $ip) {
+                $origin = if ($ip.PrefixOrigin -eq 'Dhcp') { "DHCP" } else { "Static" }
+                @{ IP = "$($ip.IPAddress)/$($ip.PrefixLength)"; Origin = $origin; Adapter = $adapter.Name }
+            } else { @{ IP = "No IP"; Origin = ""; Adapter = $adapter.Name } }
+        } else { @{ IP = "No adapters up"; Origin = ""; Adapter = "" } }
+    } -CacheSeconds 15
+    $ipColor = if ($primaryIP.Origin -eq "Static") { "Success" } elseif ($primaryIP.Origin -eq "DHCP") { "Warning" } else { "Error" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                       NETWORK CONFIGURATION").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    $ipLabel = if ($primaryIP.Origin) { "$($primaryIP.IP) ($($primaryIP.Origin))" } else { $primaryIP.IP }
+    Write-OutputColor "  Primary: $ipLabel" -color $ipColor
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -580,10 +643,21 @@ function Show-NetworkMenu {
 function Show-HostNetworkMenu {
     Clear-Host
 
+    # Quick adapter summary (cached)
+    $adapterSummary = Get-CachedValue -Key "AdapterSummary" -FetchScript {
+        $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue)
+        $up = @($adapters | Where-Object { $_.Status -eq "Up" }).Count
+        $down = @($adapters | Where-Object { $_.Status -ne "Up" }).Count
+        @{ Up = $up; Down = $down; Total = $adapters.Count }
+    } -CacheSeconds 15
+    $adapterLabel = "$($adapterSummary.Up) up"
+    if ($adapterSummary.Down -gt 0) { $adapterLabel += ", $($adapterSummary.Down) down" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                     HOST NETWORK CONFIGURATION").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "  Adapters: $adapterLabel" -color $(if ($adapterSummary.Down -gt 0) { "Warning" } else { "Info" })
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

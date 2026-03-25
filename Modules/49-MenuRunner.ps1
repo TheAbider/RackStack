@@ -201,11 +201,12 @@ function Start-Show-SystemConfigMenu {
             "3" { Show-ADDSPromotionMenu }
             "4" { Set-ServerTimeZone; Write-PressEnter }
             "5" { Show-WindowsUpdatesMenu }
-            "6" { Register-ServerLicense }
-            "7" { Set-ServerPowerPlan; Write-PressEnter }
+            "6" { Sync-SystemTime; Write-PressEnter }
+            "7" { Register-ServerLicense }
+            "8" { Set-ServerPowerPlan; Write-PressEnter }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

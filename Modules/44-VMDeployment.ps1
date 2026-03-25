@@ -1956,6 +1956,25 @@ function New-DeployedVM {
         Write-OutputColor "    VHD Files: $($paths.VHDSpecificPath)" -color "Info"
         Write-OutputColor "" -color "Info"
 
+        # Pre-flight: check disk space before creating VHDs
+        $totalDiskGB = 0
+        foreach ($disk in $Config.Disks) {
+            if ($disk.Type -eq "Fixed") { $totalDiskGB += $disk.SizeGB }
+            else { $totalDiskGB += [math]::Ceiling($disk.SizeGB * 0.05) }  # Dynamic VHDs start small
+        }
+        $vhdDriveLetter = (Split-Path $paths.VHDSpecificPath -Qualifier).TrimEnd(':')
+        $drive = Get-PSDrive -Name $vhdDriveLetter -ErrorAction SilentlyContinue
+        if ($null -ne $drive -and $drive.Free -gt 0) {
+            $freeGB = [math]::Round($drive.Free / 1GB, 1)
+            if ($freeGB -lt ($totalDiskGB + 5)) {  # 5GB buffer
+                Write-OutputColor "  WARNING: Low disk space on ${vhdDriveLetter}:" -color "Error"
+                Write-OutputColor "    Required: ~${totalDiskGB} GB | Available: $freeGB GB" -color "Error"
+                if (-not (Confirm-UserAction -Message "Continue anyway? Storage may run out during creation")) {
+                    return $false
+                }
+            }
+        }
+
         New-VMDirectories -VMSpecificPath $paths.VMSpecificPath -VHDSpecificPath $paths.VHDSpecificPath -ComputerName $paths.ComputerName
 
         $vm = New-VMShell -Config $Config -VMPath $paths.VMPath -ComputerName $paths.ComputerName

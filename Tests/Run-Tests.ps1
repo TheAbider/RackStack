@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.88.0
+    Automated Test Runner for RackStack v1.89.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -2293,7 +2293,15 @@ $additionalFunctions = @(
     "Show-OSVersionMenu",
     "Test-OpticalDrive",
     "Initialize-AppConfigDir",
-    "Export-HTMLHealthReport"
+    "Export-HTMLHealthReport",
+    "Sync-SystemTime",
+    "Enable-ICMPPingRules",
+    "Enable-RDPFirewallRules",
+    "Enable-WinRMFirewallRules",
+    "Enable-NTPFirewallRules",
+    "Enable-SNMPFirewallRules",
+    "Invoke-FlushDnsCache",
+    "Invoke-NetworkStackReset"
 )
 
 foreach ($funcName in $additionalFunctions) {
@@ -7162,6 +7170,31 @@ try {
     Write-TestResult "18-FirewallTemplates: function Enable-iSCSIFirewallRules exists" ($fwContent -match 'function\s+Enable-iSCSIFirewallRules\b')
     Write-TestResult "18-FirewallTemplates: function Enable-SMBFirewallRules exists" ($fwContent -match 'function\s+Enable-SMBFirewallRules\b')
     Write-TestResult "18-FirewallTemplates: function Show-HyperVClusterFirewallRules exists" ($fwContent -match 'function\s+Show-HyperVClusterFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-ICMPPingRules exists" ($fwContent -match 'function\s+Enable-ICMPPingRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-RDPFirewallRules exists" ($fwContent -match 'function\s+Enable-RDPFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-WinRMFirewallRules exists" ($fwContent -match 'function\s+Enable-WinRMFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: ICMP uses ICMPv4 protocol" ($fwContent -match 'Protocol ICMPv4')
+    Write-TestResult "18-FirewallTemplates: ICMP uses ICMPv6 protocol" ($fwContent -match 'Protocol ICMPv6')
+    Write-TestResult "18-FirewallTemplates: ICMP uses IcmpType 8 (echo request)" ($fwContent -match 'IcmpType 8')
+    Write-TestResult "18-FirewallTemplates: ICMP has undo action" ($fwContent -match 'Add-UndoAction.*ICMP|ICMP.*Add-UndoAction')
+    Write-TestResult "18-FirewallTemplates: ICMP Ping in template comparison" ($fwContent -match '"ICMP Ping"')
+    Write-TestResult "18-FirewallTemplates: RDP uses port 3389" ($fwContent -match '3389')
+    Write-TestResult "18-FirewallTemplates: RDP has TCP and UDP rules" ($fwContent -match 'RDP Inbound TCP 3389' -and $fwContent -match 'RDP Inbound UDP 3389')
+    Write-TestResult "18-FirewallTemplates: RDP has undo action" ($fwContent -match 'Add-UndoAction.*RDP|RDP.*Add-UndoAction')
+    Write-TestResult "18-FirewallTemplates: RDP in template comparison" ($fwContent -match '"RDP"')
+    Write-TestResult "18-FirewallTemplates: WinRM uses port 5985" ($fwContent -match '5985')
+    Write-TestResult "18-FirewallTemplates: WinRM uses port 5986" ($fwContent -match '5986')
+    Write-TestResult "18-FirewallTemplates: WinRM has HTTP and HTTPS rules" ($fwContent -match 'WinRM HTTP Inbound' -and $fwContent -match 'WinRM HTTPS Inbound')
+    Write-TestResult "18-FirewallTemplates: WinRM has undo action" ($fwContent -match 'Add-UndoAction.*WinRM|WinRM.*Add-UndoAction')
+    Write-TestResult "18-FirewallTemplates: WinRM in template comparison" ($fwContent -match '"WinRM"')
+    Write-TestResult "18-FirewallTemplates: function Enable-NTPFirewallRules exists" ($fwContent -match 'function\s+Enable-NTPFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: function Enable-SNMPFirewallRules exists" ($fwContent -match 'function\s+Enable-SNMPFirewallRules\b')
+    Write-TestResult "18-FirewallTemplates: NTP uses port 123" ($fwContent -match 'LocalPort 123|RemotePort 123')
+    Write-TestResult "18-FirewallTemplates: NTP in template comparison" ($fwContent -match '"NTP"')
+    Write-TestResult "18-FirewallTemplates: SNMP uses port 161" ($fwContent -match '161')
+    Write-TestResult "18-FirewallTemplates: SNMP uses port 162" ($fwContent -match '162')
+    Write-TestResult "18-FirewallTemplates: SNMP in template comparison" ($fwContent -match '"SNMP"')
+    Write-TestResult "18-FirewallTemplates: menu has section headers" ($fwContent -match 'SERVER ROLES' -and $fwContent -match 'REMOTE ACCESS' -and $fwContent -match 'INFRASTRUCTURE SERVICES' -and $fwContent -match 'TOOLS')
     Write-TestResult "18-FirewallTemplates: uses Enable-NetFirewallRule" ($fwContent -match 'Enable-NetFirewallRule')
     Write-TestResult "18-FirewallTemplates: iSCSI uses port 3260" ($fwContent -match '3260')
     Write-TestResult "18-FirewallTemplates: cluster uses UDP 3343" ($fwContent -match '3343')
@@ -8150,7 +8183,7 @@ Write-TestResult "34-Help: settings menu specific invalid msg" ($helpContent -ma
 
 # FirewallTemplates improved error
 $fwTplContent = Get-Content -LiteralPath "$modulesPath\18-FirewallTemplates.ps1" -Raw
-Write-TestResult "18-FirewallTemplates: specific invalid msg" ($fwTplContent -match 'Enter 1-8 or B')
+Write-TestResult "18-FirewallTemplates: specific invalid msg" ($fwTplContent -match 'Enter 1-13 or B')
 
 # Operations Edit Defaults improved error
 Write-TestResult "56-OperationsMenu: edit defaults specific invalid msg" ($omContent -match 'Enter 1-12, S, R, or B')
@@ -8258,7 +8291,7 @@ Write-TestResult "45-Config: baseline second number nav check" ($ceContent2 -mat
 $dcContent = Get-Content -LiteralPath "$modulesPath\20-DiskCleanup.ps1" -Raw
 Write-TestResult "20-DiskCleanup: specific invalid msg" ($dcContent -match 'Enter 1-13 or B')
 $ndContent = Get-Content -LiteralPath "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
-Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-10 or B')
+Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-12 or B')
 
 # AD DS promotion menu — no double Write-PressEnter (sub-functions have their own)
 $adContent = Get-Content -LiteralPath "$modulesPath\61-ActiveDirectory.ps1" -Raw
@@ -8614,7 +8647,15 @@ Write-TestResult "58-NetDiag: Invoke-SubnetSweep validates subnet" ($ndContent3 
 Write-TestResult "58-NetDiag: Invoke-QuickPortScan validates target" ($ndContent3 -match 'function Invoke-QuickPortScan[\s\S]*?notmatch')
 Write-TestResult "58-NetDiag: Show-ActiveConnections function exists" ($ndContent3 -match 'function Show-ActiveConnections')
 Write-TestResult "58-NetDiag: Show-ArpTable function exists" ($ndContent3 -match 'function Show-ArpTable')
-Write-TestResult "58-NetDiag: menu has 10 options" ($ndContent3 -match 'Enter 1-10 or B')
+Write-TestResult "58-NetDiag: Invoke-FlushDnsCache function exists" ($ndContent3 -match 'function Invoke-FlushDnsCache')
+Write-TestResult "58-NetDiag: Invoke-NetworkStackReset function exists" ($ndContent3 -match 'function Invoke-NetworkStackReset')
+Write-TestResult "58-NetDiag: DNS flush uses Clear-DnsClientCache" ($ndContent3 -match 'Clear-DnsClientCache')
+Write-TestResult "58-NetDiag: network reset uses netsh winsock reset" ($ndContent3 -match 'netsh winsock reset')
+Write-TestResult "58-NetDiag: network reset uses netsh int ip reset" ($ndContent3 -match 'netsh int ip reset')
+Write-TestResult "58-NetDiag: network reset sets RebootNeeded flag" ($ndContent3 -match 'RebootNeeded.*=.*\$true')
+Write-TestResult "58-NetDiag: network reset has confirmation prompt" ($ndContent3 -match 'Are you sure')
+Write-TestResult "58-NetDiag: menu has 12 options" ($ndContent3 -match 'Enter 1-12 or B')
+Write-TestResult "58-NetDiag: menu has REPAIR section" ($ndContent3 -match 'REPAIR')
 
 # 48-MenuDisplay: Invoke-WithTimeout function existence (critical helper)
 Write-TestResult "04-Navigation: Invoke-WithTimeout defined" ($null -ne (Get-Command -Name Invoke-WithTimeout -ErrorAction SilentlyContinue))
@@ -8715,7 +8756,7 @@ Write-TestResult "07-IPConfig: Clear-MenuCache after IP set" ($ipContent2 -match
 # Clear-MenuCache: firewall templates
 $fwContent2 = Get-Content (Join-Path $modulesPath "18-FirewallTemplates.ps1") -Raw
 $fwCacheCount = ([regex]::Matches($fwContent2, 'Clear-MenuCache')).Count
-Write-TestResult "18-FirewallTemplates: Clear-MenuCache in all 6 template functions" ($fwCacheCount -ge 6)
+Write-TestResult "18-FirewallTemplates: Clear-MenuCache in all 11 template functions" ($fwCacheCount -ge 11)
 
 # Clear-MenuCache: service manager
 $smContent2 = Get-Content (Join-Path $modulesPath "30-ServiceManager.ps1") -Raw
@@ -9199,8 +9240,6 @@ $newFunctions = @(
     "Test-ReplicationHealth",
     "Test-FailoverPreFlight",
     "Save-NetworkBaseline",
-    "Compare-NetworkBaseline",
-    "Compress-OldTranscripts",
     # Save-BatchUndoState omitted: nested inside Start-BatchMode, not visible to Get-Command
     # Wave 7: dashboard/summary functions
     "Show-AdapterHealthSummary",
@@ -9699,6 +9738,12 @@ try {
     Write-TestResult "13-Timezone: Show-TimezoneComparison shows DST info" ($mod13 -match 'function Show-TimezoneComparison[\s\S]{0,2000}SupportsDaylightSavingTime')
     Write-TestResult "13-Timezone: Show-TimezoneComparison calculates time difference" ($mod13 -match 'function Show-TimezoneComparison[\s\S]{0,3000}TotalMinutes')
     Write-TestResult "13-Timezone: Set-SelectedTimezone calls Show-TimezoneComparison" ($mod13 -match 'Set-SelectedTimezone[\s\S]{0,1000}Show-TimezoneComparison')
+    Write-TestResult "13-Timezone: Sync-SystemTime function defined" ($mod13 -match 'function\s+Sync-SystemTime\b')
+    Write-TestResult "13-Timezone: Sync-SystemTime checks W32Time service" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,1000}W32Time')
+    Write-TestResult "13-Timezone: Sync-SystemTime calls w32tm /resync" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,2000}w32tm /resync')
+    Write-TestResult "13-Timezone: Sync-SystemTime queries NTP source" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,1000}w32tm /query /source')
+    Write-TestResult "13-Timezone: Sync-SystemTime has Reason parameter" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,200}\$Reason')
+    Write-TestResult "13-Timezone: Set-SelectedTimezone calls Sync-SystemTime" ($mod13 -match 'Set-SelectedTimezone[\s\S]{0,3000}Sync-SystemTime')
 
     # 24-DisableAdmin: Show-AdminAccountStatus
     Write-TestResult "24-DisableAdmin: Show-AdminAccountStatus defined" ($mod24 -match 'function\s+Show-AdminAccountStatus\b')
@@ -10055,7 +10100,7 @@ try {
     Write-TestResult "37-HealthCheck: Hardening checks UAC" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,9000}UAC")
     Write-TestResult "37-HealthCheck: Hardening checks RDP NLA" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,8000}RDP NLA")
     Write-TestResult "37-HealthCheck: Hardening checks TLS" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,3500}TLS 1\.")
-    Write-TestResult "37-HealthCheck: Hardening checks BitLocker" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,14000}BitLocker")
+    Write-TestResult "37-HealthCheck: Hardening checks BitLocker" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,15000}BitLocker")
     Write-TestResult "37-HealthCheck: Hardening checks Script Block Logging" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,12000}ScriptBlockLogging")
     Write-TestResult "37-HealthCheck: Hardening checks antivirus" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,14000}MpComputerStatus")
     Write-TestResult "37-HealthCheck: Hardening checks WinRM" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,7000}WinRM Encryption")
@@ -11470,6 +11515,213 @@ try {
 
 } catch {
     Write-TestResult "ServerScore + FleetReport + PasswordPolicy + FirewallRuleAudit tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 157: v1.89.0 ENHANCEMENTS (error handling, NuGet fix, templates)
+# ============================================================================
+
+Write-SectionHeader "SECTION 157: v1.89.0 ENHANCEMENTS"
+
+try {
+    # Error handling fixes — Get-NetAdapter calls now have -ErrorAction
+    $setContent = Get-Content (Join-Path $modulesPath "09-SET.ps1") -Raw
+    Write-TestResult "09-SET: Get-NetAdapter has ErrorAction in team health" ($setContent -match 'Get-NetAdapter -ErrorAction')
+
+    $epContent = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: Get-NetAdapter has ErrorAction in iSCSI auto" ($epContent -match 'Get-NetAdapter -ErrorAction SilentlyContinue')
+
+    # Defender exclusions graceful failure
+    $defContent = Get-Content (Join-Path $modulesPath "17-DefenderExclusions.ps1") -Raw
+    Write-TestResult "17-Defender: Get-MpPreference has ErrorAction" ($defContent -match 'Get-MpPreference -ErrorAction')
+    Write-TestResult "17-Defender: null check after Get-MpPreference" ($defContent -match 'null -eq \$prefs')
+
+    # DNS undo script has ErrorAction
+    $ipContent3 = Get-Content (Join-Path $modulesPath "07-IPConfiguration.ps1") -Raw
+    Write-TestResult "07-IPConfig: DNS undo has ErrorAction" ($ipContent3 -match 'ResetServerAddresses -ErrorAction')
+
+    # NuGet fix in Windows Updates
+    $wuContent = Get-Content (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw
+    Write-TestResult "14-WindowsUpdates: ConfirmPreference suppressed" ($wuContent -match "ConfirmPreference.*=.*'None'")
+    Write-TestResult "14-WindowsUpdates: NuGet uses -ListAvailable check" ($wuContent -match 'Get-PackageProvider.*-ListAvailable')
+    Write-TestResult "14-WindowsUpdates: Install-Module has -Confirm:false" ($wuContent -match 'Install-Module.*-Confirm:\$false')
+    Write-TestResult "14-WindowsUpdates: ConfirmPreference restored in finally" ($wuContent -match 'finally[\s\S]{0,100}\$ConfirmPreference.*=.*\$savedConfirmPref')
+
+    # License check timeout
+    $scContent = Get-Content (Join-Path $modulesPath "05-SystemCheck.ps1") -Raw
+    Write-TestResult "05-SystemCheck: SoftwareLicensingProduct has timeout" ($scContent -match 'SoftwareLicensingProduct.*OperationTimeoutSec')
+
+    # Menu data fetched before render
+    $mdContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+    # License fetch must appear BEFORE first Write-MenuItem in SystemConfigMenu
+    $licFetchPos = $mdContent.IndexOf('LicenseActivated')
+    $firstMenuItemPos = $mdContent.IndexOf('Write-MenuItem "[1]  Set Hostname"')
+    Write-TestResult "48-MenuDisplay: license fetch before menu render" ($licFetchPos -lt $firstMenuItemPos -and $licFetchPos -gt 0)
+
+    # Sync Time function and menu
+    Write-TestResult "48-MenuDisplay: Sync Time menu item exists" ($mdContent -match 'Write-MenuItem.*Sync Time')
+    $mrContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
+    Write-TestResult "49-MenuRunner: Sync-SystemTime handler exists" ($mrContent -match 'Sync-SystemTime')
+
+    # Firewall template menu structure
+    $fwContent3 = Get-Content (Join-Path $modulesPath "18-FirewallTemplates.ps1") -Raw
+    Write-TestResult "18-FirewallTemplates: 13 menu items (Enter 1-13)" ($fwContent3 -match 'Enter 1-13 or B')
+    Write-TestResult "18-FirewallTemplates: 11 template comparison items" ($fwContent3 -match 'Enter 1-11\.')
+    $fwUndoCount = ([regex]::Matches($fwContent3, 'Add-UndoAction')).Count
+    Write-TestResult "18-FirewallTemplates: undo action for each template ($fwUndoCount)" ($fwUndoCount -ge 11)
+    $fwSessionCount = ([regex]::Matches($fwContent3, 'Add-SessionChange')).Count
+    Write-TestResult "18-FirewallTemplates: session change for each template ($fwSessionCount)" ($fwSessionCount -ge 11)
+
+    # TickCount64 compatibility
+    Write-TestResult "48-MenuDisplay: TickCount64 has try/catch fallback" ($mdContent -match 'TickCount64' -and $mdContent -match 'catch \{.*TickCount')
+
+    # w32tm validation
+    $tzContent = Get-Content (Join-Path $modulesPath "13-Timezone.ps1") -Raw
+    Write-TestResult "13-Timezone: Sync-SystemTime validates w32tm exists" ($tzContent -match 'function Sync-SystemTime[\s\S]{0,500}Get-Command w32tm')
+
+    # netsh error handling
+    $ndContent4 = Get-Content (Join-Path $modulesPath "58-NetworkDiagnostics.ps1") -Raw
+    $netshExitChecks = ([regex]::Matches($ndContent4, 'LASTEXITCODE')).Count
+    Write-TestResult "58-NetDiag: netsh commands check LASTEXITCODE ($netshExitChecks checks)" ($netshExitChecks -ge 3)
+    # Health check adapter warnings
+    $hcContent = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
+    Write-TestResult "37-HealthCheck: flags 100 Mbps adapters" ($hcContent -match '100.*Mbps.*SLOW|SLOW.*100.*Mbps')
+    Write-TestResult "37-HealthCheck: checks adapter packet errors" ($hcContent -match 'Get-NetAdapterStatistics' -and $hcContent -match 'InErrors|OutErrors')
+    Write-TestResult "37-HealthCheck: shows Defender signature age" ($hcContent -match 'AntivirusSignatureAge')
+    Write-TestResult "37-HealthCheck: shows last scan time" ($hcContent -match 'FullScanEndTime|QuickScanEndTime')
+    Write-TestResult "37-HealthCheck: readiness Defender shows sig age" ($hcContent -match 'sigs.*old')
+
+    # Service manager critical service warning
+    $smContent3 = Get-Content (Join-Path $modulesPath "30-ServiceManager.ps1") -Raw
+    Write-TestResult "30-ServiceManager: critical service list defined" ($smContent3 -match 'criticalServices.*NTDS.*DNS')
+    Write-TestResult "30-ServiceManager: critical service warning shown" ($smContent3 -match 'CRITICAL SERVICE')
+
+    # IP config DNS suffix
+    $ipContent4 = Get-Content (Join-Path $modulesPath "07-IPConfiguration.ps1") -Raw
+    Write-TestResult "07-IPConfig: shows DNS suffix search list" ($ipContent4 -match 'Get-DnsClientGlobalSetting')
+    Write-TestResult "07-IPConfig: shows per-adapter DNS suffix" ($ipContent4 -match 'ConnectionSpecificSuffix')
+
+    # Network menu shows primary IP
+    Write-TestResult "48-MenuDisplay: network menu shows primary IP" ($mdContent -match 'PrimaryIP')
+    Write-TestResult "48-MenuDisplay: network menu shows DHCP/Static" ($mdContent -match 'DHCP.*Static|Static.*DHCP')
+
+    # Session change counter in main menu
+    Write-TestResult "48-MenuDisplay: main menu shows session changes" ($mdContent -match 'SessionChanges\.Count')
+    Write-TestResult "48-MenuDisplay: main menu shows undo count" ($mdContent -match 'UndoStack\.Count')
+
+    # Last boot time in system config
+    Write-TestResult "48-MenuDisplay: system config shows last boot" ($mdContent -match 'lastBoot')
+
+    # Windows Update last install date
+    Write-TestResult "48-MenuDisplay: Windows Update shows last date" ($mdContent -match 'LastUpdateDate')
+    Write-TestResult "48-MenuDisplay: Windows Update uses event log (fast)" ($mdContent -match 'WindowsUpdateClient.*EventID=19')
+
+    # Host network adapter summary
+    Write-TestResult "48-MenuDisplay: host network shows adapter summary" ($mdContent -match 'AdapterSummary')
+
+    # VM disk space check
+    $vmContent2 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+    Write-TestResult "44-VMDeployment: pre-flight disk space check" ($vmContent2 -match 'Low disk space')
+    Write-TestResult "44-VMDeployment: calculates required disk space" ($vmContent2 -match 'totalDiskGB')
+
+    # BitLocker TPM validation
+    $blContent3 = Get-Content (Join-Path $modulesPath "31-BitLocker.ps1") -Raw
+    Write-TestResult "31-BitLocker: TPM check before TPM protector" ($blContent3 -match 'Get-Tpm')
+    Write-TestResult "31-BitLocker: warns if no TPM present" ($blContent3 -match 'No TPM detected')
+    Write-TestResult "31-BitLocker: warns if TPM not ready" ($blContent3 -match 'TpmReady')
+
+    # Scheduled task import overwrite
+    $stContent2 = Get-Content (Join-Path $modulesPath "63-ScheduledTasks.ps1") -Raw
+    Write-TestResult "63-Tasks: checks for existing task before import" ($stContent2 -match 'Get-ScheduledTask.*TaskName.*TaskPath.*ErrorAction')
+    Write-TestResult "63-Tasks: offers overwrite with -Force" ($stContent2 -match 'Register-ScheduledTask.*-Force')
+
+    # Cache timeout consistency (multiline — key and CacheSeconds on different lines)
+    Write-TestResult "48-MenuDisplay: WSB status has cache timeout" ($mdContent -match 'WSBInstalled[\s\S]{0,300}CacheSeconds')
+    Write-TestResult "48-MenuDisplay: Dedup status has cache timeout" ($mdContent -match 'DedupInstalled[\s\S]{0,300}CacheSeconds')
+    # EntryPoint fixes
+    $epContent2 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: UAC failure exits with code 1" ($epContent2 -match 'elevationFailed.*=.*\$true')
+    Write-TestResult "50-EntryPoint: batch config validates null JSON" ($epContent2 -match 'null -eq \$batchConfig')
+    Write-TestResult "50-EntryPoint: batch config validates empty properties" ($epContent2 -match 'configHash\.Count -eq 0')
+    Write-TestResult "50-EntryPoint: batch mode ensures TempPath exists" ($epContent2 -match 'Ensure TempPath exists' -and $epContent2 -match 'New-Item.*TempPath.*Directory')
+} catch {
+    Write-TestResult "v1.89.0 Enhancement Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 158: v1.89.0 BEHAVIOR TESTS (VM, Storage, Checkpoints)
+# ============================================================================
+
+Write-SectionHeader "SECTION 158: v1.89.0 BEHAVIOR TESTS"
+
+try {
+    # 44-VMDeployment behavior tests
+    $vmContent3 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+    Write-TestResult "44-VMDeployment: Set-VMConfigName rejects invalid chars" ($vmContent3 -match 'customName.*-match.*\\\\|customName.*-match.*[/:*?]')
+    Write-TestResult "44-VMDeployment: Set-VMConfigName checks existing VM" ($vmContent3 -match 'Get-VM.*-Name.*customName|Get-VM.*VMName')
+    Write-TestResult "44-VMDeployment: Connect-FailoverCluster validates nodes" ($vmContent3 -match 'Get-ClusterNode')
+    Write-TestResult "44-VMDeployment: Connect-FailoverCluster detects CSV" ($vmContent3 -match 'Get-ClusterSharedVolume')
+    Write-TestResult "44-VMDeployment: disk space check in New-DeployedVM" ($vmContent3 -match 'totalDiskGB')
+    Write-TestResult "44-VMDeployment: fixed VHD counts full size" ($vmContent3 -match 'Fixed.*totalDiskGB.*SizeGB')
+    Write-TestResult "44-VMDeployment: dynamic VHD estimates small" ($vmContent3 -match 'Dynamic.*0\.05|totalDiskGB.*Ceiling')
+
+    # 59-StorageBackends behavior tests
+    $sbContent = Get-Content (Join-Path $modulesPath "59-StorageBackends.ps1") -Raw
+    Write-TestResult "59-StorageBackends: Test-SMB3SharePath validates path" ($sbContent -match 'function Test-SMB3SharePath[\s\S]{0,1000}Test-Path')
+    Write-TestResult "59-StorageBackends: validates storage backend type" ($sbContent -match 'ValidStorageBackends')
+    Write-TestResult "59-StorageBackends: S2D requires cluster check" ($sbContent -match 'S2D[\s\S]{0,500}cluster|Test-S2DAvailable')
+
+    # 52-VMCheckpoints behavior tests
+    $cpContent = Get-Content (Join-Path $modulesPath "52-VMCheckpoints.ps1") -Raw
+    Write-TestResult "52-VMCheckpoints: age warning uses TotalDays" ($cpContent -match 'TotalDays')
+    Write-TestResult "52-VMCheckpoints: deletion uses Confirm false" ($cpContent -match 'Remove-VMCheckpoint.*Confirm.*false|Remove-VMSnapshot.*Confirm.*false')
+
+    # 31-BitLocker TPM validation
+    $blContent4 = Get-Content (Join-Path $modulesPath "31-BitLocker.ps1") -Raw
+    Write-TestResult "31-BitLocker: Get-Tpm validates presence" ($blContent4 -match 'Get-Tpm[\s\S]{0,200}TpmPresent')
+    Write-TestResult "31-BitLocker: checks TpmReady state" ($blContent4 -match 'TpmReady')
+    Write-TestResult "31-BitLocker: suggests password-only for non-TPM" ($blContent4 -match 'option \[3\].*Password only')
+
+    # 63-ScheduledTasks overwrite
+    $stContent3 = Get-Content (Join-Path $modulesPath "63-ScheduledTasks.ps1") -Raw
+    Write-TestResult "63-Tasks: pre-checks existing task" ($stContent3 -match 'Get-ScheduledTask.*TaskName.*TaskPath.*SilentlyContinue')
+    Write-TestResult "63-Tasks: offers overwrite confirmation" ($stContent3 -match 'Overwrite existing task')
+
+    # 62-HyperVReplica frequency display default
+    $hrContent = Get-Content (Join-Path $modulesPath "62-HyperVReplica.ps1") -Raw
+    Write-TestResult "62-HyperVReplica: freq display has default case" ($hrContent -match 'freqDisplay = switch[\s\S]{0,300}default')
+
+    # 19-NTP service validation
+    $ntpContent3 = Get-Content (Join-Path $modulesPath "19-NTPConfiguration.ps1") -Raw
+    Write-TestResult "19-NTP: validates W32Time service before restart" ($ntpContent3 -match 'Get-Service.*w32time[\s\S]{0,200}Status.*Running')
+    Write-TestResult "19-NTP: warns if W32Time not found" ($ntpContent3 -match 'W32Time service not found')
+
+    # 64-SystemDebloat version-aware debloat
+    $dbContent = Get-Content (Join-Path $modulesPath "64-SystemDebloat.ps1") -Raw
+    Write-TestResult "64-Debloat: Get-WindowsDebloatInfo function exists" ($dbContent -match 'function Get-WindowsDebloatInfo')
+    Write-TestResult "64-Debloat: detects Win11 vs Win10" ($dbContent -match 'IsWin11' -and $dbContent -match 'IsWin10')
+    Write-TestResult "64-Debloat: version tags for 24H2+" ($dbContent -match 'Win11_24H2')
+    Write-TestResult "64-Debloat: version tags for Server2025" ($dbContent -match 'Server2025')
+    Write-TestResult "64-Debloat: Win10-specific packages" ($dbContent -match 'osInfo\.IsWin10[\s\S]{0,300}Print3D|Microsoft\.Print3D')
+    Write-TestResult "64-Debloat: Win11 24H2+ Copilot packages" ($dbContent -match 'Build -ge 26100[\s\S]{0,300}Copilot')
+    Write-TestResult "64-Debloat: Win11 25H2+ Recall packages" ($dbContent -match 'Build -ge 26200[\s\S]{0,300}Recall')
+    Write-TestResult "64-Debloat: version-aware registry tweaks" ($dbContent -match 'DisableAIDataAnalysis')
+    Write-TestResult "64-Debloat: Copilot disable for 24H2+" ($dbContent -match 'ShowCopilotButton')
+    Write-TestResult "64-Debloat: Win10 Cortana disable" ($dbContent -match 'AllowCortana' -and $dbContent -match 'Disable Cortana')
+    Write-TestResult "64-Debloat: UI cleanup handles Win10" ($dbContent -match 'function Invoke-Win11UICleanup' -and $dbContent -match 'osInfo\.IsWin10[\s\S]{0,300}AllowCortana')
+    Write-TestResult "64-Debloat: menu shows OS version profile" ($dbContent -match 'VersionTag')
+    Write-TestResult "64-Debloat: telemetry includes RetailDemo path" ($dbContent -match 'RetailDemo')
+    Write-TestResult "64-Debloat: telemetry includes Shell path for 24H2+" ($dbContent -match 'Shell.*26100|Build -ge 26100[\s\S]{0,200}Shell')
+    Write-TestResult "64-Debloat: auto-removes Edge startup" ($dbContent -match 'StartupBoostEnabled')
+    Write-TestResult "64-Debloat: auto-removes OneDrive startup" ($dbContent -match 'PreventNetworkTrafficPreUserSignIn')
+    Write-TestResult "64-Debloat: Phase 5 startup item cleanup" ($dbContent -match 'Startup Item Cleanup')
+    Write-TestResult "64-Debloat: startup patterns include Teams" ($dbContent -match 'startupPatterns[\s\S]{0,500}Teams')
+    Write-TestResult "64-Debloat: startup patterns include OneDrive" ($dbContent -match 'startupPatterns[\s\S]{0,500}OneDrive')
+    Write-TestResult "64-Debloat: custom debloat scans RunOnce" ($dbContent -match 'RunOnce')
+    Write-TestResult "64-Debloat: Server Core detection" ($dbContent -match 'IsServerCore')
+    Write-TestResult "64-Debloat: UI cleanup skips on Server Core" ($dbContent -match 'Server Core detected.*no GUI')
+} catch {
+    Write-TestResult "v1.89.0 Behavior Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

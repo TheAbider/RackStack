@@ -175,6 +175,15 @@ function Show-ServiceManager {
                 if ($navResult.ShouldReturn) { return }
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
+                    # Warn about critical services
+                    $criticalServices = @('NTDS', 'DNS', 'DFSR', 'LanmanServer', 'W32Time', 'ClusSvc', 'vmms', 'wuauserv')
+                    if ($svc.Name -in $criticalServices) {
+                        Write-OutputColor "" -color "Info"
+                        Write-OutputColor "  *** CRITICAL SERVICE ***" -color "Error"
+                        Write-OutputColor "  '$($svc.DisplayName)' is a critical infrastructure service." -color "Error"
+                        Write-OutputColor "  Stopping it may cause service outages or cluster failovers." -color "Error"
+                    }
+
                     # Warn about dependent services
                     $dependents = @(Get-Service -Name $svc.Name -DependentServices -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' })
                     if ($dependents.Count -gt 0) {

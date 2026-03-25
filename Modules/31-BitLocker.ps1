@@ -205,6 +205,21 @@ function Show-BitLockerManagement {
                         $navResult = Test-NavigationCommand -UserInput $method
                         if ($navResult.ShouldReturn) { return }
 
+                        # Validate TPM before TPM-based methods
+                        if ($method -in "1","2") {
+                            $tpm = Get-Tpm -ErrorAction SilentlyContinue
+                            if ($null -eq $tpm -or -not $tpm.TpmPresent) {
+                                Write-OutputColor "  No TPM detected on this system." -color "Error"
+                                Write-OutputColor "  Use option [3] (Password only) for non-TPM systems." -color "Info"
+                                Write-PressEnter
+                                continue
+                            }
+                            if (-not $tpm.TpmReady) {
+                                Write-OutputColor "  TPM is present but not ready (may need initialization in BIOS)." -color "Warning"
+                                if (-not (Confirm-UserAction -Message "Attempt anyway?")) { continue }
+                            }
+                        }
+
                         try {
                             switch ($method) {
                                 "1" {

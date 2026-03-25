@@ -19,7 +19,7 @@ function Test-WindowsServer {
 # Centralized Windows activation check (replaces duplicate CIM queries across modules)
 function Test-WindowsActivated {
     try {
-        $license = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationId='$($script:WindowsLicensingAppId)' AND LicenseStatus=1" -ErrorAction SilentlyContinue
+        $license = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationId='$($script:WindowsLicensingAppId)' AND LicenseStatus=1" -OperationTimeoutSec 5 -ErrorAction SilentlyContinue
         return ($null -ne $license)
     }
     catch {
@@ -144,8 +144,8 @@ function Test-PowerShellVersion {
 # Function to check Hyper-V minimum hardware requirements
 function Test-HyperVMinimumSpecs {
     try {
-        $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
-        $mem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $cpu = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
+        $mem = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
 
         $issues = @()
 

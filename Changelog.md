@@ -1,5 +1,56 @@
 ﻿# Changelog
 
+## v1.89.0
+
+- **New:** Remote Desktop (RDP) firewall rule template — enables built-in RDP rules plus custom TCP/UDP 3389 rules on Domain and Private profiles with undo support.
+- **New:** Windows Remote Management (WinRM) firewall rule template — enables WinRM HTTP (5985) and HTTPS (5986) rules with undo support.
+- **New:** Allow Ping (ICMP Echo Request) firewall rule template — enables inbound ICMPv4/v6 echo request rules on Domain and Private profiles, with fallback to custom rule creation.
+- **New:** NTP Time Sync (UDP 123) firewall rule template — creates inbound and outbound NTP rules for time synchronization.
+- **New:** SNMP Monitoring (UDP 161/162) firewall rule template — enables SNMP agent polling and trap rules for monitoring tools.
+- **New:** Firewall Rule Templates menu reorganized with section headers (Server Roles, Remote Access, Infrastructure Services, Tools) for better navigation.
+- **New:** Sync Time option in System Configuration menu — synchronize system clock via NTP without changing timezone. Shows current time, NTP source, and updated time after sync.
+- **New:** Flush DNS Cache in Network Diagnostics — clears DNS client cache and optionally re-registers DNS for domain-joined machines.
+- **New:** Network Stack Reset in Network Diagnostics — guided reset with 4 levels: DNS-only, Winsock, TCP/IP, or full reset. Includes confirmation prompts and sets reboot-needed flag.
+- **Fix:** System Configuration menu no longer freezes for 10-30 seconds on workstations. License activation check now has a 5-second timeout and all status data loads before the menu renders.
+- **Fix:** Windows Updates no longer shows an interactive NuGet provider prompt on fresh systems. Package management prompts are now fully suppressed.
+- **Hardened:** Added -OperationTimeoutSec to 6 additional Get-CimInstance calls (SoftwareLicensingProduct, Win32_Processor, Win32_ComputerSystem, Win32_OperatingSystem, MPIO_DISK_INFO) to prevent WMI hangs.
+- **Hardened:** Added -ErrorAction to unprotected Get-NetAdapter calls in SET team health check and iSCSI auto-setup. Added null guard to Defender exclusions menu. Added error handling to DNS undo scripts.
+- **Enhanced:** Defender status in Security menu now shows signature age alongside real-time protection status (e.g., "RT:On Sigs:1d"). Status also shown on Dashboard menu item. Color-coded: green if RT on and sigs fresh, yellow if sigs stale, red if RT off.
+- **Enhanced:** System Configuration menu now shows pending reboot indicator when Windows has a reboot pending.
+- **Enhanced:** Health check now flags physical adapters running at 100 Mbps (potential cabling/switch issue) and reports packet errors on adapters.
+- **Enhanced:** Health check Defender section now reports signature age (color-coded: green ≤3d, yellow 3-7d, red >7d) and last scan timestamp.
+- **Enhanced:** Server readiness check now downgrades Defender status if signatures are stale (>7 days).
+- **Enhanced:** System Configuration menu now displays system uptime (no CIM overhead — uses TickCount64).
+- **Enhanced:** Host Network Configuration menu now shows adapter summary ("3 up, 1 down") with color coding.
+- **Enhanced:** Network Configuration menu now shows primary IP address and DHCP/Static origin with color coding (green=Static, yellow=DHCP).
+- **Hardened:** Added error handling to fleet results export (45-ConfigExport) and batch config export (36-BatchConfig) to gracefully handle disk full or permission errors during file writes.
+- **Fix:** Uptime display uses TickCount64 with fallback to TickCount for .NET Framework versions below 4.8 (Server 2016/2019 compatibility).
+- **Fix:** Network stack reset now checks netsh exit codes and reports failures instead of silently succeeding.
+- **Fix:** Sync Time validates w32tm command exists before attempting time synchronization.
+- **Enhanced:** Service Manager now shows a critical service warning (red) when attempting to stop infrastructure services (NTDS, DNS, DFSR, LanmanServer, W32Time, ClusSvc, vmms).
+- **Enhanced:** IP Configuration Summary now shows DNS suffix search list (global) and per-adapter connection-specific DNS suffixes.
+- **Enhanced:** Main menu dashboard now shows session change count and undoable actions when changes have been made.
+- **Enhanced:** VM deployment now checks disk space before creating VHDs and warns if storage is low (prevents mid-creation failures).
+- **Enhanced:** System Config menu uptime now includes last boot date/time.
+- **Enhanced:** Windows Updates menu item shows last successful update date from event log (fast — no COM object overhead).
+- **Enhanced:** Main menu dashboard shows session change and undo count when changes have been made.
+- **Fix:** BitLocker now validates TPM presence and readiness before attempting TPM-based encryption. Shows clear error and suggests password-only mode on non-TPM systems.
+- **Fix:** Scheduled task import now checks for existing tasks and offers overwrite (uses `-Force`) instead of failing with cryptic error.
+- **Fix:** WSB and Deduplication feature status queries now have proper cache timeouts (300s) matching other feature checks.
+- **Fix:** Hyper-V Replica frequency display now handles non-standard replication intervals instead of showing blank.
+- **Fix:** NTP configuration now validates W32Time service exists and restarts properly, with clear warnings on failure.
+- **Cleanup:** Removed dead code: `Compare-NetworkBaseline` and `Compress-OldTranscripts` functions (never called from any menu or CLI action).
+- **Fix:** UAC elevation denial now exits with code 1 (failure) instead of 0, enabling automation scripts to detect denied elevation.
+- **Fix:** Batch mode validates null/empty JSON config before proceeding, preventing silent no-op runs.
+- **Hardened:** Start-BatchMode ensures TempPath directory exists before writing batch undo state.
+- **Major:** System Debloat is now fully version-aware. Automatically detects Windows 10, 11 (22H2/23H2/24H2/25H2+), and Server 2025 and applies version-specific package removals, registry tweaks, and UI customizations. New packages for 24H2+ (Copilot, Outlook, Cross-Device), 25H2+ (Recall, AI Studio). Version-specific registry: Recall disable, Copilot policy, telemetry minimization. UI cleanup now works on Win10 too (Cortana, web search). Batch mode Win11Cleanup is now version-aware and works on all versions automatically.
+- **Enhanced:** Debloat telemetry task sweep now covers 11 task paths (added RetailDemo, MobilePC, Shell, Cortana for 24H2+).
+- **Enhanced:** Workstation debloat Standard/Aggressive now auto-removes known startup bloat entries (OneDrive, Teams, Edge, Cortana) from Run registry keys without user interaction.
+- **Enhanced:** Debloat registry tweaks now disable Edge startup boost, Edge sidebar, and OneDrive pre-sign-in network traffic.
+- **Enhanced:** Custom debloat startup scanner now checks RunOnce keys in addition to Run keys.
+- **Enhanced:** Debloat detects Server Core and skips AppX/UI operations with informational messages instead of failing silently.
+- 65 modules, 4423 tests, 157 CLI actions, 633 functions
+
 ## v1.88.0
 
 - **New CLI Action:** `InsecureServiceAudit` — finds services with unquoted paths (classic privilege escalation vector where spaces in unquoted paths allow executable hijacking) and non-default services running as LocalSystem. JSON output with full details.
