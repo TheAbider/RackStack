@@ -79,6 +79,49 @@ function Enable-RDP {
 
         # Show current security posture
         Show-RDPSecurityStatus
+
+        # Offer subnet restriction
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Restrict RDP to a specific subnet? (recommended for security)" -color "Info"
+        Write-OutputColor "  This creates a firewall rule limiting RDP to a specific IP range." -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  [1] Restrict to subnet (enter CIDR, e.g., 10.0.1.0/24)" -color "Info"
+        Write-OutputColor "  [2] Skip (allow from any address)" -color "Info"
+        $restrictChoice = Read-Host "  Select"
+
+        if ($restrictChoice -eq "1") {
+            $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24 or 192.168.1.0/24)"
+            $navResult = Test-NavigationCommand -UserInput $subnet
+            if (-not $navResult.ShouldReturn -and -not [string]::IsNullOrWhiteSpace($subnet)) {
+                try {
+                    # Remove existing subnet restriction rule if present
+                    Remove-NetFirewallRule -DisplayName "RDP Subnet Restriction" -ErrorAction SilentlyContinue
+
+                    New-NetFirewallRule -DisplayName "RDP Subnet Restriction" `
+                        -Direction Inbound -Protocol TCP -LocalPort 3389 `
+                        -RemoteAddress $subnet -Action Allow `
+                        -Profile Domain,Private,Public `
+                        -Description "Allow RDP only from $subnet" -ErrorAction Stop | Out-Null
+
+                    # Disable the broad RDP rules so only the restricted one applies
+                    Get-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue |
+                        Where-Object { $_.DisplayName -ne "RDP Subnet Restriction" } |
+                        Disable-NetFirewallRule -ErrorAction SilentlyContinue
+
+                    Write-OutputColor "  RDP restricted to $subnet only." -color "Success"
+                    Write-OutputColor "  Broad RDP rules disabled. Only subnet rule is active." -color "Success"
+                    Add-SessionChange -Category "Security" -Description "Restricted RDP to subnet $subnet"
+                    Add-UndoAction -Category "Security" -Description "RDP subnet restriction to $subnet" -UndoScript {
+                        Remove-NetFirewallRule -DisplayName "RDP Subnet Restriction" -ErrorAction SilentlyContinue
+                        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                    }
+                }
+                catch {
+                    Write-OutputColor "  Failed to create subnet restriction: $_" -color "Error"
+                    Write-OutputColor "  Check that the CIDR format is valid (e.g., 10.0.1.0/24)." -color "Info"
+                }
+            }
+        }
     }
     catch {
         Write-RackStackError -Code "RS-2012" -Detail "Remote Desktop configuration failed: $($_.Exception.Message)"
@@ -129,6 +172,16 @@ function Show-RDPSecurityStatus {
     $rdpRule = Get-NetFirewallRule -DisplayName "Remote Desktop*" -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq $true }
     $ruleCount = @($rdpRule).Count
     Write-OutputColor "  Firewall Rules: $ruleCount enabled" -color $(if ($ruleCount -gt 0) { "Success" } else { "Warning" })
+
+    # Check subnet restriction
+    $subnetRule = Get-NetFirewallRule -DisplayName "RDP Subnet Restriction" -ErrorAction SilentlyContinue
+    if ($null -ne $subnetRule -and $subnetRule.Enabled -eq $true) {
+        $subnetFilter = $subnetRule | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue
+        $remoteAddr = if ($null -ne $subnetFilter) { $subnetFilter.RemoteAddress -join ', ' } else { "configured" }
+        Write-OutputColor "  Access Restricted: $remoteAddr" -color "Success"
+    } else {
+        Write-OutputColor "  Access Restricted: No (any address)" -color "Warning"
+    }
 
     # Check listening port
     try {

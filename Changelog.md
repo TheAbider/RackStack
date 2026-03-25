@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.89.1
+
+- **New:** RDP subnet restriction — after enabling RDP, option to restrict access to a specific subnet via firewall rule. Shows restriction status in security posture display. Includes undo support.
+- 65 modules, 4423 tests, 157 CLI actions, 633 functions
+
 ## v1.89.0
 
 - **New:** Remote Desktop (RDP) firewall rule template — enables built-in RDP rules plus custom TCP/UDP 3389 rules on Domain and Private profiles with undo support.
