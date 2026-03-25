@@ -423,7 +423,42 @@ function Enable-PowerShellRemoting {
                 Set-Service -Name WinRM -StartupType Manual -ErrorAction SilentlyContinue
             }
         }
-        Clear-MenuCache  # Invalidate cache after change
+        Clear-MenuCache
+
+        # Offer subnet restriction for WinRM
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Restrict WinRM to a specific subnet? (recommended for security)" -color "Info"
+        Write-OutputColor "  [1] Restrict to subnet  [2] Skip" -color "Info"
+        $winrmRestrict = Read-Host "  Select"
+
+        if ($winrmRestrict -eq "1") {
+            $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24)"
+            $navResult = Test-NavigationCommand -UserInput $subnet
+            if (-not $navResult.ShouldReturn -and -not [string]::IsNullOrWhiteSpace($subnet)) {
+                try {
+                    Remove-NetFirewallRule -DisplayName "WinRM Subnet Restriction" -ErrorAction SilentlyContinue
+                    New-NetFirewallRule -DisplayName "WinRM Subnet Restriction" `
+                        -Direction Inbound -Protocol TCP -LocalPort 5985,5986 `
+                        -RemoteAddress $subnet -Action Allow `
+                        -Profile Domain,Private,Public `
+                        -Description "Allow WinRM only from $subnet" -ErrorAction Stop | Out-Null
+
+                    # Disable broad WinRM rules
+                    Get-NetFirewallRule -DisplayGroup "Windows Remote Management" -ErrorAction SilentlyContinue |
+                        Disable-NetFirewallRule -ErrorAction SilentlyContinue
+
+                    Write-OutputColor "  WinRM restricted to $subnet." -color "Success"
+                    Add-SessionChange -Category "Security" -Description "Restricted WinRM to subnet $subnet"
+                    Add-UndoAction -Category "Security" -Description "WinRM subnet restriction to $subnet" -UndoScript {
+                        Remove-NetFirewallRule -DisplayName "WinRM Subnet Restriction" -ErrorAction SilentlyContinue
+                        Enable-NetFirewallRule -DisplayGroup "Windows Remote Management" -ErrorAction SilentlyContinue
+                    }
+                }
+                catch {
+                    Write-OutputColor "  Failed to create subnet restriction: $_" -color "Error"
+                }
+            }
+        }
     }
     catch {
         Write-OutputColor "  Error configuring PowerShell Remoting: $_" -color "Error"

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.89.2
+
+- **New:** WinRM subnet restriction — after enabling PowerShell Remoting, option to restrict WinRM access (ports 5985/5986) to a specific subnet. Same pattern as RDP restriction with undo support.
+- 65 modules, 4423 tests, 157 CLI actions, 633 functions
+
 ## v1.89.1
 
 - **New:** RDP subnet restriction — after enabling RDP, option to restrict access to a specific subnet via firewall rule. Shows restriction status in security posture display. Includes undo support.
