@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.89.6
+
+- **New:** Reboot Pending Reasons — health check now shows WHY a reboot is pending (Windows Update KB, component servicing, hostname change, file rename operations).
+- **New:** Strong Password Generator — generates complex random passwords (12-128 chars, upper/lower/digit/special, no ambiguous chars), auto-copies to clipboard. Available as `New-StrongPassword` function.
+- **New:** Gateway Connectivity Test — standalone test in Network Diagnostics that pings all default gateways and shows per-adapter latency.
+- 65 modules, 4433 tests, 157 CLI actions, 638 functions
+
 ## v1.89.5
 
 - **New:** iSCSI Status now shows local initiator IQN (needed for SAN whitelist configuration).

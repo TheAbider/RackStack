@@ -324,4 +324,52 @@ function Show-LocalAccountAudit {
     Clear-MenuCache
     Write-PressEnter
 }
+
+# Function to generate a strong random password
+function New-StrongPassword {
+    param([int]$Length = 16)
+
+    if ($Length -lt 12) { $Length = 12 }
+    if ($Length -gt 128) { $Length = 128 }
+
+    $upper = "ABCDEFGHJKLMNPQRSTUVWXYZ"    # No I, O (ambiguous)
+    $lower = "abcdefghjkmnpqrstuvwxyz"      # No i, l, o (ambiguous)
+    $digits = "23456789"                     # No 0, 1 (ambiguous)
+    $special = "!@#%^&*-_=+"                 # Safe special chars
+
+    # Ensure at least one of each type
+    $password = @(
+        $upper[(Get-Random -Maximum $upper.Length)]
+        $lower[(Get-Random -Maximum $lower.Length)]
+        $digits[(Get-Random -Maximum $digits.Length)]
+        $special[(Get-Random -Maximum $special.Length)]
+    )
+
+    $allChars = $upper + $lower + $digits + $special
+    for ($i = $password.Count; $i -lt $Length; $i++) {
+        $password += $allChars[(Get-Random -Maximum $allChars.Length)]
+    }
+
+    # Shuffle
+    $password = ($password | Get-Random -Count $password.Count) -join ''
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  GENERATED PASSWORD".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    Write-OutputColor "  │$("  $password".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  Length: $Length | Complexity: Upper+Lower+Digit+Special".PadRight(72))│" -color "Info"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    # Copy to clipboard if available
+    try {
+        Set-Clipboard -Value $password -ErrorAction Stop
+        Write-OutputColor "  Copied to clipboard." -color "Success"
+    }
+    catch {
+        Write-OutputColor "  Tip: Select and copy the password above." -color "Info"
+    }
+
+    return $password
+}
 #endregion

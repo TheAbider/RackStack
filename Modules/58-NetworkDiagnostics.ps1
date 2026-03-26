@@ -29,10 +29,11 @@ function Show-NetworkDiagnostics {
         Write-MenuItem "[9]  ARP Table"
         Write-MenuItem "[10] Quick Port Scan (common services)"
         Write-MenuItem "[11] Path MTU Discovery"
+        Write-MenuItem "[12] Gateway Connectivity Test"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-OutputColor "  │$("  REPAIR".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-MenuItem "[12] Reset Network Stack"
+        Write-MenuItem "[13] Reset Network Stack"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -55,13 +56,14 @@ function Show-NetworkDiagnostics {
             "9" { Show-ArpTable }
             "10" { Invoke-QuickPortScan }
             "11" { Invoke-PathMtuDiscovery }
-            "12" { Invoke-NetworkStackReset }
+            "12" { Test-GatewayConnectivity }
+            "13" { Invoke-NetworkStackReset }
             "b" { return }
             "B" { return }
             "m" { $global:ReturnToMainMenu = $true; return }
             "M" { $global:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-12 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -850,6 +852,56 @@ function Show-ArpTable {
     catch {
         Write-OutputColor "  Failed: $($_.Exception.Message)" -color "Error"
     }
+    Write-PressEnter
+}
+
+function Test-GatewayConnectivity {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Testing default gateway connectivity..." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    try {
+        $gateways = @(Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $null -ne $_.IPv4DefaultGateway })
+
+        if ($gateways.Count -eq 0) {
+            Write-OutputColor "  No default gateways configured." -color "Warning"
+            Write-PressEnter
+            return
+        }
+
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  GATEWAY CONNECTIVITY".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        foreach ($config in $gateways) {
+            $gwIp = $config.IPv4DefaultGateway.NextHop
+            $adapter = $config.InterfaceAlias
+            $ping = Test-Connection -ComputerName $gwIp -Count 2 -Quiet -ErrorAction SilentlyContinue
+
+            $status = if ($ping) { "Reachable" } else { "UNREACHABLE" }
+            $color = if ($ping) { "Success" } else { "Error" }
+
+            $line = "  $adapter -> $gwIp : $status"
+            if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+            Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+
+            # Also test latency if reachable
+            if ($ping) {
+                $latency = Test-Connection -ComputerName $gwIp -Count 3 -ErrorAction SilentlyContinue
+                if ($null -ne $latency) {
+                    $avgMs = [math]::Round(($latency | Measure-Object -Property ResponseTime -Average).Average)
+                    $latLine = "    Avg latency: ${avgMs}ms"
+                    Write-OutputColor "  │$($latLine.PadRight(72))│" -color "Info"
+                }
+            }
+        }
+
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    }
+    catch {
+        Write-OutputColor "  Failed to test gateway: $_" -color "Error"
+    }
+
     Write-PressEnter
 }
 

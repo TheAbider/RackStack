@@ -110,6 +110,40 @@ function Test-RebootPending {
     return $false
 }
 
+# Function to get the reason a reboot is pending
+function Get-RebootPendingReasons {
+    $reasons = [System.Collections.Generic.List[string]]::new()
+
+    if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") {
+        $reasons.Add("Windows component servicing (OS update)")
+    }
+    if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") {
+        # Try to get specific KBs
+        $kbs = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired" -ErrorAction SilentlyContinue
+        if ($null -ne $kbs -and $null -ne $kbs.PSObject.Properties) {
+            $kbNames = @($kbs.PSObject.Properties | Where-Object { $_.Name -notmatch "^PS" } | Select-Object -ExpandProperty Name)
+            if ($kbNames.Count -gt 0) {
+                $reasons.Add("Windows Update ($($kbNames -join ', '))")
+            } else {
+                $reasons.Add("Windows Update")
+            }
+        } else {
+            $reasons.Add("Windows Update")
+        }
+    }
+    try {
+        $pfro = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" -Name PendingFileRenameOperations -ErrorAction SilentlyContinue
+        if ($null -ne $pfro) { $reasons.Add("Pending file rename operations (driver/software install)") }
+    } catch { }
+    try {
+        $cn = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName" -ErrorAction SilentlyContinue).ComputerName
+        $acn = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName" -ErrorAction SilentlyContinue).ComputerName
+        if ($cn -and $acn -and $cn -ne $acn) { $reasons.Add("Hostname change pending ($acn -> $cn)") }
+    } catch { }
+
+    return $reasons
+}
+
 # Function to check available disk space
 function Test-MinimumDiskSpace {
     param(

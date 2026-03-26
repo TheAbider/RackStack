@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.89.5
+    Automated Test Runner for RackStack v1.89.6
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8291,7 +8291,7 @@ Write-TestResult "45-Config: baseline second number nav check" ($ceContent2 -mat
 $dcContent = Get-Content -LiteralPath "$modulesPath\20-DiskCleanup.ps1" -Raw
 Write-TestResult "20-DiskCleanup: specific invalid msg" ($dcContent -match 'Enter 1-13 or B')
 $ndContent = Get-Content -LiteralPath "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
-Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-12 or B')
+Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-13 or B')
 
 # AD DS promotion menu — no double Write-PressEnter (sub-functions have their own)
 $adContent = Get-Content -LiteralPath "$modulesPath\61-ActiveDirectory.ps1" -Raw
@@ -8654,7 +8654,7 @@ Write-TestResult "58-NetDiag: network reset uses netsh winsock reset" ($ndConten
 Write-TestResult "58-NetDiag: network reset uses netsh int ip reset" ($ndContent3 -match 'netsh int ip reset')
 Write-TestResult "58-NetDiag: network reset sets RebootNeeded flag" ($ndContent3 -match 'RebootNeeded.*=.*\$true')
 Write-TestResult "58-NetDiag: network reset has confirmation prompt" ($ndContent3 -match 'Are you sure')
-Write-TestResult "58-NetDiag: menu has 12 options" ($ndContent3 -match 'Enter 1-12 or B')
+Write-TestResult "58-NetDiag: menu has 13 options" ($ndContent3 -match 'Enter 1-13 or B')
 Write-TestResult "58-NetDiag: menu has REPAIR section" ($ndContent3 -match 'REPAIR')
 
 # 48-MenuDisplay: Invoke-WithTimeout function existence (critical helper)
@@ -11722,6 +11722,29 @@ try {
     Write-TestResult "64-Debloat: UI cleanup skips on Server Core" ($dbContent -match 'Server Core detected.*no GUI')
 } catch {
     Write-TestResult "v1.89.0 Behavior Tests" $false $_.Exception.Message
+}
+
+# v1.89.5 additions
+try {
+    $sc2 = Get-Content (Join-Path $modulesPath "05-SystemCheck.ps1") -Raw
+    Write-TestResult "05-SystemCheck: Get-RebootPendingReasons function exists" ($sc2 -match 'function Get-RebootPendingReasons')
+    Write-TestResult "05-SystemCheck: reboot reasons check Windows Update" ($sc2 -match 'Get-RebootPendingReasons[\s\S]{0,1000}Windows Update')
+    Write-TestResult "05-SystemCheck: reboot reasons check hostname change" ($sc2 -match 'function Get-RebootPendingReasons' -and $sc2 -match 'Hostname change pending')
+
+    $pw2 = Get-Content (Join-Path $modulesPath "22-Password.ps1") -Raw
+    Write-TestResult "22-Password: New-StrongPassword function exists" ($pw2 -match 'function New-StrongPassword')
+    Write-TestResult "22-Password: password generator copies to clipboard" ($pw2 -match 'Set-Clipboard')
+    Write-TestResult "22-Password: password has complexity requirements" ($pw2 -match 'upper.*lower.*digits.*special')
+
+    $hc2 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
+    Write-TestResult "37-HealthCheck: reboot shows reasons" ($hc2 -match 'Get-RebootPendingReasons')
+
+    $nd5 = Get-Content (Join-Path $modulesPath "58-NetworkDiagnostics.ps1") -Raw
+    Write-TestResult "58-NetDiag: Test-GatewayConnectivity function exists" ($nd5 -match 'function Test-GatewayConnectivity')
+    Write-TestResult "58-NetDiag: gateway test pings default gateways" ($nd5 -match 'IPv4DefaultGateway')
+    Write-TestResult "58-NetDiag: gateway test shows latency" ($nd5 -match 'Avg latency')
+} catch {
+    Write-TestResult "v1.89.5 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

@@ -870,6 +870,10 @@ function Show-SystemHealthCheck {
     Write-OutputColor "=== WINDOWS UPDATE STATUS ===" -color "Success"
     if (Test-RebootPending) {
         Write-OutputColor "  Reboot Pending: YES" -color "Warning"
+        $rebootReasons = Get-RebootPendingReasons
+        foreach ($reason in $rebootReasons) {
+            Write-OutputColor "    Reason: $reason" -color "Warning"
+        }
     }
     else {
         Write-OutputColor "  Reboot Pending: No" -color "Success"
