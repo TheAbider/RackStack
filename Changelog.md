@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.89.4
+
+- **Enhanced:** Network adapter table now shows MAC addresses alongside name, status, and speed.
+- **Enhanced:** Health check system info now shows Windows build number and feature update version (e.g., "26100 (24H2)").
+- **Enhanced:** Full Enhanced Disk Cleanup now shows total space recovered by comparing free space before and after all operations.
+- 65 modules, 4423 tests, 157 CLI actions, 634 functions
+
 ## v1.89.3
 
 - **New:** Logged-On Users display in Operations menu — shows active RDP/console sessions with color-coded status (Active=green, Disconnected=yellow).

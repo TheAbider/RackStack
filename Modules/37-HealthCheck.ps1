@@ -727,6 +727,13 @@ function Show-SystemHealthCheck {
     Write-OutputColor "  Computer Name: $(if ($cs) { $cs.Name } else { $env:COMPUTERNAME })" -color "Info"
     Write-OutputColor "  OS: $(if ($os) { $os.Caption } else { 'Unknown' })" -color "Info"
     Write-OutputColor "  Version: $(if ($os) { $os.Version } else { 'Unknown' })" -color "Info"
+    $hcBuildNum = $script:OSBuildNumber
+    $hcDisplayVer = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue).DisplayVersion
+    if ($hcBuildNum -or $hcDisplayVer) {
+        $buildLabel = "  Build: $hcBuildNum"
+        if ($hcDisplayVer) { $buildLabel += " ($hcDisplayVer)" }
+        Write-OutputColor $buildLabel -color "Info"
+    }
     Write-OutputColor "  Last Boot: $(if ($os) { $os.LastBootUpTime } else { 'Unknown' })" -color "Info"
 
     if ($os -and $os.LastBootUpTime) {

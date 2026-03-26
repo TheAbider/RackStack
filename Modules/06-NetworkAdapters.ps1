@@ -332,16 +332,17 @@ function Show-AdaptersTable {
         [hashtable]$columnWidths
     )
 
-    # Add Speed column width and widen Status for "Disconnected"
+    # Add Speed and MAC column widths; widen Status for "Disconnected"
     $speedWidth = 10
     $statusWidth = 12  # Wide enough for "Disconnected"
-    $totalWidth = $columnWidths.Index + $columnWidths.Name + $columnWidths.Description + $statusWidth + $speedWidth + 16
+    $macWidth = 17     # "AA-BB-CC-DD-EE-FF"
+    $totalWidth = $columnWidths.Index + $columnWidths.Name + $columnWidths.Description + $statusWidth + $speedWidth + $macWidth + 20
     $separator = "-" * $totalWidth
 
-    $headerFormat = "| {0,-$($columnWidths.Index)} | {1,-$($columnWidths.Name)} | {2,-$($columnWidths.Description)} | {3,-$($statusWidth)} | {4,-$($speedWidth)} |"
+    $headerFormat = "| {0,-$($columnWidths.Index)} | {1,-$($columnWidths.Name)} | {2,-$($columnWidths.Description)} | {3,-$($statusWidth)} | {4,-$($speedWidth)} | {5,-$($macWidth)} |"
 
     Write-OutputColor $separator -color "Info"
-    Write-OutputColor ($headerFormat -f "Index", "Name", "Description", "Status", "Speed") -color "Info"
+    Write-OutputColor ($headerFormat -f "Index", "Name", "Description", "Status", "Speed", "MAC Address") -color "Info"
     Write-OutputColor $separator -color "Info"
 
     foreach ($adapter in $adapters) {
@@ -359,6 +360,9 @@ function Show-AdaptersTable {
             $speed = Format-LinkSpeed -SpeedBps $speedValue
         }
 
+        # MAC address
+        $mac = if ($adapter.MacAddress) { $adapter.MacAddress } else { "N/A" }
+
         # Color based on status
         $statusColor = switch ($adapter.Status) {
             "Up" { "Success" }
@@ -367,7 +371,7 @@ function Show-AdaptersTable {
             default { "Warning" }
         }
 
-        Write-OutputColor "| $("$($adapter.InterfaceIndex)".PadRight($columnWidths.Index)) | $("$($adapter.Name)".PadRight($columnWidths.Name)) | $($desc.PadRight($columnWidths.Description)) | $("$($adapter.Status)".PadRight($statusWidth)) | $($speed.PadRight($speedWidth)) |" -color $statusColor
+        Write-OutputColor "| $("$($adapter.InterfaceIndex)".PadRight($columnWidths.Index)) | $("$($adapter.Name)".PadRight($columnWidths.Name)) | $($desc.PadRight($columnWidths.Description)) | $("$($adapter.Status)".PadRight($statusWidth)) | $($speed.PadRight($speedWidth)) | $($mac.PadRight($macWidth)) |" -color $statusColor
     }
 
     Write-OutputColor $separator -color "Info"

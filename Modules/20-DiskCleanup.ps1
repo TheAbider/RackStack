@@ -865,6 +865,9 @@ function Invoke-FullEnhancedCleanup {
 
     $totalFreed = 0
 
+    # Capture pre-cleanup disk space for final comparison
+    $preDiskFree = try { (Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).FreeSpace } catch { $null }
+
     # 1. Quick Clean (temp files)
     Write-OutputColor "  [1/7] Quick Clean (temp files)..." -color "Info"
     $beforeTemp = (Get-PSDrive -Name C -ErrorAction SilentlyContinue).Free
@@ -1031,7 +1034,18 @@ function Invoke-FullEnhancedCleanup {
         Write-OutputColor "  Could not process shadow copies: $_" -color "Warning"
     }
 
+    # Final disk space comparison
     Write-OutputColor "" -color "Info"
+    try {
+        $postDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+        if ($null -ne $preDiskFree -and $null -ne $postDisk) {
+            $freedMB = [math]::Round(($postDisk.FreeSpace - $preDiskFree) / 1MB)
+            if ($freedMB -gt 0) {
+                $freedDisplay = if ($freedMB -ge 1024) { "$([math]::Round($freedMB / 1024, 1)) GB" } else { "$freedMB MB" }
+                Write-OutputColor "  Total space recovered: $freedDisplay" -color "Success"
+            }
+        }
+    } catch { }
     Write-OutputColor "  Full Enhanced Cleanup complete." -color "Success"
     Add-SessionChange -Category "System" -Description "Full Enhanced Cleanup completed"
     Clear-MenuCache
