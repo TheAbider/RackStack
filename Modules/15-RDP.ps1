@@ -190,6 +190,12 @@ function Show-RDPSecurityStatus {
         $portColor = if ($port -ne 3389 -and $null -ne $port) { "Warning" } else { "Info" }
         Write-OutputColor "  Listening Port: $portDisplay" -color $portColor
     } catch { }
+
+    # Active RDP sessions
+    try {
+        $rdpSessions = @(query session 2>$null | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'rdp-tcp.*Active' })
+        Write-OutputColor "  Active RDP Sessions: $($rdpSessions.Count)" -color $(if ($rdpSessions.Count -gt 0) { "Success" } else { "Info" })
+    } catch { }
 }
 
 # Function to enable PowerShell Remoting (WinRM) securely

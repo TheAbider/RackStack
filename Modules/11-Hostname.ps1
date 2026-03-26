@@ -6,6 +6,15 @@ function Set-HostName {
 
     $currentHostname = $env:COMPUTERNAME
     Write-OutputColor "  Current hostname: $currentHostname" -color "Info"
+
+    # Check for pending hostname change
+    try {
+        $pendingName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName" -ErrorAction SilentlyContinue).ComputerName
+        $activeName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName" -ErrorAction SilentlyContinue).ComputerName
+        if ($pendingName -and $activeName -and $pendingName -ne $activeName) {
+            Write-OutputColor "  Pending rename: $activeName -> $pendingName (reboot required)" -color "Warning"
+        }
+    } catch { }
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  Hostname requirements:" -color "Info"

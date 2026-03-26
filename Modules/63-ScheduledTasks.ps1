@@ -19,8 +19,11 @@ function Show-TaskHealthStatus {
             $lastRun = if ($null -ne $info -and $null -ne $info.LastRunTime -and $info.LastRunTime -ne [datetime]::MinValue) {
                 $info.LastRunTime.ToString('yyyy-MM-dd HH:mm')
             } else { "Never" }
+            $nextRun = if ($null -ne $info -and $null -ne $info.NextRunTime -and $info.NextRunTime -gt (Get-Date)) {
+                $info.NextRunTime.ToString('yyyy-MM-dd HH:mm')
+            } else { "" }
 
-            $taskName = if ($task.TaskName.Length -gt 35) { $task.TaskName.Substring(0, 32) + "..." } else { $task.TaskName }
+            $taskName = if ($task.TaskName.Length -gt 30) { $task.TaskName.Substring(0, 27) + "..." } else { $task.TaskName }
 
             $color = "Success"
             $status = "OK"
@@ -191,8 +194,11 @@ function Show-AllScheduledTasks {
         try {
             $info = $task | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
             $lastResult = if ($null -ne $info) { Format-TaskResult -ResultCode $info.LastTaskResult } else { "N/A" }
+            $nextRunStr = if ($null -ne $info -and $null -ne $info.NextRunTime -and $info.NextRunTime -gt (Get-Date)) {
+                $info.NextRunTime.ToString('MM/dd HH:mm')
+            } else { "" }
         }
-        catch { $lastResult = "N/A" }
+        catch { $lastResult = "N/A"; $nextRunStr = "" }
 
         $name = $task.TaskName
         if ($name.Length -gt 34) { $name = $name.Substring(0, 31) + "..." }

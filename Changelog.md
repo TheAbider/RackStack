@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.89.11
+
+- **Enhanced:** RDP security status now shows active RDP session count.
+- **Enhanced:** Scheduled task views now include next run time alongside last run time.
+- **Enhanced:** Hostname configuration shows pending rename if a hostname change is waiting for reboot.
+- 65 modules, 4449 tests, 157 CLI actions, 642 functions
+
 ## v1.89.10
 
 - **New:** Performance Dashboard now shows Top Processes by Memory alongside CPU — see which processes consume the most RAM at a glance.
