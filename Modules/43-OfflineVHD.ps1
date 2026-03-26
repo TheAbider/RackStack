@@ -29,8 +29,15 @@ function Set-OfflineVHDConfiguration {
         return $false
     }
 
-    # Verify VHD is not already mounted
-    $existingMount = Get-VHD -Path $VHDPath -ErrorAction SilentlyContinue
+    # Validate VHD format and check mount status
+    try {
+        $existingMount = Get-VHD -Path $VHDPath -ErrorAction Stop
+    }
+    catch {
+        Write-OutputColor "  VHD validation failed: $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  The VHD may be corrupted or an unsupported format." -color "Warning"
+        return $false
+    }
     if ($null -ne $existingMount -and $existingMount.Attached) {
         Write-OutputColor "  VHD is already mounted or in use. Skipping offline customization." -color "Warning"
         return $false

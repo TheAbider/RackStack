@@ -105,7 +105,7 @@ function Show-StorageReplicaManagement {
                     }
                 }
                 catch {
-                    Write-OutputColor "  Failed: $_" -color "Error"
+                    Write-OutputColor "  Storage Replica operation failed: $_" -color "Error"
                 }
                 Write-PressEnter
             }

@@ -988,6 +988,12 @@ function Get-ReadinessChecks {
         } else {
             $checks.Add(@{ Category = "Security"; Name = "Defender Real-Time"; Value = "DISABLED"; Status = "Fail" })
         }
+        # Signature age
+        $sigAge = $mpStat.AntivirusSignatureAge
+        if ($null -ne $sigAge) {
+            $sigStatus = if ($sigAge -le 3) { "OK" } elseif ($sigAge -le 7) { "Warn" } else { "Fail" }
+            $checks.Add(@{ Category = "Security"; Name = "Defender Signatures"; Value = "$sigAge day(s) old"; Status = $sigStatus })
+        }
     } catch {
         $checks.Add(@{ Category = "Security"; Name = "Defender Real-Time"; Value = "Unavailable"; Status = "Warn" })
     }

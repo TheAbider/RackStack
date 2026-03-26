@@ -114,7 +114,7 @@ function Disable-WindowsFirewallDomainPrivate {
                 }.GetNewClosure() -UndoParams @{ Prof = $selectedProfile; OldState = $currentState }
             }
             catch {
-                Write-OutputColor "  Failed: $_" -color "Error"
+                Write-OutputColor "  Firewall profile change failed: $_" -color "Error"
             }
         }
         default { return }

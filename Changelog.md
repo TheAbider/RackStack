@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.89.7
+
+- **Enhanced:** Offline VHD customization now validates VHD format before attempting mount, catching corruption early with clear error messages.
+- **Enhanced:** VM Checkpoint age report now shows individual checkpoint sizes and total disk usage.
+- **Enhanced:** HTML Security Report now includes Defender signature age with color-coded status.
+- **Enhanced:** Firewall and Storage Replica error messages now include operation context instead of generic "Failed".
+- 65 modules, 4433 tests, 157 CLI actions, 638 functions
+
 ## v1.89.6
 
 - **New:** Reboot Pending Reasons — health check now shows WHY a reboot is pending (Windows Update KB, component servicing, hostname change, file rename operations).

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.89.6
+    Automated Test Runner for RackStack v1.89.7
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8958,7 +8958,7 @@ Write-TestResult "41-VHDManagement: checks disk space before VHD copy" ($vhdCont
 
 # v1.21.2: Offline VHD already-mounted check
 $offlineContent = Get-Content (Join-Path $modulesPath "43-OfflineVHD.ps1") -Raw
-Write-TestResult "43-OfflineVHD: checks if VHD is already mounted before mount" ($offlineContent -match 'Get-VHD -Path \$VHDPath[\s\S]{0,250}already mounted or in use')
+Write-TestResult "43-OfflineVHD: checks if VHD is already mounted before mount" ($offlineContent -match 'Get-VHD -Path \$VHDPath[\s\S]{0,500}already mounted or in use')
 
 # v1.21.2: Box UI overflow in modules 60-63
 $replContent = Get-Content (Join-Path $modulesPath "62-HyperVReplica.ps1") -Raw

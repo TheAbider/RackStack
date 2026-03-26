@@ -429,10 +429,20 @@ function Show-CheckpointAgeWarnings {
                 $oldCount++
             }
 
-            Write-OutputColor "  $vmName / $cpName - Created: $($cp.CreationTime.ToString('yyyy-MM-dd'))$warning" -color $color
+            # Show size if available
+            $sizeLabel = ""
+            if ($cp.SizeOfSystemFiles -and $cp.SizeOfSystemFiles -gt 0) {
+                $sizeGB = [math]::Round($cp.SizeOfSystemFiles / 1GB, 1)
+                $sizeLabel = " (${sizeGB} GB)"
+                $totalSize += $cp.SizeOfSystemFiles
+            }
+            Write-OutputColor "  $vmName / $cpName - Created: $($cp.CreationTime.ToString('yyyy-MM-dd'))$warning$sizeLabel" -color $color
         }
 
         Write-OutputColor "`n  Total checkpoints: $(@($checkpoints).Count)" -color "Info"
+        if ($totalSize -gt 0) {
+            Write-OutputColor "  Total checkpoint disk usage: $([math]::Round($totalSize / 1GB, 1)) GB" -color "Info"
+        }
         if ($oldCount -gt 0) {
             Write-OutputColor "  WARNING: $oldCount checkpoint(s) older than 7 days" -color "Warning"
             Write-OutputColor "  Old checkpoints degrade VM performance and consume disk space" -color "Warning"
