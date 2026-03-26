@@ -94,6 +94,10 @@ function Disable-WindowsFirewallDomainPrivate {
             $newState = -not $currentState
             $action = if ($newState) { "Enable" } else { "Disable" }
 
+            $profileRules = @(Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { $_.Profile -match $selectedProfile -or $_.Profile -eq 'Any' })
+            $activeRules = @($profileRules | Where-Object { $_.Enabled -eq $true }).Count
+            Write-OutputColor "  Rules on $selectedProfile profile: $($profileRules.Count) total, $activeRules active" -color "Info"
+
             if (-not (Confirm-UserAction -Message "$action $selectedProfile firewall profile?")) {
                 return
             }

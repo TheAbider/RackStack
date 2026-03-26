@@ -2474,4 +2474,34 @@ function Show-LoggedOnUsers {
         Write-OutputColor "  Failed to query sessions: $_" -color "Error"
     }
 }
+
+# Function to show current user's group memberships (useful for permission troubleshooting)
+function Show-CurrentUserGroups {
+    Write-OutputColor "`n  Current User Group Memberships:" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    try {
+        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        Write-OutputColor "  User: $($identity.Name)" -color "Info"
+        Write-OutputColor "" -color "Info"
+
+        $groups = $identity.Groups | ForEach-Object {
+            try { $_.Translate([System.Security.Principal.NTAccount]).Value } catch { $_.Value }
+        } | Sort-Object
+
+        $adminGroups = @("BUILTIN\Administrators", "Domain Admins", "Enterprise Admins", "Schema Admins")
+
+        foreach ($group in $groups) {
+            $color = if ($adminGroups | Where-Object { $group -match $_ }) { "Warning" } else { "Info" }
+            Write-OutputColor "    $group" -color $color
+        }
+
+        Write-OutputColor "" -color "Info"
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        Write-OutputColor "  Running as Administrator: $(if ($isAdmin) { 'Yes' } else { 'No' })" -color $(if ($isAdmin) { "Success" } else { "Warning" })
+    }
+    catch {
+        Write-OutputColor "  Failed to enumerate groups: $_" -color "Error"
+    }
+}
 #endregion

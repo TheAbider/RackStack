@@ -1082,6 +1082,13 @@ function Show-iSCSIStatus {
 
     Write-OutputColor "" -color "Info"
 
+    # Initiator IQN (needed for SAN whitelist config)
+    $initiatorIqn = (Get-InitiatorPort -ErrorAction SilentlyContinue | Select-Object -First 1).NodeAddress
+    if ($initiatorIqn) {
+        Write-OutputColor "  Initiator IQN: $initiatorIqn" -color "Info"
+        Write-OutputColor "" -color "Info"
+    }
+
     # iSCSI Sessions
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  iSCSI SESSIONS".PadRight(72))│" -color "Info"

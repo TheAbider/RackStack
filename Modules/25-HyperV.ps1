@@ -109,6 +109,16 @@ function Install-HyperVRole {
                 $global:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V role"
                 Clear-MenuCache
+                # Hint about nested virtualization if running in a VM
+                try {
+                    $csModel = (Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 5 -ErrorAction SilentlyContinue).Model
+                    if ($csModel -match 'Virtual|Hyper-V|VMware|KVM|QEMU') {
+                        Write-OutputColor "" -color "Info"
+                        Write-OutputColor "  Tip: This appears to be a virtual machine." -color "Info"
+                        Write-OutputColor "  For nested VMs, enable on the host:" -color "Info"
+                        Write-OutputColor "  Set-VMProcessor -VMName <ThisVM> -ExposeVirtualizationExtensions `$true" -color "Success"
+                    }
+                } catch { }
             }
             else {
                 Write-OutputColor "  Hyper-V installation may not have completed successfully." -color "Error"

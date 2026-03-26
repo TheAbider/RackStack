@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.89.5
+
+- **New:** iSCSI Status now shows local initiator IQN (needed for SAN whitelist configuration).
+- **New:** Current User Group Memberships function — shows all group memberships with admin groups highlighted. Useful for permission troubleshooting.
+- **Enhanced:** Hyper-V installation now detects if running in a VM and suggests enabling nested virtualization on the host.
+- **Enhanced:** Firewall profile toggle now shows rule count and active rules affected before applying changes.
+- 65 modules, 4423 tests, 157 CLI actions, 636 functions
+
 ## v1.89.4
 
 - **Enhanced:** Network adapter table now shows MAC addresses alongside name, status, and speed.
