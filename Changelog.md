@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.89.9
+
+- **New:** VHD Optimization function (`Optimize-VHDFile`) — compact dynamic VHDs, shows before/after size and space saved. Validates VHD type and mount status before operating.
+- **Enhanced:** Agent installer now shows currently installed version before reinstall/update confirmation.
+- **Enhanced:** Drift detection report now includes a "Changes detected" narrative section showing before->after values for all drifted settings.
+- 65 modules, 4433 tests, 157 CLI actions, 641 functions
+
 ## v1.89.8
 
 - **New:** System Summary Banner (`Show-SystemBanner`) — standalone function showing hostname, IP, domain, OS version, and uptime in a formatted box. Callable independently for quick system identification.

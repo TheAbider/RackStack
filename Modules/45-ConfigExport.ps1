@@ -1245,6 +1245,20 @@ function Show-DriftReport {
 
     $summaryColor = if ($driftCount -eq 0) { "Success" } else { "Warning" }
     Write-OutputColor "  Summary: $totalCount checked, $matchCount match, $driftCount drifted" -color $summaryColor
+
+    # Show change narrative for drifted items
+    if ($driftCount -gt 0) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Changes detected:" -color "Warning"
+        foreach ($key in $DriftResults.Keys) {
+            $item = $DriftResults[$key]
+            if (-not $item.Match) {
+                $expected = if ($item.Expected) { "$($item.Expected)" } else { "(not set)" }
+                $current = if ($item.Current) { "$($item.Current)" } else { "(not set)" }
+                Write-OutputColor "    $key : $expected -> $current" -color "Warning"
+            }
+        }
+    }
 }
 
 # Remediate drifted settings by applying fixes from a baseline profile

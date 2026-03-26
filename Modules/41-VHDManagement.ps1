@@ -913,4 +913,61 @@ function Start-VHDManagement {
         }
     }
 }
+
+# Function to optimize/compact a VHD (reduce size of dynamic VHDs)
+function Optimize-VHDFile {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$VHDPath
+    )
+
+    if (-not (Test-Path -LiteralPath $VHDPath)) {
+        Write-OutputColor "  VHD not found: $VHDPath" -color "Error"
+        return
+    }
+
+    try {
+        $vhdInfo = Get-VHD -Path $VHDPath -ErrorAction Stop
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  VHD: $(Split-Path $VHDPath -Leaf)" -color "Info"
+        Write-OutputColor "  Type: $($vhdInfo.VhdType)" -color "Info"
+        Write-OutputColor "  Current size: $([math]::Round($vhdInfo.FileSize / 1GB, 2)) GB" -color "Info"
+        Write-OutputColor "  Maximum size: $([math]::Round($vhdInfo.Size / 1GB, 2)) GB" -color "Info"
+
+        if ($null -ne $vhdInfo.FragmentationPercentage) {
+            Write-OutputColor "  Fragmentation: $($vhdInfo.FragmentationPercentage)%" -color $(if ($vhdInfo.FragmentationPercentage -gt 30) { "Warning" } else { "Info" })
+        }
+
+        if ($vhdInfo.Attached) {
+            Write-OutputColor "  VHD is currently attached. Dismount before optimizing." -color "Error"
+            return
+        }
+
+        if ($vhdInfo.VhdType -ne 'Dynamic') {
+            Write-OutputColor "  Only dynamic VHDs can be compacted. This is a $($vhdInfo.VhdType) VHD." -color "Warning"
+            return
+        }
+
+        Write-OutputColor "" -color "Info"
+        if (-not (Confirm-UserAction -Message "Optimize this VHD? (may take several minutes)")) { return }
+
+        Write-OutputColor "  Optimizing VHD..." -color "Info"
+        Optimize-VHD -Path $VHDPath -Mode Full -ErrorAction Stop
+
+        $postInfo = Get-VHD -Path $VHDPath -ErrorAction SilentlyContinue
+        if ($null -ne $postInfo) {
+            $savedMB = [math]::Round(($vhdInfo.FileSize - $postInfo.FileSize) / 1MB)
+            Write-OutputColor "  Optimization complete." -color "Success"
+            Write-OutputColor "  New size: $([math]::Round($postInfo.FileSize / 1GB, 2)) GB" -color "Success"
+            if ($savedMB -gt 0) {
+                Write-OutputColor "  Space saved: $savedMB MB" -color "Success"
+            }
+        }
+        Add-SessionChange -Category "Storage" -Description "Optimized VHD: $(Split-Path $VHDPath -Leaf)"
+    }
+    catch {
+        Write-OutputColor "  VHD optimization failed: $_" -color "Error"
+    }
+}
 #endregion

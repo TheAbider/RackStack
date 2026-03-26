@@ -452,6 +452,17 @@ function Install-SelectedAgent {
     if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
     Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+    # Check if agent is already installed and show version comparison
+    $currentStatus = Test-AgentInstalled
+    if ($currentStatus.Installed) {
+        $currentVer = Get-InstalledAgentVersion
+        $verDisplay = if ($currentVer) { $currentVer } else { "unknown version" }
+        Write-OutputColor "  Currently installed: $verDisplay" -color "Info"
+        Write-OutputColor "  This will reinstall/update the agent." -color "Info"
+    } else {
+        Write-OutputColor "  No existing agent detected — fresh install." -color "Info"
+    }
     Write-OutputColor "" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Download and install this $toolName Agent?")) {
