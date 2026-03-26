@@ -174,6 +174,21 @@ function Show-PerformanceDashboard {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
+        # Top Processes by Memory
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  TOP PROCESSES (by Memory)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+        $topMemProcs = Get-Process -ErrorAction SilentlyContinue | Sort-Object WorkingSet64 -Descending | Select-Object -First 5
+        foreach ($proc in $topMemProcs) {
+            $procName = if ($proc.ProcessName.Length -gt 25) { $proc.ProcessName.Substring(0,22) + "..." } else { $proc.ProcessName }
+            $memMB = [math]::Round($proc.WorkingSet64 / 1MB, 0)
+            $line = "  $procName (PID $($proc.Id)) - $memMB MB"
+            Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
+        }
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+
         Write-OutputColor "  [R] Refresh  |  [C] Copy to Clipboard  |  Press Enter or [B] to go back" -color "Info"
         $choice = Read-Host "  "
         $navResult = Test-NavigationCommand -UserInput $choice

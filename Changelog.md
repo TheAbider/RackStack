@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.89.10
+
+- **New:** Performance Dashboard now shows Top Processes by Memory alongside CPU — see which processes consume the most RAM at a glance.
+- **New:** What's New function (`Show-WhatsNew`) — displays current version changes from changelog with color-coded categories (green=New, yellow=Fix, cyan=Enhanced).
+- **Enhanced:** Windows Update history now extracts and displays KB article numbers (e.g., [KB5001234]) alongside update titles.
+- **Enhanced:** License status now shows expiry date and KMS renewal interval when applicable.
+- **Enhanced:** Disk cleanup shows temp file COUNT alongside size (e.g., "352.1 MB (4,231 files)").
+- **Enhanced:** Debloat analysis shows estimated space savings before cleanup starts.
+- **Enhanced:** Agent installer shows currently installed version before reinstall to help assess update necessity.
+- 65 modules, 4449 tests, 157 CLI actions, 642 functions
+
 ## v1.89.9
 
 - **New:** VHD Optimization function (`Optimize-VHDFile`) — compact dynamic VHDs, shows before/after size and space saved. Validates VHD type and mount status before operating.

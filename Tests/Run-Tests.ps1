@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.89.9
+    Automated Test Runner for RackStack v1.89.10
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -2301,7 +2301,15 @@ $additionalFunctions = @(
     "Enable-NTPFirewallRules",
     "Enable-SNMPFirewallRules",
     "Invoke-FlushDnsCache",
-    "Invoke-NetworkStackReset"
+    "Invoke-NetworkStackReset",
+    "Show-SystemBanner",
+    "Show-LoggedOnUsers",
+    "Show-CurrentUserGroups",
+    "Optimize-VHDFile",
+    "New-StrongPassword",
+    "Get-RebootPendingReasons",
+    "Get-WindowsDebloatInfo",
+    "Test-GatewayConnectivity"
 )
 
 foreach ($funcName in $additionalFunctions) {
@@ -11743,6 +11751,26 @@ try {
     Write-TestResult "58-NetDiag: Test-GatewayConnectivity function exists" ($nd5 -match 'function Test-GatewayConnectivity')
     Write-TestResult "58-NetDiag: gateway test pings default gateways" ($nd5 -match 'IPv4DefaultGateway')
     Write-TestResult "58-NetDiag: gateway test shows latency" ($nd5 -match 'Avg latency')
+
+    # v1.89.10 additions
+    $pd = Get-Content (Join-Path $modulesPath "28-PerformanceDashboard.ps1") -Raw
+    Write-TestResult "28-PerfDash: top processes by memory section" ($pd -match 'TOP PROCESSES.*by Memory')
+
+    $wu = Get-Content (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw
+    Write-TestResult "14-WinUpdates: shows KB numbers in history" ($wu -match 'KB\\d')
+
+    $lic = Get-Content (Join-Path $modulesPath "21-Licensing.ps1") -Raw
+    Write-TestResult "21-Licensing: shows license expiry date" ($lic -match 'Expires:')
+    Write-TestResult "21-Licensing: shows KMS renewal interval" ($lic -match 'VLRenewalInterval')
+
+    $dc = Get-Content (Join-Path $modulesPath "20-DiskCleanup.ps1") -Raw
+    Write-TestResult "20-DiskCleanup: shows temp file count" ($dc -match 'tempFileCount')
+
+    $help = Get-Content (Join-Path $modulesPath "34-Help.ps1") -Raw
+    Write-TestResult "34-Help: Show-WhatsNew function exists" ($help -match 'function Show-WhatsNew')
+
+    Write-TestResult "64-Debloat: shows estimated space savings" ($dbContent -match 'Estimated space savings')
+    Write-TestResult "57-Agent: shows installed version before update" ($nd5 -match 'Get-InstalledAgentVersion' -or (Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw) -match 'Currently installed')
 } catch {
     Write-TestResult "v1.89.5 Tests" $false $_.Exception.Message
 }

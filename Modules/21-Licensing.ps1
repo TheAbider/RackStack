@@ -234,11 +234,19 @@ function Show-LicenseStatus {
             }
         }
 
-        # Grace period remaining
+        # Grace period remaining / expiry date
         if ($licenseInfo.GracePeriodRemaining -gt 0) {
             $daysLeft = [math]::Round($licenseInfo.GracePeriodRemaining / 1440, 0)
             $graceColor = if ($daysLeft -gt 30) { "Info" } elseif ($daysLeft -gt 7) { "Warning" } else { "Error" }
             Write-OutputColor "  Grace Period: $daysLeft days remaining" -color $graceColor
+            $expiryDate = (Get-Date).AddMinutes($licenseInfo.GracePeriodRemaining).ToString('yyyy-MM-dd')
+            Write-OutputColor "  Expires: $expiryDate" -color $graceColor
+        }
+
+        # KMS renewal info
+        if ($licenseInfo.VLRenewalInterval -gt 0) {
+            $renewalDays = [math]::Round($licenseInfo.VLRenewalInterval / 1440, 0)
+            Write-OutputColor "  KMS Renewal: Every $renewalDays days" -color "Info"
         }
     } catch {
         Write-OutputColor "  License check failed: $($_.Exception.Message)" -color "Warning"

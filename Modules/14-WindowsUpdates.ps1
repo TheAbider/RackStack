@@ -33,8 +33,12 @@ function Show-UpdateHistory {
             }
 
             $date = $update.Date.ToString('yyyy-MM-dd HH:mm')
-            $title = if ($update.Title -and $update.Title.Length -gt 60) { $update.Title.Substring(0, 57) + "..." } elseif ($update.Title) { $update.Title } else { "(unknown)" }
-            Write-OutputColor "  $date  $status  $title" -color $color
+            # Extract KB number if present
+            $kb = ""
+            if ($update.Title -match '(KB\d+)') { $regexMatches = $matches; $kb = " [$($regexMatches[1])]" }
+            $maxTitleLen = 55 - $kb.Length
+            $title = if ($update.Title -and $update.Title.Length -gt $maxTitleLen) { $update.Title.Substring(0, $maxTitleLen - 3) + "..." } elseif ($update.Title) { $update.Title } else { "(unknown)" }
+            Write-OutputColor "  $date  $status  $title$kb" -color $color
         }
 
         Write-OutputColor "`n  Showing $([math]::Min($Count, $historyCount)) of $historyCount total updates" -color "Info"

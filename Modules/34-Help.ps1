@@ -310,6 +310,59 @@ function Set-ColorTheme {
     }
 }
 
+# Function to display What's New for current version
+function Show-WhatsNew {
+    Clear-Host
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
+    Write-OutputColor "  ║$(("                  WHAT'S NEW IN v" + $script:ScriptVersion).PadRight(72))║" -color "Info"
+    Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $changelogPath = Join-Path $PSScriptRoot "Changelog.md"
+    if (-not (Test-Path -LiteralPath $changelogPath)) {
+        $changelogPath = Join-Path (Split-Path $PSCommandPath) "Changelog.md"
+    }
+
+    if (Test-Path -LiteralPath $changelogPath) {
+        $content = Get-Content -LiteralPath $changelogPath -Encoding UTF8
+        $inCurrentVersion = $false
+        $changes = @()
+
+        foreach ($line in $content) {
+            if ($line -match "^## v$([regex]::Escape($script:ScriptVersion))") {
+                $inCurrentVersion = $true
+                continue
+            }
+            if ($inCurrentVersion -and $line -match '^## v') {
+                break  # Hit next version section
+            }
+            if ($inCurrentVersion -and $line.Trim() -ne '') {
+                $changes += $line
+            }
+        }
+
+        if ($changes.Count -gt 0) {
+            foreach ($change in $changes) {
+                $display = $change -replace '^\- ', '  '
+                if ($display.Length -gt 74) { $display = $display.Substring(0, 71) + "..." }
+                $color = if ($display -match '\*\*New') { "Success" }
+                         elseif ($display -match '\*\*Fix') { "Warning" }
+                         elseif ($display -match '\*\*Enhanced') { "Info" }
+                         else { "Info" }
+                Write-OutputColor $display -color $color
+            }
+        } else {
+            Write-OutputColor "  No changelog entry found for v$($script:ScriptVersion)." -color "Warning"
+        }
+    } else {
+        Write-OutputColor "  Changelog file not found." -color "Warning"
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-PressEnter
+}
+
 # Function to display changelog
 function Show-Changelog {
     Clear-Host

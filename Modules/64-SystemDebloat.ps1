@@ -1479,8 +1479,15 @@ function Show-DebloatAnalysis {
 
     $totalItems = $removableCount + $disableableCount + $enabledTaskCount
     $impactColor = if ($totalItems -eq 0) { "Success" } elseif ($totalItems -lt 10) { "Info" } else { "Warning" }
+
+    # Estimate total space savings (packages + temp files + WinSxS potential)
+    $estSavingsMB = [math]::Round($totalPackageSize / 1MB, 0)
+    $estSavingsMB += 200  # Conservative estimate for telemetry/cache cleanup
+    $estDisplay = if ($estSavingsMB -ge 1024) { "$([math]::Round($estSavingsMB / 1024, 1)) GB" } else { "$estSavingsMB MB" }
+
     Write-OutputColor "  │$("  ─────────────────────────────────────────".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Total actionable items: $totalItems".PadRight(72))│" -color $impactColor
+    Write-OutputColor "  │$("  Estimated space savings: ~$estDisplay".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
     # Return structured report for JSON output mode

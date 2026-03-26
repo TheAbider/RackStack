@@ -16,10 +16,13 @@ function Start-DiskCleanup {
         $logsSize = 0
 
         # Temp files
+        $tempFileCount = 0
         $tempPaths = @($env:TEMP, "$env:SystemRoot\Temp", "$env:SystemRoot\Prefetch")
         foreach ($path in $tempPaths) {
             if (Test-Path -LiteralPath $path) {
-                $tempSize += [long](Get-ChildItem -LiteralPath $path -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                $tempFiles = @(Get-ChildItem -LiteralPath $path -Recurse -Force -File -ErrorAction SilentlyContinue)
+                $tempFileCount += $tempFiles.Count
+                $tempSize += [long]($tempFiles | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
             }
         }
 
@@ -40,7 +43,7 @@ function Start-DiskCleanup {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  POTENTIAL SPACE SAVINGS".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        Write-OutputColor "  │$("  Temporary Files:        $([math]::Round($tempSize/1MB, 1)) MB".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Temporary Files:        $([math]::Round($tempSize/1MB, 1)) MB ($tempFileCount files)".PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  Windows Update Cache:   $([math]::Round($wuSize/1MB, 1)) MB".PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  CBS/DISM Logs:          $([math]::Round($logsSize/1MB, 1)) MB".PadRight(72))│" -color "Info"
         Write-OutputColor "  │$("  ─────────────────────────────────────────".PadRight(72))│" -color "Info"
