@@ -2504,4 +2504,46 @@ function Show-CurrentUserGroups {
         Write-OutputColor "  Failed to enumerate groups: $_" -color "Error"
     }
 }
+
+# Function to show a quick system summary banner (hostname, IP, domain, OS, uptime)
+function Show-SystemBanner {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  SYSTEM SUMMARY".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+    # Hostname + domain
+    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+    $hostname = if ($cs) { $cs.Name } else { $env:COMPUTERNAME }
+    $domain = if ($cs -and $cs.PartOfDomain) { $cs.Domain } else { "WORKGROUP" }
+    Write-OutputColor "  │$("  Hostname: $hostname".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  Domain:   $domain".PadRight(72))│" -color $(if ($cs -and $cs.PartOfDomain) { "Success" } else { "Warning" })
+
+    # Primary IP
+    $primaryAdapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    if ($null -ne $primaryAdapter) {
+        $ip = Get-NetIPAddress -InterfaceIndex $primaryAdapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1
+        $ipStr = if ($ip) { "$($ip.IPAddress)/$($ip.PrefixLength)" } else { "No IP" }
+        Write-OutputColor "  │$("  IP:       $ipStr ($($primaryAdapter.Name))".PadRight(72))│" -color "Info"
+    }
+
+    # OS
+    $ntVer = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue
+    $osName = if ($ntVer) { $ntVer.ProductName } else { "Unknown" }
+    $osBuild = if ($ntVer) { "$($ntVer.CurrentBuildNumber)" } else { "" }
+    $osDisplay = if ($ntVer -and $ntVer.DisplayVersion) { " ($($ntVer.DisplayVersion))" } else { "" }
+    $osLine = "  OS:      $osName $osBuild$osDisplay"
+    if ($osLine.Length -gt 72) { $osLine = $osLine.Substring(0, 69) + "..." }
+    Write-OutputColor "  │$($osLine.PadRight(72))│" -color "Info"
+
+    # Uptime
+    try { $uptimeMs = [Environment]::TickCount64 } catch { $uptimeMs = [math]::Abs([Environment]::TickCount) }
+    $uptimeDays = [math]::Floor($uptimeMs / 86400000)
+    $uptimeHrs = [math]::Floor(($uptimeMs % 86400000) / 3600000)
+    $uptimeStr = if ($uptimeDays -gt 0) { "${uptimeDays}d ${uptimeHrs}h" } else { "${uptimeHrs}h" }
+    Write-OutputColor "  │$("  Uptime:  $uptimeStr".PadRight(72))│" -color "Info"
+
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+}
 #endregion

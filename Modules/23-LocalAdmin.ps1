@@ -60,6 +60,13 @@ function Add-LocalAdminAccount {
         }
     }
 
+    # Check for reserved/built-in names
+    $reservedNames = @("Administrator", "Guest", "DefaultAccount", "WDAGUtilityAccount", "SYSTEM", "NETWORK SERVICE", "LOCAL SERVICE")
+    if ($accountName -in $reservedNames) {
+        Write-OutputColor "  '$accountName' is a reserved system account name. Choose a different name." -color "Error"
+        return
+    }
+
     # Check if account exists
     $existingUser = Get-LocalUser -Name $accountName -ErrorAction SilentlyContinue
 

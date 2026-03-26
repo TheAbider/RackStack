@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.89.8
+
+- **New:** System Summary Banner (`Show-SystemBanner`) — standalone function showing hostname, IP, domain, OS version, and uptime in a formatted box. Callable independently for quick system identification.
+- **Hardened:** Local admin account creation now rejects reserved system names (Administrator, Guest, SYSTEM, etc.) before attempting creation.
+- 65 modules, 4433 tests, 157 CLI actions, 640 functions
+
 ## v1.89.7
 
 - **Enhanced:** Offline VHD customization now validates VHD format before attempting mount, catching corruption early with clear error messages.
