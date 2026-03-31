@@ -243,7 +243,7 @@ try {
 Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 "@
             $scriptFolder = "$windowsDrive\Windows\Setup\Scripts"
-            if (-not (Test-Path $scriptFolder)) {
+            if (-not (Test-Path -LiteralPath $scriptFolder)) {
                 New-Item -Path $scriptFolder -ItemType Directory -Force -ErrorAction Stop | Out-Null
             }
 

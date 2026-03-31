@@ -18,7 +18,7 @@
   <img alt="CI" src="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml/badge.svg">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="4200+ Tests" src="https://img.shields.io/badge/tests-4200%2B-brightgreen">
+  <img alt="4400+ Tests" src="https://img.shields.io/badge/tests-4400%2B-brightgreen">
 </p>
 
 ---
@@ -82,7 +82,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 
 ### Single-File Deployment (Production)
 
-For production use, generate a monolithic single-file script (~35K lines) that you can drop on any server:
+For production use, generate a monolithic single-file script (~66K lines) that you can drop on any server:
 
 ```powershell
 # Build the monolithic from all modules
@@ -342,7 +342,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 150 CLI Actions
+### 157 CLI Actions
 
 | Category | Actions |
 |----------|---------|
@@ -386,7 +386,7 @@ RackStack/
 │   ├── ...                     # 61 more modules
 │   └── 64-SystemDebloat.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 4080+ automated tests
+│   ├── Run-Tests.ps1           # 4400+ automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -412,7 +412,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (~2,500+ tests, ~4 minutes)
+# Full test suite (~4,400+ tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 65 modules + monolithic)
@@ -422,7 +422,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 powershell -ExecutionPolicy Bypass -File Tests\Validate-Release.ps1
 ```
 
-Tests cover parsing, module loading, function existence (629 functions), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
+Tests cover parsing, module loading, function existence (642 functions), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
 
 ## Development
 

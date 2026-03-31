@@ -277,8 +277,6 @@ function Show-FirewallRuleSearch {
         }
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
-        Add-SessionChange -Category "Security" -Description "Searched firewall rules: $title"
-        Clear-MenuCache
         Write-PressEnter
     }
 }
@@ -298,12 +296,12 @@ function Export-FirewallRuleAudit {
     try {
         $rules = Get-NetFirewallRule -ErrorAction Stop
 
-        $export = @()
+        $export = [System.Collections.Generic.List[object]]::new()
         foreach ($rule in $rules) {
             $portFilter = $rule | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
             $addrFilter = $rule | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue
 
-            $export += [PSCustomObject]@{
+            $null = $export.Add([PSCustomObject]@{
                 Name          = $rule.Name
                 DisplayName   = $rule.DisplayName
                 Direction     = $rule.Direction.ToString()
@@ -313,7 +311,7 @@ function Export-FirewallRuleAudit {
                 Protocol      = if ($null -ne $portFilter) { $portFilter.Protocol } else { 'Any' }
                 LocalPort     = if ($null -ne $portFilter) { $portFilter.LocalPort -join ',' } else { 'Any' }
                 RemoteAddress = if ($null -ne $addrFilter) { $addrFilter.RemoteAddress -join ',' } else { 'Any' }
-            }
+            })
         }
 
         $export | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Encoding UTF8

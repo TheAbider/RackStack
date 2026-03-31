@@ -466,7 +466,7 @@ function Show-HostStorageAnalysis {
         Write-OutputColor "  Free: ${freeGB} GB" -color "Info"
 
         # Show subfolder breakdown
-        $subfolders = @('ISOs', 'VHDs', 'VMs', 'Exports')
+        $subfolders = @('ISOs', 'Virtual Machines', '_BaseImages')
         foreach ($folder in $subfolders) {
             $folderPath = Join-Path $dataDrive $folder
             if (Test-Path -LiteralPath $folderPath) {

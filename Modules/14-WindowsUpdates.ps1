@@ -220,8 +220,6 @@ function Install-WindowsUpdates {
         $elapsed = 0
         $maxInstallTime = 3600  # 1 hour max for install
         while ($installJob.State -eq "Running" -and $elapsed -lt $maxInstallTime) {
-            $minutes = [math]::Floor($elapsed / 60)
-            $seconds = $elapsed % 60
             Show-ProgressMessage -Activity "Installing updates" -Status "In progress" -SecondsElapsed $elapsed
             Start-Sleep -Seconds 1
             $elapsed++

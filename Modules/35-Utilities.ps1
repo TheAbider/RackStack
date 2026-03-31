@@ -1964,7 +1964,55 @@ function Show-ListeningPorts {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     }
 
-    Add-SessionChange -Category "Network" -Description "Listening ports scan: $($portInfo.Count) endpoints on $($uniquePorts.Count) unique ports"
+    # UDP listeners
+    Write-OutputColor "" -color "Info"
+    try {
+        $udpListeners = @(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object { $_.LocalAddress -ne '::' } | Sort-Object LocalPort)
+        $udpSeenPorts = @{}
+        $udpInfoList = [System.Collections.Generic.List[PSCustomObject]]::new()
+        foreach ($ep in $udpListeners) {
+            $key = "$($ep.LocalAddress):$($ep.LocalPort)"
+            if ($udpSeenPorts.ContainsKey($key)) { continue }
+            $udpSeenPorts[$key] = $true
+            $processName = "Unknown"
+            try {
+                $proc = Get-Process -Id $ep.OwningProcess -ErrorAction Stop
+                $processName = $proc.ProcessName
+            } catch {
+                $processName = "PID $($ep.OwningProcess)"
+            }
+            $null = $udpInfoList.Add([PSCustomObject]@{
+                Port = $ep.LocalPort
+                Address = $ep.LocalAddress
+                Process = $processName
+            })
+        }
+        if ($udpInfoList.Count -gt 0) {
+            $displayUdp = @($udpInfoList | Select-Object -First 15)
+            $udpHeader = "UDP LISTENERS"
+            if ($udpInfoList.Count -gt 15) { $udpHeader += " - showing first 15 of $($udpInfoList.Count)" }
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  $udpHeader".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+            foreach ($u in $displayUdp) {
+                $procName = $u.Process
+                if ($procName.Length -gt 20) { $procName = $procName.Substring(0, 17) + "..." }
+                $svcLabel = switch ($u.Port) {
+                    53 { "DNS" } 67 { "DHCP" } 68 { "DHCP" } 123 { "NTP" } 137 { "NetBIOS" }
+                    161 { "SNMP" } 162 { "SNMP-Trap" } 500 { "IKE" } 514 { "Syslog" }
+                    default { "" }
+                }
+                $lineText = "  $($u.Port.ToString().PadRight(7)) $($u.Address.PadRight(17)) $($procName.PadRight(22)) $svcLabel"
+                if ($lineText.Length -gt 72) { $lineText = $lineText.Substring(0, 72) }
+                Write-OutputColor "  │$($lineText.PadRight(72))│" -color "Info"
+            }
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        }
+    } catch {
+        Write-OutputColor "  Could not query UDP endpoints: $_" -color "Warning"
+    }
+
+    Add-SessionChange -Category "Network" -Description "Listening ports scan: $($portInfo.Count) TCP + $($udpInfoList.Count) UDP endpoints"
     Write-PressEnter
 }
 

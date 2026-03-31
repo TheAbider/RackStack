@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.89.11
+    Automated Test Runner for RackStack v1.89.12
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8724,7 +8724,7 @@ Write-TestResult "09-SET: Add-CustomVNIC has Write-PressEnter" ($setContent2 -ma
 $iscsiContent2 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
 Write-TestResult "10-iSCSI: auto-config has Write-PressEnter" ($iscsiContent2 -match 'Auto-Configuration Complete![\s\S]{0,30}Write-PressEnter')
 $dcContent2 = Get-Content (Join-Path $modulesPath "20-DiskCleanup.ps1") -Raw
-Write-TestResult "20-DiskCleanup: QuickClean has Write-PressEnter" ($dcContent2 -match 'Quick Clean complete[\s\S]{0,300}Write-PressEnter')
+Write-TestResult "20-DiskCleanup: QuickClean no internal PressEnter" (-not ($dcContent2 -match 'Quick Clean complete[\s\S]{0,300}Write-PressEnter'))
 $hcContent2 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
 Write-TestResult "37-HealthCheck: role template has Write-PressEnter" ($hcContent2 -match 'template.*setup complete![\s\S]{0,200}Write-PressEnter')
 
@@ -11773,6 +11773,106 @@ try {
     Write-TestResult "57-Agent: shows installed version before update" ($nd5 -match 'Get-InstalledAgentVersion' -or (Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw) -match 'Currently installed')
 } catch {
     Write-TestResult "v1.89.5 Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# v1.89.12 bug fixes and new features
+# ============================================================================
+try {
+    # 05-SystemCheck: WinRM returns "Disabled" when zero checks pass (was "Partial")
+    $sc3 = Get-Content (Join-Path $modulesPath "05-SystemCheck.ps1") -Raw
+    Write-TestResult "05-SystemCheck: Get-WinRMState returns Disabled when zero pass" ($sc3 -match 'return\s+"Disabled"')
+
+    # 05-SystemCheck: HTTPS connectivity test added
+    Write-TestResult "05-SystemCheck: HTTPS connectivity test exists" ($sc3 -match 'HTTPS connectivity')
+    Write-TestResult "05-SystemCheck: HTTPS test uses Invoke-WebRequest" ($sc3 -match 'Invoke-WebRequest.*microsoft\.com')
+
+    # 10-iSCSI: restoreOriginalConfig called in finally block (not just catch)
+    $iscsi2 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
+    Write-TestResult "10-iSCSI: restores original IPs in finally block" ($iscsi2 -match 'finally\s*\{[\s\S]{0,500}restoreOriginalConfig')
+
+    # 13-Timezone: Get-TimezoneOffsetString uses Abs on both hours and minutes
+    $tz2 = Get-Content (Join-Path $modulesPath "13-Timezone.ps1") -Raw
+    Write-TestResult "13-Timezone: offset string uses Abs on minutes" ($tz2 -match '\[math\]::Abs\(\$offset\.Minutes\)')
+
+    # 13-Timezone: Validate actual offset formatting
+    $estTz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Eastern Standard Time")
+    $estOffset = Get-TimezoneOffsetString -TimeZoneInfo $estTz
+    Write-TestResult "13-Timezone: EST formats as UTC-05:00" ($estOffset -eq "UTC-05:00") "Got: $estOffset"
+    $istTz = [System.TimeZoneInfo]::FindSystemTimeZoneById("India Standard Time")
+    $istOffset = Get-TimezoneOffsetString -TimeZoneInfo $istTz
+    Write-TestResult "13-Timezone: IST formats as UTC+05:30" ($istOffset -eq "UTC+05:30") "Got: $istOffset"
+    # Test half-hour negative offset (Newfoundland)
+    $nfldTz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Newfoundland Standard Time")
+    $nfldOffset = Get-TimezoneOffsetString -TimeZoneInfo $nfldTz
+    Write-TestResult "13-Timezone: Newfoundland formats as UTC-03:30" ($nfldOffset -eq "UTC-03:30") "Got: $nfldOffset"
+
+    # 14-WindowsUpdates: dead $minutes/$seconds removed from install loop
+    $wu2 = Get-Content (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw
+    Write-TestResult "14-WinUpdates: no dead minutes/seconds vars in install loop" (-not ($wu2 -match 'while \(\$installJob[\s\S]{0,100}\$minutes = \[math\]::Floor'))
+
+    # 16-Firewall: Export uses List<object> instead of += array growth
+    $fw2 = Get-Content (Join-Path $modulesPath "16-Firewall.ps1") -Raw
+    Write-TestResult "16-Firewall: Export uses List<object>" ($fw2 -match 'System\.Collections\.Generic\.List\[object\]')
+    # 16-Firewall: search does not log session changes
+    Write-TestResult "16-Firewall: search does not log session changes" (-not ($fw2 -match 'Searched firewall rules'))
+
+    # 17-DefenderExclusions: extension display handles dot prefix
+    $def2 = Get-Content (Join-Path $modulesPath "17-DefenderExclusions.ps1") -Raw
+    Write-TestResult "17-Defender: extension display avoids double dot" ($def2 -match 'StartsWith\(''\.''\)')
+
+    # 29-EventLogViewer: clears lastEvents when no events found
+    $el2 = Get-Content (Join-Path $modulesPath "29-EventLogViewer.ps1") -Raw
+    Write-TestResult "29-EventLog: clears lastEvents on empty results" ($el2 -match 'No events found[\s\S]{0,100}\$lastEvents\s*=\s*\$null')
+
+    # 35-Utilities: UDP listeners section in Show-ListeningPorts
+    $ut2 = Get-Content (Join-Path $modulesPath "35-Utilities.ps1") -Raw
+    Write-TestResult "35-Utilities: Show-ListeningPorts has UDP section" ($ut2 -match 'UDP LISTENERS')
+    Write-TestResult "35-Utilities: UDP uses Get-NetUDPEndpoint" ($ut2 -match 'Get-NetUDPEndpoint')
+
+    # 40-HostStorage: analysis uses correct subfolder names
+    $hs2 = Get-Content (Join-Path $modulesPath "40-HostStorage.ps1") -Raw
+    Write-TestResult "40-HostStorage: analysis uses Virtual Machines subfolder" ($hs2 -match "subfolders\s*=\s*@\([\s\S]{0,100}Virtual Machines")
+    Write-TestResult "40-HostStorage: analysis uses _BaseImages subfolder" ($hs2 -match "subfolders\s*=\s*@\([\s\S]{0,100}_BaseImages")
+
+    # 43-OfflineVHD: uses -LiteralPath for Test-Path
+    $ov2 = Get-Content (Join-Path $modulesPath "43-OfflineVHD.ps1") -Raw
+    Write-TestResult "43-OfflineVHD: setup scripts folder uses LiteralPath" ($ov2 -match 'Test-Path -LiteralPath \$scriptFolder')
+
+    # 51-ClusterDashboard: offlineCount increment suppressed in switch
+    $cd2 = Get-Content (Join-Path $modulesPath "51-ClusterDashboard.ps1") -Raw
+    Write-TestResult "51-Cluster: offlineCount uses null suppression" ($cd2 -match '\$null = \$offlineCount\+\+')
+
+    # 52-VMCheckpoints: uses Get-VMSnapshot (not Get-VMCheckpoint)
+    $cp2 = Get-Content (Join-Path $modulesPath "52-VMCheckpoints.ps1") -Raw
+    Write-TestResult "52-VMCheckpoints: age warnings use Get-VMSnapshot" ($cp2 -match 'Show-CheckpointAgeWarnings[\s\S]{0,500}Get-VMSnapshot')
+
+    # 56-OperationsMenu: remote health uses theme colors not hardcoded
+    $om2 = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+    Write-TestResult "56-OpsMenu: remote health uses Success/Warning/Error colors" ($om2 -match 'cpuColor.*"Success"' -and -not ($om2 -match 'cpuColor.*"Green"'))
+    Write-TestResult "56-OpsMenu: remote services uses theme colors" (-not ($om2 -match 'Invoke-RemoteServiceManager[\s\S]{0,2000}statusColor.*"Green"'))
+
+    # 57-AgentInstaller: Get-InstalledAgentVersion called with -AgentName
+    $ai2 = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
+    Write-TestResult "57-Agent: pre-install version check passes AgentName" ($ai2 -match 'Get-InstalledAgentVersion -AgentName')
+
+    # 64-SystemDebloat: no duplicate DiagTrack in server aggressive
+    $db2 = Get-Content (Join-Path $modulesPath "64-SystemDebloat.ps1") -Raw
+    # DiagTrack appears in both Workstation and Server profiles (one each) — Aggressive no longer has a duplicate
+    $serverBlock = [regex]::Match($db2, 'elseif \(\$Type -eq "Server"\)[\s\S]*?return \$services').Value
+    $serverDtCount = @([regex]::Matches($serverBlock, 'Name = "DiagTrack"')).Count
+    Write-TestResult "64-Debloat: Server profile has DiagTrack exactly once" ($serverDtCount -eq 1) "Found $serverDtCount in server block"
+
+    # 64-SystemDebloat: New-DebloatRestorePoint function exists
+    Write-TestResult "64-Debloat: New-DebloatRestorePoint function exists" ($db2 -match 'function New-DebloatRestorePoint')
+    Write-TestResult "64-Debloat: restore point created before workstation debloat" ($db2 -match 'New-DebloatRestorePoint[\s\S]{0,100}Invoke-WorkstationDebloat')
+    Write-TestResult "64-Debloat: restore point created before server debloat" ($db2 -match 'New-DebloatRestorePoint[\s\S]{0,100}Invoke-ServerDebloat')
+
+    # sync-to-monolithic: exits non-zero on parse errors
+    $syncContent = Get-Content (Join-Path $script:ModuleRoot "sync-to-monolithic.ps1") -Raw
+    Write-TestResult "sync: parse errors cause exit 1" ($syncContent -match 'PARSE ERRORS[\s\S]{0,200}exit 1')
+} catch {
+    Write-TestResult "v1.89.12 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

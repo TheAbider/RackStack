@@ -93,6 +93,8 @@ function Test-iSCSIAdapterSide {
             Remove-NetIPAddress -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
             Remove-NetRoute -InterfaceAlias $AdapterName -Confirm:$false -ErrorAction SilentlyContinue
         }
+        # Restore original IP configuration after side detection
+        & $restoreOriginalConfig
     }
 
     # Determine side

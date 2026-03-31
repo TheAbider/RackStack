@@ -136,6 +136,7 @@ function Show-EventLogViewer {
 
         if (-not $events) {
             Write-OutputColor "  No events found." -color "Info"
+            $lastEvents = $null
         }
         else {
             $lastEvents = $events

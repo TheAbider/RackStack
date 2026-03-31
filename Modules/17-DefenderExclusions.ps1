@@ -561,7 +561,8 @@ function Show-DefenderExclusionStatus {
         if ($extExclusions.Count -gt 0) {
             Write-OutputColor "`n  Extension Exclusions ($($extExclusions.Count)):" -color "Info"
             foreach ($ext in $extExclusions) {
-                Write-OutputColor "    .$ext" -color "Info"
+                $displayExt = if ($ext.StartsWith('.')) { $ext } else { ".$ext" }
+                Write-OutputColor "    $displayExt" -color "Info"
             }
         }
 

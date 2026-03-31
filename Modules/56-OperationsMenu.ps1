@@ -377,19 +377,21 @@ function Invoke-RemoteHealthCheck {
         Write-MenuItem "  OS:          $($health.OS)"
         Write-MenuItem "  Uptime:      $($health.Uptime)"
 
-        $cpuColor = if ($health.CPU -lt 70) { "Green" } elseif ($health.CPU -lt 90) { "Yellow" } else { "Red" }
-        Write-Host "  │  " -NoNewline -ForegroundColor Cyan; Write-Host "  CPU:         $($health.CPU)%".PadRight(70) -NoNewline -ForegroundColor $cpuColor; Write-Host "│" -ForegroundColor Cyan
+        $cpuColor = if ($health.CPU -lt 70) { "Success" } elseif ($health.CPU -lt 90) { "Warning" } else { "Error" }
+        $cpuLine = "  CPU:         $($health.CPU)%"
+        Write-OutputColor "  │$($cpuLine.PadRight(72))│" -color $cpuColor
 
-        $memColor = if ($health.MemPct -lt 70) { "Green" } elseif ($health.MemPct -lt 90) { "Yellow" } else { "Red" }
-        Write-Host "  │  " -NoNewline -ForegroundColor Cyan; Write-Host "  Memory:      $($health.UsedMemGB)/$($health.TotalMemGB) GB ($($health.MemPct)%)".PadRight(70) -NoNewline -ForegroundColor $memColor; Write-Host "│" -ForegroundColor Cyan
+        $memColor = if ($health.MemPct -lt 70) { "Success" } elseif ($health.MemPct -lt 90) { "Warning" } else { "Error" }
+        $memLine = "  Memory:      $($health.UsedMemGB)/$($health.TotalMemGB) GB ($($health.MemPct)%)"
+        Write-OutputColor "  │$($memLine.PadRight(72))│" -color $memColor
 
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-OutputColor "  │$("  DISK USAGE".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         foreach ($d in $health.Disks) {
-            $diskColor = if ($d.UsedPct -lt 70) { "Green" } elseif ($d.UsedPct -lt 90) { "Yellow" } else { "Red" }
+            $diskColor = if ($d.UsedPct -lt 70) { "Success" } elseif ($d.UsedPct -lt 90) { "Warning" } else { "Error" }
             $diskLine = "  $($d.Drive)  $($d.FreeGB) GB free / $($d.SizeGB) GB ($($d.UsedPct)% used)"
-            Write-Host "  │  " -NoNewline -ForegroundColor Cyan; Write-Host $diskLine.PadRight(70) -NoNewline -ForegroundColor $diskColor; Write-Host "│" -ForegroundColor Cyan
+            Write-OutputColor "  │$($diskLine.PadRight(72))│" -color $diskColor
         }
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     }
@@ -437,14 +439,14 @@ function Invoke-RemoteServiceManager {
         Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         $header = "  Status".PadRight(12) + "Name".PadRight(22) + "Display Name"
-        Write-Host "  │  " -NoNewline -ForegroundColor Cyan; Write-Host $header.PadRight(70) -NoNewline -ForegroundColor Yellow; Write-Host "│" -ForegroundColor Cyan
+        Write-OutputColor "  │$($header.PadRight(72))│" -color "Warning"
         Write-OutputColor "  │$("  $('─' * 70)".PadRight(72))│" -color "Info"
 
         foreach ($svc in $services) {
-            $statusColor = if ($svc.Status -eq 'Running') { "Green" } else { "Red" }
+            $statusColor = if ($svc.Status -eq 'Running') { "Success" } else { "Error" }
             $displayName = if ($svc.DisplayName -and $svc.DisplayName.Length -gt 34) { $svc.DisplayName.Substring(0, 31) + "..." } elseif ($svc.DisplayName) { $svc.DisplayName } else { "(unknown)" }
             $line = "  $($svc.Status.ToString().PadRight(10))$($svc.ServiceName.PadRight(22))$displayName"
-            Write-Host "  │  " -NoNewline -ForegroundColor Cyan; Write-Host $line.PadRight(70) -NoNewline -ForegroundColor $statusColor; Write-Host "│" -ForegroundColor Cyan
+            Write-OutputColor "  │$($line.PadRight(72))│" -color $statusColor
         }
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 

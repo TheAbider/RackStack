@@ -401,7 +401,7 @@ function Remove-VMCheckpointWizard {
 # Function to show checkpoint age warnings
 function Show-CheckpointAgeWarnings {
     try {
-        $checkpoints = Get-VMCheckpoint -VMName * -ErrorAction SilentlyContinue
+        $checkpoints = Get-VMSnapshot -VMName * -ErrorAction SilentlyContinue
         if ($null -eq $checkpoints -or @($checkpoints).Count -eq 0) {
             Write-OutputColor "  No VM checkpoints found" -color "Success"
             return

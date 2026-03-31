@@ -474,8 +474,8 @@ function Show-ClusterResourceStatus {
             $color = switch ($state) {
                 'Online'          { "Success" }
                 'PartiallyOnline' { "Warning" }
-                'Offline'         { "Error"; $offlineCount++ }
-                'Failed'          { "Error"; $offlineCount++ }
+                'Offline'         { $null = $offlineCount++; "Error" }
+                'Failed'          { $null = $offlineCount++; "Error" }
                 default           { "Info" }
             }
 

@@ -1,5 +1,29 @@
 ﻿# Changelog
 
+## v1.89.12
+
+- **Fix:** iSCSI side detection now correctly restores original adapter IP configuration after testing instead of leaving adapters unconfigured.
+- **Fix:** Timezone offset formatting for half-hour negative timezones (e.g., Newfoundland UTC-03:30) now displays correctly instead of showing negative minutes.
+- **Fix:** Cluster dashboard resource groups no longer leak increment values into color assignments, which could cause display errors.
+- **Fix:** VM checkpoint age warnings now use `Get-VMSnapshot` consistently across all functions for compatibility.
+- **Fix:** Agent installer pre-install version check now correctly passes the agent service name parameter.
+- **Fix:** WinRM state detection now returns "Disabled" when zero configuration checks pass, instead of incorrectly showing "Partial."
+- **Fix:** Host storage analysis now checks the correct subfolder names (Virtual Machines, _BaseImages) matching the actual created folder structure.
+- **Fix:** Duplicate DiagTrack entry removed from server aggressive debloat profile — service was being disabled twice.
+- **Fix:** Firewall rule search no longer logs session changes or clears menu cache for read-only search operations.
+- **Fix:** Disk cleanup Quick Clean no longer shows a double "Press Enter" prompt.
+- **Fix:** Defender exclusion display now handles extensions that already include a leading dot, preventing double-dot display.
+- **Fix:** Event log viewer now clears stale search results when a query returns empty, preventing export of stale data.
+- **Fix:** Offline VHD setup scripts folder check now uses `-LiteralPath` for paths containing special characters.
+- **Enhanced:** Remote health check and service manager now use theme-aware colors instead of hardcoded console colors.
+- **Enhanced:** Firewall rule audit export now uses efficient `List<object>` collection instead of `+=` array growth for better performance on large rule sets.
+- **Enhanced:** Sync-to-monolithic build script now exits with error code 1 when parse errors are detected.
+- **New:** HTTPS connectivity test — network connectivity check now tests HTTPS in addition to ICMP ping and DNS, catching firewall configurations that block ping but allow web traffic.
+- **New:** UDP listener display — port scan now shows UDP listeners (DNS, DHCP, NTP, SNMP, etc.) alongside TCP connections.
+- **New:** System restore point creation before debloat operations provides an additional safety net on workstation editions.
+- **Fix:** PowerShell scan workflow now wraps filtered `.Count` calls in `@()` for PS 5.1 compatibility.
+- 65 modules, 4477 tests, 157 CLI actions, 643 functions
+
 ## v1.89.11
 
 - **Enhanced:** RDP security status now shows active RDP session count.

@@ -160,7 +160,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.89.11"
+$script:ScriptVersion = "1.89.12"
 $script:ScriptStartTime = Get-Date
 
 # CLI headless mode parameters (populated from param block in monolithic/exe)

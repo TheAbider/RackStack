@@ -86,7 +86,7 @@ function Get-TimezoneOffsetString {
 
     $offset = $TimeZoneInfo.BaseUtcOffset
     $sign = if ($offset -lt [TimeSpan]::Zero) { "-" } else { "+" }
-    return "UTC${sign}$("{0:D2}:{1:D2}" -f [math]::Abs($offset.Hours), $offset.Minutes)"
+    return "UTC${sign}$("{0:D2}:{1:D2}" -f [math]::Abs($offset.Hours), [math]::Abs($offset.Minutes))"
 }
 
 # Show a comparison of current timezone vs expected/target timezone

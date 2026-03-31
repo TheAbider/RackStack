@@ -218,7 +218,6 @@ function Get-DisableableServices {
 
         if ($DebloatProfile -eq "Aggressive") {
             $services.Add(@{ Name = "WerSvc"; DisplayName = "Windows Error Reporting Service"; Warning = $null })
-            $services.Add(@{ Name = "DiagTrack"; DisplayName = "Connected User Experiences"; Warning = $null })
             $services.Add(@{ Name = "RemoteRegistry"; DisplayName = "Remote Registry"; Warning = "Some management tools may require this" })
         }
     }
@@ -319,6 +318,27 @@ function Select-DebloatProfile {
     }
 }
 
+# ────────────────────────────────────────────────────────────────────────
+# Helper: Create a system restore point before debloat (best-effort)
+# ────────────────────────────────────────────────────────────────────────
+function New-DebloatRestorePoint {
+    try {
+        # System Restore is only available on workstation SKUs
+        $srEnabled = $null -ne (Get-ComputerRestorePoint -ErrorAction SilentlyContinue)
+        if ($null -eq $srEnabled) {
+            # Check if SR service is enabled
+            $srSvc = Get-Service -Name srservice -ErrorAction SilentlyContinue
+            if ($null -eq $srSvc -or $srSvc.StartType -eq 'Disabled') { return }
+        }
+        Write-OutputColor "  Creating restore point before debloat..." -color "Info"
+        Checkpoint-Computer -Description "$($script:ToolName) Debloat $(Get-Date -Format 'yyyy-MM-dd HH:mm')" -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
+        Write-OutputColor "  Restore point created." -color "Success"
+    }
+    catch {
+        Write-OutputColor "  Note: Could not create restore point (not available on Server editions)" -color "Warning"
+    }
+}
+
 # ════════════════════════════════════════════════════════════════════════
 # Main menu: Start-SystemDebloat
 # ════════════════════════════════════════════════════════════════════════
@@ -370,6 +390,7 @@ function Start-SystemDebloat {
             "1" {
                 $selectedProfile = Select-DebloatProfile
                 if ($null -eq $selectedProfile) { continue }
+                New-DebloatRestorePoint
                 Invoke-WorkstationDebloat -DebloatProfile $selectedProfile
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Press Enter to continue..." -color "Info"
@@ -378,6 +399,7 @@ function Start-SystemDebloat {
             "2" {
                 $selectedProfile = Select-DebloatProfile
                 if ($null -eq $selectedProfile) { continue }
+                New-DebloatRestorePoint
                 Invoke-ServerDebloat -DebloatProfile $selectedProfile
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Press Enter to continue..." -color "Info"
@@ -390,6 +412,7 @@ function Start-SystemDebloat {
                 Read-Host | Out-Null
             }
             "4" {
+                New-DebloatRestorePoint
                 Invoke-CustomDebloat
             }
             "5" {

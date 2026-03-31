@@ -336,6 +336,7 @@ if ($errors.Count -gt 0) {
     foreach ($e in $errors | Select-Object -First 5) {
         Write-Host "  Line $($e.Token.StartLine): $($e.Message)" -ForegroundColor Red
     }
+    exit 1
 } else {
     Write-Host "Parse check: PASSED (0 errors)" -ForegroundColor Green
 }

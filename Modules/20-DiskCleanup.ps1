@@ -181,7 +181,6 @@ function Invoke-QuickClean {
     Write-OutputColor "  Quick Clean complete. Freed $([math]::Round($cleaned/1MB, 1)) MB ($fileCount files)" -color "Success"
     Add-SessionChange -Category "System" -Description "Disk cleanup freed $([math]::Round($cleaned/1MB, 1)) MB ($fileCount files)"
     Clear-MenuCache
-    Write-PressEnter
 }
 
 function Invoke-StandardClean {

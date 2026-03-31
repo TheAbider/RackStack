@@ -285,7 +285,7 @@ function Get-WinRMState {
         } elseif ($passed -gt 0) {
             return "Partial"
         } else {
-            return "Partial"
+            return "Disabled"
         }
     }
     catch {
@@ -407,6 +407,17 @@ function Test-AllConnectivity {
     }
     catch {
         Write-OutputColor "[FAIL] DNS resolution failed" -color "Error"
+    }
+
+    # HTTPS connectivity test (catches firewalls that block ICMP but allow HTTPS)
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Testing HTTPS connectivity..." -color "Info"
+    try {
+        $httpsResult = Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        Write-OutputColor "[OK ] HTTPS connectivity working (microsoft.com - $($httpsResult.StatusCode))" -color "Success"
+    }
+    catch {
+        Write-OutputColor "[FAIL] HTTPS connectivity failed: $($_.Exception.Message)" -color "Warning"
     }
 }
 

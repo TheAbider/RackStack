@@ -220,11 +220,11 @@ jobs:
         shell: powershell
         run: |
           $summaryData = '${{ steps.update-issues.outputs.summaryData }}' | ConvertFrom-Json
-          $total = $summaryData.Count
-          $highCount = ($summaryData | Where-Object { $_.risk -eq "High" }).Count
-          $mediumCount = ($summaryData | Where-Object { $_.risk -eq "Medium" }).Count
-          $lowCount = ($summaryData | Where-Object { $_.risk -eq "Low" }).Count
-          $cleanCount = ($summaryData | Where-Object { $_.risk -eq "Clean" }).Count
+          $total = @($summaryData).Count
+          $highCount = @($summaryData | Where-Object { $_.risk -eq "High" }).Count
+          $mediumCount = @($summaryData | Where-Object { $_.risk -eq "Medium" }).Count
+          $lowCount = @($summaryData | Where-Object { $_.risk -eq "Low" }).Count
+          $cleanCount = @($summaryData | Where-Object { $_.risk -eq "Clean" }).Count
           $report = "## PowerShell Scan Summary`n"
           $report += "**Total Scripts Scanned:** $total`n"
           $report += "**High Risk:** $highCount | **Medium Risk:** $mediumCount | **Low Risk:** $lowCount | **Clean:** $cleanCount`n`n"

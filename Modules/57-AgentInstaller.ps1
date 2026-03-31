@@ -456,7 +456,7 @@ function Install-SelectedAgent {
     # Check if agent is already installed and show version comparison
     $currentStatus = Test-AgentInstalled
     if ($currentStatus.Installed) {
-        $currentVer = Get-InstalledAgentVersion
+        $currentVer = Get-InstalledAgentVersion -AgentName $script:AgentInstaller.ServiceName
         $verDisplay = if ($currentVer) { $currentVer } else { "unknown version" }
         Write-OutputColor "  Currently installed: $verDisplay" -color "Info"
         Write-OutputColor "  This will reinstall/update the agent." -color "Info"
