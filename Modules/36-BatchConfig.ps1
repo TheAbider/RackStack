@@ -270,12 +270,10 @@ function New-ScenarioBatchConfig {
                 Timezone        = "Eastern Standard Time"
                 EnableRDP       = $true
                 EnableWinRM     = $true
-                FirewallDomain  = $false
-                FirewallPrivate = $false
-                FirewallPublic  = $true
-                PowerPlan       = "High Performance"
-                InstallHyperV   = $true
-                InstallMPIO     = $true
+                ConfigureFirewall = $true
+                SetPowerPlan      = "High Performance"
+                InstallHyperV     = $true
+                InstallMPIO       = $true
                 DryRun          = $false
             }
             $scenarioName = "Hyper-V Host"
@@ -292,10 +290,8 @@ function New-ScenarioBatchConfig {
                 Timezone                  = "Eastern Standard Time"
                 EnableRDP                 = $true
                 EnableWinRM               = $true
-                FirewallDomain            = $false
-                FirewallPrivate           = $false
-                FirewallPublic            = $true
-                PowerPlan                 = "High Performance"
+                ConfigureFirewall         = $true
+                SetPowerPlan              = "High Performance"
                 InstallHyperV             = $true
                 InstallMPIO               = $true
                 InstallFailoverClustering = $true
@@ -307,21 +303,21 @@ function New-ScenarioBatchConfig {
         }
         "3" {
             $config = [ordered]@{
-                Hostname        = "DC01"
-                IPAddress       = "192.168.1.2"
-                SubnetCIDR      = 24
-                Gateway         = "192.168.1.1"
-                DNS1            = "127.0.0.1"
-                DNS2            = "192.168.1.3"
-                Timezone        = "Eastern Standard Time"
-                EnableRDP       = $true
-                FirewallDomain  = $false
-                FirewallPrivate = $false
-                FirewallPublic  = $true
-                PromoteDC       = $true
-                DomainName      = "domain.local"
-                NewForest       = $true
-                DryRun          = $false
+                Hostname            = "DC01"
+                IPAddress           = "192.168.1.2"
+                SubnetCIDR          = 24
+                Gateway             = "192.168.1.1"
+                DNS1                = "127.0.0.1"
+                DNS2                = "192.168.1.3"
+                Timezone            = "Eastern Standard Time"
+                EnableRDP            = $true
+                EnableWinRM          = $true
+                ConfigureFirewall    = $true
+                SetPowerPlan         = "High Performance"
+                PromoteToDC          = $true
+                DCPromoType          = "NewForest"
+                ForestName           = "domain.local"
+                DryRun               = $false
             }
             $scenarioName = "Domain Controller"
             Write-OutputColor "  Loaded: Domain Controller template" -color "Success"
@@ -335,11 +331,11 @@ function New-ScenarioBatchConfig {
                 DNS1            = "192.168.1.2"
                 DNS2            = "192.168.1.3"
                 Timezone        = "Eastern Standard Time"
-                EnableRDP       = $true
-                FirewallDomain  = $false
-                FirewallPrivate = $false
-                FirewallPublic  = $true
-                DomainName      = "domain.local"
+                EnableRDP            = $true
+                EnableWinRM          = $true
+                ConfigureFirewall    = $true
+                SetPowerPlan         = "High Performance"
+                DomainName           = "domain.local"
                 DryRun          = $false
             }
             $scenarioName = "File Server"

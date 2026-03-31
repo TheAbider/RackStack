@@ -235,6 +235,13 @@ function Show-PerformanceDashboard {
                 $pMem = [math]::Round($proc.WorkingSet64 / 1MB, 0)
                 $clipLines += "  $($proc.ProcessName) (PID $($proc.Id)) - CPU: ${pCpu}s - Mem: $pMem MB"
             }
+            $clipLines += ""
+            $clipLines += "Top Processes (by Memory):"
+            foreach ($proc in $topMemProcs) {
+                $pMem = [math]::Round($proc.WorkingSet64 / 1MB, 0)
+                $pCpu = if ($null -ne $proc.CPU) { [math]::Round($proc.CPU, 1) } else { 0 }
+                $clipLines += "  $($proc.ProcessName) (PID $($proc.Id)) - Mem: $pMem MB - CPU: ${pCpu}s"
+            }
             ($clipLines -join "`r`n") | clip.exe
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  System info copied to clipboard." -color "Success"

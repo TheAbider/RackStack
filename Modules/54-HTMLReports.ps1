@@ -105,14 +105,13 @@ function Export-HTMLHealthReport {
     $memPercent = if ($totalMemGB -gt 0) { [math]::Round(($usedMemGB / $totalMemGB) * 100, 1) } else { 0 }
     $memStatus = if ($memPercent -gt 90) { "bad" } elseif ($memPercent -gt 75) { "warn" } else { "good" }
 
-    # Disks
-    $disks = $null
+    # Disks (always query for issues summary; HTML only if section selected)
+    $diskResult = Invoke-WithTimeout -ScriptBlock {
+        Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+    } -TimeoutSeconds 10 -Activity "Querying disk info"
+    $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
     $diskHtml = ""
     if ($includeStorage) {
-        $diskResult = Invoke-WithTimeout -ScriptBlock {
-            Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-        } -TimeoutSeconds 10 -Activity "Querying disk info"
-        $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
         if (-not $disks) {
             $diskHtml = "<tr><td colspan='5'>Disk information unavailable</td></tr>"
         }
@@ -312,12 +311,12 @@ function Export-HTMLHealthReport {
     }
 
     # Firewall Status (Security section)
+    # Always query firewall for issues summary
+    $fwProfiles = try { Get-NetFirewallProfile -ErrorAction SilentlyContinue } catch { $null }
     $firewallHtml = ""
-    $fwProfiles = $null
     if ($includeSecurity) {
         $firewallHtml = "<table><tr><th>Profile</th><th>Enabled</th><th>Status</th></tr>"
         try {
-            $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
             foreach ($fwProf in $fwProfiles) {
                 $fwOn = $fwProf.Enabled -eq $true
                 $fwStat = if ($fwOn) { "good" } else { "bad" }
@@ -330,13 +329,12 @@ function Export-HTMLHealthReport {
         $firewallHtml += "</table>"
     }
 
-    # Recent Critical Events (Security section)
+    # Always query critical events for issues summary
+    $critEvents = @(try { Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction SilentlyContinue } catch { })
     $critEventsHtml = ""
-    $critEvents = @()
     if ($includeSecurity) {
         $critEventsHtml = "<table><tr><th>Time</th><th>Source</th><th>ID</th><th>Message</th></tr>"
         try {
-            $critEvents = @(Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction SilentlyContinue)
             if ($critEvents.Count -gt 0) {
                 foreach ($evt in ($critEvents | Select-Object -First 5)) {
                     $evtMsg = if ($evt.Message) { $evt.Message.Split("`n")[0] } else { "N/A" }
@@ -1322,7 +1320,7 @@ function Export-HTMLTrendReport {
     $diskSection = ""
     $latestSnap = $snapshots[-1]
     if ($latestSnap.Disks) {
-        $diskSection = "<h2>Disk Usage (Latest)</h2><table>"
+        $diskSection = "<h2>Disk Usage (Latest)</h2><table><tr><th>Drive</th><th>Total GB</th><th>Free GB</th><th>Used %</th><th>Projection</th></tr>"
         foreach ($disk in $latestSnap.Disks) {
             $daysUntilFull = ""
             if ($snapshots.Count -ge 2) {

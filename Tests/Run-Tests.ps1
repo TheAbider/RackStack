@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.90.0
+    Automated Test Runner for RackStack v1.90.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11926,7 +11926,40 @@ try {
     Write-TestResult "38-StorageMgr: shows disk serial number" ($stm2 -match 'SerialNumber')
     Write-TestResult "38-StorageMgr: shows disk media type" ($stm2 -match 'MediaType')
 } catch {
-    Write-TestResult "v1.89.13 Tests" $false $_.Exception.Message
+    Write-TestResult "v1.90.0 Tests" $false $_.Exception.Message
+}
+
+# v1.90.1 bug fixes
+try {
+    # 50-EntryPoint: no orphaned else in Win11Cleanup batch step
+    $ep3 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: no orphaned else in UI cleanup step" (-not ($ep3 -match 'UI cleanup failed[\s\S]{0,200}else \{[\s\S]{0,200}skipped \(build'))
+
+    # 36-BatchConfig: DC template uses correct key names
+    $bc2 = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
+    Write-TestResult "36-BatchConfig: DC template uses PromoteToDC" ($bc2 -match 'PromoteToDC\s*=\s*\$true')
+    Write-TestResult "36-BatchConfig: DC template uses DCPromoType" ($bc2 -match 'DCPromoType\s*=\s*"NewForest"')
+    Write-TestResult "36-BatchConfig: DC template uses ForestName" ($bc2 -match 'ForestName\s*=\s*"domain\.local"')
+    # No old-style PromoteDC key
+    Write-TestResult "36-BatchConfig: no legacy PromoteDC key" (-not ($bc2 -match 'PromoteDC\s*='))
+
+    # 36-BatchConfig: all scenarios use ConfigureFirewall (not FirewallDomain)
+    Write-TestResult "36-BatchConfig: no legacy FirewallDomain keys" (-not ($bc2 -match 'FirewallDomain\s*='))
+    Write-TestResult "36-BatchConfig: scenarios use ConfigureFirewall" (@([regex]::Matches($bc2, 'ConfigureFirewall\s*=\s*\$true')).Count -ge 3)
+
+    # 54-HTMLReports: disk/firewall/events queried before section selection
+    $hr2 = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
+    Write-TestResult "54-HTML: disks queried before includeStorage check" ($hr2 -match 'Querying disk info[\s\S]{0,200}\$diskHtml[\s\S]{0,50}if \(\$includeStorage\)')
+    Write-TestResult "54-HTML: firewall queried before includeSecurity check" ($hr2 -match 'Get-NetFirewallProfile[\s\S]{0,200}if \(\$includeSecurity\)')
+
+    # 28-PerfDash: clipboard includes memory processes
+    $pd2 = Get-Content (Join-Path $modulesPath "28-PerformanceDashboard.ps1") -Raw
+    Write-TestResult "28-PerfDash: clipboard includes memory processes" ($pd2 -match 'Top Processes \(by Memory\)[\s\S]{0,200}topMemProcs')
+
+    # 54-HTML: disk trend table has header row
+    Write-TestResult "54-HTML: disk trend table has column headers" ($hr2 -match 'Disk Usage \(Latest\).*<table><tr><th>')
+} catch {
+    Write-TestResult "v1.90.1 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

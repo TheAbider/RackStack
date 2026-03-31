@@ -12212,9 +12212,6 @@ function Start-BatchMode {
                 $errors++
             }
         }
-        else {
-            Write-OutputColor "  [$stepNum/$totalSteps] Win11 cleanup: skipped (build $build < 22000)" -color "Debug"
-        }
     }
     else {
         Write-OutputColor "  [$stepNum/$totalSteps] Win11 cleanup: skipped" -color "Debug"

@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## v1.90.1
+
+- **Fix:** Batch mode orphaned `else` block in UI cleanup step could cause parse error at runtime when Win11Cleanup is enabled.
+- **Fix:** DC scenario template now uses correct batch executor field names (`PromoteToDC`, `DCPromoType`, `ForestName`) — previously DC promotion was silently skipped.
+- **Fix:** All batch scenario templates (Hyper-V Host, Cluster Node, File Server) now use `ConfigureFirewall` and `SetPowerPlan` matching the executor, instead of non-functional `FirewallDomain`/`FirewallPrivate`/`FirewallPublic`/`PowerPlan` keys.
+- **Fix:** HTML health report issues summary now always checks disk space, firewall state, and critical events regardless of which report sections are selected — previously a report with only Performance selected could show "HEALTHY" while disks were full and firewall was disabled.
+- **Fix:** Performance dashboard clipboard copy now includes Top Processes by Memory section (was only showing CPU).
+- **Fix:** HTML trend report disk usage table now has proper column headers.
+- 65 modules, 4497 tests, 157 CLI actions, 644 functions
+
 ## v1.90.0
 
 - **Fix:** User audit no longer flags accounts with null password expiry as "EXPIRED" — previously `$null -lt (Get-Date)` evaluated true in PowerShell.
