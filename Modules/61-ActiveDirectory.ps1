@@ -224,6 +224,8 @@ function Read-DSRMPassword {
         }
     }
     finally {
+        $plain1 = $null
+        $plain2 = $null
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr1)
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr2)
     }

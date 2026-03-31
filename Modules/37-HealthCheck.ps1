@@ -1006,6 +1006,44 @@ function Show-SystemHealthCheck {
     }
     Write-OutputColor "" -color "Info"
 
+    # Disk Reliability / SMART Data
+    Write-OutputColor "=== DISK RELIABILITY ===" -color "Success"
+    try {
+        $physDisks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $null -ne $_.DeviceId })
+        if ($physDisks.Count -gt 0) {
+            foreach ($pd in $physDisks) {
+                $reliability = $pd | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue
+                $healthColor = if ($pd.HealthStatus -ne 'Healthy') { "Error" } else { "Success" }
+                $model = if ($pd.FriendlyName.Length -gt 30) { $pd.FriendlyName.Substring(0, 27) + "..." } else { $pd.FriendlyName }
+                $sizeGB = [math]::Round($pd.Size / 1GB, 0)
+                $line = "  Disk $($pd.DeviceId): $model (${sizeGB}GB $($pd.MediaType)) - $($pd.HealthStatus)"
+                Write-OutputColor $line -color $healthColor
+                if ($null -ne $reliability) {
+                    $details = @()
+                    if ($null -ne $reliability.Temperature) { $details += "Temp: $($reliability.Temperature)C" }
+                    if ($null -ne $reliability.Wear -and $reliability.Wear -gt 0) { $details += "Wear: $($reliability.Wear)%" }
+                    if ($null -ne $reliability.PowerOnHours) { $details += "PowerOn: $($reliability.PowerOnHours)h" }
+                    $readErr = if ($null -ne $reliability.ReadErrorsTotal) { $reliability.ReadErrorsTotal } else { 0 }
+                    $writeErr = if ($null -ne $reliability.WriteErrorsTotal) { $reliability.WriteErrorsTotal } else { 0 }
+                    if ($readErr -gt 0 -or $writeErr -gt 0) { $details += "Errors: R=$readErr W=$writeErr" }
+                    if ($details.Count -gt 0) {
+                        $detailColor = if ($readErr -gt 0 -or $writeErr -gt 0) { "Warning" } elseif ($null -ne $reliability.Wear -and $reliability.Wear -gt 80) { "Warning" } else { "Info" }
+                        Write-OutputColor "    $($details -join ' | ')" -color $detailColor
+                    }
+                }
+                if ($pd.HealthStatus -ne 'Healthy') {
+                    $issues += "Disk $($pd.DeviceId) ($model): $($pd.HealthStatus)"
+                }
+            }
+        } else {
+            Write-OutputColor "  No physical disks found (virtual environment?)" -color "Info"
+        }
+    }
+    catch {
+        Write-OutputColor "  Disk reliability data unavailable." -color "Debug"
+    }
+    Write-OutputColor "" -color "Info"
+
     # NIC Error Counters (v1.7.0)
     Write-OutputColor "=== NIC ERROR COUNTERS ===" -color "Success"
     try {

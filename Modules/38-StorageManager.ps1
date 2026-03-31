@@ -156,9 +156,15 @@ function Show-AllDisks {
             Write-OutputColor "" -color "Info"
         }
 
-        # Show friendly name
+        # Show friendly name, serial number, and media type
         if ($disk.FriendlyName) {
-            Write-OutputColor "       Model: $($disk.FriendlyName)" -color "Info"
+            $diskDetails = "Model: $($disk.FriendlyName)"
+            $phys = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DeviceId -eq $disk.Number.ToString() } | Select-Object -First 1
+            if ($null -ne $phys) {
+                if ($phys.MediaType -and $phys.MediaType -ne 'Unspecified') { $diskDetails += " | $($phys.MediaType)" }
+                if ($phys.SerialNumber) { $diskDetails += " | S/N: $($phys.SerialNumber.Trim())" }
+            }
+            Write-OutputColor "       $diskDetails" -color "Info"
         }
     }
 

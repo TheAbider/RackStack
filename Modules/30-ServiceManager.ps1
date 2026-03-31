@@ -130,6 +130,7 @@ function Show-ServiceManager {
         Write-MenuItem -Text "[R]  Restart a Service (enter number)"
         Write-MenuItem -Text "[C]  Change Startup Type (enter number)"
         Write-MenuItem -Text "[A]  Search All Services"
+        Write-MenuItem -Text "[E]  Show Failed Services (Auto + Stopped)"
         Write-MenuItem -Text "[D]  View Service Dependencies"
         Write-MenuItem -Text "[F]  Find Service Dependencies (by name)"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -309,6 +310,25 @@ function Show-ServiceManager {
                         Write-OutputColor "  No services found matching '$search'" -color "Warning"
                     }
                 }
+            }
+            "^[Ee]$" {
+                $failedSvcs = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -eq 'Stopped' })
+                Write-OutputColor "" -color "Info"
+                if ($failedSvcs.Count -eq 0) {
+                    Write-OutputColor "  All automatic services are running." -color "Success"
+                } else {
+                    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                    Write-OutputColor "  │$("  FAILED SERVICES (Automatic + Stopped): $($failedSvcs.Count)".PadRight(72))│" -color "Error"
+                    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                    foreach ($fs in $failedSvcs | Sort-Object DisplayName) {
+                        $dispName = if ($fs.DisplayName.Length -gt 45) { $fs.DisplayName.Substring(0, 42) + "..." } else { $fs.DisplayName }
+                        $fsLine = "  $($fs.Name.PadRight(24)) $dispName"
+                        if ($fsLine.Length -gt 72) { $fsLine = $fsLine.Substring(0, 72) }
+                        Write-OutputColor "  │$($fsLine.PadRight(72))│" -color "Error"
+                    }
+                    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                }
+                Write-PressEnter
             }
             "^[Dd]$" {
                 $num = Read-Host "  Enter service number to view dependencies"

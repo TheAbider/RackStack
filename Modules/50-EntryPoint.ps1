@@ -1972,7 +1972,7 @@ function Invoke-CLIAction {
                     Write-OutputColor "  Registering scheduled export task..." -color "Info"
                     Write-OutputColor "" -color "Info"
 
-                    $outFmt = if ($script:CLIOutputFormat -eq 'JSON') { 'JSON' } else { 'JSON' }
+                    $outFmt = 'JSON'
                     $regResult = Register-ScheduledExport -OutputDir $exportDir -Frequency $freq -Sections $sectionFilter -OutputFormat $outFmt
 
                     if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2916,7 +2916,7 @@ function Invoke-CLIAction {
                     if ($user.PasswordNeverExpires) { $pwdExpires = 'Never' }
                     elseif ($null -ne $user.PasswordExpires) { $pwdExpires = $user.PasswordExpires.ToString("yyyy-MM-dd") }
 
-                    if ($user.Enabled -and $user.PasswordExpires -and $user.PasswordExpires -lt (Get-Date)) {
+                    if ($user.Enabled -and $null -ne $user.PasswordExpires -and $user.PasswordExpires -lt (Get-Date)) {
                         $flags += 'EXPIRED'
                     }
 
@@ -3734,7 +3734,6 @@ function Invoke-CLIAction {
             # UEFI vs BIOS
             $firmwareType = "Unknown"
             try {
-                $env:firmware_type_check = $null
                 $fwReg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State' -ErrorAction SilentlyContinue
                 if ($null -ne $fwReg) {
                     $firmwareType = "UEFI"

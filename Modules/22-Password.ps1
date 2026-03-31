@@ -96,7 +96,7 @@ function Show-PasswordStrength {
     # Convert SecureString to check strength (clear from memory after)
     $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
     try {
-        $plainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+        $plainText = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
 
         $score = 0
         $feedback = @()
@@ -135,6 +135,7 @@ function Show-PasswordStrength {
             Write-OutputColor "    $item" -color $itemColor
         }
     } finally {
+        $plainText = $null
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
     }
 }
@@ -337,21 +338,35 @@ function New-StrongPassword {
     $digits = "23456789"                     # No 0, 1 (ambiguous)
     $special = "!@#%^&*-_=+"                 # Safe special chars
 
+    # Use cryptographic RNG for secure index generation
+    $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+    $cryptoRandom = {
+        param([int]$Max)
+        $bytes = New-Object byte[] 4
+        $rng.GetBytes($bytes)
+        [math]::Abs([BitConverter]::ToInt32($bytes, 0)) % $Max
+    }
+
     # Ensure at least one of each type
     $password = @(
-        $upper[(Get-Random -Maximum $upper.Length)]
-        $lower[(Get-Random -Maximum $lower.Length)]
-        $digits[(Get-Random -Maximum $digits.Length)]
-        $special[(Get-Random -Maximum $special.Length)]
+        $upper[(& $cryptoRandom $upper.Length)]
+        $lower[(& $cryptoRandom $lower.Length)]
+        $digits[(& $cryptoRandom $digits.Length)]
+        $special[(& $cryptoRandom $special.Length)]
     )
 
     $allChars = $upper + $lower + $digits + $special
     for ($i = $password.Count; $i -lt $Length; $i++) {
-        $password += $allChars[(Get-Random -Maximum $allChars.Length)]
+        $password += $allChars[(& $cryptoRandom $allChars.Length)]
     }
 
-    # Shuffle
-    $password = ($password | Get-Random -Count $password.Count) -join ''
+    # Shuffle using Fisher-Yates with crypto RNG
+    for ($i = $password.Count - 1; $i -gt 0; $i--) {
+        $j = & $cryptoRandom ($i + 1)
+        $temp = $password[$i]; $password[$i] = $password[$j]; $password[$j] = $temp
+    }
+    $rng.Dispose()
+    $password = $password -join ''
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

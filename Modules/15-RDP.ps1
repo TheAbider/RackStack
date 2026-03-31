@@ -93,6 +93,12 @@ function Enable-RDP {
             $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24 or 192.168.1.0/24)"
             $navResult = Test-NavigationCommand -UserInput $subnet
             if (-not $navResult.ShouldReturn -and -not [string]::IsNullOrWhiteSpace($subnet)) {
+                # Validate CIDR format and reject overly broad subnets
+                if ($subnet -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$') {
+                    Write-OutputColor "  Invalid CIDR format. Expected format: 10.0.1.0/24" -color "Error"
+                } elseif ($subnet -match '/[0-7]$') {
+                    Write-OutputColor "  Subnet too broad (/$($subnet.Split('/')[-1])). Use /8 or narrower." -color "Error"
+                } else {
                 try {
                     # Remove existing subnet restriction rule if present
                     Remove-NetFirewallRule -DisplayName "RDP Subnet Restriction" -ErrorAction SilentlyContinue
@@ -119,6 +125,7 @@ function Enable-RDP {
                 catch {
                     Write-OutputColor "  Failed to create subnet restriction: $_" -color "Error"
                     Write-OutputColor "  Check that the CIDR format is valid (e.g., 10.0.1.0/24)." -color "Info"
+                }
                 }
             }
         }
@@ -441,6 +448,11 @@ function Enable-PowerShellRemoting {
             $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24)"
             $navResult = Test-NavigationCommand -UserInput $subnet
             if (-not $navResult.ShouldReturn -and -not [string]::IsNullOrWhiteSpace($subnet)) {
+                if ($subnet -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$') {
+                    Write-OutputColor "  Invalid CIDR format. Expected format: 10.0.1.0/24" -color "Error"
+                } elseif ($subnet -match '/[0-7]$') {
+                    Write-OutputColor "  Subnet too broad (/$($subnet.Split('/')[-1])). Use /8 or narrower." -color "Error"
+                } else {
                 try {
                     Remove-NetFirewallRule -DisplayName "WinRM Subnet Restriction" -ErrorAction SilentlyContinue
                     New-NetFirewallRule -DisplayName "WinRM Subnet Restriction" `
@@ -462,6 +474,7 @@ function Enable-PowerShellRemoting {
                 }
                 catch {
                     Write-OutputColor "  Failed to create subnet restriction: $_" -color "Error"
+                }
                 }
             }
         }

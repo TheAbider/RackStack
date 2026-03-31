@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.89.12
+    Automated Test Runner for RackStack v1.89.13
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11873,6 +11873,60 @@ try {
     Write-TestResult "sync: parse errors cause exit 1" ($syncContent -match 'PARSE ERRORS[\s\S]{0,200}exit 1')
 } catch {
     Write-TestResult "v1.89.12 Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# v1.89.13 security fixes and features
+# ============================================================================
+try {
+    # 50-EntryPoint: UserAudit uses $null -ne check for PasswordExpires
+    $ep2 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: UserAudit null-safe password expiry check" ($ep2 -match '\$null -ne \$user\.PasswordExpires -and \$user\.PasswordExpires -lt')
+
+    # 50-EntryPoint: dead code removed (both branches JSON)
+    Write-TestResult "50-EntryPoint: no dead outFmt conditional" (-not ($ep2 -match "outFmt = if.*'JSON'.*else.*'JSON'"))
+
+    # 50-EntryPoint: leftover env var removed
+    Write-TestResult "50-EntryPoint: no firmware_type_check env var" (-not ($ep2 -match 'env:firmware_type_check'))
+
+    # 22-Password: PtrToStringBSTR used (not PtrToStringAuto)
+    $pw3 = Get-Content (Join-Path $modulesPath "22-Password.ps1") -Raw
+    Write-TestResult "22-Password: Show-PasswordStrength uses PtrToStringBSTR" ($pw3 -match 'Show-PasswordStrength[\s\S]{0,500}PtrToStringBSTR')
+    Write-TestResult "22-Password: Show-PasswordStrength clears plainText" ($pw3 -match 'Show-PasswordStrength[\s\S]{0,3500}\$plainText = \$null')
+
+    # 22-Password: crypto-secure RNG
+    Write-TestResult "22-Password: New-StrongPassword uses RNGCryptoServiceProvider" ($pw3 -match 'RNGCryptoServiceProvider')
+    Write-TestResult "22-Password: Fisher-Yates shuffle" ($pw3 -match 'Fisher-Yates')
+
+    # 61-ActiveDirectory: DSRM password plaintext cleared
+    $ad2 = Get-Content (Join-Path $modulesPath "61-ActiveDirectory.ps1") -Raw
+    Write-TestResult "61-AD: DSRM password vars cleared in finally" ($ad2 -match 'finally[\s\S]{0,200}\$plain1 = \$null[\s\S]{0,50}\$plain2 = \$null')
+
+    # 15-RDP: CIDR validation for subnet restriction
+    $rdp2 = Get-Content (Join-Path $modulesPath "15-RDP.ps1") -Raw
+    Write-TestResult "15-RDP: RDP subnet validates CIDR format" ($rdp2 -match 'Invalid CIDR format')
+    Write-TestResult "15-RDP: RDP subnet rejects broad masks" ($rdp2 -match 'Subnet too broad')
+    Write-TestResult "15-RDP: WinRM subnet validates CIDR format" (($rdp2 -match 'Invalid CIDR format' -and ($rdp2 | Select-String 'Invalid CIDR format').Count -ge 2) -or $rdp2 -match 'WinRM[\s\S]{0,500}Invalid CIDR format')
+
+    # 37-HealthCheck: SMART disk reliability section
+    $hc3 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
+    Write-TestResult "37-HealthCheck: disk reliability section exists" ($hc3 -match 'DISK RELIABILITY')
+    Write-TestResult "37-HealthCheck: queries StorageReliabilityCounter" ($hc3 -match 'Get-StorageReliabilityCounter')
+    Write-TestResult "37-HealthCheck: shows disk temperature" ($hc3 -match 'reliability\.Temperature')
+    Write-TestResult "37-HealthCheck: shows disk wear level" ($hc3 -match 'reliability\.Wear')
+    Write-TestResult "37-HealthCheck: shows power-on hours" ($hc3 -match 'reliability\.PowerOnHours')
+
+    # 30-ServiceManager: failed services view
+    $sm2 = Get-Content (Join-Path $modulesPath "30-ServiceManager.ps1") -Raw
+    Write-TestResult "30-ServiceMgr: failed services menu option exists" ($sm2 -match 'Show Failed Services')
+    Write-TestResult "30-ServiceMgr: queries Auto+Stopped services" ($sm2 -match "StartType -eq 'Automatic' -and.*Status -eq 'Stopped'")
+
+    # 38-StorageManager: serial number and media type display
+    $stm2 = Get-Content (Join-Path $modulesPath "38-StorageManager.ps1") -Raw
+    Write-TestResult "38-StorageMgr: shows disk serial number" ($stm2 -match 'SerialNumber')
+    Write-TestResult "38-StorageMgr: shows disk media type" ($stm2 -match 'MediaType')
+} catch {
+    Write-TestResult "v1.89.13 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

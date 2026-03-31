@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## v1.89.13
+
+- **Fix:** User audit no longer flags accounts with null password expiry as "EXPIRED" — previously `$null -lt (Get-Date)` evaluated true in PowerShell.
+- **Fix:** Password strength checker now uses `PtrToStringBSTR` (correct paired call) instead of `PtrToStringAuto`, preventing potential data misread on some platforms.
+- **Fix:** Password strength checker and DSRM password validation now clear plaintext variables from memory in `finally` blocks.
+- **Fix:** Removed dead code in scheduled export CLI action where both branches returned the same value.
+- **Fix:** Removed leftover debug environment variable assignment in BIOS audit.
+- **Security:** Password generator now uses `RNGCryptoServiceProvider` instead of `Get-Random` for cryptographically secure index generation.
+- **Security:** RDP and WinRM subnet restriction prompts now validate CIDR format and reject overly broad subnets (wider than /8).
+- **New:** Disk reliability / SMART data section in health check — shows temperature, wear level, power-on hours, and read/write error counts per physical disk.
+- **New:** Failed services quick view in Service Manager — shows all Automatic services that are Stopped, the most common troubleshooting query.
+- **Enhanced:** Storage Manager disk display now shows serial number and media type (SSD/HDD) alongside the model name.
+- 65 modules, 4497 tests, 157 CLI actions, 644 functions
+
 ## v1.89.12
 
 - **Fix:** iSCSI side detection now correctly restores original adapter IP configuration after testing instead of leaving adapters unconfigured.
