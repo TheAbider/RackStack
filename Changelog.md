@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## v1.89.13
+## v1.90.0
 
 - **Fix:** User audit no longer flags accounts with null password expiry as "EXPIRED" — previously `$null -lt (Get-Date)` evaluated true in PowerShell.
 - **Fix:** Password strength checker now uses `PtrToStringBSTR` (correct paired call) instead of `PtrToStringAuto`, preventing potential data misread on some platforms.
