@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.92.1
+
+- **Fix:** WMI Audit provider test now correctly displays query latency — broken string interpolation `${$p.QueryMs}` replaced with `$($p.QueryMs)`.
+- **Fix:** Port Audit TCP connections now properly disposed in `finally` block — previously leaked socket handles on connection exceptions.
+- **Fix:** Added `-OperationTimeoutSec` to 14+ CIM queries across BIOSAudit, MemoryAudit, DiskAudit, DriverAudit, CredGuardAudit, USBDeviceAudit, ServiceAccountAudit, and SysInfoAudit — prevents indefinite hangs on systems with degraded WMI.
+- 65 modules, 4540 tests, 165 CLI actions, 649 functions
+
 ## v1.92.0
 
 - **New:** `SLAReport` CLI action — calculates server uptime percentage over a configurable period, with SLA compliance checks (99.9%, 99.5%, 99.0%), incident breakdown, longest outage duration, and unexpected shutdown count. JSON output for automation.

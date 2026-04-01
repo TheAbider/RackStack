@@ -3506,7 +3506,7 @@ function Invoke-CLIAction {
 
             # Volume utilization
             try {
-                $vols = @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop)
+                $vols = @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction Stop)
                 foreach ($v in $vols) {
                     $totalGB = [math]::Round($v.Size / 1GB, 1)
                     $freeGB = [math]::Round($v.FreeSpace / 1GB, 1)
@@ -3837,7 +3837,7 @@ function Invoke-CLIAction {
             $drivers = @()
 
             try {
-                $allDrivers = @(Get-CimInstance -ClassName Win32_PnPSignedDriver -ErrorAction Stop |
+                $allDrivers = @(Get-CimInstance -ClassName Win32_PnPSignedDriver -OperationTimeoutSec 15 -ErrorAction Stop |
                     Where-Object { $null -ne $_.DeviceName -and $_.DeviceName -ne '' })
 
                 foreach ($d in $allDrivers) {
@@ -3958,7 +3958,7 @@ function Invoke-CLIAction {
             $bootTime = $null
             $uptimeDays = $null
             try {
-                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 $bootTime = $os.LastBootUpTime.ToString("yyyy-MM-ddTHH:mm:ss")
                 $uptimeDays = [math]::Round(((Get-Date) - $os.LastBootUpTime).TotalDays, 1)
             } catch { }
@@ -4043,7 +4043,7 @@ function Invoke-CLIAction {
             $bootTime = $null
             $uptimeDays = $null
             try {
-                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 $bootTime = $os.LastBootUpTime.ToString("yyyy-MM-ddTHH:mm:ss")
                 $uptimeDays = [math]::Round(((Get-Date) - $os.LastBootUpTime).TotalDays, 1)
                 if ($uptimeDays -gt 90) { $bootIssues++ }
@@ -4117,7 +4117,7 @@ function Invoke-CLIAction {
             # Check if domain-joined
             $isDomainJoined = $false
             try {
-                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 $isDomainJoined = $cs.PartOfDomain -eq $true
             } catch { }
 
@@ -4241,7 +4241,7 @@ function Invoke-CLIAction {
             $usedGB = 0
             $pctUsed = 0
             try {
-                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 $totalPhysicalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
                 $availableGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
                 $usedGB = [math]::Round($totalPhysicalGB - $availableGB, 1)
@@ -4255,7 +4255,7 @@ function Invoke-CLIAction {
             # Memory DIMMs
             $dimms = @()
             try {
-                $physMem = @(Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction Stop)
+                $physMem = @(Get-CimInstance -ClassName Win32_PhysicalMemory -OperationTimeoutSec 8 -ErrorAction Stop)
                 foreach ($m in $physMem) {
                     $dimms += @{
                         BankLabel    = "$($m.BankLabel)"
@@ -4273,7 +4273,7 @@ function Invoke-CLIAction {
             # Page file
             $pageFiles = @()
             try {
-                $pf = @(Get-CimInstance -ClassName Win32_PageFileUsage -ErrorAction Stop)
+                $pf = @(Get-CimInstance -ClassName Win32_PageFileUsage -OperationTimeoutSec 8 -ErrorAction Stop)
                 foreach ($p in $pf) {
                     $pfSizeMB = $p.AllocatedBaseSize
                     $pfUsedMB = $p.CurrentUsage
@@ -4496,7 +4496,7 @@ function Invoke-CLIAction {
             # Shadow copies
             $shadowCopies = @()
             try {
-                $shadows = @(Get-CimInstance -ClassName Win32_ShadowCopy -ErrorAction Stop)
+                $shadows = @(Get-CimInstance -ClassName Win32_ShadowCopy -OperationTimeoutSec 8 -ErrorAction Stop)
                 foreach ($s in $shadows) {
                     $shadowCopies += @{
                         ID         = "$($s.ID)"
@@ -5339,7 +5339,7 @@ function Invoke-CLIAction {
             # Auto-start services (non-Microsoft)
             $autoServices = @()
             try {
-                $autoServices = @(Get-CimInstance -ClassName Win32_Service -Filter "StartMode='Auto'" -ErrorAction Stop |
+                $autoServices = @(Get-CimInstance -ClassName Win32_Service -Filter "StartMode='Auto'" -OperationTimeoutSec 8 -ErrorAction Stop |
                     Where-Object { $_.PathName -notmatch 'Windows\\system32|Windows\\SysWOW64|Microsoft' -and $null -ne $_.PathName -and $_.PathName -ne '' })
                 foreach ($svc in $autoServices) {
                     $entries += @{ Name = $svc.Name; Command = "$($svc.PathName)"; Source = 'Services'; Scope = 'Machine'; Type = 'Service' }
@@ -5393,7 +5393,7 @@ function Invoke-CLIAction {
             $systemInfo = @{}
 
             try {
-                $bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop
+                $bios = Get-CimInstance -ClassName Win32_BIOS -OperationTimeoutSec 8 -ErrorAction Stop
                 $biosInfo = @{
                     Manufacturer   = "$($bios.Manufacturer)"
                     Version        = "$($bios.SMBIOSBIOSVersion)"
@@ -5406,7 +5406,7 @@ function Invoke-CLIAction {
             }
 
             try {
-                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 $systemInfo = @{
                     Manufacturer = "$($cs.Manufacturer)"
                     Model        = "$($cs.Model)"
@@ -5418,7 +5418,7 @@ function Invoke-CLIAction {
             } catch { }
 
             try {
-                $board = Get-CimInstance -ClassName Win32_BaseBoard -ErrorAction Stop
+                $board = Get-CimInstance -ClassName Win32_BaseBoard -OperationTimeoutSec 8 -ErrorAction Stop
                 $systemInfo['BaseBoardProduct'] = "$($board.Product)"
                 $systemInfo['BaseBoardManufacturer'] = "$($board.Manufacturer)"
                 $systemInfo['BaseBoardSerial'] = "$($board.SerialNumber)"
@@ -5866,7 +5866,7 @@ function Invoke-CLIAction {
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             Write-OutputColor "  │$("  PROVIDER TESTS".PadRight(72))│" -color "Info"
             foreach ($p in $providerResults) {
-                $pStatus = if ($p.Available) { "OK (${$p.QueryMs}ms)" } else { "FAIL" }
+                $pStatus = if ($p.Available) { "OK ($($p.QueryMs)ms)" } else { "FAIL" }
                 $pColor = if ($p.Available) { 'Success' } else { 'Error' }
                 Write-OutputColor "  │$("  $($p.Name.PadRight(20)) $pStatus".PadRight(72))│" -color $pColor
             }
@@ -6337,7 +6337,7 @@ function Invoke-CLIAction {
             $securityServices = @()
 
             try {
-                $dgInfo = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\Microsoft\Windows\DeviceGuard' -ErrorAction Stop
+                $dgInfo = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\Microsoft\Windows\DeviceGuard' -OperationTimeoutSec 8 -ErrorAction Stop
                 $vbsRunning = $dgInfo.VirtualizationBasedSecurityStatus -eq 2
                 if ($null -ne $dgInfo.SecurityServicesRunning) {
                     $svcIds = @($dgInfo.SecurityServicesRunning)
@@ -6408,6 +6408,7 @@ function Invoke-CLIAction {
             foreach ($t in $targets) {
                 $reachable = $false
                 $latencyMs = 0
+                $tcp = $null
                 try {
                     $sw = [System.Diagnostics.Stopwatch]::StartNew()
                     $tcp = [System.Net.Sockets.TcpClient]::new()
@@ -6416,9 +6417,10 @@ function Invoke-CLIAction {
                     $sw.Stop()
                     $latencyMs = $sw.ElapsedMilliseconds
                     if ($completed -and $tcp.Connected) { $reachable = $true }
-                    $tcp.Dispose()
                 } catch {
                     $reachable = $false
+                } finally {
+                    if ($null -ne $tcp) { $tcp.Dispose() }
                 }
 
                 if (-not $reachable) { $portIssues++ }
@@ -6491,7 +6493,7 @@ function Invoke-CLIAction {
 
             # Third-party AV (via WMI SecurityCenter2)
             try {
-                $avWmi = @(Get-CimInstance -Namespace 'root\SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
+                $avWmi = @(Get-CimInstance -Namespace 'root\SecurityCenter2' -ClassName AntiVirusProduct -OperationTimeoutSec 8 -ErrorAction Stop)
                 foreach ($av in $avWmi) {
                     $avProducts += @{ Name = "$($av.displayName)"; State = $av.productState; Path = "$($av.pathToSignedProductExe)" }
                 }
@@ -6924,7 +6926,7 @@ function Invoke-CLIAction {
             $usbDevices = @()
 
             try {
-                $devices = @(Get-CimInstance -ClassName Win32_USBControllerDevice -ErrorAction Stop)
+                $devices = @(Get-CimInstance -ClassName Win32_USBControllerDevice -OperationTimeoutSec 8 -ErrorAction Stop)
                 $seen = @{}
                 foreach ($d in $devices) {
                     $depPath = $d.Dependent
@@ -7168,8 +7170,8 @@ function Invoke-CLIAction {
             $sysInfo = @{}
 
             try {
-                $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
-                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $os = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
 
                 $sysInfo = @{
@@ -7418,7 +7420,7 @@ function Invoke-CLIAction {
             $serviceAccounts = @()
 
             try {
-                $services = @(Get-CimInstance -ClassName Win32_Service -ErrorAction Stop |
+                $services = @(Get-CimInstance -ClassName Win32_Service -OperationTimeoutSec 8 -ErrorAction Stop |
                     Where-Object { $_.StartName -ne 'LocalSystem' -and $_.StartName -ne 'NT AUTHORITY\LocalService' -and $_.StartName -ne 'NT AUTHORITY\NetworkService' -and $_.StartName -ne 'NT Authority\LocalService' -and $_.StartName -ne 'NT Authority\NetworkService' -and $null -ne $_.StartName -and $_.StartName -ne '' })
 
                 foreach ($svc in $services) {
@@ -7593,7 +7595,7 @@ function Invoke-CLIAction {
             $autoManaged = $false
 
             try {
-                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
                 $autoManaged = $cs.AutomaticManagedPagefile -eq $true
             } catch { }
 
@@ -7607,7 +7609,7 @@ function Invoke-CLIAction {
             # Current usage
             $pfUsage = @()
             try {
-                $usage = @(Get-CimInstance -ClassName Win32_PageFileUsage -ErrorAction Stop)
+                $usage = @(Get-CimInstance -ClassName Win32_PageFileUsage -OperationTimeoutSec 8 -ErrorAction Stop)
                 foreach ($u in $usage) {
                     $pctUsed = if ($u.AllocatedBaseSize -gt 0) { [math]::Round(($u.CurrentUsage / $u.AllocatedBaseSize) * 100, 1) } else { 0 }
                     if ($pctUsed -gt 80) { $pfIssues++ }
@@ -7806,7 +7808,7 @@ function Invoke-CLIAction {
             Write-OutputColor "  Auditing domain secure channel..." -color "Info"
             Write-OutputColor "" -color "Info"
             $scIssues = 0; $scStatus = @{}
-            try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; $scStatus['DomainJoined'] = $cs.PartOfDomain -eq $true; $scStatus['Domain'] = "$($cs.Domain)" } catch { }
+            try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop; $scStatus['DomainJoined'] = $cs.PartOfDomain -eq $true; $scStatus['Domain'] = "$($cs.Domain)" } catch { }
             if ($scStatus['DomainJoined']) {
                 try { $nltest = & nltest /sc_query:$($scStatus['Domain']) 2>&1; $nltestStr = $nltest -join ' '; $scStatus['SecureChannel'] = if ($nltestStr -match 'NERR_Success') { 'OK' } else { 'FAIL' }; if ($scStatus['SecureChannel'] -ne 'OK') { $scIssues++ }; if ($nltestStr -match 'Trusted DC Name\s*(.+?)(?:\s|$)') { $regexMatches = $matches; $scStatus['TrustedDC'] = $regexMatches[1].Trim() } } catch { $scStatus['SecureChannel'] = 'Error' }
             } else { $scStatus['SecureChannel'] = 'N/A (not domain-joined)' }
