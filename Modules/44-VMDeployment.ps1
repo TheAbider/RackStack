@@ -1805,11 +1805,19 @@ function New-VMDisk {
     else { $vhdParams.Dynamic = $true }
 
     if ($script:VMDeploymentMode -eq "Standalone" -and $script:VMDeploymentTarget -ne $env:COMPUTERNAME) {
-        $vhdParams.ComputerName = $script:VMDeploymentTarget
-        if ($script:VMDeploymentCredential) { $vhdParams.Credential = $script:VMDeploymentCredential }
+        if ($script:VMDeploymentCredential) {
+            # New-VHD does not support -Credential; use Invoke-Command for remote credential-based creation
+            $null = Invoke-Command -ComputerName $script:VMDeploymentTarget -Credential $script:VMDeploymentCredential -ScriptBlock {
+                param($Params)
+                New-VHD @Params
+            } -ArgumentList $vhdParams -ErrorAction Stop
+        } else {
+            $vhdParams.ComputerName = $script:VMDeploymentTarget
+            $null = New-VHD @vhdParams
+        }
+    } else {
+        $null = New-VHD @vhdParams
     }
-
-    $null = New-VHD @vhdParams
     Add-VMHardDiskDrive -VM $VM -Path $vhdFullPath -ErrorAction Stop
 }
 

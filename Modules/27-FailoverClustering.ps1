@@ -1164,6 +1164,12 @@ function Test-ClusterQuorumHealth {
         $totalVotes = ($nodes | Measure-Object -Property NodeWeight -Sum).Sum
         $activeVotes = ($upNodes | Measure-Object -Property NodeWeight -Sum).Sum
 
+        # Account for quorum witness vote (disk, file share, or cloud witness)
+        if ($null -ne $quorum -and $null -ne $quorum.QuorumResource) {
+            $totalVotes++
+            if ($quorum.QuorumResource.State -eq 'Online') { $activeVotes++ }
+        }
+
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  NODE VOTES".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"

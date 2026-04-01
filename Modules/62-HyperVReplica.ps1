@@ -546,12 +546,37 @@ function Enable-VMReplicationWizard {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Enabling replication for VM '$vmName'..." -color "Info"
 
-        Enable-VMReplication -VMName $vmName `
-            -ReplicaServerName $replicaServer `
-            -ReplicaServerPort $port `
-            -AuthenticationType $authType `
-            -ReplicationFrequencySec $freqSec `
-            -ErrorAction Stop
+        $replParams = @{
+            VMName                = $vmName
+            ReplicaServerName     = $replicaServer
+            ReplicaServerPort     = $port
+            AuthenticationType    = $authType
+            ReplicationFrequencySec = $freqSec
+            ErrorAction           = "Stop"
+        }
+        if ($authType -eq "Certificate") {
+            Write-OutputColor "  Select a certificate for authentication:" -color "Info"
+            $certs = @(Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
+                Where-Object { $_.HasPrivateKey -and $_.EnhancedKeyUsageList.ObjectId -contains '1.3.6.1.5.5.7.3.1' })
+            if ($certs.Count -eq 0) {
+                Write-OutputColor "  No suitable certificates found in Local Machine\Personal store." -color "Error"
+                Write-OutputColor "  Certificate must have a private key and Server Authentication EKU." -color "Info"
+                return
+            }
+            for ($ci = 0; $ci -lt $certs.Count; $ci++) {
+                Write-OutputColor "  [$($ci + 1)] $($certs[$ci].Subject) (Expires: $($certs[$ci].NotAfter.ToString('yyyy-MM-dd')))" -color "Info"
+            }
+            $certChoice = Read-Host "  Select certificate"
+            $navResult = Test-NavigationCommand -UserInput $certChoice
+            if ($navResult.ShouldReturn) { return }
+            if ($certChoice -match '^\d+$' -and [int]$certChoice -ge 1 -and [int]$certChoice -le $certs.Count) {
+                $replParams.CertificateThumbprint = $certs[[int]$certChoice - 1].Thumbprint
+            } else {
+                Write-OutputColor "  Invalid selection." -color "Error"
+                return
+            }
+        }
+        Enable-VMReplication @replParams
 
         Write-OutputColor "  Replication enabled. Starting initial replication..." -color "Info"
 
@@ -1166,11 +1191,11 @@ function Set-ReverseReplication {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Setting up reverse replication..." -color "Info"
 
-        Set-VMReplication -VMName $vmName -Reverse -ReplicaServerName $originalServer -ErrorAction Stop
+        Set-VMReplication -VMName $vmName -Reverse -ErrorAction Stop
 
         Write-OutputColor "  Reverse replication configured successfully!" -color "Success"
-        Write-OutputColor "  VM '$vmName' will now replicate to $originalServer." -color "Info"
-        Add-SessionChange -Category "Hyper-V" -Description "Reversed replication for VM '$vmName' to $originalServer"
+        Write-OutputColor "  VM '$vmName' replication direction has been reversed." -color "Info"
+        Add-SessionChange -Category "Hyper-V" -Description "Reversed replication for VM '$vmName'"
         Clear-MenuCache
     }
     catch {

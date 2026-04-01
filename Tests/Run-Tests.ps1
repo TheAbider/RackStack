@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.90.2
+    Automated Test Runner for RackStack v1.91.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11989,6 +11989,49 @@ try {
     Write-TestResult "48-MenuDisplay: cached reboot check in config menu" ($md2 -match 'Get-CachedValue.*RebootPending')
 } catch {
     Write-TestResult "v1.90.2 Tests" $false $_.Exception.Message
+}
+
+# v1.91.0 features and critical fixes
+try {
+    # 62-HyperVReplica: cert auth has thumbprint logic
+    $hr3 = Get-Content (Join-Path $modulesPath "62-HyperVReplica.ps1") -Raw
+    Write-TestResult "62-Replica: cert auth prompts for certificate" ($hr3 -match 'CertificateThumbprint')
+    Write-TestResult "62-Replica: cert auth browses cert store" ($hr3 -match 'Cert:\\LocalMachine\\My')
+
+    # 62-HyperVReplica: reverse replication uses -Reverse only (no -ReplicaServerName)
+    Write-TestResult "62-Replica: reverse uses -Reverse without -ReplicaServerName" ($hr3 -match 'Set-VMReplication -VMName \$vmName -Reverse -ErrorAction Stop' -and -not ($hr3 -match 'Set-VMReplication.*-Reverse.*-ReplicaServerName'))
+
+    # 44-VMDeployment: remote VHD creation uses Invoke-Command for credentials
+    $vd2 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+    Write-TestResult "44-VMDeploy: remote VHD uses Invoke-Command for creds" ($vd2 -match 'Invoke-Command[\s\S]{0,200}Credential[\s\S]{0,200}New-VHD')
+
+    # 27-FailoverClustering: quorum includes witness vote
+    $fc2 = Get-Content (Join-Path $modulesPath "27-FailoverClustering.ps1") -Raw
+    Write-TestResult "27-Cluster: quorum health counts witness vote" ($fc2 -match 'QuorumResource[\s\S]{0,200}totalVotes\+\+')
+
+    # 09-SET: clears stale iSCSI candidates
+    $set2 = Get-Content (Join-Path $modulesPath "09-SET.ps1") -Raw
+    Write-TestResult "09-SET: clears stale iSCSI candidates" ($set2 -match 'iSCSICandidateAdapters = @\(\)')
+
+    # 50-EntryPoint: Readiness CLI action
+    $ep5 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: Readiness action exists" ($ep5 -match "'Readiness' \{")
+    Write-TestResult "50-EntryPoint: Readiness calls Get-ReadinessChecks" ($ep5 -match "Readiness[\s\S]{0,500}Get-ReadinessChecks")
+
+    # 50-EntryPoint: BaselineDiff CLI action
+    Write-TestResult "50-EntryPoint: BaselineDiff action exists" ($ep5 -match "'BaselineDiff' \{")
+    Write-TestResult "50-EntryPoint: BaselineDiff calls Compare-DriftHistory" ($ep5 -match "'BaselineDiff'[\s\S]{0,2000}Compare-DriftHistory")
+
+    # 50-EntryPoint: RotateExports CLI action
+    Write-TestResult "50-EntryPoint: RotateExports action exists" ($ep5 -match "'RotateExports' \{")
+    Write-TestResult "50-EntryPoint: RotateExports calls Invoke-ExportRotation" ($ep5 -match "'RotateExports'[\s\S]{0,2000}Invoke-ExportRotation")
+
+    # Action list in -ListActions block has 160 entries
+    $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
+    $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
+    Write-TestResult "50-EntryPoint: action list has 163 entries" ($listActionCount -eq 163) "Found $listActionCount"
+} catch {
+    Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

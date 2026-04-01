@@ -249,6 +249,9 @@ function New-SwitchEmbeddedTeam {
         Start-Sleep -Seconds 2
     }
 
+    # Clear stale iSCSI candidate adapters from previous runs
+    $script:iSCSICandidateAdapters = @()
+
     Write-OutputColor "`nSelect physical adapters for the Switch Embedded Team:" -color "Info"
     Write-OutputColor "  Note: Select at least 2 adapters for redundancy" -color "Warning"
     Write-OutputColor "" -color "Info"

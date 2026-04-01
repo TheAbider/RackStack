@@ -313,6 +313,9 @@ function Assert-Elevation {
                 @{ Action = 'SecureBootAudit'; Description = 'UEFI Secure Boot status + boot mode' }
                 @{ Action = 'TimeSkewAudit'; Description = 'NTP sync accuracy + time source + skew detection' }
                 @{ Action = 'NetworkProfileAudit'; Description = 'Network profile (Domain/Private/Public) per adapter' }
+                @{ Action = 'Readiness';        Description = 'Pre-deployment readiness checklist' }
+                @{ Action = 'BaselineDiff';     Description = 'Compare two saved baselines' }
+                @{ Action = 'RotateExports';    Description = 'Prune old export files by retention count' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -425,6 +428,105 @@ function Invoke-CLIAction {
                     Report    = $healthReport
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'Readiness' {
+            Write-OutputColor "  Running pre-deployment readiness checks..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            try {
+                $checks = Get-ReadinessChecks
+                $passCount = @($checks | Where-Object { $_.Status -eq 'Pass' }).Count
+                $failCount = @($checks | Where-Object { $_.Status -eq 'Fail' }).Count
+                $warnCount = @($checks | Where-Object { $_.Status -eq 'Warn' }).Count
+                $totalCount = @($checks).Count
+
+                foreach ($chk in $checks) {
+                    $color = switch ($chk.Status) { 'Pass' { 'Success' } 'Fail' { 'Error' } 'Warn' { 'Warning' } default { 'Info' } }
+                    $tag = switch ($chk.Status) { 'Pass' { 'OK  ' } 'Fail' { 'FAIL' } 'Warn' { 'WARN' } default { '    ' } }
+                    Write-OutputColor "  [$tag] $($chk.Name): $($chk.Value)" -color $color
+                }
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Results: $passCount passed, $failCount failed, $warnCount warnings" -color $(if ($failCount -gt 0) { "Error" } else { "Success" })
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'Readiness'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        Passed = $passCount; Failed = $failCount; Warnings = $warnCount; Total = $totalCount
+                        Checks = $checks
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+                if ($failCount -gt 0) { [Environment]::Exit(1) }
+            } catch {
+                Write-OutputColor "  Readiness check failed: $_" -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
+        'BaselineDiff' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Action BaselineDiff requires -Config 'path1,path2'" -color "Error"
+                [Environment]::Exit(1)
+            }
+            $paths = $script:CLIConfig -split ','
+            if ($paths.Count -ne 2) {
+                Write-OutputColor "  ERROR: Provide two baseline paths separated by comma." -color "Error"
+                [Environment]::Exit(1)
+            }
+            $path1 = $paths[0].Trim().Trim('"')
+            $path2 = $paths[1].Trim().Trim('"')
+            if (-not (Test-Path -LiteralPath $path1)) { Write-OutputColor "  ERROR: File not found: $path1" -color "Error"; [Environment]::Exit(1) }
+            if (-not (Test-Path -LiteralPath $path2)) { Write-OutputColor "  ERROR: File not found: $path2" -color "Error"; [Environment]::Exit(1) }
+            try {
+                $diffResult = Compare-DriftHistory -Baseline1Path $path1 -Baseline2Path $path2
+                if ($diffResult.HasChanges) {
+                    Write-OutputColor "  Changes detected between baselines:" -color "Warning"
+                    foreach ($change in $diffResult.Changes) {
+                        Write-OutputColor "  [$($change.Category)] $($change.Setting): $($change.OldValue) -> $($change.NewValue)" -color "Warning"
+                    }
+                } else {
+                    Write-OutputColor "  No differences found between baselines." -color "Success"
+                }
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'BaselineDiff'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        Baseline1 = $path1; Baseline2 = $path2
+                        HasChanges = $diffResult.HasChanges; ChangeCount = @($diffResult.Changes).Count
+                        Changes = $diffResult.Changes
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+                if ($diffResult.HasChanges) { [Environment]::Exit(1) }
+            } catch {
+                Write-OutputColor "  BaselineDiff failed: $_" -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
+        'RotateExports' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Action RotateExports requires -Config 'directory,keepCount'" -color "Error"
+                [Environment]::Exit(1)
+            }
+            $parts = $script:CLIConfig -split ','
+            $exportDir = $parts[0].Trim().Trim('"')
+            $keepCount = if ($parts.Count -ge 2 -and $parts[1].Trim() -match '^\d+$') { [int]$parts[1].Trim() } else { 30 }
+            if (-not (Test-Path -LiteralPath $exportDir)) { Write-OutputColor "  ERROR: Directory not found: $exportDir" -color "Error"; [Environment]::Exit(1) }
+            try {
+                $rotResult = Invoke-ExportRotation -ExportDir $exportDir -KeepCount $keepCount
+                Write-OutputColor "  Export rotation complete: $($rotResult.Removed) removed, $($rotResult.Kept) kept" -color "Success"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'RotateExports'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        Directory = $exportDir; KeepCount = $keepCount
+                        Removed = $rotResult.Removed; Kept = $rotResult.Kept
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            } catch {
+                Write-OutputColor "  RotateExports failed: $_" -color "Error"
+                [Environment]::Exit(1)
             }
         }
         'Batch' {

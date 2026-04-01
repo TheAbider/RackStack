@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## v1.91.0
+
+- **Fix (CRITICAL):** Hyper-V Replica certificate-based authentication now prompts for certificate selection from the local machine store — previously always failed due to missing thumbprint parameter.
+- **Fix (CRITICAL):** Hyper-V Replica reverse replication now uses the correct parameter set — previously always failed due to mutually exclusive `-Reverse` and `-ReplicaServerName` parameters.
+- **Fix:** Remote VM deployment with explicit credentials now uses `Invoke-Command` for VHD creation — `New-VHD` does not support the `-Credential` parameter directly.
+- **Fix:** Cluster quorum health check now accounts for the witness vote (disk/file share/cloud witness), preventing false "AT RISK" warnings on properly configured 2-node clusters.
+- **Fix:** SET creation now clears stale iSCSI candidate adapters from previous runs, preventing misconfiguration prompts showing adapters from a prior auto-detect session.
+- **New:** `Readiness` CLI action — pre-deployment readiness checklist with structured JSON output, returns exit code 1 when checks fail.
+- **New:** `BaselineDiff` CLI action — compare two saved baselines to see what changed between them, ideal for scheduled change auditing.
+- **New:** `RotateExports` CLI action — prune old export files by retention count, the cleanup companion for `ScheduledExport`.
+- 65 modules, 4528 tests, 163 CLI actions, 647 functions
+
 ## v1.90.2
 
 - **Fix:** Baseline Save now stores actual performance snapshot data instead of just the file path, making baselines self-contained.
