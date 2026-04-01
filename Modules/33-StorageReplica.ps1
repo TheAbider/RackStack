@@ -277,7 +277,7 @@ function Show-StorageReplicaManagement {
                         Write-OutputColor "" -color "Info"
                         Write-OutputColor "  Group: $($g.Name)" -color "Info"
                         foreach ($r in $replStatus) {
-                            $syncPct = if ($r.NumOfBytesRemaining -and $r.PartitionSize) {
+                            $syncPct = if ($null -ne $r.NumOfBytesRemaining -and $null -ne $r.PartitionSize -and $r.PartitionSize -gt 0) {
                                 [math]::Round((1 - ($r.NumOfBytesRemaining / $r.PartitionSize)) * 100, 1)
                             } else { "N/A" }
                             $syncDisplay = if ($syncPct -eq "N/A") { "N/A" } else { "$syncPct%" }
@@ -304,7 +304,11 @@ function Show-StorageReplicaManagement {
                     if ($navResult.ShouldReturn) { return }
                     if ($pNum -match '^\d+$' -and [int]$pNum -ge 1 -and [int]$pNum -le $partnerships.Count) {
                         $sel = $partnerships[[int]$pNum - 1]
-                        $matchedParts = @(Get-SRPartnership | Where-Object { $_.SourceComputerName -eq $sel.SourceComputerName })
+                        $matchedParts = @(Get-SRPartnership | Where-Object {
+                            $_.SourceComputerName -eq $sel.SourceComputerName -and
+                            $_.DestinationComputerName -eq $sel.DestinationComputerName -and
+                            $_.SourceRGName -eq $sel.SourceRGName
+                        })
                         if ($matchedParts.Count -gt 1) {
                             Write-OutputColor "  WARNING: $($matchedParts.Count) partnerships match source '$($sel.SourceComputerName)'" -color "Warning"
                         }

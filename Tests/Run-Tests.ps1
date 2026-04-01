@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.91.1
+    Automated Test Runner for RackStack v1.92.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -12029,9 +12029,42 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 163 entries" ($listActionCount -eq 163) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 165 entries" ($listActionCount -eq 165) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
+}
+
+# v1.92.0 features and fixes
+try {
+    $ep6 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+
+    # SLAReport action
+    Write-TestResult "50-EntryPoint: SLAReport action exists" ($ep6 -match "'SLAReport' \{")
+    Write-TestResult "50-EntryPoint: SLAReport calculates uptime percentage" ($ep6 -match "SLAReport[\s\S]{0,5000}UptimePercent")
+    Write-TestResult "50-EntryPoint: SLAReport checks SLA thresholds" ($ep6 -match "99\.9.*99\.5.*99\.0|SLACompliance")
+    Write-TestResult "50-EntryPoint: SLAReport tracks incidents" ($ep6 -match "SLAReport[\s\S]{0,5000}IncidentCount")
+
+    # Validate action
+    Write-TestResult "50-EntryPoint: Validate action exists" ($ep6 -match "'Validate' \{")
+    Write-TestResult "50-EntryPoint: Validate has pre mode" ($ep6 -match "'pre'[\s\S]{0,500}Pre-change baseline")
+    Write-TestResult "50-EntryPoint: Validate has post mode" ($ep6 -match "'post'[\s\S]{0,500}Post-change baseline")
+    Write-TestResult "50-EntryPoint: Validate calls Compare-DriftHistory" ($ep6 -match "'Validate'[\s\S]{0,8000}Compare-DriftHistory")
+
+    # Storage Replica fixes
+    $sr2 = Get-Content (Join-Path $modulesPath "33-StorageReplica.ps1") -Raw
+    Write-TestResult "33-StorageReplica: partnership delete filters by dest+group" ($sr2 -match 'DestinationComputerName -eq[\s\S]{0,200}SourceRGName')
+    Write-TestResult "33-StorageReplica: sync 100% not N/A" ($sr2 -match 'null -ne \$r\.NumOfBytesRemaining')
+
+    # Storage Manager fix
+    $sm3 = Get-Content (Join-Path $modulesPath "38-StorageManager.ps1") -Raw
+    Write-TestResult "38-StorageMgr: drive map uses Format-ByteSize" ($sm3 -match 'Get-DriveLetterMap[\s\S]{0,2000}Format-ByteSize' -or $sm3 -match 'DriveLetterMap[\s\S]{0,500}Format-ByteSize')
+
+    # Action list count (should be 167 now)
+    $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
+    $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
+    Write-TestResult "50-EntryPoint: action list has 165 entries" ($actionCount2 -eq 165) "Found $actionCount2"
+} catch {
+    Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

@@ -1391,7 +1391,7 @@ function Get-DriveLetterMap {
         if ($vol) {
             $driveType = $vol.DriveType
             $label = if ($vol.FileSystemLabel) { $vol.FileSystemLabel } else { "" }
-            $sizeStr = if ($vol.Size -gt 0) { Format-TransferSize -Bytes $vol.Size } else { "" }
+            $sizeStr = if ($vol.Size -gt 0) { Format-ByteSize -Bytes $vol.Size } else { "" }
 
             $map[$letterStr] = @{
                 Status    = "InUse"

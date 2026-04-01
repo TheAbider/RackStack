@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.92.0
+
+- **New:** `SLAReport` CLI action — calculates server uptime percentage over a configurable period, with SLA compliance checks (99.9%, 99.5%, 99.0%), incident breakdown, longest outage duration, and unexpected shutdown count. JSON output for automation.
+- **New:** `Validate` CLI action — pre/post change validation workflow. Run `-Action Validate -Config pre` before changes, make changes, then `-Action Validate -Config post` to get an automatic diff showing exactly what changed. Ideal for change management tickets.
+- **Fix:** Storage Replica partnership removal now filters by source, destination, AND replication group — previously could delete unrelated partnerships from the same source server.
+- **Fix:** Storage Replica sync status now shows 100% for fully synced replicas instead of "N/A" — zero bytes remaining was treated as falsy.
+- **Fix:** Storage Manager drive letter map now uses consistent `Format-ByteSize` instead of `Format-TransferSize`.
+- 65 modules, 4540 tests, 165 CLI actions, 649 functions
+
 ## v1.91.1
 
 - **Fix:** IP rollback now handles adapters with multiple default routes — previously could leave the adapter unconfigured if rollback failed.

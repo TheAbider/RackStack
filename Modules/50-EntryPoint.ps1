@@ -313,6 +313,8 @@ function Assert-Elevation {
                 @{ Action = 'SecureBootAudit'; Description = 'UEFI Secure Boot status + boot mode' }
                 @{ Action = 'TimeSkewAudit'; Description = 'NTP sync accuracy + time source + skew detection' }
                 @{ Action = 'NetworkProfileAudit'; Description = 'Network profile (Domain/Private/Public) per adapter' }
+                @{ Action = 'SLAReport';        Description = 'Uptime SLA compliance report' }
+                @{ Action = 'Validate';         Description = 'Pre/post change validation diff' }
                 @{ Action = 'Readiness';        Description = 'Pre-deployment readiness checklist' }
                 @{ Action = 'BaselineDiff';     Description = 'Compare two saved baselines' }
                 @{ Action = 'RotateExports';    Description = 'Prune old export files by retention count' }
@@ -428,6 +430,184 @@ function Invoke-CLIAction {
                     Report    = $healthReport
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'SLAReport' {
+            $periodDays = if ($script:CLIConfig -and $script:CLIConfig -match '^\d+$') { [int]$script:CLIConfig } else { 30 }
+            Write-OutputColor "  Calculating SLA report for last $periodDays days..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            try {
+                $now = Get-Date
+                $periodStart = $now.AddDays(-$periodDays)
+                $totalMinutes = $periodDays * 24 * 60
+
+                # Collect all reboot events in period
+                $allReboots = [System.Collections.Generic.List[object]]::new()
+                try {
+                    $plannedEvents = @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 1074; StartTime = $periodStart } -ErrorAction SilentlyContinue)
+                    foreach ($e in $plannedEvents) { $null = $allReboots.Add(@{ Time = $e.TimeCreated; Type = "Planned" }) }
+                } catch { }
+                try {
+                    $unexpectedEvents = @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 6008; StartTime = $periodStart } -ErrorAction SilentlyContinue)
+                    foreach ($e in $unexpectedEvents) { $null = $allReboots.Add(@{ Time = $e.TimeCreated; Type = "Unexpected" }) }
+                } catch { }
+                try {
+                    $startupEvents = @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 6005; StartTime = $periodStart } -ErrorAction SilentlyContinue)
+                } catch { $startupEvents = @() }
+
+                # Calculate downtime: pair shutdowns with next startup
+                $sortedReboots = @($allReboots | Sort-Object { $_.Time })
+                $sortedStartups = @($startupEvents | Sort-Object TimeCreated)
+                $totalDowntimeMinutes = 0
+                $incidents = [System.Collections.Generic.List[object]]::new()
+                $longestOutage = 0
+
+                foreach ($reboot in $sortedReboots) {
+                    $nextStartup = $sortedStartups | Where-Object { $_.TimeCreated -gt $reboot.Time } | Select-Object -First 1
+                    $downMinutes = if ($nextStartup) {
+                        [math]::Round(($nextStartup.TimeCreated - $reboot.Time).TotalMinutes, 1)
+                    } else { 15 }  # Assume 15 min if no startup event found
+                    if ($downMinutes -gt 480) { $downMinutes = 15 }  # Cap at 8h — likely stale event
+                    $totalDowntimeMinutes += $downMinutes
+                    if ($downMinutes -gt $longestOutage) { $longestOutage = $downMinutes }
+                    $null = $incidents.Add(@{
+                        Time = $reboot.Time.ToString("yyyy-MM-dd HH:mm")
+                        Type = $reboot.Type
+                        DowntimeMinutes = $downMinutes
+                    })
+                }
+
+                $uptimeMinutes = $totalMinutes - $totalDowntimeMinutes
+                $uptimePct = if ($totalMinutes -gt 0) { [math]::Round(($uptimeMinutes / $totalMinutes) * 100, 3) } else { 100 }
+                $downtimeHours = [math]::Round($totalDowntimeMinutes / 60, 1)
+                $longestHours = [math]::Round($longestOutage / 60, 1)
+
+                # Display
+                $slaColor = if ($uptimePct -ge 99.9) { "Success" } elseif ($uptimePct -ge 99.0) { "Warning" } else { "Error" }
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  SLA UPTIME REPORT — Last $periodDays Days".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Uptime: $uptimePct%".PadRight(72))│" -color $slaColor
+                Write-OutputColor "  │$("  Total downtime: ${downtimeHours}h across $($incidents.Count) incident(s)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Longest outage: ${longestHours}h".PadRight(72))│" -color "Info"
+                Write-OutputColor "  │$("  Unexpected shutdowns: $(@($incidents | Where-Object { $_.Type -eq 'Unexpected' }).Count)".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+                # SLA thresholds
+                $slaTargets = @(@{Target="99.9%"; MaxDown=43.2}, @{Target="99.5%"; MaxDown=216}, @{Target="99.0%"; MaxDown=432})
+                foreach ($sla in $slaTargets) {
+                    $met = $totalDowntimeMinutes -le $sla.MaxDown
+                    $tag = if ($met) { "PASS" } else { "FAIL" }
+                    $color = if ($met) { "Success" } else { "Error" }
+                    Write-OutputColor "  │$("  SLA $($sla.Target): [$tag] (max $([math]::Round($sla.MaxDown / 60, 1))h downtime/month)".PadRight(72))│" -color $color
+                }
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+                if ($incidents.Count -gt 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Incidents:" -color "Info"
+                    foreach ($inc in $incidents) {
+                        $incColor = if ($inc.Type -eq "Unexpected") { "Error" } else { "Warning" }
+                        Write-OutputColor "    $($inc.Time) [$($inc.Type)] — $($inc.DowntimeMinutes) min downtime" -color $incColor
+                    }
+                }
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SLAReport'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        PeriodDays = $periodDays; UptimePercent = $uptimePct
+                        TotalDowntimeHours = $downtimeHours; LongestOutageHours = $longestHours
+                        IncidentCount = $incidents.Count; UnexpectedCount = @($incidents | Where-Object { $_.Type -eq "Unexpected" }).Count
+                        Incidents = @($incidents)
+                        SLACompliance = @{
+                            "99.9" = $totalDowntimeMinutes -le 43.2
+                            "99.5" = $totalDowntimeMinutes -le 216
+                            "99.0" = $totalDowntimeMinutes -le 432
+                        }
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            } catch {
+                Write-OutputColor "  SLA report failed: $_" -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
+        'Validate' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Action Validate requires -Config 'pre|post|diff'" -color "Error"
+                Write-OutputColor "  Usage:" -color "Info"
+                Write-OutputColor "    Step 1: RackStack.exe -Action Validate -Config pre" -color "Info"
+                Write-OutputColor "    Step 2: (make your changes)" -color "Info"
+                Write-OutputColor "    Step 3: RackStack.exe -Action Validate -Config post" -color "Info"
+                [Environment]::Exit(1)
+            }
+            $validateMode = $script:CLIConfig.Trim().ToLower()
+            $validateDir = Join-Path $script:AppConfigDir "validate"
+            if (-not (Test-Path -LiteralPath $validateDir)) { New-Item -Path $validateDir -ItemType Directory -Force | Out-Null }
+            $preFile = Join-Path $validateDir "pre-change.json"
+            $postFile = Join-Path $validateDir "post-change.json"
+
+            switch ($validateMode) {
+                'pre' {
+                    Write-OutputColor "  Capturing pre-change baseline..." -color "Info"
+                    try {
+                        Save-DriftBaseline -BaselinePath $preFile -Description "Pre-change validation snapshot"
+                        Write-OutputColor "  Pre-change baseline saved." -color "Success"
+                        Write-OutputColor "  Now make your changes, then run: -Action Validate -Config post" -color "Info"
+                    } catch {
+                        Write-OutputColor "  Failed to save pre-change baseline: $_" -color "Error"
+                        [Environment]::Exit(1)
+                    }
+                }
+                'post' {
+                    if (-not (Test-Path -LiteralPath $preFile)) {
+                        Write-OutputColor "  ERROR: No pre-change baseline found. Run -Action Validate -Config pre first." -color "Error"
+                        [Environment]::Exit(1)
+                    }
+                    Write-OutputColor "  Capturing post-change baseline..." -color "Info"
+                    try {
+                        Save-DriftBaseline -BaselinePath $postFile -Description "Post-change validation snapshot"
+                        Write-OutputColor "  Post-change baseline saved. Comparing..." -color "Info"
+                        Write-OutputColor "" -color "Info"
+
+                        $diffResult = Compare-DriftHistory -Baseline1Path $preFile -Baseline2Path $postFile
+                        if ($diffResult.HasChanges) {
+                            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                            Write-OutputColor "  │$("  CHANGE VALIDATION: $(@($diffResult.Changes).Count) change(s) detected".PadRight(72))│" -color "Warning"
+                            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                            foreach ($change in $diffResult.Changes) {
+                                $chgLine = "  [$($change.Category)] $($change.Setting)"
+                                if ($chgLine.Length -gt 72) { $chgLine = $chgLine.Substring(0, 69) + "..." }
+                                Write-OutputColor "  │$($chgLine.PadRight(72))│" -color "Warning"
+                                $valLine = "    $($change.OldValue) -> $($change.NewValue)"
+                                if ($valLine.Length -gt 72) { $valLine = $valLine.Substring(0, 69) + "..." }
+                                Write-OutputColor "  │$($valLine.PadRight(72))│" -color "Info"
+                            }
+                            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+                        } else {
+                            Write-OutputColor "  No changes detected between pre and post snapshots." -color "Success"
+                        }
+
+                        if ($script:CLIOutputFormat -eq 'JSON') {
+                            $jsonResult = @{
+                                Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'Validate'
+                                Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                                Mode = 'post'; HasChanges = $diffResult.HasChanges
+                                ChangeCount = @($diffResult.Changes).Count; Changes = $diffResult.Changes
+                            }
+                            Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                        }
+                    } catch {
+                        Write-OutputColor "  Validation failed: $_" -color "Error"
+                        [Environment]::Exit(1)
+                    }
+                }
+                default {
+                    Write-OutputColor "  ERROR: Invalid mode '$validateMode'. Use 'pre' or 'post'." -color "Error"
+                    [Environment]::Exit(1)
+                }
             }
         }
         'Readiness' {
