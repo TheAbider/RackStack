@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.90.2
+
+- **Fix:** Baseline Save now stores actual performance snapshot data instead of just the file path, making baselines self-contained.
+- **Fix:** Cleanup CLI action now validates the profile tier and exits with error code for invalid profiles instead of silently doing nothing.
+- **Fix:** BootAudit no longer makes a redundant CIM query for DEP status — reuses the existing Win32_OperatingSystem result.
+- **Fix:** ConfigExport `Export-ServerConfiguration` now uses `List<string>` instead of 120+ `+=` array operations for significantly better performance on servers with many adapters/disks/services.
+- **Fix:** ConfigExport profile import now uses explicit `$script:` scope for the local admin account name variable, preventing potential empty-name account creation.
+- **Fix:** `Save-ConfigurationProfile` now validates the parent directory exists before attempting to write.
+- **Fix:** Configure Server menu now caches `Test-RebootPending` result instead of hitting registry/WMI on every menu render.
+- 65 modules, 4508 tests, 157 CLI actions, 644 functions
+
 ## v1.90.1
 
 - **Fix:** Batch mode orphaned `else` block in UI cleanup step could cause parse error at runtime when Win11Cleanup is enabled.

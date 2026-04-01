@@ -1,4 +1,4 @@
-﻿#region ===== CONFIGURATION EXPORT =====
+﻿#region ===== COnFIGURATIOn EXPORT =====
 function Export-ServerConfiguration {
     Clear-Host
     Write-CenteredOutput "Export Configuration" -color "Info"
@@ -7,7 +7,7 @@ function Export-ServerConfiguration {
     Write-OutputColor "" -color "Info"
 
     # Default filename
-    $hostname = $env:COMPUTERNAME
+    $hostname = $env:COMPUTERnAME
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $defaultPath = "$env:USERPROFILE\Desktop\${hostname}_Config_$timestamp.txt"
 
@@ -19,10 +19,10 @@ function Export-ServerConfiguration {
     else {
         Write-OutputColor "  Enter export path (full path with filename):" -color "Info"
         $exportPath = Read-Host
-        $navResult = Test-NavigationCommand -UserInput $exportPath
+        $navResult = Test-navigationCommand -UserInput $exportPath
         if ($navResult.ShouldReturn) { return }
-        if (-not [string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $exportPath.Trim('"') }
-        if ([string]::IsNullOrWhiteSpace($exportPath)) {
+        if (-not [string]::IsnullOrWhiteSpace($exportPath)) { $exportPath = $exportPath.Trim('"') }
+        if ([string]::IsnullOrWhiteSpace($exportPath)) {
             $exportPath = $defaultPath
         }
     }
@@ -37,92 +37,92 @@ function Export-ServerConfiguration {
     Write-OutputColor "`nGathering configuration..." -color "Info"
 
     try {
-        $config = @()
-        $config += "=" * 80
-        $config += "SERVER CONFIGURATION EXPORT"
-        $config += "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-        $config += "Script Version: $($script:ScriptVersion)"
-        $config += "=" * 80
-        $config += ""
+        $config = [System.Collections.Generic.List[string]]::new(500)
+        $null = $config.Add("=" * 80)
+        $null = $config.Add("SERVER COnFIGURATIOn EXPORT")
+        $null = $config.Add("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+        $null = $config.Add("Script Version: $($script:ScriptVersion)")
+        $null = $config.Add("=" * 80)
+        $null = $config.Add("")
 
         # System Info (batch CIM with timeout)
-        $config += "### SYSTEM INFORMATION ###"
+        $null = $config.Add("### SYSTEM InFORMATIOn ###")
         $sysInfo = Invoke-WithTimeout -ScriptBlock {
             @{
-                CS   = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-                OS   = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-                CPU  = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
+                CS   = Get-CimInstance -Classname Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                OS   = Get-CimInstance -Classname Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                CPU  = Get-CimInstance -Classname Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
             }
         } -TimeoutSeconds 15 -Activity "Querying system info"
         if ($sysInfo.TimedOut) {
-            $config += "(CIM query timed out — system info unavailable)"
+            $null = $config.Add("(CIM query timed out — system info unavailable)")
         } else {
             $computerSystem = $sysInfo.Result.CS
             $os = $sysInfo.Result.OS
             $proc = $sysInfo.Result.CPU
-            $config += "Hostname:       $(if ($computerSystem) { $computerSystem.Name } else { $env:COMPUTERNAME })"
-            $config += "Domain:         $(if ($computerSystem) { $computerSystem.Domain } else { 'Unknown' })"
-            $config += "Part of Domain: $(if ($computerSystem) { $computerSystem.PartOfDomain } else { 'Unknown' })"
-            $config += "OS:             $(if ($os) { $os.Caption } else { 'Unknown' })"
-            $config += "OS Build:       $(if ($os) { $os.BuildNumber } else { 'Unknown' })"
-            $config += "Timezone:       $((Get-TimeZone).DisplayName)"
-            $config += "CPU:            $(if ($proc) { $proc.Name } else { 'Unknown' })"
-            $config += "CPU Cores:      $(if ($proc) { "$($proc.NumberOfCores) cores / $($proc.NumberOfLogicalProcessors) logical" } else { 'Unknown' })"
-            $config += "Total RAM:      $(if ($computerSystem) { "$([math]::Round($computerSystem.TotalPhysicalMemory / 1GB, 1)) GB" } else { 'Unknown' })"
+            $null = $config.Add("Hostname:       $(if ($computerSystem) { $computerSystem.name } else { $env:COMPUTERnAME })")
+            $null = $config.Add("Domain:         $(if ($computerSystem) { $computerSystem.Domain } else { 'Unknown' })")
+            $null = $config.Add("Part of Domain: $(if ($computerSystem) { $computerSystem.PartOfDomain } else { 'Unknown' })")
+            $null = $config.Add("OS:             $(if ($os) { $os.Caption } else { 'Unknown' })")
+            $null = $config.Add("OS Build:       $(if ($os) { $os.Buildnumber } else { 'Unknown' })")
+            $null = $config.Add("Timezone:       $((Get-TimeZone).Displayname)")
+            $null = $config.Add("CPU:            $(if ($proc) { $proc.name } else { 'Unknown' })")
+            $null = $config.Add("CPU Cores:      $(if ($proc) { "$($proc.numberOfCores) cores / $($proc.numberOfLogicalProcessors) logical" } else { 'Unknown' })")
+            $null = $config.Add("Total RAM:      $(if ($computerSystem) { "$([math]::Round($computerSystem.TotalPhysicalMemory / 1GB, 1)) GB" } else { 'Unknown' })")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Licensing
-        $config += "### LICENSING ###"
+        $null = $config.Add("### LICEnSInG ###")
         try {
-            $licenseInfo = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationId='$($script:WindowsLicensingAppId)' AND LicenseStatus=1" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $licenseInfo = Get-CimInstance -Classname SoftwareLicensingProduct -Filter "ApplicationId='$($script:WindowsLicensingAppId)' AnD LicenseStatus=1" -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($licenseInfo) {
-                $config += "License Status: Activated"
-                $config += "Product Name:   $($licenseInfo.Name)"
-                $config += "Description:    $($licenseInfo.Description)"
+                $null = $config.Add("License Status: Activated")
+                $null = $config.Add("Product name:   $($licenseInfo.name)")
+                $null = $config.Add("Description:    $($licenseInfo.Description)")
             } else {
-                $config += "License Status: Not Activated"
+                $null = $config.Add("License Status: not Activated")
             }
         }
         catch {
-            $config += "License Status: Unable to determine"
+            $null = $config.Add("License Status: Unable to determine")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Power Plan
-        $config += "### POWER PLAN ###"
+        $null = $config.Add("### POWER PLAn ###")
         $currentPlan = Get-CurrentPowerPlan
-        $config += "Active Plan: $($currentPlan.Name)"
-        $config += ""
+        $null = $config.Add("Active Plan: $($currentPlan.name)")
+        $null = $config.Add("")
 
-        # Network Configuration
-        $config += "### NETWORK CONFIGURATION ###"
-        $adapters = Get-NetAdapter -ErrorAction Stop
-        # Batch all network queries upfront (avoids N+1 query pattern per adapter)
-        $allIPv4 = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        $allDNS = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        $allGateways = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue
-        $allBindings = Get-NetAdapterBinding -ComponentId 'ms_tcpip6' -ErrorAction SilentlyContinue
+        # network Configuration
+        $null = $config.Add("### nETWORK COnFIGURATIOn ###")
+        $adapters = Get-netAdapter -ErrorAction Stop
+        # Batch all network queries upfront (avoids n+1 query pattern per adapter)
+        $allIPv4 = Get-netIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $allDnS = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $allGateways = Get-netRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue
+        $allBindings = Get-netAdapterBinding -ComponentId 'ms_tcpip6' -ErrorAction SilentlyContinue
 
         foreach ($adapter in $adapters) {
-            $config += ""
-            $config += "Adapter: $($adapter.Name)"
-            $config += "  Description:  $($adapter.InterfaceDescription)"
-            $config += "  Status:       $($adapter.Status)"
-            $config += "  Link Speed:   $($adapter.LinkSpeed)"
-            $config += "  MAC Address:  $($adapter.MacAddress)"
+            $null = $config.Add("")
+            $null = $config.Add("Adapter: $($adapter.name)")
+            $null = $config.Add("  Description:  $($adapter.InterfaceDescription)")
+            $null = $config.Add("  Status:       $($adapter.Status)")
+            $null = $config.Add("  Link Speed:   $($adapter.LinkSpeed)")
+            $null = $config.Add("  MAC Address:  $($adapter.MacAddress)")
 
             # Adapter speed negotiation state
             try {
-                $physAdapter = Get-NetAdapterHardwareInfo -Name $adapter.Name -ErrorAction SilentlyContinue
+                $physAdapter = Get-netAdapterHardwareInfo -name $adapter.name -ErrorAction SilentlyContinue
                 if ($null -ne $physAdapter) {
-                    $adapterAdv = Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword "*SpeedDuplex" -ErrorAction SilentlyContinue
+                    $adapterAdv = Get-netAdapterAdvancedProperty -name $adapter.name -RegistryKeyword "*SpeedDuplex" -ErrorAction SilentlyContinue
                     $mediaType = $adapter.MediaType
                     if ($mediaType) {
-                        $config += "  Media Type:   $mediaType"
+                        $null = $config.Add("  Media Type:   $mediaType")
                     }
                     if ($null -ne $adapterAdv -and $adapterAdv.DisplayValue) {
-                        $config += "  Speed/Duplex: $($adapterAdv.DisplayValue)"
+                        $null = $config.Add("  Speed/Duplex: $($adapterAdv.DisplayValue)")
                     }
                     # Flag if running below max capability
                     $linkSpeedStr = $adapter.LinkSpeed
@@ -131,13 +131,13 @@ function Export-ServerConfiguration {
                         $linkVal = [double]$regexMatches[1]
                         $linkUnit = $regexMatches[3]
                         $linkMbps = if ($linkUnit -eq "Gbps") { $linkVal * 1000 } else { $linkVal }
-                        $maxSpeed = Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword "*SpeedDuplex" -ErrorAction SilentlyContinue
+                        $maxSpeed = Get-netAdapterAdvancedProperty -name $adapter.name -RegistryKeyword "*SpeedDuplex" -ErrorAction SilentlyContinue
                         if ($null -ne $maxSpeed -and $maxSpeed.ValidRegistryValues) {
                             $maxOptions = @($maxSpeed.ValidDisplayValues | Where-Object { $_ -match '\d' })
                             if ($maxOptions.Count -gt 0) {
                                 $lastOption = $maxOptions[-1]
                                 if ($lastOption -match '10\s*Gbps|10000' -and $linkMbps -lt 10000) {
-                                    $config += "  ** WARNING:   Running below max speed (capable of 10 Gbps)"
+                                    $null = $config.Add("  ** WARnInG:   Running below max speed (capable of 10 Gbps)")
                                 }
                             }
                         }
@@ -148,262 +148,262 @@ function Export-ServerConfiguration {
                 # Adapter speed details unavailable — skip silently
             }
 
-            $ipConfig = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.Name }
+            $ipConfig = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.name }
             if ($ipConfig) {
-                $config += "  IPv4 Address: $($ipConfig.IPAddress)/$($ipConfig.PrefixLength)"
+                $null = $config.Add("  IPv4 Address: $($ipConfig.IPAddress)/$($ipConfig.PrefixLength)")
             }
 
-            $dns = $allDNS | Where-Object { $_.InterfaceAlias -eq $adapter.Name }
+            $dns = $allDnS | Where-Object { $_.InterfaceAlias -eq $adapter.name }
             if ($dns -and $dns.ServerAddresses) {
-                $config += "  DNS Servers:  $($dns.ServerAddresses -join ', ')"
+                $null = $config.Add("  DnS Servers:  $($dns.ServerAddresses -join ', ')")
             }
 
-            $gateway = $allGateways | Where-Object { $_.InterfaceAlias -eq $adapter.Name }
+            $gateway = $allGateways | Where-Object { $_.InterfaceAlias -eq $adapter.name }
             if ($gateway) {
-                $config += "  Gateway:      $($gateway.NextHop)"
+                $null = $config.Add("  Gateway:      $($gateway.nextHop)")
             }
 
-            # VLAN info
-            $vlan = Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword "VlanID" -ErrorAction SilentlyContinue
+            # VLAn info
+            $vlan = Get-netAdapterAdvancedProperty -name $adapter.name -RegistryKeyword "VlanID" -ErrorAction SilentlyContinue
             if ($vlan -and $vlan.RegistryValue -and $vlan.RegistryValue[0] -ne "0") {
-                $config += "  VLAN ID:      $($vlan.RegistryValue[0])"
+                $null = $config.Add("  VLAn ID:      $($vlan.RegistryValue[0])")
             }
 
             # IPv6 status
-            $ipv6Binding = $allBindings | Where-Object { $_.Name -eq $adapter.Name }
+            $ipv6Binding = $allBindings | Where-Object { $_.name -eq $adapter.name }
             if ($ipv6Binding) {
-                $config += "  IPv6:         $(if ($ipv6Binding.Enabled) { 'Enabled' } else { 'Disabled' })"
+                $null = $config.Add("  IPv6:         $(if ($ipv6Binding.Enabled) { 'Enabled' } else { 'Disabled' })")
             }
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Remote Access
-        $config += "### REMOTE ACCESS ###"
-        $config += "RDP Status:    $(Get-RDPState)"
+        $null = $config.Add("### REMOTE ACCESS ###")
+        $null = $config.Add("RDP Status:    $(Get-RDPState)")
         try {
-            $rdpPort = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name PortNumber -ErrorAction Stop).PortNumber
-            $config += "RDP Port:      $rdpPort"
+            $rdpPort = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name Portnumber -ErrorAction Stop).Portnumber
+            $null = $config.Add("RDP Port:      $rdpPort")
         } catch {}
-        $config += "WinRM Status:  $(Get-WinRMState)"
-        $config += ""
+        $null = $config.Add("WinRM Status:  $(Get-WinRMState)")
+        $null = $config.Add("")
 
         # Key Services
-        $config += "### KEY SERVICES ###"
-        $servicesToCheck = @('wuauserv', 'WinRM', 'vmms', 'ClusSvc', 'MSiSCSI', 'W32Time', 'WinDefend', 'Spooler', 'DNS', 'NTDS')
-        foreach ($svcName in $servicesToCheck) {
-            $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+        $null = $config.Add("### KEY SERVICES ###")
+        $servicesToCheck = @('wuauserv', 'WinRM', 'vmms', 'ClusSvc', 'MSiSCSI', 'W32Time', 'WinDefend', 'Spooler', 'DnS', 'nTDS')
+        foreach ($svcname in $servicesToCheck) {
+            $svc = Get-Service -name $svcname -ErrorAction SilentlyContinue
             if ($svc) {
                 $startTag = switch ($svc.StartType) { "Automatic" { "Auto" } "Manual" { "Manual" } "Disabled" { "Disabled" } default { $svc.StartType } }
-                $config += "  $($svc.DisplayName): $($svc.Status) [$startTag]"
+                $null = $config.Add("  $($svc.Displayname): $($svc.Status) [$startTag]")
             }
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Firewall Status
-        $config += "### FIREWALL STATUS ###"
+        $null = $config.Add("### FIREWALL STATUS ###")
         $fwState = Get-FirewallState
-        $config += "Domain Profile:  $($fwState.Domain)"
-        $config += "Private Profile: $($fwState.Private)"
-        $config += "Public Profile:  $($fwState.Public)"
+        $null = $config.Add("Domain Profile:  $($fwState.Domain)")
+        $null = $config.Add("Private Profile: $($fwState.Private)")
+        $null = $config.Add("Public Profile:  $($fwState.Public)")
         try {
-            $fwRules = @(Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue)
+            $fwRules = @(Get-netFirewallRule -Enabled True -ErrorAction SilentlyContinue)
             $fwInbound = @($fwRules | Where-Object { $_.Direction -eq "Inbound" }).Count
             $fwOutbound = @($fwRules | Where-Object { $_.Direction -eq "Outbound" }).Count
-            $config += "Enabled Rules:   $($fwRules.Count) total ($fwInbound inbound, $fwOutbound outbound)"
+            $null = $config.Add("Enabled Rules:   $($fwRules.Count) total ($fwInbound inbound, $fwOutbound outbound)")
         }
         catch {
-            $config += "Enabled Rules:   Unable to enumerate"
+            $null = $config.Add("Enabled Rules:   Unable to enumerate")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # MPIO
-        $config += "### MPIO (MULTIPATH I/O) ###"
+        $null = $config.Add("### MPIO (MULTIPATH I/O) ###")
         if (Test-MPIOInstalled) {
-            $config += "MPIO: Installed"
+            $null = $config.Add("MPIO: Installed")
             $mpioDevices = Get-MSDSMSupportedHW -ErrorAction SilentlyContinue
             if ($mpioDevices) {
-                $config += "  Supported Hardware:"
+                $null = $config.Add("  Supported Hardware:")
                 foreach ($dev in $mpioDevices) {
                     $vendor = if ($dev.VendorId) { $dev.VendorId.Trim() } else { "Unknown" }
                     $product = if ($dev.ProductId) { $dev.ProductId.Trim() } else { "Unknown" }
-                    $config += "    $vendor - $product"
+                    $null = $config.Add("    $vendor - $product")
                 }
             }
         } else {
-            $config += "MPIO: Not Installed"
+            $null = $config.Add("MPIO: not Installed")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Failover Clustering
-        $config += "### FAILOVER CLUSTERING ###"
+        $null = $config.Add("### FAILOVER CLUSTERInG ###")
         if (Test-FailoverClusteringInstalled) {
-            $config += "Failover Clustering: Installed"
+            $null = $config.Add("Failover Clustering: Installed")
             $cluster = Get-Cluster -ErrorAction SilentlyContinue
             if ($cluster) {
-                $config += "  Cluster Name: $($cluster.Name)"
-                $nodes = Get-ClusterNode -ErrorAction SilentlyContinue
+                $null = $config.Add("  Cluster name: $($cluster.name)")
+                $nodes = Get-Clusternode -ErrorAction SilentlyContinue
                 if ($nodes) {
-                    $config += "  Nodes:"
+                    $null = $config.Add("  nodes:")
                     foreach ($node in $nodes) {
-                        $config += "    $($node.Name) | State: $($node.State)"
+                        $null = $config.Add("    $($node.name) | State: $($node.State)")
                     }
                 }
             } else {
-                $config += "  Not a member of any cluster"
+                $null = $config.Add("  not a member of any cluster")
             }
         } else {
-            $config += "Failover Clustering: Not Installed"
+            $null = $config.Add("Failover Clustering: not Installed")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Local Administrators
-        $config += "### LOCAL ADMINISTRATORS ###"
+        $null = $config.Add("### LOCAL ADMInISTRATORS ###")
         $admins = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue
         foreach ($admin in $admins) {
-            $config += "  $($admin.Name) ($($admin.ObjectClass))"
+            $null = $config.Add("  $($admin.name) ($($admin.ObjectClass))")
         }
-        $builtInAdmin = Get-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue
+        $builtInAdmin = Get-LocalUser -name "Administrator" -ErrorAction SilentlyContinue
         if ($builtInAdmin) {
-            $config += "  Built-in Administrator: $(if ($builtInAdmin.Enabled) { 'Enabled' } else { 'Disabled' })"
+            $null = $config.Add("  Built-in Administrator: $(if ($builtInAdmin.Enabled) { 'Enabled' } else { 'Disabled' })")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Security Baseline
-        $config += "### SECURITY BASELINE ###"
+        $null = $config.Add("### SECURITY BASELInE ###")
         try {
             $secureBoot = Confirm-SecureBootUEFI -ErrorAction Stop
-            $config += "Secure Boot:   $(if ($secureBoot) { 'Enabled' } else { 'Disabled' })"
+            $null = $config.Add("Secure Boot:   $(if ($secureBoot) { 'Enabled' } else { 'Disabled' })")
         } catch {
-            $config += "Secure Boot:   N/A (BIOS or check unavailable)"
+            $null = $config.Add("Secure Boot:   n/A (BIOS or check unavailable)")
         }
         try {
-            $uacKey = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction Stop
-            $config += "UAC:           $(if ($uacKey.EnableLUA -eq 1) { 'Enabled' } else { 'Disabled' })"
+            $uacKey = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name EnableLUA -ErrorAction Stop
+            $null = $config.Add("UAC:           $(if ($uacKey.EnableLUA -eq 1) { 'Enabled' } else { 'Disabled' })")
         } catch {
-            $config += "UAC:           Unknown"
+            $null = $config.Add("UAC:           Unknown")
         }
         try {
             $defender = Get-MpComputerStatus -ErrorAction Stop
-            $config += "Defender:      $(if ($defender.AntivirusEnabled) { 'Enabled' } else { 'Disabled' })"
-            $config += "Real-time:     $(if ($defender.RealTimeProtectionEnabled) { 'Enabled' } else { 'Disabled' })"
+            $null = $config.Add("Defender:      $(if ($defender.AntivirusEnabled) { 'Enabled' } else { 'Disabled' })")
+            $null = $config.Add("Real-time:     $(if ($defender.RealTimeProtectionEnabled) { 'Enabled' } else { 'Disabled' })")
             if ($null -ne $defender.AntivirusSignatureLastUpdated) {
-                $config += "Signatures:    $($defender.AntivirusSignatureLastUpdated.ToString('yyyy-MM-dd HH:mm'))"
+                $null = $config.Add("Signatures:    $($defender.AntivirusSignatureLastUpdated.ToString('yyyy-MM-dd HH:mm'))")
             }
         } catch {
-            $config += "Defender:      Unavailable"
+            $null = $config.Add("Defender:      Unavailable")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # BitLocker
-        $config += "### BITLOCKER STATUS ###"
+        $null = $config.Add("### BITLOCKER STATUS ###")
         try {
             $blVolumes = Get-BitLockerVolume -ErrorAction SilentlyContinue
             if ($null -ne $blVolumes) {
                 foreach ($blVol in $blVolumes) {
                     $protectors = @($blVol.KeyProtector | ForEach-Object { $_.KeyProtectorType }) -join ", "
-                    if (-not $protectors) { $protectors = "None" }
-                    $config += "  $($blVol.MountPoint) | Encryption: $($blVol.VolumeStatus) | Protection: $($blVol.ProtectionStatus) | Protectors: $protectors"
+                    if (-not $protectors) { $protectors = "none" }
+                    $null = $config.Add("  $($blVol.MountPoint) | Encryption: $($blVol.VolumeStatus) | Protection: $($blVol.ProtectionStatus) | Protectors: $protectors")
                 }
             } else {
-                $config += "BitLocker: Not available (cmdlet not found or no volumes)"
+                $null = $config.Add("BitLocker: not available (cmdlet not found or no volumes)")
             }
         }
         catch {
-            $config += "BitLocker: Unable to query (may require elevated privileges or Server edition)"
+            $null = $config.Add("BitLocker: Unable to query (may require elevated privileges or Server edition)")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Event Log Configuration
-        $config += "### EVENT LOG CONFIGURATION ###"
+        $null = $config.Add("### EVEnT LOG COnFIGURATIOn ###")
         try {
-            $logNames = @("Application", "System", "Security")
-            foreach ($logName in $logNames) {
-                $logConfig = Get-WinEvent -ListLog $logName -ErrorAction SilentlyContinue
+            $lognames = @("Application", "System", "Security")
+            foreach ($logname in $lognames) {
+                $logConfig = Get-WinEvent -ListLog $logname -ErrorAction SilentlyContinue
                 if ($null -ne $logConfig) {
                     $maxSizeMB = [math]::Round($logConfig.MaximumSizeInBytes / 1MB, 1)
-                    $config += "  $logName | Max Size: ${maxSizeMB} MB | Mode: $($logConfig.LogMode)"
+                    $null = $config.Add("  $logname | Max Size: ${maxSizeMB} MB | Mode: $($logConfig.LogMode)")
                 }
             }
         }
         catch {
-            $config += "  (Unable to query event log configuration: $_)"
+            $null = $config.Add("  (Unable to query event log configuration: $_)")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Time Sync
-        $config += "### TIME SYNCHRONIZATION ###"
-        $config += "System Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        $null = $config.Add("### TIME SYnCHROnIZATIOn ###")
+        $null = $config.Add("System Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
         try {
             $timeSource = & w32tm /query /source 2>&1
             if ($LASTEXITCODE -eq 0) {
-                $config += "NTP Source:  $timeSource"
+                $null = $config.Add("nTP Source:  $timeSource")
             } else {
-                $config += "NTP Source:  Unable to determine"
+                $null = $config.Add("nTP Source:  Unable to determine")
             }
         }
         catch {
-            $config += "NTP Source:  w32tm not available"
+            $null = $config.Add("nTP Source:  w32tm not available")
         }
         try {
             $syncStatus = & w32tm /query /status 2>&1
             if ($LASTEXITCODE -eq 0) {
                 $lastSync = $syncStatus | Select-String "Last Successful Sync Time"
                 if ($lastSync) {
-                    $config += "Last Sync:   $($lastSync.ToString().Split(':',2)[1].Trim())"
+                    $null = $config.Add("Last Sync:   $($lastSync.ToString().Split(':',2)[1].Trim())")
                 }
             }
         }
         catch {
             # Time sync status unavailable — skip silently
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Storage
-        $config += "### STORAGE ###"
+        $null = $config.Add("### STORAGE ###")
         try {
             $disks = Get-Disk -ErrorAction Stop
             foreach ($disk in $disks) {
                 $sizeDisplay = if ($disk.Size -ge 1TB) { "$([math]::Round($disk.Size / 1TB, 2)) TB" } else { "$([math]::Round($disk.Size / 1GB, 1)) GB" }
-                $config += "  Disk $($disk.Number): $($disk.FriendlyName) | $sizeDisplay | $($disk.PartitionStyle) | $($disk.OperationalStatus)"
+                $null = $config.Add("  Disk $($disk.number): $($disk.Friendlyname) | $sizeDisplay | $($disk.PartitionStyle) | $($disk.OperationalStatus)")
             }
         }
         catch {
-            $config += "  (Unable to enumerate disks: $_)"
+            $null = $config.Add("  (Unable to enumerate disks: $_)")
         }
-        $config += ""
+        $null = $config.Add("")
         try {
             $volumes = Get-Volume -ErrorAction Stop | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' } | Sort-Object DriveLetter
             foreach ($vol in $volumes) {
                 $totalGB = [math]::Round($vol.Size / 1GB, 1)
                 $freeGB = [math]::Round($vol.SizeRemaining / 1GB, 1)
                 $usedPct = if ($vol.Size -gt 0) { [math]::Round((($vol.Size - $vol.SizeRemaining) / $vol.Size) * 100, 0) } else { 0 }
-                $label = if ($vol.FileSystemLabel) { $vol.FileSystemLabel } else { "(No Label)" }
-                $config += "  $($vol.DriveLetter): $label | $($vol.FileSystem) | $freeGB GB free / $totalGB GB ($usedPct% used)"
+                $label = if ($vol.FileSystemLabel) { $vol.FileSystemLabel } else { "(no Label)" }
+                $null = $config.Add("  $($vol.DriveLetter): $label | $($vol.FileSystem) | $freeGB GB free / $totalGB GB ($usedPct% used)")
             }
         }
         catch {
-            $config += "  (Unable to enumerate volumes: $_)"
+            $null = $config.Add("  (Unable to enumerate volumes: $_)")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Hyper-V Info
-        $config += "### HYPER-V STATUS ###"
+        $null = $config.Add("### HYPER-V STATUS ###")
         if (Test-HyperVInstalled) {
-            $config += "Hyper-V: Installed"
+            $null = $config.Add("Hyper-V: Installed")
 
             $vmSwitches = Get-VMSwitch -ErrorAction SilentlyContinue
             if ($vmSwitches) {
-                $config += ""
-                $config += "  Virtual Switches:"
+                $null = $config.Add("")
+                $null = $config.Add("  Virtual Switches:")
                 foreach ($sw in $vmSwitches) {
                     $teamMembers = ""
                     $teamDetails = ""
                     if ($sw.EmbeddedTeamingEnabled) {
                         try {
-                            $setTeam = Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue
+                            $setTeam = Get-VMSwitchTeam -name $sw.name -ErrorAction SilentlyContinue
                             if ($null -ne $setTeam) {
-                                $teamNics = $setTeam.NetAdapterInterfaceDescription -join ", "
-                                if ($teamNics) { $teamMembers = " | Team: $teamNics" }
+                                $teamnics = $setTeam.netAdapterInterfaceDescription -join ", "
+                                if ($teamnics) { $teamMembers = " | Team: $teamnics" }
                                 $lbAlgo = $setTeam.LoadBalancingAlgorithm
                                 if ($lbAlgo) { $teamDetails = " | LB: $lbAlgo" }
                             }
@@ -412,40 +412,40 @@ function Export-ServerConfiguration {
                             # SET team query failed — skip details
                         }
                     }
-                    $config += "    $($sw.Name) (Type: $($sw.SwitchType))$teamMembers$teamDetails"
+                    $null = $config.Add("    $($sw.name) (Type: $($sw.SwitchType))$teamMembers$teamDetails")
                 }
             }
 
             $vms = @(Get-VM -ErrorAction SilentlyContinue)
             if ($vms.Count -gt 0) {
-                $config += ""
-                $config += "  Virtual Machines: $($vms.Count) total"
-                foreach ($vm in $vms | Sort-Object Name) {
+                $null = $config.Add("")
+                $null = $config.Add("  Virtual Machines: $($vms.Count) total")
+                foreach ($vm in $vms | Sort-Object name) {
                     $memGB = [math]::Round($vm.MemoryAssigned / 1GB, 1)
-                    $config += "    $($vm.Name) | State: $($vm.State) | CPU: $($vm.ProcessorCount) | RAM: ${memGB}GB"
+                    $null = $config.Add("    $($vm.name) | State: $($vm.State) | CPU: $($vm.ProcessorCount) | RAM: ${memGB}GB")
                 }
             }
             else {
-                $config += "  Virtual Machines: None"
+                $null = $config.Add("  Virtual Machines: none")
             }
         }
         else {
-            $config += "Hyper-V: Not Installed"
+            $null = $config.Add("Hyper-V: not Installed")
         }
-        $config += ""
+        $null = $config.Add("")
 
         # Session changes
         if ($script:SessionChanges.Count -gt 0) {
-            $config += "### CHANGES THIS SESSION ###"
+            $null = $config.Add("### CHAnGES THIS SESSIOn ###")
             foreach ($change in $script:SessionChanges) {
-                $config += "  [$($change.Timestamp)] [$($change.Category)] $($change.Description)"
+                $null = $config.Add("  [$($change.Timestamp)] [$($change.Category)] $($change.Description)")
             }
-            $config += ""
+            $null = $config.Add("")
         }
 
-        $config += "=" * 80
-        $config += "END OF CONFIGURATION EXPORT"
-        $config += "=" * 80
+        $null = $config.Add("=" * 80)
+        $null = $config.Add("EnD OF COnFIGURATIOn EXPORT")
+        $null = $config.Add("=" * 80)
 
         # Write to file
         $config | Out-File -LiteralPath $exportPath -Encoding UTF8 -Force
@@ -459,12 +459,12 @@ function Export-ServerConfiguration {
     }
 }
 
-# Function to save configuration profile as JSON for cloning to other servers
+# Function to save configuration profile as JSOn for cloning to other servers
 function Save-ConfigurationProfile {
     Clear-Host
     Write-CenteredOutput "Save Configuration Profile" -color "Info"
 
-    Write-OutputColor "  This will save the current server's configuration as a JSON profile" -color "Info"
+    Write-OutputColor "  This will save the current server's configuration as a JSOn profile" -color "Info"
     Write-OutputColor "  that can be loaded onto other servers to clone settings." -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -472,43 +472,43 @@ function Save-ConfigurationProfile {
     Write-OutputColor "  Gathering current configuration..." -color "Info"
 
     $csCim = Invoke-WithTimeout -ScriptBlock {
-        Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+        Get-CimInstance -Classname Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Querying computer system"
     $computerSystem = if ($csCim.TimedOut) { $null } else { $csCim.Result }
     $timezone = Get-TimeZone
     $powerPlan = Get-CurrentPowerPlan
 
     # Get primary adapter info
-    $primaryAdapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    $primaryAdapter = Get-netAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
     $primaryIP = $null
-    $primaryDNS = $null
+    $primaryDnS = $null
 
     if ($primaryAdapter) {
-        $primaryIP = Get-NetIPAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1
-        $primaryDNS = Get-DnsClientServerAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $primaryIP = Get-netIPAddress -InterfaceAlias $primaryAdapter.name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1
+        $primaryDnS = Get-DnsClientServerAddress -InterfaceAlias $primaryAdapter.name -AddressFamily IPv4 -ErrorAction SilentlyContinue
     }
 
     $configProfile = [ordered]@{
         "_ProfileInfo" = [ordered]@{
-            "CreatedFrom" = $env:COMPUTERNAME
+            "CreatedFrom" = $env:COMPUTERnAME
             "CreatedAt" = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
             "ScriptVersion" = $script:ScriptVersion
             "Description" = "Configuration profile - edit Hostname, IPAddress, and Gateway before applying to a new server"
         }
         "Hostname" = $null  # Intentionally null - user should set for new server
         "_Hostname_Help" = "Set to the new server's hostname (max 15 chars, e.g., 123456-FS1)"
-        "Network" = [ordered]@{
-            "AdapterName" = if ($primaryAdapter) { $primaryAdapter.Name } else { "Ethernet" }
+        "network" = [ordered]@{
+            "Adaptername" = if ($primaryAdapter) { $primaryAdapter.name } else { "Ethernet" }
             "IPAddress" = $null  # Intentionally null - user should set for new server
             "SubnetCIDR" = if ($primaryIP) { $primaryIP.PrefixLength } else { 24 }
             "Gateway" = $null  # Intentionally null - user should set for new server
-            "DNS1" = if ($primaryDNS -and $primaryDNS.ServerAddresses.Count -ge 1) { $primaryDNS.ServerAddresses[0] } else { $script:DNSPresets["Google DNS"][0] }
-            "DNS2" = if ($primaryDNS -and $primaryDNS.ServerAddresses.Count -ge 2) { $primaryDNS.ServerAddresses[1] } else { $script:DNSPresets["Google DNS"][1] }
+            "DnS1" = if ($primaryDnS -and $primaryDnS.ServerAddresses.Count -ge 1) { $primaryDnS.ServerAddresses[0] } else { $script:DnSPresets["Google DnS"][0] }
+            "DnS2" = if ($primaryDnS -and $primaryDnS.ServerAddresses.Count -ge 2) { $primaryDnS.ServerAddresses[1] } else { $script:DnSPresets["Google DnS"][1] }
         }
         "Domain" = [ordered]@{
             "JoinDomain" = if ($null -ne $computerSystem) { $computerSystem.PartOfDomain } else { $false }
-            "DomainName" = if ($null -ne $computerSystem -and $computerSystem.PartOfDomain) { $computerSystem.Domain } else { $script:Domain }
-            "_Note" = "Domain join will prompt for credentials when applied"
+            "Domainname" = if ($null -ne $computerSystem -and $computerSystem.PartOfDomain) { $computerSystem.Domain } else { $script:Domain }
+            "_note" = "Domain join will prompt for credentials when applied"
         }
         "Timezone" = $timezone.Id
         "RDP" = [ordered]@{
@@ -516,43 +516,43 @@ function Save-ConfigurationProfile {
         }
         "WinRM" = [ordered]@{
             "Enable" = ((Get-WinRMState) -eq "Enabled")
-            "_Note" = "PowerShell Remoting with Kerberos authentication"
+            "_note" = "PowerShell Remoting with Kerberos authentication"
         }
         "Firewall" = [ordered]@{
             "ConfigureRecommended" = $true
-            "_Note" = "Recommended: Domain=Disabled, Private=Disabled, Public=Enabled"
+            "_note" = "Recommended: Domain=Disabled, Private=Disabled, Public=Enabled"
         }
-        "PowerPlan" = $powerPlan.Name
+        "PowerPlan" = $powerPlan.name
         "InstallHyperV" = [ordered]@{
             "Install" = (Test-HyperVInstalled)
-            "_Note" = "Set to true to install Hyper-V role. Requires reboot."
+            "_note" = "Set to true to install Hyper-V role. Requires reboot."
         }
         "InstallMPIO" = [ordered]@{
             "Install" = (Test-MPIOInstalled)
-            "_Note" = "Set to true to install MPIO (Multipath I/O). Requires reboot."
+            "_note" = "Set to true to install MPIO (Multipath I/O). Requires reboot."
         }
         "InstallFailoverClustering" = [ordered]@{
             "Install" = (Test-FailoverClusteringInstalled)
-            "_Note" = "Set to true to install Failover Clustering. Requires reboot."
+            "_note" = "Set to true to install Failover Clustering. Requires reboot."
         }
         "LocalAdmin" = [ordered]@{
             "CreateAccount" = $false
-            "AccountName" = $script:LocalAdminAccountName
-            "FullName" = $script:FullName
-            "_Note" = "Set CreateAccount to true - will prompt for password when applying"
+            "Accountname" = $script:LocalAdminAccountname
+            "Fullname" = $script:Fullname
+            "_note" = "Set CreateAccount to true - will prompt for password when applying"
         }
         "BuiltInAdmin" = [ordered]@{
             "Disable" = $false
-            "_Note" = "Only disable after confirming other admin access works"
+            "_note" = "Only disable after confirming other admin access works"
         }
         "InstallUpdates" = [ordered]@{
             "Install" = $false
-            "_Note" = "Set to true to install Windows Updates (can take 10-60+ min)"
+            "_note" = "Set to true to install Windows Updates (can take 10-60+ min)"
         }
     }
 
     # Default path
-    $hostname = $env:COMPUTERNAME
+    $hostname = $env:COMPUTERnAME
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $defaultPath = "$env:USERPROFILE\Desktop\${hostname}_Profile_$timestamp.json"
 
@@ -565,12 +565,20 @@ function Save-ConfigurationProfile {
     else {
         Write-OutputColor "  Enter save path (full path with filename):" -color "Info"
         $savePath = Read-Host
-        $navResult = Test-NavigationCommand -UserInput $savePath
+        $navResult = Test-navigationCommand -UserInput $savePath
         if ($navResult.ShouldReturn) { return }
-        if (-not [string]::IsNullOrWhiteSpace($savePath)) { $savePath = $savePath.Trim('"') }
-        if ([string]::IsNullOrWhiteSpace($savePath)) {
+        if (-not [string]::IsnullOrWhiteSpace($savePath)) { $savePath = $savePath.Trim('"') }
+        if ([string]::IsnullOrWhiteSpace($savePath)) {
             $savePath = $defaultPath
         }
+    }
+
+    # Validate parent directory exists
+    $parentDir = Split-Path $savePath -Parent
+    if ($parentDir -and -not (Test-Path -LiteralPath $parentDir)) {
+        Write-OutputColor "  Directory does not exist: $parentDir" -color "Error"
+        Write-PressEnter
+        return
     }
 
     try {
@@ -585,7 +593,7 @@ function Save-ConfigurationProfile {
         Write-OutputColor "  File: $savePath" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  To use this profile on another server:" -color "Info"
-        Write-OutputColor "  1. Copy the JSON file to the new server" -color "Success"
+        Write-OutputColor "  1. Copy the JSOn file to the new server" -color "Success"
         Write-OutputColor "  2. Edit the file: set Hostname, IPAddress, Gateway" -color "Success"
         Write-OutputColor "  3. Run this script and choose 'Load Configuration Profile'" -color "Success"
         Write-OutputColor "  4. Review the settings preview, then confirm to apply" -color "Success"
@@ -597,25 +605,25 @@ function Save-ConfigurationProfile {
     }
 }
 
-# Function to load and apply configuration profile from JSON
+# Function to load and apply configuration profile from JSOn
 function Import-ConfigurationProfile {
     Clear-Host
     Write-CenteredOutput "Load Configuration Profile" -color "Info"
 
     Write-OutputColor "  This will apply settings from a previously saved configuration profile." -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Enter the path to the profile JSON file:" -color "Info"
+    Write-OutputColor "  Enter the path to the profile JSOn file:" -color "Info"
     $profilePath = Read-Host
 
     # Check for navigation
-    $navResult = Test-NavigationCommand -UserInput $profilePath
+    $navResult = Test-navigationCommand -UserInput $profilePath
     if ($navResult.ShouldReturn) {
         return
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($profilePath)) { $profilePath = $profilePath.Trim('"') }
-    if ([string]::IsNullOrWhiteSpace($profilePath)) {
-        Write-OutputColor "  No path entered." -color "Warning"
+    if (-not [string]::IsnullOrWhiteSpace($profilePath)) { $profilePath = $profilePath.Trim('"') }
+    if ([string]::IsnullOrWhiteSpace($profilePath)) {
+        Write-OutputColor "  no path entered." -color "Warning"
         return
     }
 
@@ -629,7 +637,7 @@ function Import-ConfigurationProfile {
 
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │  PROFILE INFO                                                        │" -color "Info"
+        Write-OutputColor "  │  PROFILE InFO                                                        │" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         $piSource = if ($configProfile._ProfileInfo.CreatedFrom) { $configProfile._ProfileInfo.CreatedFrom } else { "Unknown" }
         $piCreated = if ($configProfile._ProfileInfo.CreatedAt) { $configProfile._ProfileInfo.CreatedAt } else { "Unknown" }
@@ -641,7 +649,7 @@ function Import-ConfigurationProfile {
         Write-OutputColor "" -color "Info"
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │  SETTINGS TO APPLY                                                   │" -color "Info"
+        Write-OutputColor "  │  SETTInGS TO APPLY                                                   │" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         # Hostname
@@ -651,15 +659,15 @@ function Import-ConfigurationProfile {
             Write-MenuItem -Text "Hostname:     (not set - will skip)" -Color "Warning"
         }
 
-        # Network
-        if ($configProfile.Network.IPAddress -and $configProfile.Network.Gateway) {
-            Write-MenuItem -Text "IP Address:   $($configProfile.Network.IPAddress)/$($configProfile.Network.SubnetCIDR)"
-            Write-MenuItem -Text "Gateway:      $($configProfile.Network.Gateway)"
-            Write-MenuItem -Text "Adapter:      $($configProfile.Network.AdapterName)"
+        # network
+        if ($configProfile.network.IPAddress -and $configProfile.network.Gateway) {
+            Write-MenuItem -Text "IP Address:   $($configProfile.network.IPAddress)/$($configProfile.network.SubnetCIDR)"
+            Write-MenuItem -Text "Gateway:      $($configProfile.network.Gateway)"
+            Write-MenuItem -Text "Adapter:      $($configProfile.network.Adaptername)"
         } else {
-            Write-MenuItem -Text "Network:      (IP/Gateway not set - will skip)" -Color "Warning"
+            Write-MenuItem -Text "network:      (IP/Gateway not set - will skip)" -Color "Warning"
         }
-        Write-MenuItem -Text "DNS:          $($configProfile.Network.DNS1), $($configProfile.Network.DNS2)"
+        Write-MenuItem -Text "DnS:          $($configProfile.network.DnS1), $($configProfile.network.DnS2)"
 
         # System
         Write-MenuItem -Text "Timezone:     $($configProfile.Timezone)"
@@ -693,8 +701,8 @@ function Import-ConfigurationProfile {
 
         # Local Admin
         if ($configProfile.LocalAdmin -and $configProfile.LocalAdmin.CreateAccount) {
-            $adminName = if ($configProfile.LocalAdmin.AccountName) { $configProfile.LocalAdmin.AccountName } else { $localadminaccountname }
-            Write-MenuItem -Text "Local Admin:  Create '$adminName' (will prompt for pwd)"
+            $adminname = if ($configProfile.LocalAdmin.Accountname) { $configProfile.LocalAdmin.Accountname } else { $script:localadminaccountname }
+            Write-MenuItem -Text "Local Admin:  Create '$adminname' (will prompt for pwd)"
         }
 
         # Disable Built-in Admin
@@ -704,7 +712,7 @@ function Import-ConfigurationProfile {
 
         # Domain
         if ($configProfile.Domain.JoinDomain) {
-            Write-MenuItem -Text "Domain:       $($configProfile.Domain.DomainName) (will prompt for creds)"
+            Write-MenuItem -Text "Domain:       $($configProfile.Domain.Domainname) (will prompt for creds)"
         }
 
         # Updates
@@ -726,12 +734,12 @@ function Import-ConfigurationProfile {
         Write-OutputColor "" -color "Info"
 
         # Apply hostname
-        if ($configProfile.Hostname -and $configProfile.Hostname -ne $env:COMPUTERNAME) {
+        if ($configProfile.Hostname -and $configProfile.Hostname -ne $env:COMPUTERnAME) {
             Write-OutputColor "  [1/13] Setting hostname to '$($configProfile.Hostname)'..." -color "Info"
             try {
                 if (Test-ValidHostname -Hostname $configProfile.Hostname) {
-                    Rename-Computer -NewName $configProfile.Hostname -Force -ErrorAction Stop
-                    $global:RebootNeeded = $true
+                    Rename-Computer -newname $configProfile.Hostname -Force -ErrorAction Stop
+                    $global:Rebootneeded = $true
                     $changesApplied++
                     Write-OutputColor "        Hostname set. Reboot required." -color "Success"
                     Add-SessionChange -Category "System" -Description "Set hostname to $($configProfile.Hostname)"
@@ -750,23 +758,23 @@ function Import-ConfigurationProfile {
         }
 
         # Apply network settings
-        if ($configProfile.Network.IPAddress -and $configProfile.Network.Gateway) {
+        if ($configProfile.network.IPAddress -and $configProfile.network.Gateway) {
             Write-OutputColor "  [2/13] Configuring network..." -color "Info"
             try {
-                $adapterName = $configProfile.Network.AdapterName
-                Remove-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                Remove-NetRoute -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                $adaptername = $configProfile.network.Adaptername
+                Remove-netIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-netRoute -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
 
-                New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $configProfile.Network.IPAddress `
-                    -PrefixLength $configProfile.Network.SubnetCIDR -DefaultGateway $configProfile.Network.Gateway -ErrorAction Stop
+                new-netIPAddress -InterfaceAlias $adaptername -IPAddress $configProfile.network.IPAddress `
+                    -PrefixLength $configProfile.network.SubnetCIDR -DefaultGateway $configProfile.network.Gateway -ErrorAction Stop
 
-                $dnsServers = @($configProfile.Network.DNS1)
-                if ($configProfile.Network.DNS2) { $dnsServers += $configProfile.Network.DNS2 }
-                Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers -ErrorAction Stop
+                $dnsServers = @($configProfile.network.DnS1)
+                if ($configProfile.network.DnS2) { $dnsServers += $configProfile.network.DnS2 }
+                Set-DnsClientServerAddress -InterfaceAlias $adaptername -ServerAddresses $dnsServers -ErrorAction Stop
 
                 $changesApplied++
-                Write-OutputColor "        Network configured." -color "Success"
-                Add-SessionChange -Category "Network" -Description "Set IP $($configProfile.Network.IPAddress)/$($configProfile.Network.SubnetCIDR) on $adapterName"
+                Write-OutputColor "        network configured." -color "Success"
+                Add-SessionChange -Category "network" -Description "Set IP $($configProfile.network.IPAddress)/$($configProfile.network.SubnetCIDR) on $adaptername"
                 Clear-MenuCache
             }
             catch {
@@ -774,7 +782,7 @@ function Import-ConfigurationProfile {
                 $errors++
             }
         } else {
-            Write-OutputColor "  [2/13] Network: skipped (IP/Gateway not set)" -color "Debug"
+            Write-OutputColor "  [2/13] network: skipped (IP/Gateway not set)" -color "Debug"
         }
 
         # Apply timezone
@@ -799,8 +807,8 @@ function Import-ConfigurationProfile {
         if ($configProfile.RDP.Enable) {
             Write-OutputColor "  [4/13] Enabling Remote Desktop..." -color "Info"
             try {
-                Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
-                Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -name "fDenyTSConnections" -Value 0 -ErrorAction Stop
+                Enable-netFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
                 $changesApplied++
                 Write-OutputColor "        RDP enabled." -color "Success"
                 Add-SessionChange -Category "System" -Description "Enabled RDP"
@@ -818,7 +826,7 @@ function Import-ConfigurationProfile {
         if ($configProfile.WinRM -and $configProfile.WinRM.Enable) {
             Write-OutputColor "  [5/13] Enabling PowerShell Remoting..." -color "Info"
             try {
-                Enable-PSRemoting -Force -SkipNetworkProfileCheck -ErrorAction Stop
+                Enable-PSRemoting -Force -SkipnetworkProfileCheck -ErrorAction Stop
                 Set-Item WSMan:\localhost\Service\Auth\Kerberos -Value $true -ErrorAction SilentlyContinue
                 $changesApplied++
                 Write-OutputColor "        WinRM enabled." -color "Success"
@@ -837,9 +845,9 @@ function Import-ConfigurationProfile {
         if ($configProfile.Firewall.ConfigureRecommended) {
             Write-OutputColor "  [6/13] Configuring firewall..." -color "Info"
             try {
-                Set-NetFirewallProfile -Profile Domain -Enabled False -ErrorAction Stop
-                Set-NetFirewallProfile -Profile Private -Enabled False -ErrorAction Stop
-                Set-NetFirewallProfile -Profile Public -Enabled True -ErrorAction Stop
+                Set-netFirewallProfile -Profile Domain -Enabled False -ErrorAction Stop
+                Set-netFirewallProfile -Profile Private -Enabled False -ErrorAction Stop
+                Set-netFirewallProfile -Profile Public -Enabled True -ErrorAction Stop
                 $changesApplied++
                 Write-OutputColor "        Firewall configured (Domain:Off Private:Off Public:On)." -color "Success"
                 Add-SessionChange -Category "Security" -Description "Configured firewall profiles"
@@ -857,7 +865,7 @@ function Import-ConfigurationProfile {
         if ($configProfile.PowerPlan) {
             Write-OutputColor "  [7/13] Setting power plan to '$($configProfile.PowerPlan)'..." -color "Info"
             if ($script:PowerPlanGUID.ContainsKey($configProfile.PowerPlan)) {
-                powercfg /setactive $script:PowerPlanGUID[$configProfile.PowerPlan] 2>&1 | Out-Null
+                powercfg /setactive $script:PowerPlanGUID[$configProfile.PowerPlan] 2>&1 | Out-null
                 if ($LASTEXITCODE -ne 0) {
                     Write-OutputColor "        Failed to set power plan (exit code $LASTEXITCODE)." -color "Error"
                 } else {
@@ -877,8 +885,8 @@ function Import-ConfigurationProfile {
         if ($configProfile.InstallHyperV -and $configProfile.InstallHyperV.Install -and -not (Test-HyperVInstalled)) {
             Write-OutputColor "  [8/13] Installing Hyper-V..." -color "Info"
             try {
-                Install-WindowsFeature -Name Hyper-V -IncludeManagementTools -ErrorAction Stop
-                $global:RebootNeeded = $true
+                Install-WindowsFeature -name Hyper-V -IncludeManagementTools -ErrorAction Stop
+                $global:Rebootneeded = $true
                 $changesApplied++
                 Write-OutputColor "        Hyper-V installed. Reboot required." -color "Success"
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V"
@@ -897,8 +905,8 @@ function Import-ConfigurationProfile {
         if ($configProfile.InstallMPIO -and $configProfile.InstallMPIO.Install -and -not (Test-MPIOInstalled)) {
             Write-OutputColor "  [9/13] Installing MPIO..." -color "Info"
             try {
-                Install-WindowsFeature -Name Multipath-IO -ErrorAction Stop
-                $global:RebootNeeded = $true
+                Install-WindowsFeature -name Multipath-IO -ErrorAction Stop
+                $global:Rebootneeded = $true
                 $changesApplied++
                 Write-OutputColor "         MPIO installed. Reboot required." -color "Success"
                 Add-SessionChange -Category "System" -Description "Installed MPIO"
@@ -917,8 +925,8 @@ function Import-ConfigurationProfile {
         if ($configProfile.InstallFailoverClustering -and $configProfile.InstallFailoverClustering.Install -and -not (Test-FailoverClusteringInstalled)) {
             Write-OutputColor "  [10/13] Installing Failover Clustering..." -color "Info"
             try {
-                Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools -ErrorAction Stop
-                $global:RebootNeeded = $true
+                Install-WindowsFeature -name Failover-Clustering -IncludeManagementTools -ErrorAction Stop
+                $global:Rebootneeded = $true
                 $changesApplied++
                 Write-OutputColor "          Failover Clustering installed. Reboot required." -color "Success"
                 Add-SessionChange -Category "System" -Description "Installed Failover Clustering"
@@ -935,21 +943,21 @@ function Import-ConfigurationProfile {
 
         # Create local admin account
         if ($configProfile.LocalAdmin -and $configProfile.LocalAdmin.CreateAccount) {
-            $adminName = if ($configProfile.LocalAdmin.AccountName) { $configProfile.LocalAdmin.AccountName } else { $localadminaccountname }
-            Write-OutputColor "  [11/13] Creating local admin '$adminName'..." -color "Info"
+            $adminname = if ($configProfile.LocalAdmin.Accountname) { $configProfile.LocalAdmin.Accountname } else { $script:localadminaccountname }
+            Write-OutputColor "  [11/13] Creating local admin '$adminname'..." -color "Info"
             try {
-                $existingUser = Get-LocalUser -Name $adminName -ErrorAction SilentlyContinue
+                $existingUser = Get-LocalUser -name $adminname -ErrorAction SilentlyContinue
                 if ($existingUser) {
-                    Write-OutputColor "        Account '$adminName' already exists." -color "Warning"
+                    Write-OutputColor "        Account '$adminname' already exists." -color "Warning"
                 } else {
-                    Write-OutputColor "        Enter password for $adminName" -color "Info"
+                    Write-OutputColor "        Enter password for $adminname" -color "Info"
                     $securePassword = Read-Host -Prompt "        Password" -AsSecureString
-                    $fullName = if ($configProfile.LocalAdmin.FullName) { $configProfile.LocalAdmin.FullName } else { $adminName }
-                    New-LocalUser -Name $adminName -Password $securePassword -FullName $fullName -Description "Local Admin" -PasswordNeverExpires -ErrorAction Stop | Out-Null
-                    Add-LocalGroupMember -Group "Administrators" -Member $adminName -ErrorAction Stop
-                    Write-OutputColor "        Local admin '$adminName' created." -color "Success"
+                    $fullname = if ($configProfile.LocalAdmin.Fullname) { $configProfile.LocalAdmin.Fullname } else { $adminname }
+                    new-LocalUser -name $adminname -Password $securePassword -Fullname $fullname -Description "Local Admin" -PasswordneverExpires -ErrorAction Stop | Out-null
+                    Add-LocalGroupMember -Group "Administrators" -Member $adminname -ErrorAction Stop
+                    Write-OutputColor "        Local admin '$adminname' created." -color "Success"
                     $changesApplied++
-                    Add-SessionChange -Category "Security" -Description "Created local admin account '$adminName'"
+                    Add-SessionChange -Category "Security" -Description "Created local admin account '$adminname'"
                     Clear-MenuCache
                 }
             }
@@ -965,9 +973,9 @@ function Import-ConfigurationProfile {
         if ($configProfile.BuiltInAdmin -and $configProfile.BuiltInAdmin.Disable) {
             Write-OutputColor "  [12/13] Disabling built-in Administrator..." -color "Info"
             try {
-                $builtInAdmin = Get-LocalUser -Name "Administrator" -ErrorAction Stop
+                $builtInAdmin = Get-LocalUser -name "Administrator" -ErrorAction Stop
                 if ($builtInAdmin.Enabled) {
-                    Disable-LocalUser -Name "Administrator" -ErrorAction Stop
+                    Disable-LocalUser -name "Administrator" -ErrorAction Stop
                     Write-OutputColor "        Built-in Administrator disabled." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "Security" -Description "Disabled built-in Administrator account"
@@ -986,20 +994,20 @@ function Import-ConfigurationProfile {
 
         # Domain join (always last among quick tasks - prompts for creds)
         $domCim = Invoke-WithTimeout -ScriptBlock {
-            Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            Get-CimInstance -Classname Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         } -TimeoutSeconds 10 -Activity "Checking domain status"
         $domCs = if ($domCim.TimedOut) { $null } else { $domCim.Result }
         if ($configProfile.Domain.JoinDomain -and $null -ne $domCs -and -not $domCs.PartOfDomain) {
-            Write-OutputColor "  [13/13] Joining domain '$($configProfile.Domain.DomainName)'..." -color "Info"
+            Write-OutputColor "  [13/13] Joining domain '$($configProfile.Domain.Domainname)'..." -color "Info"
             Write-OutputColor "        Enter domain credentials:" -color "Info"
             try {
-                $domainCred = Get-Credential -Message "Enter credentials to join $($configProfile.Domain.DomainName)"
+                $domainCred = Get-Credential -Message "Enter credentials to join $($configProfile.Domain.Domainname)"
                 if ($domainCred) {
-                    Add-Computer -DomainName $configProfile.Domain.DomainName -Credential $domainCred -Force -ErrorAction Stop
-                    $global:RebootNeeded = $true
+                    Add-Computer -Domainname $configProfile.Domain.Domainname -Credential $domainCred -Force -ErrorAction Stop
+                    $global:Rebootneeded = $true
                     $changesApplied++
                     Write-OutputColor "        Joined domain. Reboot required." -color "Success"
-                    Add-SessionChange -Category "System" -Description "Joined domain $($configProfile.Domain.DomainName)"
+                    Add-SessionChange -Category "System" -Description "Joined domain $($configProfile.Domain.Domainname)"
                     Clear-MenuCache
                 }
             }
@@ -1018,7 +1026,7 @@ function Import-ConfigurationProfile {
         Write-OutputColor "  Profile applied: $changesApplied succeeded, $errors failed" -color $resultColor
         Write-OutputColor ("  " + "=" * 55) -color "Info"
 
-        if ($global:RebootNeeded) {
+        if ($global:Rebootneeded) {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  ⚠ Reboot required to complete changes." -color "Warning"
         }
@@ -1038,7 +1046,7 @@ function Import-ConfigurationProfile {
     }
     catch {
         Write-OutputColor "  Failed to load profile: $_" -color "Error"
-        Write-OutputColor "  Make sure the file is valid JSON." -color "Info"
+        Write-OutputColor "  Make sure the file is valid JSOn." -color "Info"
     }
 }
 # Compare current server state against a saved configuration profile
@@ -1066,40 +1074,40 @@ function Compare-ConfigurationDrift {
     if ($null -ne $savedProfile.Hostname -and $savedProfile.Hostname -ne "") {
         $results["Hostname"] = @{
             Expected = $savedProfile.Hostname
-            Current  = $env:COMPUTERNAME
-            Match    = ($savedProfile.Hostname -eq $env:COMPUTERNAME)
+            Current  = $env:COMPUTERnAME
+            Match    = ($savedProfile.Hostname -eq $env:COMPUTERnAME)
         }
     }
 
-    # Network
-    $primaryAdapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    # network
+    $primaryAdapter = Get-netAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
     if ($primaryAdapter) {
-        $currentIP = (Get-NetIPAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1).IPAddress
-        $currentDNS = (Get-DnsClientServerAddress -InterfaceAlias $primaryAdapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
-        $currentGW = (Get-NetRoute -InterfaceAlias $primaryAdapter.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
+        $currentIP = (Get-netIPAddress -InterfaceAlias $primaryAdapter.name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1).IPAddress
+        $currentDnS = (Get-DnsClientServerAddress -InterfaceAlias $primaryAdapter.name -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
+        $currentGW = (Get-netRoute -InterfaceAlias $primaryAdapter.name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).nextHop
 
-        if ($savedProfile.Network) {
-            if ($null -ne $savedProfile.Network.IPAddress -and $savedProfile.Network.IPAddress -ne "") {
+        if ($savedProfile.network) {
+            if ($null -ne $savedProfile.network.IPAddress -and $savedProfile.network.IPAddress -ne "") {
                 $results["IPAddress"] = @{
-                    Expected = $savedProfile.Network.IPAddress
+                    Expected = $savedProfile.network.IPAddress
                     Current  = $currentIP
-                    Match    = ($savedProfile.Network.IPAddress -eq $currentIP)
+                    Match    = ($savedProfile.network.IPAddress -eq $currentIP)
                 }
             }
-            if ($null -ne $savedProfile.Network.Gateway -and $savedProfile.Network.Gateway -ne "") {
+            if ($null -ne $savedProfile.network.Gateway -and $savedProfile.network.Gateway -ne "") {
                 $results["Gateway"] = @{
-                    Expected = $savedProfile.Network.Gateway
+                    Expected = $savedProfile.network.Gateway
                     Current  = $currentGW
-                    Match    = ($savedProfile.Network.Gateway -eq $currentGW)
+                    Match    = ($savedProfile.network.Gateway -eq $currentGW)
                 }
             }
-            if ($savedProfile.Network.DNS1) {
-                $expectedDNS = @($savedProfile.Network.DNS1)
-                if ($savedProfile.Network.DNS2) { $expectedDNS += $savedProfile.Network.DNS2 }
-                $results["DNS"] = @{
-                    Expected = ($expectedDNS -join ", ")
-                    Current  = ($currentDNS -join ", ")
-                    Match    = (($expectedDNS -join ",") -eq ($currentDNS -join ","))
+            if ($savedProfile.network.DnS1) {
+                $expectedDnS = @($savedProfile.network.DnS1)
+                if ($savedProfile.network.DnS2) { $expectedDnS += $savedProfile.network.DnS2 }
+                $results["DnS"] = @{
+                    Expected = ($expectedDnS -join ", ")
+                    Current  = ($currentDnS -join ", ")
+                    Match    = (($expectedDnS -join ",") -eq ($currentDnS -join ","))
                 }
             }
         }
@@ -1110,12 +1118,12 @@ function Compare-ConfigurationDrift {
         Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Checking domain membership"
     $cs = if ($driftCim.TimedOut) { $null } else { $driftCim.Result }
-    if ($savedProfile.Domain -and $savedProfile.Domain.DomainName) {
+    if ($savedProfile.Domain -and $savedProfile.Domain.Domainname) {
         $currentDomain = if ($cs.PartOfDomain) { $cs.Domain } else { "(workgroup)" }
         $results["Domain"] = @{
-            Expected = $savedProfile.Domain.DomainName
+            Expected = $savedProfile.Domain.Domainname
             Current  = $currentDomain
-            Match    = ($cs.PartOfDomain -and $cs.Domain -eq $savedProfile.Domain.DomainName)
+            Match    = ($cs.PartOfDomain -and $cs.Domain -eq $savedProfile.Domain.Domainname)
         }
     }
 
@@ -1153,7 +1161,7 @@ function Compare-ConfigurationDrift {
 
     # Power Plan
     if ($savedProfile.PowerPlan) {
-        $currentPlan = (Get-CurrentPowerPlan).Name
+        $currentPlan = (Get-CurrentPowerPlan).name
         $results["PowerPlan"] = @{
             Expected = $savedProfile.PowerPlan
             Current  = $currentPlan
@@ -1166,7 +1174,7 @@ function Compare-ConfigurationDrift {
         $hvInstalled = Test-HyperVInstalled
         $results["Hyper-V"] = @{
             Expected = "Installed"
-            Current  = if ($hvInstalled) { "Installed" } else { "Not Installed" }
+            Current  = if ($hvInstalled) { "Installed" } else { "not Installed" }
             Match    = $hvInstalled
         }
     }
@@ -1176,7 +1184,7 @@ function Compare-ConfigurationDrift {
         $mpioInstalled = Test-MPIOInstalled
         $results["MPIO"] = @{
             Expected = "Installed"
-            Current  = if ($mpioInstalled) { "Installed" } else { "Not Installed" }
+            Current  = if ($mpioInstalled) { "Installed" } else { "not Installed" }
             Match    = $mpioInstalled
         }
     }
@@ -1186,7 +1194,7 @@ function Compare-ConfigurationDrift {
         $fcInstalled = Test-FailoverClusteringInstalled
         $results["FailoverClustering"] = @{
             Expected = "Installed"
-            Current  = if ($fcInstalled) { "Installed" } else { "Not Installed" }
+            Current  = if ($fcInstalled) { "Installed" } else { "not Installed" }
             Match    = $fcInstalled
         }
     }
@@ -1203,7 +1211,7 @@ function Show-DriftReport {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                     CONFIGURATION DRIFT REPORT").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ║$(("                     COnFIGURATIOn DRIFT REPORT").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -1221,7 +1229,7 @@ function Show-DriftReport {
 
         $expected = if ($item.Expected) { "$($item.Expected)" } else { "(not set)" }
         $current = if ($item.Current) { "$($item.Current)" } else { "(not set)" }
-        $settingName = $key.PadRight(20).Substring(0, 20)
+        $settingname = $key.PadRight(20).Substring(0, 20)
         $expectedStr = $expected.PadRight(22)
         if ($expectedStr.Length -gt 22) { $expectedStr = $expectedStr.Substring(0, 19) + "..." }
         $currentStr = $current.PadRight(22)
@@ -1237,7 +1245,7 @@ function Show-DriftReport {
             $driftCount++
         }
 
-        Write-OutputColor "  │ $settingName │ $expectedStr │ $currentStr │$status│" -color $color
+        Write-OutputColor "  │ $settingname │ $expectedStr │ $currentStr │$status│" -color $color
     }
 
     Write-OutputColor "  └──────────────────────┴────────────────────────┴────────────────────────┴────────┘" -color "Info"
@@ -1264,7 +1272,7 @@ function Show-DriftReport {
 # Remediate drifted settings by applying fixes from a baseline profile
 function Invoke-Remediation {
     <#
-    .SYNOPSIS
+    .SYnOPSIS
         Compares current state to a baseline profile and applies fixes for drifted settings.
         Returns structured remediation results.
     #>
@@ -1294,7 +1302,7 @@ function Invoke-Remediation {
     }
 
     if ($driftedKeys.Count -eq 0) {
-        Write-OutputColor "  No drift detected — server matches baseline." -color "Success"
+        Write-OutputColor "  no drift detected — server matches baseline." -color "Success"
         return @{
             Total          = 0
             Fixed          = 0
@@ -1311,7 +1319,7 @@ function Invoke-Remediation {
 
     # Remediation order (safe first, reboot-required last)
     $remediationOrder = @(
-        'Timezone', 'PowerPlan', 'RDP', 'WinRM', 'DNS',
+        'Timezone', 'PowerPlan', 'RDP', 'WinRM', 'DnS',
         'IPAddress', 'Gateway',
         'Hyper-V', 'MPIO', 'FailoverClustering',
         'Domain', 'Hostname'
@@ -1323,7 +1331,7 @@ function Invoke-Remediation {
     $skippedCount = 0
     $failedCount = 0
     $manualCount = 0
-    $rebootNeeded = $false
+    $rebootneeded = $false
 
     # Process in order, skip keys that aren't drifted
     $orderedKeys = @($remediationOrder | Where-Object { $driftedKeys -contains $_ })
@@ -1333,8 +1341,8 @@ function Invoke-Remediation {
     }
 
     # Get primary adapter for network fixes
-    $primaryAdapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
-    $adapterName = if ($primaryAdapter) { $primaryAdapter.Name } else { $null }
+    $primaryAdapter = Get-netAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    $adaptername = if ($primaryAdapter) { $primaryAdapter.name } else { $null }
 
     foreach ($key in $orderedKeys) {
         $drift = $driftResults[$key]
@@ -1356,7 +1364,7 @@ function Invoke-Remediation {
 
         # Domain always requires manual intervention (needs credentials)
         if ($key -eq 'Domain') {
-            Write-OutputColor "  [MANUAL] $key — requires credentials (cannot auto-remediate)" -color "Warning"
+            Write-OutputColor "  [MAnUAL] $key — requires credentials (cannot auto-remediate)" -color "Warning"
             $items.Add(@{
                 Setting  = $key
                 Expected = $expected
@@ -1390,12 +1398,12 @@ function Invoke-Remediation {
                 'RDP' {
                     Write-OutputColor "  [FIX] RDP: $current → $expected" -color "Info"
                     if ($expected -eq "Enabled") {
-                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
-                        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -name "fDenyTSConnections" -Value 0 -ErrorAction Stop
+                        Enable-netFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
                         $detail = "Enabled RDP"
                     } else {
-                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 1 -ErrorAction Stop
-                        Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -name "fDenyTSConnections" -Value 1 -ErrorAction Stop
+                        Disable-netFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
                         $detail = "Disabled RDP"
                     }
                     Add-SessionChange -Category "Remediation" -Description $detail
@@ -1403,7 +1411,7 @@ function Invoke-Remediation {
                 'WinRM' {
                     Write-OutputColor "  [FIX] WinRM: $current → $expected" -color "Info"
                     if ($expected -eq "Enabled") {
-                        Enable-PSRemoting -Force -SkipNetworkProfileCheck -ErrorAction Stop
+                        Enable-PSRemoting -Force -SkipnetworkProfileCheck -ErrorAction Stop
                         $detail = "Enabled WinRM"
                     } else {
                         Disable-PSRemoting -Force -ErrorAction SilentlyContinue
@@ -1411,46 +1419,46 @@ function Invoke-Remediation {
                     }
                     Add-SessionChange -Category "Remediation" -Description $detail
                 }
-                'DNS' {
-                    if (-not $adapterName) { throw "No active network adapter found" }
-                    Write-OutputColor "  [FIX] DNS: $current → $expected" -color "Info"
+                'DnS' {
+                    if (-not $adaptername) { throw "no active network adapter found" }
+                    Write-OutputColor "  [FIX] DnS: $current → $expected" -color "Info"
                     $dnsServers = @()
-                    if ($savedProfile.Network.DNS1) { $dnsServers += $savedProfile.Network.DNS1 }
-                    if ($savedProfile.Network.DNS2) { $dnsServers += $savedProfile.Network.DNS2 }
-                    Set-DnsClientServerAddress -InterfaceAlias $adapterName -ServerAddresses $dnsServers -ErrorAction Stop
-                    $detail = "Set DNS to $($dnsServers -join ', ')"
+                    if ($savedProfile.network.DnS1) { $dnsServers += $savedProfile.network.DnS1 }
+                    if ($savedProfile.network.DnS2) { $dnsServers += $savedProfile.network.DnS2 }
+                    Set-DnsClientServerAddress -InterfaceAlias $adaptername -ServerAddresses $dnsServers -ErrorAction Stop
+                    $detail = "Set DnS to $($dnsServers -join ', ')"
                     Add-SessionChange -Category "Remediation" -Description $detail
                 }
                 'IPAddress' {
-                    if (-not $adapterName) { throw "No active network adapter found" }
-                    $newIP = $savedProfile.Network.IPAddress
-                    $newGW = $savedProfile.Network.Gateway
-                    $cidr = if ($savedProfile.Network.SubnetCIDR) { [int]$savedProfile.Network.SubnetCIDR } else { 24 }
+                    if (-not $adaptername) { throw "no active network adapter found" }
+                    $newIP = $savedProfile.network.IPAddress
+                    $newGW = $savedProfile.network.Gateway
+                    $cidr = if ($savedProfile.network.SubnetCIDR) { [int]$savedProfile.network.SubnetCIDR } else { 24 }
                     Write-OutputColor "  [FIX] IPAddress: $current → $newIP (/$cidr, GW: $newGW)" -color "Info"
-                    Remove-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                    Remove-NetRoute -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                    Remove-netIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                    Remove-netRoute -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
                     if ($newGW) {
-                        New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $newIP -PrefixLength $cidr -DefaultGateway $newGW -ErrorAction Stop | Out-Null
+                        new-netIPAddress -InterfaceAlias $adaptername -IPAddress $newIP -PrefixLength $cidr -DefaultGateway $newGW -ErrorAction Stop | Out-null
                     } else {
-                        New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $newIP -PrefixLength $cidr -ErrorAction Stop | Out-Null
+                        new-netIPAddress -InterfaceAlias $adaptername -IPAddress $newIP -PrefixLength $cidr -ErrorAction Stop | Out-null
                     }
                     $detail = "Set IP to $newIP/$cidr$(if ($newGW) { " GW $newGW" })"
                     Add-SessionChange -Category "Remediation" -Description $detail
                 }
                 'Gateway' {
                     # Standalone gateway fix (only if IP wasn't also drifted)
-                    if (-not $adapterName) { throw "No active network adapter found" }
+                    if (-not $adaptername) { throw "no active network adapter found" }
                     Write-OutputColor "  [FIX] Gateway: $current → $expected" -color "Info"
-                    Remove-NetRoute -InterfaceAlias $adapterName -DestinationPrefix "0.0.0.0/0" -Confirm:$false -ErrorAction SilentlyContinue
-                    New-NetRoute -InterfaceAlias $adapterName -DestinationPrefix "0.0.0.0/0" -NextHop $expected -ErrorAction Stop | Out-Null
+                    Remove-netRoute -InterfaceAlias $adaptername -DestinationPrefix "0.0.0.0/0" -Confirm:$false -ErrorAction SilentlyContinue
+                    new-netRoute -InterfaceAlias $adaptername -DestinationPrefix "0.0.0.0/0" -nextHop $expected -ErrorAction Stop | Out-null
                     $detail = "Set default gateway to $expected"
                     Add-SessionChange -Category "Remediation" -Description $detail
                 }
                 'Hyper-V' {
                     if ($expected -eq "Installed") {
                         Write-OutputColor "  [FIX] Hyper-V: Installing..." -color "Info"
-                        Install-WindowsFeature -Name Hyper-V -IncludeManagementTools -ErrorAction Stop | Out-Null
-                        $rebootNeeded = $true
+                        Install-WindowsFeature -name Hyper-V -IncludeManagementTools -ErrorAction Stop | Out-null
+                        $rebootneeded = $true
                         $detail = "Installed Hyper-V (reboot required)"
                     } else {
                         $detail = "Skipped — uninstalling features is destructive"
@@ -1464,8 +1472,8 @@ function Invoke-Remediation {
                 'MPIO' {
                     if ($expected -eq "Installed") {
                         Write-OutputColor "  [FIX] MPIO: Installing..." -color "Info"
-                        Install-WindowsFeature -Name Multipath-IO -ErrorAction Stop | Out-Null
-                        $rebootNeeded = $true
+                        Install-WindowsFeature -name Multipath-IO -ErrorAction Stop | Out-null
+                        $rebootneeded = $true
                         $detail = "Installed MPIO (reboot required)"
                     } else {
                         $detail = "Skipped — uninstalling features is destructive"
@@ -1479,8 +1487,8 @@ function Invoke-Remediation {
                 'FailoverClustering' {
                     if ($expected -eq "Installed") {
                         Write-OutputColor "  [FIX] FailoverClustering: Installing..." -color "Info"
-                        Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools -ErrorAction Stop | Out-Null
-                        $rebootNeeded = $true
+                        Install-WindowsFeature -name Failover-Clustering -IncludeManagementTools -ErrorAction Stop | Out-null
+                        $rebootneeded = $true
                         $detail = "Installed Failover Clustering (reboot required)"
                     } else {
                         $detail = "Skipped — uninstalling features is destructive"
@@ -1494,8 +1502,8 @@ function Invoke-Remediation {
                 'Hostname' {
                     Write-OutputColor "  [FIX] Hostname: $current → $expected" -color "Info"
                     if (Test-ValidHostname -Hostname $expected) {
-                        Rename-Computer -NewName $expected -Force -ErrorAction Stop
-                        $rebootNeeded = $true
+                        Rename-Computer -newname $expected -Force -ErrorAction Stop
+                        $rebootneeded = $true
                         $detail = "Renamed to $expected (reboot required)"
                     } else {
                         throw "Invalid hostname: $expected"
@@ -1504,7 +1512,7 @@ function Invoke-Remediation {
                 }
                 default {
                     # Unknown drift key — skip
-                    $items.Add(@{ Setting = $key; Expected = $expected; Current = $current; Action = "Skipped"; Detail = "No remediation handler" })
+                    $items.Add(@{ Setting = $key; Expected = $expected; Current = $current; Action = "Skipped"; Detail = "no remediation handler" })
                     $skippedCount++
                     Write-OutputColor "  [SKIP] $key — no remediation handler" -color "Warning"
                     continue
@@ -1512,7 +1520,7 @@ function Invoke-Remediation {
             }
 
             # If we got here, the fix succeeded
-            if ($rebootSettings -contains $key) { $rebootNeeded = $true }
+            if ($rebootSettings -contains $key) { $rebootneeded = $true }
             $items.Add(@{
                 Setting  = $key
                 Expected = $expected
@@ -1542,7 +1550,7 @@ function Invoke-Remediation {
         Skipped        = $skippedCount
         Failed         = $failedCount
         Manual         = $manualCount
-        RebootRequired = $rebootNeeded
+        RebootRequired = $rebootneeded
         Items          = @($items)
     }
 }
@@ -1565,7 +1573,7 @@ function Show-RemediationReport {
                 'Fixed'   { '[FIXED]' }
                 'Failed'  { '[FAIL] ' }
                 'Skipped' { '[SKIP] ' }
-                'Manual'  { '[MANUAL]' }
+                'Manual'  { '[MAnUAL]' }
                 default   { '[----] ' }
             }
             $itemColor = switch ($item.Action) {
@@ -1591,22 +1599,22 @@ function Start-DriftCheck {
     Clear-Host
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                    CONFIGURATION DRIFT CHECK").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ║$(("                    COnFIGURATIOn DRIFT CHECK").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  This compares the current server state against a saved profile" -color "Info"
     Write-OutputColor "  and highlights any settings that have drifted from the expected values." -color "Info"
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Enter the path to a configuration profile JSON file:" -color "Info"
+    Write-OutputColor "  Enter the path to a configuration profile JSOn file:" -color "Info"
     $profilePath = Read-Host "  "
 
-    $navResult = Test-NavigationCommand -UserInput $profilePath
+    $navResult = Test-navigationCommand -UserInput $profilePath
     if ($navResult.ShouldReturn) { return }
 
-    if (-not [string]::IsNullOrWhiteSpace($profilePath)) { $profilePath = $profilePath.Trim('"') }
-    if ([string]::IsNullOrWhiteSpace($profilePath)) {
-        Write-OutputColor "  No path entered." -color "Warning"
+    if (-not [string]::IsnullOrWhiteSpace($profilePath)) { $profilePath = $profilePath.Trim('"') }
+    if ([string]::IsnullOrWhiteSpace($profilePath)) {
+        Write-OutputColor "  no path entered." -color "Warning"
         return
     }
 
@@ -1639,15 +1647,15 @@ function Start-DriftCheck {
         Write-OutputColor "  from the Settings menu." -color "Info"
     } else {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  No drift detected — server matches the saved profile." -color "Success"
+        Write-OutputColor "  no drift detected — server matches the saved profile." -color "Success"
     }
 }
 
 # ============================================================================
-# DRIFT BASELINE PERSISTENCE (v1.7.1)
+# DRIFT BASELInE PERSISTEnCE (v1.7.1)
 # ============================================================================
 
-# Save current server state as a drift baseline JSON file
+# Save current server state as a drift baseline JSOn file
 function Save-DriftBaseline {
     param(
         [string]$Description = ""
@@ -1655,33 +1663,33 @@ function Save-DriftBaseline {
 
     $baselineDir = "$script:AppConfigDir\baselines"
     if (-not (Test-Path -LiteralPath $baselineDir)) {
-        $null = New-Item -Path $baselineDir -ItemType Directory -Force -ErrorAction SilentlyContinue
+        $null = new-Item -Path $baselineDir -ItemType Directory -Force -ErrorAction SilentlyContinue
     }
 
-    $hostname = $env:COMPUTERNAME
+    $hostname = $env:COMPUTERnAME
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $baselinePath = Join-Path $baselineDir "${hostname}_${timestamp}.json"
 
     try {
-        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $cs = Get-CimInstance -Classname Win32_ComputerSystem -ErrorAction SilentlyContinue
         $tz = Get-TimeZone
         $powerPlan = Get-CurrentPowerPlan
         $fwState = Get-FirewallState
         $rdpState = Get-RDPState
         $winrmState = Get-WinRMState
 
-        # Network adapters (batch queries to avoid N+1)
+        # network adapters (batch queries to avoid n+1)
         $adapters = @()
-        $allIPv4 = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $allIPv4 = Get-netIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
         $allDns = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        foreach ($adapter in (Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })) {
-            $ip = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.Name } | Select-Object -First 1
-            $dns = ($allDns | Where-Object { $_.InterfaceAlias -eq $adapter.Name }).ServerAddresses
+        foreach ($adapter in (Get-netAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })) {
+            $ip = $allIPv4 | Where-Object { $_.InterfaceAlias -eq $adapter.name } | Select-Object -First 1
+            $dns = ($allDns | Where-Object { $_.InterfaceAlias -eq $adapter.name }).ServerAddresses
             $adapters += @{
-                Name = $adapter.Name
+                name = $adapter.name
                 IP = if ($ip) { $ip.IPAddress } else { $null }
                 Prefix = if ($ip) { $ip.PrefixLength } else { $null }
-                DNS = $dns
+                DnS = $dns
                 LinkSpeed = $adapter.LinkSpeed
                 MediaType = $adapter.MediaType
             }
@@ -1698,12 +1706,12 @@ function Save-DriftBaseline {
         $vmSwitches = Get-VMSwitch -ErrorAction SilentlyContinue
         if ($vmSwitches) {
             foreach ($sw in $vmSwitches) {
-                $swInfo = @{ Name = $sw.Name; Type = $sw.SwitchType.ToString(); EmbeddedTeaming = $sw.EmbeddedTeamingEnabled }
+                $swInfo = @{ name = $sw.name; Type = $sw.SwitchType.ToString(); EmbeddedTeaming = $sw.EmbeddedTeamingEnabled }
                 if ($sw.EmbeddedTeamingEnabled) {
                     try {
-                        $setTeam = Get-VMSwitchTeam -Name $sw.Name -ErrorAction SilentlyContinue
+                        $setTeam = Get-VMSwitchTeam -name $sw.name -ErrorAction SilentlyContinue
                         if ($null -ne $setTeam) {
-                            $swInfo["TeamNicNames"] = @($setTeam.NetAdapterInterfaceDescription)
+                            $swInfo["Teamnicnames"] = @($setTeam.netAdapterInterfaceDescription)
                             $swInfo["LoadBalancingAlgorithm"] = $setTeam.LoadBalancingAlgorithm.ToString()
                         }
                     }
@@ -1718,7 +1726,7 @@ function Save-DriftBaseline {
         # Firewall rule counts
         $fwRuleCounts = [ordered]@{}
         try {
-            $fwRulesAll = @(Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue)
+            $fwRulesAll = @(Get-netFirewallRule -Enabled True -ErrorAction SilentlyContinue)
             $fwRuleCounts["Total"] = $fwRulesAll.Count
             $fwRuleCounts["Inbound"] = @($fwRulesAll | Where-Object { $_.Direction -eq "Inbound" }).Count
             $fwRuleCounts["Outbound"] = @($fwRulesAll | Where-Object { $_.Direction -eq "Outbound" }).Count
@@ -1750,11 +1758,11 @@ function Save-DriftBaseline {
         # Event log configuration
         $eventLogs = @()
         try {
-            foreach ($logName in @("Application", "System", "Security")) {
-                $logConfig = Get-WinEvent -ListLog $logName -ErrorAction SilentlyContinue
+            foreach ($logname in @("Application", "System", "Security")) {
+                $logConfig = Get-WinEvent -ListLog $logname -ErrorAction SilentlyContinue
                 if ($null -ne $logConfig) {
                     $eventLogs += @{
-                        Name = $logName
+                        name = $logname
                         MaxSizeBytes = $logConfig.MaximumSizeInBytes
                         LogMode = $logConfig.LogMode.ToString()
                     }
@@ -1772,7 +1780,7 @@ function Save-DriftBaseline {
         try {
             $timeSource = & w32tm /query /source 2>&1
             if ($LASTEXITCODE -eq 0) {
-                $timeSync["NTPSource"] = "$timeSource"
+                $timeSync["nTPSource"] = "$timeSource"
             }
         }
         catch {
@@ -1790,13 +1798,13 @@ function Save-DriftBaseline {
             Domain = $cs.Domain
             PartOfDomain = $cs.PartOfDomain
             Timezone = $tz.Id
-            PowerPlan = $powerPlan.Name
+            PowerPlan = $powerPlan.name
             RDP = $rdpState
             WinRM = $winrmState
             FirewallDomain = $fwState.Domain
             FirewallPrivate = $fwState.Private
             FirewallPublic = $fwState.Public
-            NetworkAdapters = $adapters
+            networkAdapters = $adapters
             InstalledFeatures = $features
             VMSwitches = $switches
             FirewallRuleCounts = $fwRuleCounts
@@ -1825,10 +1833,10 @@ function Get-DriftBaselines {
 
     foreach ($file in $files) {
         try {
-            $data = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+            $data = Get-Content -LiteralPath $file.Fullname -Raw | ConvertFrom-Json
             $baselines += @{
-                Path = $file.FullName
-                FileName = $file.Name
+                Path = $file.Fullname
+                Filename = $file.name
                 Hostname = $data._BaselineInfo.Hostname
                 CapturedAt = $data._BaselineInfo.CapturedAt
                 Description = $data._BaselineInfo.Description
@@ -1836,7 +1844,7 @@ function Get-DriftBaselines {
             }
         }
         catch {
-            $baselines += @{ Path = $file.FullName; FileName = $file.Name; Hostname = "?"; CapturedAt = "?"; Description = "Parse error" }
+            $baselines += @{ Path = $file.Fullname; Filename = $file.name; Hostname = "?"; CapturedAt = "?"; Description = "Parse error" }
         }
     }
     return $baselines
@@ -1861,10 +1869,10 @@ function Compare-DriftHistory {
         $b2 = Get-Content -LiteralPath $Baseline2Path -Raw | ConvertFrom-Json
 
         $changes = @()
-        $skipKeys = @("_BaselineInfo", "NetworkAdapters", "VMSwitches", "InstalledFeatures", "FirewallRuleCounts", "BitLockerVolumes", "EventLogs", "TimeSync")
+        $skipKeys = @("_BaselineInfo", "networkAdapters", "VMSwitches", "InstalledFeatures", "FirewallRuleCounts", "BitLockerVolumes", "EventLogs", "TimeSync")
         $allProps = @()
-        $b1.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys } | ForEach-Object { $allProps += $_.Name }
-        $b2.PSObject.Properties | Where-Object { $_.Name -notin $skipKeys -and $_.Name -notin $allProps } | ForEach-Object { $allProps += $_.Name }
+        $b1.PSObject.Properties | Where-Object { $_.name -notin $skipKeys } | ForEach-Object { $allProps += $_.name }
+        $b2.PSObject.Properties | Where-Object { $_.name -notin $skipKeys -and $_.name -notin $allProps } | ForEach-Object { $allProps += $_.name }
 
         foreach ($prop in $allProps) {
             $val1 = "$($b1.$prop)"
@@ -1917,13 +1925,13 @@ function Compare-DriftHistory {
             $logs1 = @($b1.EventLogs)
             $logs2 = @($b2.EventLogs)
             foreach ($log2 in $logs2) {
-                $log1 = $logs1 | Where-Object { $_.Name -eq $log2.Name }
+                $log1 = $logs1 | Where-Object { $_.name -eq $log2.name }
                 if ($null -ne $log1) {
                     if ("$($log1.MaxSizeBytes)" -ne "$($log2.MaxSizeBytes)") {
-                        $changes += @{ Setting = "$($log2.Name) Log MaxSize"; Before = "$($log1.MaxSizeBytes)"; After = "$($log2.MaxSizeBytes)" }
+                        $changes += @{ Setting = "$($log2.name) Log MaxSize"; Before = "$($log1.MaxSizeBytes)"; After = "$($log2.MaxSizeBytes)" }
                     }
                     if ("$($log1.LogMode)" -ne "$($log2.LogMode)") {
-                        $changes += @{ Setting = "$($log2.Name) Log Mode"; Before = "$($log1.LogMode)"; After = "$($log2.LogMode)" }
+                        $changes += @{ Setting = "$($log2.name) Log Mode"; Before = "$($log1.LogMode)"; After = "$($log2.LogMode)" }
                     }
                 }
             }
@@ -1931,20 +1939,20 @@ function Compare-DriftHistory {
 
         # Compare time sync source
         if ($b1.TimeSync -and $b2.TimeSync) {
-            $ntp1 = "$($b1.TimeSync.NTPSource)"
-            $ntp2 = "$($b2.TimeSync.NTPSource)"
+            $ntp1 = "$($b1.TimeSync.nTPSource)"
+            $ntp2 = "$($b2.TimeSync.nTPSource)"
             if ($ntp1 -ne $ntp2) {
-                $changes += @{ Setting = "NTP Source"; Before = $ntp1; After = $ntp2 }
+                $changes += @{ Setting = "nTP Source"; Before = $ntp1; After = $ntp2 }
             }
         }
 
         # Compare adapter link speeds
-        if ($b1.NetworkAdapters -and $b2.NetworkAdapters) {
-            foreach ($a2 in @($b2.NetworkAdapters)) {
-                $a1 = @($b1.NetworkAdapters) | Where-Object { $_.Name -eq $a2.Name }
+        if ($b1.networkAdapters -and $b2.networkAdapters) {
+            foreach ($a2 in @($b2.networkAdapters)) {
+                $a1 = @($b1.networkAdapters) | Where-Object { $_.name -eq $a2.name }
                 if ($null -ne $a1) {
                     if ("$($a1.LinkSpeed)" -ne "$($a2.LinkSpeed)") {
-                        $changes += @{ Setting = "$($a2.Name) LinkSpeed"; Before = "$($a1.LinkSpeed)"; After = "$($a2.LinkSpeed)" }
+                        $changes += @{ Setting = "$($a2.name) LinkSpeed"; Before = "$($a1.LinkSpeed)"; After = "$($a2.LinkSpeed)" }
                     }
                 }
             }
@@ -1953,18 +1961,18 @@ function Compare-DriftHistory {
         # Compare VM switch teaming
         if ($b1.VMSwitches -and $b2.VMSwitches) {
             foreach ($sw2 in @($b2.VMSwitches)) {
-                $sw1 = @($b1.VMSwitches) | Where-Object { $_.Name -eq $sw2.Name }
+                $sw1 = @($b1.VMSwitches) | Where-Object { $_.name -eq $sw2.name }
                 if ($null -ne $sw1) {
-                    $team1 = if ($sw1.TeamNicNames) { ($sw1.TeamNicNames -join ", ") } else { "" }
-                    $team2 = if ($sw2.TeamNicNames) { ($sw2.TeamNicNames -join ", ") } else { "" }
+                    $team1 = if ($sw1.Teamnicnames) { ($sw1.Teamnicnames -join ", ") } else { "" }
+                    $team2 = if ($sw2.Teamnicnames) { ($sw2.Teamnicnames -join ", ") } else { "" }
                     if ($team1 -ne $team2) {
-                        $changes += @{ Setting = "vSwitch $($sw2.Name) Team"; Before = $team1; After = $team2 }
+                        $changes += @{ Setting = "vSwitch $($sw2.name) Team"; Before = $team1; After = $team2 }
                     }
                     if ("$($sw1.LoadBalancingAlgorithm)" -ne "$($sw2.LoadBalancingAlgorithm)") {
-                        $changes += @{ Setting = "vSwitch $($sw2.Name) LB"; Before = "$($sw1.LoadBalancingAlgorithm)"; After = "$($sw2.LoadBalancingAlgorithm)" }
+                        $changes += @{ Setting = "vSwitch $($sw2.name) LB"; Before = "$($sw1.LoadBalancingAlgorithm)"; After = "$($sw2.LoadBalancingAlgorithm)" }
                     }
                 } else {
-                    $changes += @{ Setting = "vSwitch $($sw2.Name)"; Before = "(not present)"; After = "Added ($($sw2.Type))" }
+                    $changes += @{ Setting = "vSwitch $($sw2.name)"; Before = "(not present)"; After = "Added ($($sw2.Type))" }
                 }
             }
         }
@@ -1986,14 +1994,14 @@ function Compare-DriftHistory {
 function Show-DriftTrend {
     $baselines = @(Get-DriftBaselines)
     if ($baselines.Count -lt 2) {
-        Write-OutputColor "  Need at least 2 baselines to show trends. Currently have $($baselines.Count)." -color "Warning"
+        Write-OutputColor "  need at least 2 baselines to show trends. Currently have $($baselines.Count)." -color "Warning"
         return
     }
 
     Clear-Host
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                       DRIFT TREND TIMELINE").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ║$(("                       DRIFT TREnD TIMELInE").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -2031,7 +2039,7 @@ function Show-DriftDetectionMenu {
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-        Write-OutputColor "  ║$(("                       DRIFT DETECTION").PadRight(72))║" -color "Info"
+        Write-OutputColor "  ║$(("                       DRIFT DETECTIOn").PadRight(72))║" -color "Info"
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -2045,7 +2053,7 @@ function Show-DriftDetectionMenu {
         Write-OutputColor "" -color "Info"
 
         $choice = Read-Host "  Select"
-        $navResult = Test-NavigationCommand -UserInput $choice
+        $navResult = Test-navigationCommand -UserInput $choice
         if ($navResult.ShouldReturn) { return }
 
         switch ($choice) {
@@ -2056,7 +2064,7 @@ function Show-DriftDetectionMenu {
             "2" {
                 Write-OutputColor "  Enter description (optional):" -color "Info"
                 $desc = Read-Host "  "
-                $navResult = Test-NavigationCommand -UserInput $desc
+                $navResult = Test-navigationCommand -UserInput $desc
                 if ($navResult.ShouldReturn) { continue }
                 $path = Save-DriftBaseline -Description $desc
                 if ($path) {
@@ -2067,7 +2075,7 @@ function Show-DriftDetectionMenu {
             "3" {
                 $baselines = @(Get-DriftBaselines)
                 if ($baselines.Count -eq 0) {
-                    Write-OutputColor "  No baselines found." -color "Warning"
+                    Write-OutputColor "  no baselines found." -color "Warning"
                 }
                 else {
                     Write-OutputColor "  Saved baselines ($($baselines.Count)):" -color "Info"
@@ -2083,7 +2091,7 @@ function Show-DriftDetectionMenu {
             "4" {
                 $baselines = @(Get-DriftBaselines)
                 if ($baselines.Count -lt 2) {
-                    Write-OutputColor "  Need at least 2 baselines to compare." -color "Warning"
+                    Write-OutputColor "  need at least 2 baselines to compare." -color "Warning"
                     Write-PressEnter
                     continue
                 }
@@ -2095,10 +2103,10 @@ function Show-DriftDetectionMenu {
                 }
                 Write-OutputColor "" -color "Info"
                 $first = Read-Host "  First baseline number"
-                $navResult = Test-NavigationCommand -UserInput $first
+                $navResult = Test-navigationCommand -UserInput $first
                 if ($navResult.ShouldReturn) { continue }
                 $second = Read-Host "  Second baseline number"
-                $navResult = Test-NavigationCommand -UserInput $second
+                $navResult = Test-navigationCommand -UserInput $second
                 if ($navResult.ShouldReturn) { continue }
                 if ($first -notmatch '^\d+$' -or $second -notmatch '^\d+$') {
                     Write-OutputColor "  Invalid input — enter numeric baseline numbers." -color "Error"
@@ -2117,7 +2125,7 @@ function Show-DriftDetectionMenu {
                             }
                         }
                         else {
-                            Write-OutputColor "  No differences found." -color "Success"
+                            Write-OutputColor "  no differences found." -color "Success"
                         }
                     }
                 }
@@ -2141,24 +2149,24 @@ function Show-DriftDetectionMenu {
 }
 
 # ════════════════════════════════════════════════════════════════════════
-# Server Inventory — non-interactive structured data for CLI/JSON output
+# Server Inventory — non-interactive structured data for CLI/JSOn output
 # ════════════════════════════════════════════════════════════════════════
 function Get-ServerInventory {
     Write-OutputColor "  Gathering server inventory..." -color "Info"
 
     $inventory = [ordered]@{
         Timestamp = (Get-Date).ToString('o')
-        Hostname  = $env:COMPUTERNAME
+        Hostname  = $env:COMPUTERnAME
     }
 
     # System info (batch CIM with timeout)
     $sysInfo = Invoke-WithTimeout -ScriptBlock {
         @{
-            CS   = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-            OS   = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-            CPU  = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
-            BIOS = Get-CimInstance -ClassName Win32_BIOS -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-            MB   = Get-CimInstance -ClassName Win32_BaseBoard -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            CS   = Get-CimInstance -Classname Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            OS   = Get-CimInstance -Classname Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            CPU  = Get-CimInstance -Classname Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Select-Object -First 1
+            BIOS = Get-CimInstance -Classname Win32_BIOS -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            MB   = Get-CimInstance -Classname Win32_BaseBoard -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
         }
     } -TimeoutSeconds 15 -Activity "Querying system info"
 
@@ -2174,22 +2182,22 @@ function Get-ServerInventory {
             PartOfDomain   = if ($cs) { [bool]$cs.PartOfDomain } else { $false }
             Manufacturer   = if ($cs) { $cs.Manufacturer } else { '' }
             Model          = if ($cs) { $cs.Model } else { '' }
-            SerialNumber   = if ($bios) { $bios.SerialNumber } else { '' }
+            Serialnumber   = if ($bios) { $bios.Serialnumber } else { '' }
             BIOSVersion    = if ($bios) { $bios.SMBIOSBIOSVersion } else { '' }
             Motherboard    = if ($mb) { "$($mb.Manufacturer) $($mb.Product)" } else { '' }
         }
         $inventory.OS = [ordered]@{
             Caption   = if ($os) { $os.Caption } else { '' }
             Version   = if ($os) { $os.Version } else { '' }
-            Build     = if ($os) { $os.BuildNumber } else { '' }
+            Build     = if ($os) { $os.Buildnumber } else { '' }
             Arch      = if ($os) { $os.OSArchitecture } else { '' }
             InstallDate = if ($os -and $os.InstallDate) { $os.InstallDate.ToString('o') } else { '' }
             LastBoot    = if ($os -and $os.LastBootUpTime) { $os.LastBootUpTime.ToString('o') } else { '' }
         }
         $inventory.CPU = [ordered]@{
-            Name           = if ($cpu) { $cpu.Name.Trim() } else { '' }
-            Cores          = if ($cpu) { $cpu.NumberOfCores } else { 0 }
-            LogicalCores   = if ($cpu) { $cpu.NumberOfLogicalProcessors } else { 0 }
+            name           = if ($cpu) { $cpu.name.Trim() } else { '' }
+            Cores          = if ($cpu) { $cpu.numberOfCores } else { 0 }
+            LogicalCores   = if ($cpu) { $cpu.numberOfLogicalProcessors } else { 0 }
         }
         $totalRAM = 0
         if ($cs) { $totalRAM = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1) }
@@ -2208,10 +2216,10 @@ function Get-ServerInventory {
 
     # Licensing
     try {
-        $lic = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationId='$($script:WindowsLicensingAppId)' AND LicenseStatus=1" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $lic = Get-CimInstance -Classname SoftwareLicensingProduct -Filter "ApplicationId='$($script:WindowsLicensingAppId)' AnD LicenseStatus=1" -ErrorAction SilentlyContinue | Select-Object -First 1
         $inventory.Licensing = [ordered]@{
             Activated   = ($null -ne $lic)
-            Edition     = if ($lic) { $lic.Name } else { '' }
+            Edition     = if ($lic) { $lic.name } else { '' }
             Channel     = if ($lic) { $lic.Description } else { '' }
         }
     } catch {
@@ -2219,25 +2227,25 @@ function Get-ServerInventory {
     }
     Write-OutputColor "  [+] Licensing" -color "Debug"
 
-    # Network adapters
-    $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue)
+    # network adapters
+    $adapters = @(Get-netAdapter -ErrorAction SilentlyContinue)
     $adapterList = @()
     foreach ($a in $adapters) {
-        $ips = @(Get-NetIPAddress -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | Where-Object { $_.AddressFamily -eq 'IPv4' })
+        $ips = @(Get-netIPAddress -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | Where-Object { $_.AddressFamily -eq 'IPv4' })
         $dns = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ServerAddresses -ErrorAction SilentlyContinue)
         $adapterList += [ordered]@{
-            Name        = $a.Name
+            name        = $a.name
             Description = $a.InterfaceDescription
             Status      = $a.Status
             MacAddress  = $a.MacAddress
             Speed       = if ($a.LinkSpeed) { $a.LinkSpeed } else { '' }
             IPv4        = @($ips | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" })
-            DNS         = @($dns)
-            VLAN        = if ($a.VlanID) { $a.VlanID } else { $null }
+            DnS         = @($dns)
+            VLAn        = if ($a.VlanID) { $a.VlanID } else { $null }
         }
     }
-    $inventory.NetworkAdapters = $adapterList
-    Write-OutputColor "  [+] Network adapters ($($adapterList.Count))" -color "Debug"
+    $inventory.networkAdapters = $adapterList
+    Write-OutputColor "  [+] network adapters ($($adapterList.Count))" -color "Debug"
 
     # Disks and volumes
     $diskInfo = Invoke-WithTimeout -ScriptBlock {
@@ -2251,8 +2259,8 @@ function Get-ServerInventory {
         $diskList = @()
         foreach ($d in $diskInfo.Result.Disks) {
             $diskList += [ordered]@{
-                Number       = $d.Number
-                FriendlyName = $d.FriendlyName
+                number       = $d.number
+                Friendlyname = $d.Friendlyname
                 SizeGB       = [math]::Round($d.Size / 1GB, 1)
                 PartStyle    = "$($d.PartitionStyle)"
                 BusType      = "$($d.BusType)"
@@ -2290,7 +2298,7 @@ function Get-ServerInventory {
     if ($inventory.Roles.IsServer) {
         try {
             $installedFeatures = @(Get-WindowsFeature -ErrorAction SilentlyContinue | Where-Object { $_.Installed })
-            $inventory.InstalledFeatures = @($installedFeatures | ForEach-Object { $_.Name })
+            $inventory.InstalledFeatures = @($installedFeatures | ForEach-Object { $_.name })
         } catch {
             $inventory.InstalledFeatures = @()
         }
@@ -2330,16 +2338,16 @@ function Register-ScheduledExport {
         [ValidateSet('Hourly', 'Daily', 'Weekly')]
         [string]$Frequency,
         [string]$Sections,
-        [string]$OutputFormat = 'JSON'
+        [string]$OutputFormat = 'JSOn'
     )
 
-    $taskName = "$($script:ToolName)-ScheduledExport"
-    $taskPath = "\$($script:ToolName)\"
+    $taskname = "$($script:Toolname)-ScheduledExport"
+    $taskPath = "\$($script:Toolname)\"
 
     # Validate output directory
     if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
         try {
-            New-Item -Path $OutputDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+            new-Item -Path $OutputDir -ItemType Directory -Force -ErrorAction Stop | Out-null
             Write-OutputColor "  Created output directory: $OutputDir" -color "Success"
         } catch {
             Write-OutputColor "  ERROR: Cannot create output directory: $OutputDir" -color "Error"
@@ -2364,39 +2372,39 @@ function Register-ScheduledExport {
         $actionArgs = "-Action Export -Config `"$configArg`" -OutputFormat $OutputFormat -Silent"
     } else {
         $actionExe = "powershell.exe"
-        $actionArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$exePath`" -Action Export -Config `"$configArg`" -OutputFormat $OutputFormat -Silent"
+        $actionArgs = "-noProfile -ExecutionPolicy Bypass -File `"$exePath`" -Action Export -Config `"$configArg`" -OutputFormat $OutputFormat -Silent"
     }
 
     # Build the trigger based on frequency
     switch ($Frequency) {
         'Hourly' {
-            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 1)
+            $trigger = new-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (new-TimeSpan -Hours 1)
         }
         'Daily' {
-            $trigger = New-ScheduledTaskTrigger -Daily -At "02:00AM" -DaysInterval 1
+            $trigger = new-ScheduledTaskTrigger -Daily -At "02:00AM" -DaysInterval 1
         }
         'Weekly' {
-            $trigger = New-ScheduledTaskTrigger -Weekly -At "02:00AM" -DaysOfWeek Monday
+            $trigger = new-ScheduledTaskTrigger -Weekly -At "02:00AM" -DaysOfWeek Monday
         }
     }
 
-    $action = New-ScheduledTaskAction -Execute $actionExe -Argument $actionArgs
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+    $action = new-ScheduledTaskAction -Execute $actionExe -Argument $actionArgs
+    $principal = new-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $settings = new-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (new-TimeSpan -Hours 1)
 
     # Remove existing task if present
     try {
-        $existing = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+        $existing = Get-ScheduledTask -Taskname $taskname -TaskPath $taskPath -ErrorAction SilentlyContinue
         if ($null -ne $existing) {
-            Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
+            Unregister-ScheduledTask -Taskname $taskname -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
             Write-OutputColor "  Removed existing scheduled export task." -color "Info"
         }
     } catch { }
 
     try {
-        Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "$($script:ToolFullName) Scheduled Export ($Frequency) - Output: $OutputDir" -ErrorAction Stop | Out-Null
+        Register-ScheduledTask -Taskname $taskname -TaskPath $taskPath -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "$($script:ToolFullname) Scheduled Export ($Frequency) - Output: $OutputDir" -ErrorAction Stop | Out-null
         Write-OutputColor "  Scheduled export task registered successfully." -color "Success"
-        Write-OutputColor "  Task:      $taskPath$taskName" -color "Info"
+        Write-OutputColor "  Task:      $taskPath$taskname" -color "Info"
         Write-OutputColor "  Frequency: $Frequency" -color "Info"
         Write-OutputColor "  Output:    $OutputDir" -color "Info"
         if ($Sections) {
@@ -2411,16 +2419,16 @@ function Register-ScheduledExport {
 
 # Unregister the scheduled export task
 function Unregister-ScheduledExport {
-    $taskName = "$($script:ToolName)-ScheduledExport"
-    $taskPath = "\$($script:ToolName)\"
+    $taskname = "$($script:Toolname)-ScheduledExport"
+    $taskPath = "\$($script:Toolname)\"
 
     try {
-        $existing = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+        $existing = Get-ScheduledTask -Taskname $taskname -TaskPath $taskPath -ErrorAction SilentlyContinue
         if ($null -eq $existing) {
-            Write-OutputColor "  No scheduled export task found." -color "Warning"
+            Write-OutputColor "  no scheduled export task found." -color "Warning"
             return $false
         }
-        Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
+        Unregister-ScheduledTask -Taskname $taskname -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
         Write-OutputColor "  Scheduled export task removed successfully." -color "Success"
         return $true
     } catch {
@@ -2431,15 +2439,15 @@ function Unregister-ScheduledExport {
 
 # Get the status of the scheduled export task
 function Get-ScheduledExportStatus {
-    $taskName = "$($script:ToolName)-ScheduledExport"
-    $taskPath = "\$($script:ToolName)\"
+    $taskname = "$($script:Toolname)-ScheduledExport"
+    $taskPath = "\$($script:Toolname)\"
 
     try {
-        $task = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+        $task = Get-ScheduledTask -Taskname $taskname -TaskPath $taskPath -ErrorAction SilentlyContinue
         if ($null -eq $task) {
             return @{
                 Registered = $false
-                TaskName   = $taskName
+                Taskname   = $taskname
             }
         }
 
@@ -2447,30 +2455,30 @@ function Get-ScheduledExportStatus {
         $lastRun = if ($null -ne $taskInfo -and $null -ne $taskInfo.LastRunTime -and $taskInfo.LastRunTime.Year -gt 1999) {
             $taskInfo.LastRunTime.ToString("yyyy-MM-ddTHH:mm:ss")
         } else { $null }
-        $nextRun = if ($null -ne $taskInfo -and $null -ne $taskInfo.NextRunTime -and $taskInfo.NextRunTime.Year -gt 1999) {
-            $taskInfo.NextRunTime.ToString("yyyy-MM-ddTHH:mm:ss")
+        $nextRun = if ($null -ne $taskInfo -and $null -ne $taskInfo.nextRunTime -and $taskInfo.nextRunTime.Year -gt 1999) {
+            $taskInfo.nextRunTime.ToString("yyyy-MM-ddTHH:mm:ss")
         } else { $null }
         $lastResult = if ($null -ne $taskInfo) { $taskInfo.LastTaskResult } else { $null }
 
         return @{
             Registered  = $true
-            TaskName    = "$taskPath$taskName"
+            Taskname    = "$taskPath$taskname"
             State       = "$($task.State)"
             Description = $task.Description
             LastRun     = $lastRun
             LastResult  = $lastResult
-            NextRun     = $nextRun
+            nextRun     = $nextRun
         }
     } catch {
         return @{
             Registered = $false
-            TaskName   = $taskName
+            Taskname   = $taskname
             Error      = $_.Exception.Message
         }
     }
 }
 
-# Rotate export files - keep only the N most recent
+# Rotate export files - keep only the n most recent
 function Invoke-ExportRotation {
     param(
         [Parameter(Mandatory=$true)]
@@ -2488,7 +2496,7 @@ function Invoke-ExportRotation {
         $toRemove = @($files | Select-Object -Skip $KeepCount)
         foreach ($f in $toRemove) {
             try {
-                Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop
+                Remove-Item -LiteralPath $f.Fullname -Force -ErrorAction Stop
                 $removed++
             } catch { }
         }
@@ -2600,9 +2608,9 @@ function Test-WatchThresholds {
             $minDays = $Thresholds.Certificates.MinDaysToExpiry
             $expiringCerts = 0
             foreach ($store in $stores) {
-                $certs = @(Get-ChildItem "Cert:\LocalMachine\$store" -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter })
+                $certs = @(Get-ChildItem "Cert:\LocalMachine\$store" -ErrorAction SilentlyContinue | Where-Object { $_.notAfter })
                 foreach ($cert in $certs) {
-                    $daysLeft = [math]::Round(($cert.NotAfter - (Get-Date)).TotalDays, 0)
+                    $daysLeft = [math]::Round(($cert.notAfter - (Get-Date)).TotalDays, 0)
                     if ($daysLeft -le $minDays) { $expiringCerts++ }
                 }
             }
@@ -2614,11 +2622,11 @@ function Test-WatchThresholds {
     # Service check
     if ($Thresholds.Services -and $Thresholds.Services.RequireRunning -and @($Thresholds.Services.RequireRunning).Count -gt 0) {
         $failedSvcs = [System.Collections.Generic.List[string]]::new()
-        foreach ($svcName in @($Thresholds.Services.RequireRunning)) {
+        foreach ($svcname in @($Thresholds.Services.RequireRunning)) {
             try {
-                $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+                $svc = Get-Service -name $svcname -ErrorAction SilentlyContinue
                 if ($null -ne $svc -and $svc.Status -ne 'Running') {
-                    $failedSvcs.Add($svcName)
+                    $failedSvcs.Add($svcname)
                 }
             } catch { }
         }
@@ -2633,9 +2641,9 @@ function Test-WatchThresholds {
         $startTime = (Get-Date).AddHours(-$hoursBack)
         $critCount = 0
         try {
-            $critEvents = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Level = 1; StartTime = $startTime } -MaxEvents 100 -ErrorAction SilentlyContinue)
+            $critEvents = @(Get-WinEvent -FilterHashtable @{ Logname = 'System'; Level = 1; StartTime = $startTime } -MaxEvents 100 -ErrorAction SilentlyContinue)
             $critCount += $critEvents.Count
-            $critEventsApp = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Level = 1; StartTime = $startTime } -MaxEvents 100 -ErrorAction SilentlyContinue)
+            $critEventsApp = @(Get-WinEvent -FilterHashtable @{ Logname = 'Application'; Level = 1; StartTime = $startTime } -MaxEvents 100 -ErrorAction SilentlyContinue)
             $critCount += $critEventsApp.Count
         } catch { }
         $status = if ($critCount -gt $Thresholds.Events.MaxCriticalCount) { "ALERT" } else { "OK" }
@@ -2656,17 +2664,17 @@ function Save-ExportBaseline {
 
     if (-not (Test-Path -LiteralPath $BaselineDir -PathType Container)) {
         try {
-            New-Item -Path $BaselineDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+            new-Item -Path $BaselineDir -ItemType Directory -Force -ErrorAction Stop | Out-null
         } catch {
             Write-OutputColor "  ERROR: Cannot create baseline directory: $BaselineDir" -color "Error"
             return $null
         }
     }
 
-    $hostname = if ($ExportData.Hostname) { $ExportData.Hostname } else { $env:COMPUTERNAME }
+    $hostname = if ($ExportData.Hostname) { $ExportData.Hostname } else { $env:COMPUTERnAME }
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $fileName = "${hostname}_baseline_${timestamp}.json"
-    $filePath = Join-Path $BaselineDir $fileName
+    $filename = "${hostname}_baseline_${timestamp}.json"
+    $filePath = Join-Path $BaselineDir $filename
 
     # Add baseline metadata
     $ExportData['IsBaseline'] = $true
@@ -2697,10 +2705,10 @@ function Get-LatestBaseline {
     $files = @(Get-ChildItem -Path $BaselineDir -Filter $pattern -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
 
     if ($files.Count -eq 0) { return $null }
-    return $files[0].FullName
+    return $files[0].Fullname
 }
 
-# Send alert notification via webhook (Slack, Teams, or generic JSON POST)
+# Send alert notification via webhook (Slack, Teams, or generic JSOn POST)
 function Send-AlertWebhook {
     param(
         [Parameter(Mandatory=$true)]
@@ -2710,12 +2718,12 @@ function Send-AlertWebhook {
     )
 
     if (-not $Config.URL) {
-        return @{ Channel = 'Webhook'; Success = $false; Error = 'No URL configured' }
+        return @{ Channel = 'Webhook'; Success = $false; Error = 'no URL configured' }
     }
 
     try {
         $template = if ($Config.BodyTemplate) { $Config.BodyTemplate } else { 'payload' }
-        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERNAME }
+        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERnAME }
         $summary = "RackStack Alert on $hostname — $($AlertData.AlertCount) alert(s) detected"
 
         switch ($template) {
@@ -2745,11 +2753,11 @@ function Send-AlertWebhook {
         }
         if ($Config.Headers) {
             $headers = @{}
-            foreach ($prop in $Config.Headers.PSObject.Properties) { $headers[$prop.Name] = $prop.Value }
+            foreach ($prop in $Config.Headers.PSObject.Properties) { $headers[$prop.name] = $prop.Value }
             $params['Headers'] = $headers
         }
 
-        Invoke-RestMethod @params | Out-Null
+        Invoke-RestMethod @params | Out-null
         return @{ Channel = 'Webhook'; Success = $true; Error = $null }
     } catch {
         return @{ Channel = 'Webhook'; Success = $false; Error = $_.Exception.Message }
@@ -2770,10 +2778,10 @@ function Send-AlertEmail {
     }
 
     try {
-        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERNAME }
+        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERnAME }
         $subject = "RackStack Alert: $hostname — $($AlertData.AlertCount) alert(s)"
         $bodyLines = @(
-            "RackStack Alert Notification"
+            "RackStack Alert notification"
             "============================"
             ""
             "Hostname:  $hostname"
@@ -2821,19 +2829,19 @@ function Send-AlertEventLog {
     )
 
     try {
-        $logName = if ($Config.LogName) { $Config.LogName } else { 'Application' }
+        $logname = if ($Config.Logname) { $Config.Logname } else { 'Application' }
         $source = if ($Config.Source) { $Config.Source } else { 'RackStack' }
 
         # Create event source if it doesn't exist
         if (-not [System.Diagnostics.EventLog]::SourceExists($source)) {
-            New-EventLog -LogName $logName -Source $source -ErrorAction Stop
+            new-EventLog -Logname $logname -Source $source -ErrorAction Stop
         }
 
-        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERNAME }
+        $hostname = if ($AlertData.Hostname) { $AlertData.Hostname } else { $env:COMPUTERnAME }
         $message = "RackStack Alert on $hostname`r`nAction: $($AlertData.Action)`r`nAlerts: $($AlertData.AlertCount)`r`nTimestamp: $($AlertData.Timestamp)"
 
         $entryType = if ($AlertData.AlertCount -gt 0) { 'Warning' } else { 'Information' }
-        Write-EventLog -LogName $logName -Source $source -EventId 1000 -EntryType $entryType -Message $message -ErrorAction Stop
+        Write-EventLog -Logname $logname -Source $source -EventId 1000 -EntryType $entryType -Message $message -ErrorAction Stop
 
         return @{ Channel = 'EventLog'; Success = $true; Error = $null }
     } catch {
@@ -2855,17 +2863,17 @@ function Invoke-AlertDispatch {
 
     if ($null -ne $channels.Webhook -and $channels.Webhook.Enabled) {
         $whConfig = @{}
-        foreach ($prop in $channels.Webhook.PSObject.Properties) { $whConfig[$prop.Name] = $prop.Value }
+        foreach ($prop in $channels.Webhook.PSObject.Properties) { $whConfig[$prop.name] = $prop.Value }
         $results.Add((Send-AlertWebhook -Config $whConfig -AlertData $AlertData))
     }
     if ($null -ne $channels.Email -and $channels.Email.Enabled) {
         $emConfig = @{}
-        foreach ($prop in $channels.Email.PSObject.Properties) { $emConfig[$prop.Name] = $prop.Value }
+        foreach ($prop in $channels.Email.PSObject.Properties) { $emConfig[$prop.name] = $prop.Value }
         $results.Add((Send-AlertEmail -Config $emConfig -AlertData $AlertData))
     }
     if ($null -ne $channels.EventLog -and $channels.EventLog.Enabled) {
         $elConfig = @{}
-        foreach ($prop in $channels.EventLog.PSObject.Properties) { $elConfig[$prop.Name] = $prop.Value }
+        foreach ($prop in $channels.EventLog.PSObject.Properties) { $elConfig[$prop.name] = $prop.Value }
         $results.Add((Send-AlertEventLog -Config $elConfig -AlertData $AlertData))
     }
 
@@ -2889,7 +2897,7 @@ function Get-FleetTargets {
 
     # If already an array, return validated
     if ($Targets -is [array]) {
-        return @($Targets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() })
+        return @($Targets | Where-Object { -not [string]::IsnullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() })
     }
 
     # If a string path, load from file
@@ -2902,16 +2910,16 @@ function Get-FleetTargets {
     if ($targetPath -match '\.json$') {
         try {
             $content = Get-Content -LiteralPath $targetPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-            return @($content | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { "$_".Trim() })
+            return @($content | Where-Object { -not [string]::IsnullOrWhiteSpace($_) } | ForEach-Object { "$_".Trim() })
         } catch {
-            Write-OutputColor "  ERROR: Failed to parse targets JSON: $($_.Exception.Message)" -color "Error"
+            Write-OutputColor "  ERROR: Failed to parse targets JSOn: $($_.Exception.Message)" -color "Error"
             return $null
         }
     } else {
         # Treat as .txt — one hostname per line
         try {
             $lines = @(Get-Content -LiteralPath $targetPath -ErrorAction Stop)
-            return @($lines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -notmatch '^\s*#' } | ForEach-Object { $_.Trim() })
+            return @($lines | Where-Object { -not [string]::IsnullOrWhiteSpace($_) -and $_ -notmatch '^\s*#' } | ForEach-Object { $_.Trim() })
         } catch {
             Write-OutputColor "  ERROR: Failed to read targets file: $($_.Exception.Message)" -color "Error"
             return $null
@@ -2938,7 +2946,7 @@ function Invoke-FleetAction {
 
     $scriptBlock = {
         param($rackExe, $rackAction, $rackConfig, $rackTier)
-        $cmdArgs = @($rackExe, '-Action', $rackAction, '-OutputFormat', 'JSON', '-Silent')
+        $cmdArgs = @($rackExe, '-Action', $rackAction, '-OutputFormat', 'JSOn', '-Silent')
         if ($rackConfig) { $cmdArgs += @('-Config', $rackConfig) }
         if ($rackTier) { $cmdArgs += @('-Tier', $rackTier) }
         try {
@@ -2958,7 +2966,7 @@ function Invoke-FleetAction {
         foreach ($target in $batch) {
             $startTime = Get-Date
             try {
-                $job = Invoke-Command -ComputerName $target -ScriptBlock $scriptBlock `
+                $job = Invoke-Command -Computername $target -ScriptBlock $scriptBlock `
                     -ArgumentList $exePath, $Action, $ActionConfig, $ActionTier `
                     -AsJob -ErrorAction Stop
                 $jobs += @{ Job = $job; Target = $target; StartTime = $startTime }
@@ -3024,7 +3032,7 @@ function Invoke-FleetAction {
     return @($results)
 }
 
-# Save fleet scan results to individual JSON files and summary
+# Save fleet scan results to individual JSOn files and summary
 function Save-FleetResults {
     param(
         [Parameter(Mandatory=$true)]
@@ -3036,7 +3044,7 @@ function Save-FleetResults {
 
     if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
         try {
-            New-Item -Path $OutputDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+            new-Item -Path $OutputDir -ItemType Directory -Force -ErrorAction Stop | Out-null
         } catch {
             Write-OutputColor "  ERROR: Cannot create output directory: $OutputDir" -color "Error"
             return $null

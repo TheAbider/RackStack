@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.90.1
+    Automated Test Runner for RackStack v1.90.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11960,6 +11960,35 @@ try {
     Write-TestResult "54-HTML: disk trend table has column headers" ($hr2 -match 'Disk Usage \(Latest\).*<table><tr><th>')
 } catch {
     Write-TestResult "v1.90.1 Tests" $false $_.Exception.Message
+}
+
+# v1.90.2 bug fixes
+try {
+    # 50-EntryPoint: Baseline stores actual snapshot data (not file path)
+    $ep4 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: baseline reads snapshot file content" ($ep4 -match 'Save-PerformanceSnapshot[\s\S]{0,300}Get-Content[\s\S]{0,100}ConvertFrom-Json')
+
+    # 50-EntryPoint: Cleanup validates profile tier
+    Write-TestResult "50-EntryPoint: Cleanup validates profile" ($ep4 -match "Invalid cleanup profile")
+
+    # 50-EntryPoint: BootAudit reuses $os for DEP (no duplicate CIM)
+    Write-TestResult "50-EntryPoint: BootAudit reuses os for DEP" ($ep4 -match 'reuse \$os from boot time' -and -not ($ep4 -match 'depReg = Get-CimInstance'))
+
+    # 45-ConfigExport: Export uses List<string>
+    $ce2 = Get-Content (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw
+    Write-TestResult "45-ConfigExport: Export uses List<string>" ($ce2 -match 'System\.Collections\.Generic\.List\[string\]')
+
+    # 45-ConfigExport: uses $script: scope for localadminaccountname
+    Write-TestResult "45-ConfigExport: scoped localadminaccountname" ($ce2 -match '\$script:localadminaccountname')
+
+    # 45-ConfigExport: Save-ConfigurationProfile validates directory
+    Write-TestResult "45-ConfigExport: Save validates parent directory" ($ce2 -match 'Save-ConfigurationProfile[\s\S]{0,8000}Validate parent directory')
+
+    # 48-MenuDisplay: cached reboot check
+    $md2 = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+    Write-TestResult "48-MenuDisplay: cached reboot check in config menu" ($md2 -match 'Get-CachedValue.*RebootPending')
+} catch {
+    Write-TestResult "v1.90.2 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

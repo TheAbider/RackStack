@@ -363,6 +363,11 @@ function Invoke-CLIAction {
         'Cleanup' {
             Write-OutputColor "  Running disk cleanup ($($script:CLIProfile) profile)..." -color "Info"
             Write-OutputColor "" -color "Info"
+            $validProfiles = @('Light', 'Standard', 'Aggressive')
+            if ($script:CLIProfile -notin $validProfiles) {
+                Write-OutputColor "  ERROR: Invalid cleanup profile '$($script:CLIProfile)'. Valid: $($validProfiles -join ', ')" -color "Error"
+                [Environment]::Exit(1)
+            }
             switch ($script:CLIProfile) {
                 'Light'      { Invoke-QuickClean }
                 'Standard'   { Invoke-StandardClean }
@@ -2451,7 +2456,12 @@ function Invoke-CLIAction {
                         $hardenScore = if ($hardenTotalCount -gt 0) { [math]::Round(($hardenPassCount / $hardenTotalCount) * 100, 0) } else { 0 }
                         $exportData['Hardening'] = @{ Score = $hardenScore; Passed = $hardenPassCount; Total = $hardenTotalCount; Checks = $hardenChecks }
                     } catch { }
-                    try { $exportData['Snapshot'] = Save-PerformanceSnapshot } catch { }
+                    try {
+                        $snapPath = Save-PerformanceSnapshot
+                        if ($snapPath -and (Test-Path -LiteralPath $snapPath)) {
+                            $exportData['Snapshot'] = Get-Content -LiteralPath $snapPath -Raw | ConvertFrom-Json
+                        }
+                    } catch { }
 
                     $savedPath = Save-ExportBaseline -BaselineDir $baselineDir -ExportData $exportData
 
@@ -3767,12 +3777,11 @@ function Invoke-CLIAction {
                 if ($pendingReboot) { $bootIssues++ }
             } catch { }
 
-            # DEP (Data Execution Prevention) status
+            # DEP (Data Execution Prevention) status — reuse $os from boot time query
             $depEnabled = $false
-            try {
-                $depReg = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
-                $depEnabled = $depReg.DataExecutionPrevention_Available -eq $true
-            } catch { }
+            if ($null -ne $os) {
+                $depEnabled = $os.DataExecutionPrevention_Available -eq $true
+            }
 
             # Console output
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
