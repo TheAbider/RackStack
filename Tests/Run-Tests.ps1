@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.94.0
+    Automated Test Runner for RackStack v1.94.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -4540,7 +4540,7 @@ try {
     # CLI action count sanity check — catches accidental action removals
     $epContent = Get-Content -LiteralPath (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
     $actionListCount = ([regex]::Matches($epContent, "@\{\s*Action\s*=")).Count
-    Write-TestResult "CLI action count >= 137" ($actionListCount -ge 137)
+    Write-TestResult "CLI action count >= 167" ($actionListCount -ge 167)
 } catch {
     Write-TestResult "Show-Changelog: changelog content" $false $_.Exception.Message
 }
@@ -12070,7 +12070,7 @@ try {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
 
-# v1.94.0 features
+# v1.94.1 features
 try {
     $ep7 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
 
@@ -12096,7 +12096,7 @@ try {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
 
-# v1.94.0 — PolicyCheck
+# v1.94.1 — PolicyCheck
 try {
     $ep8 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
 
@@ -12131,7 +12131,7 @@ try {
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
     Write-TestResult "50-EntryPoint: action list has 167 entries" ($actionCount4 -eq 167) "Found $actionCount4"
 } catch {
-    Write-TestResult "v1.94.0 Tests" $false $_.Exception.Message
+    Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

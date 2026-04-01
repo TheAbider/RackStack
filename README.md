@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src=".github/assets/banner.png" alt="RackStack" width="100%">
 </p>
 <p align="center">
@@ -18,12 +18,12 @@
   <img alt="CI" src="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml/badge.svg">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="4400+ Tests" src="https://img.shields.io/badge/tests-4400%2B-brightgreen">
+  <img alt="4500+ Tests" src="https://img.shields.io/badge/tests-4500%2B-brightgreen">
 </p>
 
 ---
 
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Think of it as **sconfig for the modern era** -- but instead of 15 options, you get 157 CLI actions and 60+ interactive menus covering network configuration, Hyper-V deployment, SAN/iSCSI setup, domain join, licensing, VM creation, health monitoring, drift detection, and batch automation -- all through an interactive console UI with undo support, transaction rollback, and audit logging.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Think of it as **sconfig for the modern era** -- but instead of 15 options, you get 167 CLI actions and 60+ interactive menus covering network configuration, Hyper-V deployment, SAN/iSCSI setup, domain join, licensing, VM creation, health monitoring, drift detection, and batch automation -- all through an interactive console UI with undo support, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
 
@@ -41,7 +41,7 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Automation** -- JSON-driven batch mode (24 idempotent steps with transaction rollback), Quick Setup Wizard, configuration export/import, HTML reports, JSON audit logging with rotation
 
-**Monitoring** -- 157 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
+**Monitoring** -- 167 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
 
 **Monitoring & Diagnostics** -- Health dashboard (disk I/O latency, NIC errors, memory pressure, Hyper-V guest health, top CPU processes), performance snapshots with trend reports and "days until full" estimates, event log viewer, service manager, network diagnostics (ping, traceroute, port test, subnet sweep, DNS, ARP)
 
@@ -342,17 +342,17 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 157 CLI Actions
+### 167 CLI Actions
 
 | Category | Actions |
 |----------|---------|
 | **System Ops** | `Cleanup` `Debloat` `HealthCheck` `QuickScan` `Batch` `Remediate` `Win11Cleanup` `DarkMode` `LightMode` |
 | **Inventory** | `Inventory` `Export` `SysInfoAudit` `BIOSAudit` `SoftwareList` `HotfixAudit` `FeatureAudit` `DotNetAudit` `WindowsCapabilityAudit` |
-| **Monitoring** | `Snapshot` `Trend` `Watch` `Alert` `Uptime` `CPUAudit` `MemoryAudit` `DiskAudit` `TempAudit` `EventLogCapacityAudit` |
-| **Compliance** | `Compliance` `DriftCheck` `Diff` `Baseline` `Compare` `Aggregate` `ReportHTML` |
+| **Monitoring** | `Snapshot` `Trend` `Watch` `Alert` `Uptime` `SLAReport` `CPUAudit` `MemoryAudit` `DiskAudit` `TempAudit` `EventLogCapacityAudit` |
+| **Compliance** | `Compliance` `PolicyCheck` `DriftCheck` `Diff` `Baseline` `BaselineDiff` `Compare` `Aggregate` `Validate` `Readiness` `ReportHTML` |
 | **Security** | `Harden` `RegistryAudit` `TLSAudit` `CredGuardAudit` `AuditPolicyAudit` `AppLockerAudit` `DefenderExclusionAudit` `TokenPrivilegeAudit` `PasswordPolicy` `TPMAudit` `SecureBootAudit` `InsecureServiceAudit` |
 | **Identity** | `UserAudit` `LocalGroupAudit` `LogonAudit` `ServiceAccountAudit` `KerberosAudit` `ACLAudit` |
-| **Network** | `NetInfo` `DNSAudit` `DNSCacheAudit` `NetworkAudit` `NetworkProfileAudit` `ListeningPorts` `NetStatAudit` `PortAudit` `ProxyAudit` `DHCPAudit` `VPNAudit` `ARPTableAudit` `NICTeamAudit` `TcpSettingsAudit` `SMBConnectionAudit` |
+| **Network** | `NetInfo` `NetMap` `DNSAudit` `DNSCacheAudit` `NetworkAudit` `NetworkProfileAudit` `ListeningPorts` `NetStatAudit` `PortAudit` `ProxyAudit` `DHCPAudit` `VPNAudit` `ARPTableAudit` `NICTeamAudit` `TcpSettingsAudit` `SMBConnectionAudit` |
 | **Firewall** | `FirewallAudit` `FirewallLogAudit` `FirewallRuleAudit` |
 | **Storage** | `StorageAudit` `ShareAudit` `SMBAudit` `SMBSessionAudit` `BitLockerAudit` `NTFSAudit` `PageFileAudit` `ProfileAudit` `iSCSIAudit` |
 | **Services** | `ServiceAudit` `TaskAudit` `TaskHistoryAudit` `EventAudit` `PrintAudit` `IISAudit` `SSHAudit` `WinRMAudit` |
@@ -366,7 +366,7 @@ $report.Issues
 | **Services** (ext) | `ServiceRecoveryAudit` `HandleLeakAudit` |
 | **Persistence** | `AutoStartAudit` `EventSubAudit` `ComObjectAudit` `SymlinkAudit` `StartupScriptAudit` `HostsFileAudit` |
 | **Domain** | `SecureChannelAudit` `DomainTrustAudit` `GPResultAudit` `ScheduledExport` `ValidateConfig` `EnvAudit` `CrashAudit` `ProcessAudit` |
-| **Fleet** | `FleetScan` `FleetReport` `Query` `RDPAudit` |
+| **Fleet** | `FleetScan` `FleetReport` `Query` `RotateExports` `RDPAudit` |
 
 Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JSON` for the full list with descriptions.
 
@@ -386,7 +386,7 @@ RackStack/
 │   ├── ...                     # 61 more modules
 │   └── 64-SystemDebloat.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 4400+ automated tests
+│   ├── Run-Tests.ps1           # 4500+ automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -412,7 +412,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (~4,400+ tests, ~4 minutes)
+# Full test suite (~4,500+ tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 65 modules + monolithic)
@@ -422,7 +422,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 powershell -ExecutionPolicy Bypass -File Tests\Validate-Release.ps1
 ```
 
-Tests cover parsing, module loading, function existence (642 functions), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
+Tests cover parsing, module loading, function existence (651 functions), version consistency, sync verification, input validation, navigation, hostname parsing, color themes, box widths, audit logging, custom vNIC features, iSCSI cabling checks, storage backend functions, and more.
 
 ## Development
 

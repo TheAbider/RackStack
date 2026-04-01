@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.94.1
+
+- **Fix:** `RotateExports` CLI action was completely broken — called `Invoke-ExportRotation` with wrong parameter name (`-ExportDir` instead of `-OutputDir`).
+- **Fix:** Help search topic updated from 157 to 167 CLI actions with new keywords for PolicyCheck, SLAReport, NetMap, Validate.
+- **Fix:** `Install-RackStack.ps1` ValidateSet updated to include all 7 new CLI actions — previously rejected `NetMap`, `PolicyCheck`, `SLAReport`, `Validate`, `Readiness`, `BaselineDiff`, `RotateExports`.
+- **Fix:** CLI action count test guard bumped from 137 to 167 — previously wouldn't catch removal of up to 30 actions.
+- **Fix:** Test for `Test-MinimumDiskSpace` now uses fallback drive letter to avoid false failures on systems with mapped Z: drives.
+- **Updated:** README.md — all counts updated (167 actions, 651 functions, 4500+ tests), 10 new actions added to CLI table.
+- **Updated:** CONTRIBUTING.md test count updated to 4,500+.
+- 65 modules, 4567 tests, 167 CLI actions, 651 functions
+
 ## v1.94.0
 
 - **New:** `PolicyCheck` CLI action — validate any server against custom compliance policies defined in JSON. Supports 20+ built-in checks: TLS versions, SMBv1, RDP/NLA, password policy, firewall profiles, UAC, guest account, NTLMv1, Defender real-time, BitLocker, script block logging, and more. Run: `RackStack.exe -Action PolicyCheck -Config policy.json`

@@ -831,7 +831,7 @@ function Invoke-CLIAction {
             $keepCount = if ($parts.Count -ge 2 -and $parts[1].Trim() -match '^\d+$') { [int]$parts[1].Trim() } else { 30 }
             if (-not (Test-Path -LiteralPath $exportDir)) { Write-OutputColor "  ERROR: Directory not found: $exportDir" -color "Error"; [Environment]::Exit(1) }
             try {
-                $rotResult = Invoke-ExportRotation -ExportDir $exportDir -KeepCount $keepCount
+                $rotResult = Invoke-ExportRotation -OutputDir $exportDir -KeepCount $keepCount
                 Write-OutputColor "  Export rotation complete: $($rotResult.Removed) removed, $($rotResult.Kept) kept" -color "Success"
                 if ($script:CLIOutputFormat -eq 'JSON') {
                     $jsonResult = @{
