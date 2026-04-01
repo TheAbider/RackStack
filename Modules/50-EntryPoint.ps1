@@ -313,6 +313,7 @@ function Assert-Elevation {
                 @{ Action = 'SecureBootAudit'; Description = 'UEFI Secure Boot status + boot mode' }
                 @{ Action = 'TimeSkewAudit'; Description = 'NTP sync accuracy + time source + skew detection' }
                 @{ Action = 'NetworkProfileAudit'; Description = 'Network profile (Domain/Private/Public) per adapter' }
+                @{ Action = 'NetMap';           Description = 'Network dependency inventory' }
                 @{ Action = 'SLAReport';        Description = 'Uptime SLA compliance report' }
                 @{ Action = 'Validate';         Description = 'Pre/post change validation diff' }
                 @{ Action = 'Readiness';        Description = 'Pre-deployment readiness checklist' }
@@ -430,6 +431,142 @@ function Invoke-CLIAction {
                     Report    = $healthReport
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+        }
+        'NetMap' {
+            Write-OutputColor "  Discovering network dependencies..." -color "Info"
+            Write-OutputColor "" -color "Info"
+            try {
+                $map = @{}
+
+                # DNS servers
+                $dnsServers = [System.Collections.Generic.List[string]]::new()
+                try {
+                    $dnsEntries = @(Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                        Where-Object { $null -ne $_.ServerAddresses -and $_.ServerAddresses.Count -gt 0 })
+                    foreach ($entry in $dnsEntries) {
+                        foreach ($addr in $entry.ServerAddresses) {
+                            if (-not $dnsServers.Contains($addr)) { $null = $dnsServers.Add($addr) }
+                        }
+                    }
+                } catch { }
+                $map.DNSServers = @($dnsServers)
+
+                # Default gateways
+                $gwList = [System.Collections.Generic.List[string]]::new()
+                try {
+                    $routes = @(Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue)
+                    foreach ($rt in $routes) {
+                        if ($rt.NextHop -and -not $gwList.Contains($rt.NextHop)) { $null = $gwList.Add($rt.NextHop) }
+                    }
+                } catch { }
+                $map.Gateways = @($gwList)
+
+                # Domain controllers
+                $dcList = @()
+                try {
+                    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
+                    if ($cs.PartOfDomain -eq $true) {
+                        $map.Domain = $cs.Domain
+                        try {
+                            $nltestOut = & nltest /dsgetdc:$($cs.Domain) 2>&1
+                            $dcMatch = $nltestOut | Where-Object { $_ -match '\\\\(.+)' } | Select-Object -First 1
+                            if ($dcMatch -and $dcMatch -match '\\\\([^\s]+)') {
+                                $regexMatches = $matches
+                                $dcList = @($regexMatches[1].Trim())
+                            }
+                        } catch { }
+                    } else { $map.Domain = $null }
+                } catch { $map.Domain = $null }
+                $map.DomainControllers = $dcList
+
+                # NTP source
+                $ntpSource = "Unknown"
+                try {
+                    $w32out = & w32tm /query /status 2>&1
+                    $srcLine = $w32out | Where-Object { $_ -match 'Source:\s*(.+)' } | Select-Object -First 1
+                    if ($srcLine -and $srcLine -match 'Source:\s*(.+)') { $regexMatches = $matches; $ntpSource = $regexMatches[1].Trim() }
+                } catch { }
+                $map.NTPSource = $ntpSource
+
+                # iSCSI targets
+                $iscsiList = @()
+                try {
+                    $svc = Get-Service -Name MSiSCSI -ErrorAction SilentlyContinue
+                    if ($null -ne $svc -and $svc.Status -eq 'Running') {
+                        $sessions = @(Get-IscsiSession -ErrorAction SilentlyContinue)
+                        foreach ($sess in $sessions) {
+                            $iscsiList += @{ Target = "$($sess.TargetNodeAddress)"; Address = "$($sess.TargetAddress)" }
+                        }
+                    }
+                } catch { }
+                $map.iSCSITargets = $iscsiList
+
+                # Top TCP connections by remote host
+                $tcpGroups = @()
+                try {
+                    $established = @(Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue |
+                        Where-Object { $_.RemoteAddress -ne '127.0.0.1' -and $_.RemoteAddress -ne '::1' -and $_.RemoteAddress -ne '0.0.0.0' })
+                    $grouped = @($established | Group-Object -Property RemoteAddress | Sort-Object Count -Descending | Select-Object -First 10)
+                    foreach ($grp in $grouped) {
+                        $remotePorts = @($grp.Group | Select-Object -ExpandProperty RemotePort -Unique | Sort-Object)
+                        $tcpGroups += @{ Host = $grp.Name; Count = $grp.Count; Ports = $remotePorts }
+                    }
+                } catch { }
+                $map.TopTCPConnections = $tcpGroups
+
+                # SMB connections
+                $smbList = @()
+                try {
+                    $smbConns = @(Get-SmbConnection -ErrorAction SilentlyContinue)
+                    foreach ($sc in $smbConns) {
+                        $smbList += @{ Server = $sc.ServerName; Share = $sc.ShareName; Dialect = "$($sc.Dialect)" }
+                    }
+                } catch { }
+                $map.SMBConnections = $smbList
+
+                # Console output
+                Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+                Write-OutputColor "  │$("  NETWORK DEPENDENCY MAP — $env:COMPUTERNAME".PadRight(72))│" -color "Info"
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  DNS Servers".PadRight(72))│" -color "Info"
+                foreach ($dns in $map.DNSServers) { Write-OutputColor "  │$("    $dns".PadRight(72))│" -color "Success" }
+                if ($map.DNSServers.Count -eq 0) { Write-OutputColor "  │$("    (none configured)".PadRight(72))│" -color "Warning" }
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Gateways".PadRight(72))│" -color "Info"
+                foreach ($gw in $map.Gateways) { Write-OutputColor "  │$("    $gw".PadRight(72))│" -color "Success" }
+                if ($map.Gateways.Count -eq 0) { Write-OutputColor "  │$("    (none)".PadRight(72))│" -color "Warning" }
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  Domain: $(if ($map.Domain) { $map.Domain } else { '(not joined)' })".PadRight(72))│" -color "Info"
+                foreach ($dc in $map.DomainControllers) { Write-OutputColor "  │$("    DC: $dc".PadRight(72))│" -color "Success" }
+                Write-OutputColor "  │$("  NTP: $($map.NTPSource)".PadRight(72))│" -color $(if ($ntpSource -match 'Unknown|Local CMOS') { "Warning" } else { "Success" })
+                Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+                Write-OutputColor "  │$("  iSCSI Targets: $($map.iSCSITargets.Count)".PadRight(72))│" -color "Info"
+                foreach ($t in $map.iSCSITargets) { $tl = "    $($t.Address) — $($t.Target)"; if ($tl.Length -gt 72) { $tl = $tl.Substring(0, 69) + "..." }; Write-OutputColor "  │$($tl.PadRight(72))│" -color "Info" }
+                Write-OutputColor "  │$("  TCP Remote Hosts: $($map.TopTCPConnections.Count) (top by connection count)".PadRight(72))│" -color "Info"
+                foreach ($tc in $map.TopTCPConnections) { $tl = "    $($tc.Host) ($($tc.Count) conn)"; if ($tl.Length -gt 72) { $tl = $tl.Substring(0, 69) + "..." }; Write-OutputColor "  │$($tl.PadRight(72))│" -color "Info" }
+                Write-OutputColor "  │$("  SMB Shares: $($map.SMBConnections.Count)".PadRight(72))│" -color "Info"
+                foreach ($smb in $map.SMBConnections) { Write-OutputColor "  │$("    \\$($smb.Server)\$($smb.Share)".PadRight(72))│" -color "Info" }
+                Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+                $depCount = $map.DNSServers.Count + $map.Gateways.Count + $map.DomainControllers.Count + $map.iSCSITargets.Count + $map.SMBConnections.Count
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Dependencies: $depCount endpoints, $($map.TopTCPConnections.Count) active remote hosts" -color "Success"
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NetMap'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        Domain = $map.Domain; DNSServers = $map.DNSServers; Gateways = $map.Gateways
+                        DomainControllers = $map.DomainControllers; NTPSource = $map.NTPSource
+                        iSCSITargets = $map.iSCSITargets; TopTCPConnections = $map.TopTCPConnections
+                        SMBConnections = $map.SMBConnections
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+                }
+            } catch {
+                Write-OutputColor "  Network dependency map failed: $_" -color "Error"
+                [Environment]::Exit(1)
             }
         }
         'SLAReport' {
@@ -8249,7 +8386,7 @@ function Invoke-CLIAction {
                     Write-OutputColor "  Client: $($g.Name)  Sessions: $($g.Count)  Open Files: $clientFiles" -color "Info"
                 }
                 # Check for stale sessions (connected > 24h)
-                $stale = @($sessions | Where-Object { $null -ne $_.ConnectedTime -and (New-TimeSpan -Start $_.ConnectedTime).TotalHours -gt 24 })
+                $stale = @($sessions | Where-Object { $null -ne $_.SecondsActive -and $_.SecondsActive -gt (24 * 3600) })
                 if ($stale.Count -gt 0) {
                     Write-OutputColor "" -color "Info"
                     Write-OutputColor "  Stale sessions (>24h): $($stale.Count)" -color "Warning"

@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.93.0
+
+- **New:** `NetMap` CLI action — discovers all network dependencies in one command: DNS servers, gateways, domain controllers, NTP source, iSCSI targets, top TCP connections by remote host, and SMB shares. Structured JSON output for fleet dependency mapping.
+- **Fix:** SMB Session Audit stale session detection now works — was using nonexistent `ConnectedTime` property, now correctly uses `SecondsActive`.
+- 65 modules, 4550+ tests, 166 CLI actions, 650 functions
+
 ## v1.92.1
 
 - **Fix:** WMI Audit provider test now correctly displays query latency — broken string interpolation `${$p.QueryMs}` replaced with `$($p.QueryMs)`.

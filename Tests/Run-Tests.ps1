@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.92.1
+    Automated Test Runner for RackStack v1.93.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -12029,7 +12029,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 165 entries" ($listActionCount -eq 165) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 166 entries" ($listActionCount -eq 166) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12062,9 +12062,35 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 165 entries" ($actionCount2 -eq 165) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 166 entries" ($actionCount2 -eq 166) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
+}
+
+# v1.93.0 features
+try {
+    $ep7 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+
+    # NetMap action
+    Write-TestResult "50-EntryPoint: NetMap action exists" ($ep7 -match "'NetMap' \{")
+    Write-TestResult "50-EntryPoint: NetMap discovers DNS servers" ($ep7 -match "NetMap[\s\S]{0,3000}Get-DnsClientServerAddress")
+    Write-TestResult "50-EntryPoint: NetMap discovers gateways" ($ep7 -match "NetMap[\s\S]{0,3000}Get-NetRoute")
+    Write-TestResult "50-EntryPoint: NetMap checks domain controllers" ($ep7 -match "NetMap[\s\S]{0,5000}nltest")
+    Write-TestResult "50-EntryPoint: NetMap checks NTP source" ($ep7 -match "NetMap[\s\S]{0,5000}w32tm")
+    Write-TestResult "50-EntryPoint: NetMap checks iSCSI" ($ep7 -match "NetMap[\s\S]{0,8000}Get-IscsiSession")
+    Write-TestResult "50-EntryPoint: NetMap groups TCP connections" ($ep7 -match "NetMap[\s\S]{0,10000}Group-Object.*RemoteAddress")
+    Write-TestResult "50-EntryPoint: NetMap checks SMB" ($ep7 -match "NetMap[\s\S]{0,12000}Get-SmbConnection")
+
+    # SMB stale session fix
+    Write-TestResult "50-EntryPoint: SMB stale uses SecondsActive" ($ep7 -match 'SecondsActive.*24 \* 3600')
+    Write-TestResult "50-EntryPoint: no ConnectedTime reference" (-not ($ep7 -match 'ConnectedTime'))
+
+    # Action count updated
+    $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
+    $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
+    Write-TestResult "50-EntryPoint: action list has 166 entries" ($actionCount3 -eq 166) "Found $actionCount3"
+} catch {
+    Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime
