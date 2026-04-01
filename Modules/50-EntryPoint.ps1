@@ -314,6 +314,7 @@ function Assert-Elevation {
                 @{ Action = 'TimeSkewAudit'; Description = 'NTP sync accuracy + time source + skew detection' }
                 @{ Action = 'NetworkProfileAudit'; Description = 'Network profile (Domain/Private/Public) per adapter' }
                 @{ Action = 'NetMap';           Description = 'Network dependency inventory' }
+                @{ Action = 'PolicyCheck';     Description = 'Custom compliance policy validation' }
                 @{ Action = 'SLAReport';        Description = 'Uptime SLA compliance report' }
                 @{ Action = 'Validate';         Description = 'Pre/post change validation diff' }
                 @{ Action = 'Readiness';        Description = 'Pre-deployment readiness checklist' }
@@ -10985,6 +10986,397 @@ function Invoke-CLIAction {
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             if ($npIssues -gt 0) { [Environment]::Exit(1) }
+        }
+        'PolicyCheck' {
+            if (-not $script:CLIConfig) {
+                Write-OutputColor "  ERROR: -Config <policy.json> is required for PolicyCheck." -color "Error"
+                Write-OutputColor "  Usage: RackStack.exe -Action PolicyCheck -Config <path>" -color "Info"
+                [Environment]::Exit(1)
+            }
+            if (-not (Test-Path -LiteralPath $script:CLIConfig)) {
+                Write-OutputColor "  ERROR: Policy file not found: $($script:CLIConfig)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            try {
+                $policyRaw = Get-Content -LiteralPath $script:CLIConfig -Raw -ErrorAction Stop
+                $policy = $policyRaw | ConvertFrom-Json -ErrorAction Stop
+            } catch {
+                Write-OutputColor "  ERROR: Invalid JSON in policy file: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            if (-not $policy.Rules -or @($policy.Rules).Count -eq 0) {
+                Write-OutputColor "  ERROR: Policy file contains no rules." -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $policyName = if ($policy.PolicyName) { "$($policy.PolicyName)" } else { "Custom Policy" }
+            $rules = @($policy.Rules)
+            Write-OutputColor "  Evaluating policy: $policyName ($($rules.Count) rules)" -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $pcResults = [System.Collections.Generic.List[object]]::new()
+            $pcPass = 0
+            $pcFail = 0
+            $pcWarn = 0
+
+            foreach ($rule in $rules) {
+                $checkName = "$($rule.Check)"
+                $status = "Fail"
+                $actual = "Unknown"
+
+                switch ($checkName) {
+                    'TLSv1Disabled' {
+                        try {
+                            $tls10Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server'
+                            if (Test-Path -LiteralPath $tls10Path) {
+                                $tls10 = Get-ItemProperty -Path $tls10Path -Name Enabled -ErrorAction SilentlyContinue
+                                if ($null -ne $tls10 -and $tls10.Enabled -eq 0) {
+                                    $status = "Pass"; $actual = "Disabled"
+                                } else {
+                                    $status = "Fail"; $actual = "Enabled"
+                                }
+                            } else {
+                                $status = "Warn"; $actual = "Not explicitly disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'TLSv11Disabled' {
+                        try {
+                            $tls11Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server'
+                            if (Test-Path -LiteralPath $tls11Path) {
+                                $tls11 = Get-ItemProperty -Path $tls11Path -Name Enabled -ErrorAction SilentlyContinue
+                                if ($null -ne $tls11 -and $tls11.Enabled -eq 0) {
+                                    $status = "Pass"; $actual = "Disabled"
+                                } else {
+                                    $status = "Fail"; $actual = "Enabled"
+                                }
+                            } else {
+                                $status = "Warn"; $actual = "Not explicitly disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'SMBv1Disabled' {
+                        try {
+                            $smbConfig = Get-SmbServerConfiguration -ErrorAction Stop
+                            if ($smbConfig.EnableSMB1Protocol) {
+                                $status = "Fail"; $actual = "Enabled"
+                            } else {
+                                $status = "Pass"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'RDPEnabled' {
+                        try {
+                            $rdpKey = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction Stop).fDenyTSConnections
+                            if ($rdpKey -eq 0) {
+                                $status = "Pass"; $actual = "Enabled"
+                            } else {
+                                $status = "Fail"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'RDPDisabled' {
+                        try {
+                            $rdpKey = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction Stop).fDenyTSConnections
+                            if ($rdpKey -eq 1) {
+                                $status = "Pass"; $actual = "Disabled"
+                            } else {
+                                $status = "Fail"; $actual = "Enabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'NLAEnabled' {
+                        try {
+                            $nla = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ErrorAction Stop).UserAuthentication
+                            if ($nla -eq 1) {
+                                $status = "Pass"; $actual = "Required"
+                            } else {
+                                $status = "Fail"; $actual = "Not required"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'PasswordMinLength' {
+                        try {
+                            $netAccts = & net accounts 2>&1
+                            $minLine = $netAccts | Where-Object { $_ -match 'Minimum password length' } | Select-Object -First 1
+                            if ($minLine -match '(\d+)') {
+                                $regexMatches = $matches
+                                $currentMin = [int]$regexMatches[1]
+                                $requiredMin = if ($null -ne $rule.Min) { [int]$rule.Min } else { 8 }
+                                $actual = "$currentMin characters"
+                                if ($currentMin -ge $requiredMin) {
+                                    $status = "Pass"
+                                } else {
+                                    $status = "Fail"
+                                }
+                            } else {
+                                $status = "Warn"; $actual = "Unable to parse"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'PasswordMaxAge' {
+                        try {
+                            $netAccts = & net accounts 2>&1
+                            $maxLine = $netAccts | Where-Object { $_ -match 'Maximum password age' } | Select-Object -First 1
+                            if ($maxLine -match '(\d+)') {
+                                $regexMatches = $matches
+                                $currentMax = [int]$regexMatches[1]
+                                $requiredMax = if ($null -ne $rule.Max) { [int]$rule.Max } else { 90 }
+                                $actual = "$currentMax days"
+                                if ($currentMax -le $requiredMax -and $currentMax -gt 0) {
+                                    $status = "Pass"
+                                } else {
+                                    $status = "Fail"
+                                }
+                            } elseif ($maxLine -match 'Unlimited') {
+                                $status = "Fail"; $actual = "Unlimited"
+                            } else {
+                                $status = "Warn"; $actual = "Unable to parse"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'LockoutThreshold' {
+                        try {
+                            $netAccts = & net accounts 2>&1
+                            $lockLine = $netAccts | Where-Object { $_ -match 'Lockout threshold' } | Select-Object -First 1
+                            if ($lockLine -match '(\d+)') {
+                                $regexMatches = $matches
+                                $currentThreshold = [int]$regexMatches[1]
+                                $requiredMax = if ($null -ne $rule.Max) { [int]$rule.Max } else { 5 }
+                                $actual = "$currentThreshold attempt(s)"
+                                if ($currentThreshold -gt 0 -and $currentThreshold -le $requiredMax) {
+                                    $status = "Pass"
+                                } else {
+                                    $status = "Fail"
+                                }
+                            } elseif ($lockLine -match 'Never') {
+                                $status = "Fail"; $actual = "Never (disabled)"
+                            } else {
+                                $status = "Warn"; $actual = "Unable to parse"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'UptimeDays' {
+                        try {
+                            $os = Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 10 -ErrorAction Stop
+                            $uptime = (Get-Date) - $os.LastBootUpTime
+                            $uptimeDays = [math]::Floor($uptime.TotalDays)
+                            $maxDays = if ($null -ne $rule.Max) { [int]$rule.Max } else { 90 }
+                            $actual = "$uptimeDays day(s)"
+                            if ($uptimeDays -le $maxDays) {
+                                $status = "Pass"
+                            } else {
+                                $status = "Fail"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'FirewallDomainEnabled' {
+                        try {
+                            $fw = Get-FirewallState
+                            if ($fw.Domain -eq "Enabled") {
+                                $status = "Pass"; $actual = "Enabled"
+                            } else {
+                                $status = "Fail"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'FirewallPrivateEnabled' {
+                        try {
+                            $fw = Get-FirewallState
+                            if ($fw.Private -eq "Enabled") {
+                                $status = "Pass"; $actual = "Enabled"
+                            } else {
+                                $status = "Fail"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'FirewallPublicEnabled' {
+                        try {
+                            $fw = Get-FirewallState
+                            if ($fw.Public -eq "Enabled") {
+                                $status = "Pass"; $actual = "Enabled"
+                            } else {
+                                $status = "Fail"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'FirewallAllEnabled' {
+                        try {
+                            $fw = Get-FirewallState
+                            if ($fw.Domain -eq "Enabled" -and $fw.Private -eq "Enabled" -and $fw.Public -eq "Enabled") {
+                                $status = "Pass"; $actual = "All profiles enabled"
+                            } else {
+                                $disabled = @()
+                                if ($fw.Domain -ne "Enabled") { $disabled += "Domain" }
+                                if ($fw.Private -ne "Enabled") { $disabled += "Private" }
+                                if ($fw.Public -ne "Enabled") { $disabled += "Public" }
+                                $status = "Fail"; $actual = "Disabled: $($disabled -join ', ')"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'UACEnabled' {
+                        try {
+                            $uacKey = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction Stop
+                            if ($uacKey.EnableLUA -eq 1) {
+                                $status = "Pass"; $actual = "Enabled"
+                            } else {
+                                $status = "Fail"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'GuestAccountDisabled' {
+                        try {
+                            $guest = Get-LocalUser -Name "Guest" -ErrorAction Stop
+                            if ($guest.Enabled) {
+                                $status = "Fail"; $actual = "Enabled"
+                            } else {
+                                $status = "Pass"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Pass"; $actual = "Not found" }
+                    }
+                    'AdminAccountDisabled' {
+                        try {
+                            $adminAcct = Get-LocalUser -Name "Administrator" -ErrorAction Stop
+                            if ($adminAcct.Enabled) {
+                                $status = "Fail"; $actual = "Enabled"
+                            } else {
+                                $status = "Pass"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    'NTLMv1Disabled' {
+                        try {
+                            $lsa = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name LmCompatibilityLevel -ErrorAction Stop
+                            if ($lsa.LmCompatibilityLevel -ge 3) {
+                                $status = "Pass"; $actual = "Disabled (Level $($lsa.LmCompatibilityLevel))"
+                            } else {
+                                $status = "Fail"; $actual = "Allowed (Level $($lsa.LmCompatibilityLevel))"
+                            }
+                        } catch { $status = "Warn"; $actual = "Default (key absent)" }
+                    }
+                    'DefenderRealTime' {
+                        try {
+                            $mpStat = Get-MpComputerStatus -ErrorAction Stop
+                            if ($mpStat.RealTimeProtectionEnabled) {
+                                $status = "Pass"; $actual = "Enabled"
+                            } else {
+                                $status = "Fail"; $actual = "Disabled"
+                            }
+                        } catch { $status = "Warn"; $actual = "Defender unavailable" }
+                    }
+                    'BitLockerEnabled' {
+                        try {
+                            $blVolume = Get-BitLockerVolume -MountPoint "C:" -ErrorAction Stop
+                            if ($null -ne $blVolume -and $blVolume.ProtectionStatus -eq 'On') {
+                                $status = "Pass"; $actual = "Protected ($($blVolume.EncryptionMethod))"
+                            } else {
+                                $status = "Fail"; $actual = if ($null -ne $blVolume) { "$($blVolume.VolumeStatus)" } else { "Not available" }
+                            }
+                        } catch { $status = "Warn"; $actual = "Not available" }
+                    }
+                    'ScriptBlockLogging' {
+                        try {
+                            $sblPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+                            if (Test-Path -LiteralPath $sblPath) {
+                                $sbl = Get-ItemProperty -Path $sblPath -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue
+                                if ($null -ne $sbl -and $sbl.EnableScriptBlockLogging -eq 1) {
+                                    $status = "Pass"; $actual = "Enabled"
+                                } else {
+                                    $status = "Fail"; $actual = "Disabled"
+                                }
+                            } else {
+                                $status = "Fail"; $actual = "Not configured"
+                            }
+                        } catch { $status = "Warn"; $actual = "Unable to check" }
+                    }
+                    default {
+                        $status = "Warn"; $actual = "Unknown check: $checkName"
+                    }
+                }
+
+                # Determine required/expected for display
+                $expected = switch ($checkName) {
+                    'PasswordMinLength' { "Min $($rule.Min)" }
+                    'PasswordMaxAge' { "Max $($rule.Max) days" }
+                    'LockoutThreshold' { "Max $($rule.Max) attempts" }
+                    'UptimeDays' { "Max $($rule.Max) days" }
+                    default { if ($rule.Required -eq $true) { "Required" } else { "Not required" } }
+                }
+
+                # Treat warnings as failures if the rule is strictly required
+                $rulePass = ($status -eq "Pass")
+
+                if ($rulePass) { $pcPass++ }
+                elseif ($status -eq "Warn") { $pcWarn++ }
+                else { $pcFail++ }
+
+                $null = $pcResults.Add(@{
+                    Check    = $checkName
+                    Expected = $expected
+                    Actual   = $actual
+                    Status   = $status
+                })
+            }
+
+            # Console display
+            $pcTotal = $pcPass + $pcFail + $pcWarn
+            Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+            Write-OutputColor "  │$("  POLICY CHECK — $policyName".PadRight(72))│" -color "Info"
+            Write-OutputColor "  │$("  $pcTotal rules: $pcPass passed, $pcFail failed, $pcWarn warning(s)".PadRight(72))│" -color "Info"
+            Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+
+            foreach ($r in $pcResults) {
+                $tag = switch ($r.Status) { "Pass" { "PASS" } "Fail" { "FAIL" } "Warn" { "WARN" } default { "????" } }
+                $color = switch ($r.Status) { "Pass" { "Success" } "Fail" { "Error" } "Warn" { "Warning" } default { "Info" } }
+                $line = "  [$tag] $($r.Check): $($r.Actual)"
+                if ($line.Length -gt 72) { $line = $line.Substring(0, 69) + "..." }
+                Write-OutputColor "  │$($line.PadRight(72))│" -color $color
+            }
+
+            Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+
+            if ($pcFail -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Policy FAILED: $pcFail rule(s) did not pass." -color "Error"
+            } elseif ($pcWarn -gt 0) {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Policy PASSED with $pcWarn warning(s)." -color "Warning"
+            } else {
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Policy PASSED: All $pcPass rules satisfied." -color "Success"
+            }
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool       = $script:ToolFullName
+                    Version    = $script:ScriptVersion
+                    Action     = 'PolicyCheck'
+                    Hostname   = $env:COMPUTERNAME
+                    Timestamp  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    PolicyName = $policyName
+                    PolicyFile = $script:CLIConfig
+                    Summary    = @{
+                        Total    = $pcTotal
+                        Passed   = $pcPass
+                        Failed   = $pcFail
+                        Warnings = $pcWarn
+                    }
+                    Results    = @($pcResults | ForEach-Object {
+                        @{
+                            Check    = $_.Check
+                            Expected = $_.Expected
+                            Actual   = $_.Actual
+                            Status   = $_.Status
+                        }
+                    })
+                    Compliant  = ($pcFail -eq 0)
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+
+            if ($pcFail -gt 0) { [Environment]::Exit(1) }
         }
         default {
             Write-OutputColor "  Unknown CLI action: $($script:CLIAction)" -color "Error"

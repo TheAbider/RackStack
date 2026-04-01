@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.93.0
+    Automated Test Runner for RackStack v1.94.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9455,8 +9455,11 @@ try {
 # Test-MinimumDiskSpace should return $true (gracefully) for non-existent drive
 # The function returns $true on error (don't block if can't check)
 try {
-    $result = Test-MinimumDiskSpace -DriveLetter "Z" -MinimumGB 1
-    Write-TestResult "Test-MinimumDiskSpace: non-existent drive Z -> true (graceful)" ($result -eq $true) "Result: $result"
+    # Use a drive letter unlikely to exist (Q)
+    $testDrive = "Q"
+    if (Get-PSDrive -Name $testDrive -ErrorAction SilentlyContinue) { $testDrive = "X" }
+    $result = Test-MinimumDiskSpace -DriveLetter $testDrive -MinimumGB 1
+    Write-TestResult "Test-MinimumDiskSpace: non-existent drive -> true (graceful)" ($result -eq $true) "Drive: $testDrive, Result: $result"
 } catch {
     Write-TestResult "Test-MinimumDiskSpace: non-existent drive" $false $_.Exception.Message
 }
@@ -12029,7 +12032,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 166 entries" ($listActionCount -eq 166) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 167 entries" ($listActionCount -eq 167) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12062,12 +12065,12 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 166 entries" ($actionCount2 -eq 166) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 167 entries" ($actionCount2 -eq 167) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
 
-# v1.93.0 features
+# v1.94.0 features
 try {
     $ep7 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
 
@@ -12088,9 +12091,47 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 166 entries" ($actionCount3 -eq 166) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 167 entries" ($actionCount3 -eq 167) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
+}
+
+# v1.94.0 — PolicyCheck
+try {
+    $ep8 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+
+    # PolicyCheck action exists and has key checks
+    Write-TestResult "50-EntryPoint: PolicyCheck action exists" ($ep8 -match "'PolicyCheck' \{")
+    Write-TestResult "50-EntryPoint: PolicyCheck reads JSON policy file" ($ep8 -match "PolicyCheck[\s\S]{0,3000}ConvertFrom-Json")
+    Write-TestResult "50-EntryPoint: PolicyCheck has TLS check" ($ep8 -match "TLSv1Disabled")
+    Write-TestResult "50-EntryPoint: PolicyCheck has SMBv1 check" ($ep8 -match "SMBv1Disabled")
+    Write-TestResult "50-EntryPoint: PolicyCheck has NLA check" ($ep8 -match "NLAEnabled")
+    Write-TestResult "50-EntryPoint: PolicyCheck has password policy check" ($ep8 -match "PasswordMinLength")
+    Write-TestResult "50-EntryPoint: PolicyCheck has firewall check" ($ep8 -match "FirewallPublicEnabled")
+    Write-TestResult "50-EntryPoint: PolicyCheck has UAC check" ($ep8 -match "UACEnabled")
+    Write-TestResult "50-EntryPoint: PolicyCheck has BitLocker check" ($ep8 -match "BitLockerEnabled")
+    Write-TestResult "50-EntryPoint: PolicyCheck has DefenderRealTime check" ($ep8 -match "DefenderRealTime")
+    Write-TestResult "50-EntryPoint: PolicyCheck outputs JSON" ($ep8 -match "PolicyCheck[\s\S]{0,20000}Compliant")
+    Write-TestResult "50-EntryPoint: PolicyCheck exits 1 on failure" ($ep8 -match "PolicyCheck[\s\S]{0,20000}Environment.*Exit.*1")
+
+    # Also test some critical function content patterns from coverage analysis
+    # ConvertTo-HtmlSafe actually encodes
+    $hr4 = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
+    Write-TestResult "54-HTML: ConvertTo-HtmlSafe uses HtmlEncode" ($hr4 -match 'function ConvertTo-HtmlSafe[\s\S]{0,200}HtmlEncode')
+
+    # Undo-LastChange pops from stack
+    $nav2 = Get-Content (Join-Path $modulesPath "04-Navigation.ps1") -Raw
+    Write-TestResult "04-Navigation: Undo-LastChange pops from UndoStack" ($nav2 -match 'function Undo-LastChange[\s\S]{0,500}UndoStack')
+
+    # Assert-Elevation checks admin
+    Write-TestResult "50-EntryPoint: Assert-Elevation checks IsInRole Administrator" ($ep8 -match 'Assert-Elevation[\s\S]{0,500}Administrator')
+
+    # Action list count
+    $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
+    $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
+    Write-TestResult "50-EntryPoint: action list has 167 entries" ($actionCount4 -eq 167) "Found $actionCount4"
+} catch {
+    Write-TestResult "v1.94.0 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.94.0
+
+- **New:** `PolicyCheck` CLI action — validate any server against custom compliance policies defined in JSON. Supports 20+ built-in checks: TLS versions, SMBv1, RDP/NLA, password policy, firewall profiles, UAC, guest account, NTLMv1, Defender real-time, BitLocker, script block logging, and more. Run: `RackStack.exe -Action PolicyCheck -Config policy.json`
+- 65 modules, 4565+ tests, 167 CLI actions, 651 functions
+
 ## v1.93.0
 
 - **New:** `NetMap` CLI action — discovers all network dependencies in one command: DNS servers, gateways, domain controllers, NTP source, iSCSI targets, top TCP connections by remote host, and SMB shares. Structured JSON output for fleet dependency mapping.
