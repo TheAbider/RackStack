@@ -223,11 +223,10 @@ function Write-CenteredOutput {
     param (
         [string]$text,
         [string]$color = "Info",
-        [int]$width = 50
+        [int]$width = 72
     )
 
-    # Use standard 72-char inner width for consistency with all menus
-    $innerWidth = 72
+    $innerWidth = $width
     $textLength = $text.Length
     $padding = [math]::Max(0, [math]::Floor(($innerWidth - $textLength) / 2))
     $paddedText = (" " * $padding) + $text

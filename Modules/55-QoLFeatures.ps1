@@ -90,6 +90,13 @@ function Add-Favorite {
 
     Import-Favorites
 
+    # Deduplicate: skip if already favorited
+    $existing = $script:Favorites | Where-Object { $_.Name -eq $Name }
+    if ($existing) {
+        Write-OutputColor "  '$Name' is already in favorites." -color "Info"
+        return
+    }
+
     # Auto-detect function name from dispatch map if not provided
     if (-not $FunctionName -and $script:FavoriteDispatch.ContainsKey($Name)) {
         $FunctionName = $script:FavoriteDispatch[$Name]
@@ -449,6 +456,9 @@ function Restore-SessionState {
             }
             if ($sessionState.ColorTheme) {
                 $script:ColorTheme = $sessionState.ColorTheme
+            }
+            if ($sessionState.SessionChanges -and $sessionState.SessionChanges.Count -gt 0) {
+                $script:SessionChanges = @($sessionState.SessionChanges)
             }
 
             Write-OutputColor "  Session restored!" -color "Success"

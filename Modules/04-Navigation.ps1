@@ -116,10 +116,8 @@ function Add-SessionChange {
         }
     }
 
-    # Auto-save session state after each change
-    if (Get-Command Save-SessionState -ErrorAction SilentlyContinue) {
-        Save-SessionState -Description $Description
-    }
+    # Auto-save session state after each change (function always exists after module load)
+    Save-SessionState -Description $Description
 }
 
 # Display recent audit log entries

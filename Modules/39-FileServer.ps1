@@ -337,6 +337,7 @@ function Get-FileServerFile {
 
             # Attempt resume if partial file exists from a previous download
             $resumed = $false
+            $resumeStartTime = Get-Date
             $existingSize = 0
             if (Test-Path -LiteralPath $destFile) {
                 $existingSize = (Get-Item -LiteralPath $destFile -ErrorAction SilentlyContinue).Length
@@ -364,6 +365,7 @@ function Get-FileServerFile {
                         }
                         Write-OutputColor "  Resume successful" -color "Success"
                         $resumed = $true
+                        $totalElapsed = [int][math]::Max(1, [math]::Floor(((Get-Date) - $resumeStartTime).TotalSeconds))
                     } else {
                         $resumeResponse.Close()
                         Write-OutputColor "  Server doesn't support resume. Restarting download..." -color "Warning"

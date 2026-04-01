@@ -50,8 +50,16 @@ function Set-AdapterVLAN {
     $vmAdapter = Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $vmAdapterName }
 
     if (-not $vmAdapter) {
-        # Try finding by partial match
-        $vmAdapter = Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$vmAdapterName*" } | Select-Object -First 1
+        # Try finding by partial match — warn user since this is imprecise
+        $candidates = @(Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$vmAdapterName*" })
+        if ($candidates.Count -eq 1) {
+            Write-OutputColor "  Note: Using partial match '$($candidates[0].Name)' for '$vmAdapterName'" -color "Warning"
+            $vmAdapter = $candidates[0]
+        } elseif ($candidates.Count -gt 1) {
+            Write-OutputColor "  Multiple adapters match '$vmAdapterName':" -color "Warning"
+            foreach ($c in $candidates) { Write-OutputColor "    - $($c.Name) (Switch: $($c.SwitchName))" -color "Info" }
+            Write-OutputColor "  Please use exact adapter name." -color "Error"
+        }
     }
 
     if (-not $vmAdapter) {

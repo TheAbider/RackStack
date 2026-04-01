@@ -207,7 +207,7 @@ function Set-VMIPAddress {
         # Save current config for rollback
         $previousIP = Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
         $previousRoute = Get-NetRoute -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-            Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' }
+            Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' } | Select-Object -First 1
 
         # Remove existing IPv4 configuration only
         Remove-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue

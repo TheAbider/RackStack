@@ -297,7 +297,9 @@ function Show-NTPStatus {
 
     # Test time accuracy
     try {
-        $ntpTest = w32tm /stripchart /computer:time.windows.com /dataonly /samples:1 2>&1
+        $ntpTestResult = Invoke-WithTimeout -ScriptBlock { w32tm /stripchart /computer:time.windows.com /dataonly /samples:1 2>&1 } -TimeoutSeconds 10 -Activity "Testing time accuracy"
+        $ntpTest = if (-not $ntpTestResult.TimedOut) { $ntpTestResult.Result } else { $null }
+        if ($null -eq $ntpTest) { Write-OutputColor "  Time accuracy test timed out (no internet?)" -color "Warning" }
         $lastLine = $ntpTest | Select-Object -Last 1
         if ("$lastLine" -match '([+-]?\d+\.\d+)s') {
             $regexMatches = $matches

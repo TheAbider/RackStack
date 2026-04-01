@@ -167,7 +167,7 @@ function Show-SessionSummary {
     # Detailed breakdown by category
     if ($script:SessionChanges.Count -gt 0) {
         Write-OutputColor "  Detailed Breakdown:" -color "Info"
-        Write-OutputColor ("-" * 60) -color "Info"
+        Write-OutputColor "  $("-" * 60)" -color "Info"
 
         $categories = @($script:SessionChanges | Group-Object -Property Category)
         foreach ($cat in $categories) {
@@ -179,7 +179,7 @@ function Show-SessionSummary {
         }
 
         Write-OutputColor "" -color "Info"
-        Write-OutputColor ("-" * 60) -color "Info"
+        Write-OutputColor "  $("-" * 60)" -color "Info"
         Write-OutputColor "  Total: $($script:SessionChanges.Count) change(s) across $($categories.Count) category(ies)" -color "Info"
     }
 

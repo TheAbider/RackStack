@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## v1.91.1
+
+- **Fix:** IP rollback now handles adapters with multiple default routes — previously could leave the adapter unconfigured if rollback failed.
+- **Fix:** VLAN partial adapter matching now warns about non-exact matches and blocks when multiple adapters match — previously could silently modify the wrong adapter.
+- **Fix:** NTP time accuracy test now uses `Invoke-WithTimeout` to prevent 30+ second hang when internet is unreachable.
+- **Fix:** File download resume now tracks elapsed time correctly — previously reported 0 seconds and wrong transfer speed after successful resume.
+- **Fix:** Session restore now properly restores SessionChanges from saved state — previously dropped them silently.
+- **Fix:** `Write-CenteredOutput` now respects the `$width` parameter (default 72) instead of ignoring it.
+- **Fix:** `Add-SessionChange` no longer calls `Get-Command` on every invocation — direct function call eliminates per-change overhead.
+- **Fix:** `Add-Favorite` now deduplicates — prevents adding the same item multiple times.
+- **Fix:** Session summary separator lines are now properly indented to match surrounding content.
+- 65 modules, 4528 tests, 163 CLI actions, 647 functions
+
 ## v1.91.0
 
 - **Fix (CRITICAL):** Hyper-V Replica certificate-based authentication now prompts for certificate selection from the local machine store — previously always failed due to missing thumbprint parameter.
