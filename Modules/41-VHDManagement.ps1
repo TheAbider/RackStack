@@ -506,11 +506,12 @@ function Show-VHDManagementMenu {
     Write-OutputColor "  │$("   [4]  Download All Missing VHDs".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("   [5]  VHD Health Check".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("   [6]  Optimize VHD (compact dynamic VHD)".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("   [6]  Show Windows Sysprep VHD Guide".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("   [7]  Show Linux cloud-init VHD Guide".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("   [7]  Show Windows Sysprep VHD Guide".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("   [8]  Show Linux cloud-init VHD Guide".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("   [8]  ◄ Back".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("   [9]  ◄ Back".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -896,14 +897,25 @@ function Start-VHDManagement {
                 Write-PressEnter
             }
             "6" {
-                Show-SysprepGuide
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Enter full path to VHD/VHDX file (or 'back' to cancel):" -color "Info"
+                $vhdPath = Read-Host "  Path"
+                $navResult = Test-NavigationCommand -UserInput $vhdPath
+                if (-not $navResult.ShouldReturn -and -not [string]::IsNullOrWhiteSpace($vhdPath)) {
+                    $vhdPath = $vhdPath.Trim('"', "'")
+                    Optimize-VHDFile -VHDPath $vhdPath
+                }
                 Write-PressEnter
             }
             "7" {
-                Show-LinuxVHDGuide
+                Show-SysprepGuide
                 Write-PressEnter
             }
             "8" {
+                Show-LinuxVHDGuide
+                Write-PressEnter
+            }
+            "9" {
                 return
             }
             default {

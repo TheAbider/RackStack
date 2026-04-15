@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.94.2
+    Automated Test Runner for RackStack v1.94.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -468,8 +468,6 @@ $requiredFunctions = @(
     # Pre-flight validation (05)
     "Test-FeaturePrerequisites",
     "Show-PreFlightCheck",
-    # Role Templates (37)
-    "Show-RoleTemplates",
     # Audit Log (04)
     "Show-AuditLog",
     # Storage Backends (59)
@@ -4220,48 +4218,6 @@ try {
 }
 
 # ============================================================================
-# SECTION 58: ROLE TEMPLATES TESTS
-# ============================================================================
-Write-SectionHeader "SECTION 58: ROLE TEMPLATES TESTS"
-
-Write-TestResult "Function exists: Show-RoleTemplates" ($null -ne (Get-Command Show-RoleTemplates -ErrorAction SilentlyContinue))
-
-# Verify wired in menu
-try {
-    $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
-    $hasMenuItem = $menuContent -match 'Server Role Template'
-    Write-TestResult "48-MenuDisplay: Server Role Template in Tools menu" $hasMenuItem
-} catch {
-    Write-TestResult "48-MenuDisplay: role templates" $false $_.Exception.Message
-}
-
-try {
-    $runnerContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
-    $hasRunner = $runnerContent -match '"8"' -and $runnerContent -match 'Show-RoleTemplates'
-    Write-TestResult "49-MenuRunner: Role Templates wired as [8]" $hasRunner
-} catch {
-    Write-TestResult "49-MenuRunner: role templates wiring" $false $_.Exception.Message
-}
-
-# Verify template definitions
-try {
-    $hcContent = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
-    $hasHyperV = $hcContent -match 'HYPER-V HOST' -and $hcContent -match 'Install-HyperVRole'
-    Write-TestResult "37-HealthCheck: Hyper-V Host template" $hasHyperV
-
-    $hasStandalone = $hcContent -match 'STANDALONE SERVER'
-    Write-TestResult "37-HealthCheck: Standalone Server template" $hasStandalone
-
-    $hasCluster = $hcContent -match 'CLUSTER NODE' -and $hcContent -match 'Install-FailoverClusteringFeature'
-    Write-TestResult "37-HealthCheck: Cluster Node template" $hasCluster
-
-    $hasAutoConfig = $hcContent -match 'Auto-configure all missing'
-    Write-TestResult "37-HealthCheck: Role templates offer auto-configure" $hasAutoConfig
-} catch {
-    Write-TestResult "37-HealthCheck: role templates" $false $_.Exception.Message
-}
-
-# ============================================================================
 # SECTION 59: AUDIT LOG TESTS
 # ============================================================================
 Write-SectionHeader "SECTION 59: AUDIT LOG TESTS"
@@ -4302,9 +4258,9 @@ try {
     $hasOps30 = $helpContent -match '\[30\].*Memory Pressure'
     Write-TestResult "34-Help: Operations shows all 30 items" $hasOps30
 
-    # Security section should show [10] Account Audit
-    $hasSecAudit = $helpContent -match '\[10\].*Account Audit'
-    Write-TestResult "34-Help: Security shows [10] Account Audit" $hasSecAudit
+    # Security section should show [10] Audit (Account Audit) and [11] Strong Pwd
+    $hasSecAudit = $helpContent -match '\[10\]\s+Audit' -and $helpContent -match '\[11\]\s+Strong'
+    Write-TestResult "34-Help: Security shows [10] Audit and [11] Strong Pwd" $hasSecAudit
 
     # Tools section should show [13] Scheduled Task Manager
     $hasTaskMgr = $helpContent -match '\[13\].*Scheduled Task Manager'
@@ -8709,8 +8665,6 @@ $iscsiContent2 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
 Write-TestResult "10-iSCSI: auto-config has Write-PressEnter" ($iscsiContent2 -match 'Auto-Configuration Complete![\s\S]{0,30}Write-PressEnter')
 $dcContent2 = Get-Content (Join-Path $modulesPath "20-DiskCleanup.ps1") -Raw
 Write-TestResult "20-DiskCleanup: QuickClean no internal PressEnter" (-not ($dcContent2 -match 'Quick Clean complete[\s\S]{0,300}Write-PressEnter'))
-$hcContent2 = Get-Content (Join-Path $modulesPath "37-HealthCheck.ps1") -Raw
-Write-TestResult "37-HealthCheck: role template has Write-PressEnter" ($hcContent2 -match 'template.*setup complete![\s\S]{0,200}Write-PressEnter')
 
 # CIM timeout wrapping (Invoke-WithTimeout)
 $djContent2 = Get-Content (Join-Path $modulesPath "12-DomainJoin.ps1") -Raw

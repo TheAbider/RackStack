@@ -55,7 +55,7 @@ function Show-Help {
     Write-OutputColor "  │$("  [4] Security & Access       RDP, PS Remoting, Firewall, Defender".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("      > [1] RDP  [2] PS Remoting  [3] Firewall  [4] FW Templates".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("      > [5] FW Search  [6] Defender Exclusions  [7] Defender Status".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("      > [8] Add Local Admin  [9] Disable Admin  [10] Account Audit".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("      > [8] Add Local Admin  [9] Disable Admin  [10] Audit  [11] Strong Pwd".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  [5] Tools & Utilities       NTP, Cleanup, Perf, Events, Services".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("      > [6] Network Diagnostics  [7] Server Readiness  [8] Roles".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  [6] Storage & Clustering    Disks, BitLocker, Dedup, Replica".PadRight(72))│" -color "Success"
@@ -140,15 +140,15 @@ function Show-Help {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  SETTINGS MENU".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  [1]-[4]  Theme, Undo, Help, Changelog".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [5]-[8]  Compare Profiles, Check Updates, Credentials, Remote Apply".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [1]-[4]   Theme, Undo, Help, Changelog".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [5]-[8]   Compare Profiles, Check Updates, Credentials, Remote Apply".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [9]  Favorites              Save and recall frequently used menus".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [10] Command History         Last 100 operations".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [11] Edit Environment Defaults  Organization values in defaults.json".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [12] Edit Custom Licenses       KMS/AVMA keys in defaults.json".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [13] View Audit Log             JSON audit log with rotation".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [14] What's New                 Highlights for the current version".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [15] System Info Banner         Hostname, IP, domain, OS, uptime".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [13]     View Audit Log         JSON audit log with rotation".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [14]     What's New             Highlights for the current version".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [15]     System Info Banner     Hostname, IP, domain, OS, uptime".PadRight(72))│" -color "Success"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -241,6 +241,10 @@ function Search-HelpTopics {
         @{ Title = "Configuration Export"; Keywords = @("export", "drift", "baseline", "compare", "config", "bitlocker", "firewall"); Description = "Export server configuration, save baselines, and detect drift" }
         @{ Title = "Replication"; Keywords = @("replica", "replication", "failover", "rpo", "hyper-v", "health"); Description = "Hyper-V Replica setup, health monitoring, RPO validation, and failover operations" }
         @{ Title = "Session Management"; Keywords = @("session", "favorite", "history", "resume", "undo", "theme", "color"); Description = "Favorites, command history, session resume, color themes, and undo operations" }
+        @{ Title = "What's New"; Keywords = @("whats", "new", "changes", "highlights", "release", "notes"); Description = "Highlights for the current version. Access from Settings > [14]" }
+        @{ Title = "System Info Banner"; Keywords = @("banner", "summary", "info", "hostname", "uptime", "quick"); Description = "Quick system summary: hostname, IP, domain, OS, uptime. Access from Settings > [15]" }
+        @{ Title = "Strong Password Generator"; Keywords = @("password", "strong", "generate", "random", "crypto", "secure"); Description = "Crypto-secure random password generator. Access from Security & Access > [11]" }
+        @{ Title = "VHD Optimize"; Keywords = @("vhd", "optimize", "compact", "shrink", "dynamic"); Description = "Compact dynamic VHD files to reclaim unused space. Access from VHD Management > [6]" }
         @{ Title = "Navigation"; Keywords = @("back", "exit", "home", "cancel", "menu", "refresh", "navigate"); Description = "Use 'back/b', 'exit/quit/q', 'home/main/m', or 'r' to refresh the dashboard" }
         @{ Title = "Storage"; Keywords = @("disk", "partition", "format", "volume", "storage", "backend", "s2d", "fc", "smb3"); Description = "Disk management, storage backends (iSCSI/FC/S2D/SMB3/NVMe-oF), and system disk protection" }
         @{ Title = "Security"; Keywords = @("bitlocker", "defender", "firewall", "rdp", "nla", "audit", "password", "admin"); Description = "BitLocker management, Defender exclusions, firewall templates/audit, RDP security, and local accounts" }
@@ -321,12 +325,16 @@ function Show-WhatsNew {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $changelogPath = Join-Path $PSScriptRoot "Changelog.md"
-    if (-not (Test-Path -LiteralPath $changelogPath)) {
-        $changelogPath = Join-Path (Split-Path $PSCommandPath) "Changelog.md"
+    $changelogPath = $null
+    foreach ($candidate in @(
+        (Join-Path $script:ModuleRoot "Changelog.md"),
+        (Join-Path $PSScriptRoot "Changelog.md"),
+        $(if ($script:ScriptPath) { Join-Path ([System.IO.Path]::GetDirectoryName($script:ScriptPath)) "Changelog.md" })
+    )) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { $changelogPath = $candidate; break }
     }
 
-    if (Test-Path -LiteralPath $changelogPath) {
+    if ($changelogPath) {
         $content = Get-Content -LiteralPath $changelogPath -Encoding UTF8
         $inCurrentVersion = $false
         $changes = @()
@@ -358,7 +366,8 @@ function Show-WhatsNew {
             Write-OutputColor "  No changelog entry found for v$($script:ScriptVersion)." -color "Warning"
         }
     } else {
-        Write-OutputColor "  Changelog file not found." -color "Warning"
+        Write-OutputColor "  Changelog file not bundled with this build." -color "Warning"
+        Write-OutputColor "  See https://github.com/TheAbider/RackStack/releases for full release notes." -color "Info"
     }
 
     Write-OutputColor "" -color "Info"
@@ -376,18 +385,21 @@ function Show-Changelog {
     Write-OutputColor "" -color "Info"
 
     # Load changelog from file (source of truth is Changelog.md)
-    $changelogPath = Join-Path $PSScriptRoot "Changelog.md"
-    if (-not (Test-Path -LiteralPath $changelogPath)) {
-        # Monolithic/EXE mode: try relative to script location
-        $changelogPath = Join-Path (Split-Path $PSCommandPath) "Changelog.md"
+    $changelogPath = $null
+    foreach ($candidate in @(
+        (Join-Path $script:ModuleRoot "Changelog.md"),
+        (Join-Path $PSScriptRoot "Changelog.md"),
+        $(if ($script:ScriptPath) { Join-Path ([System.IO.Path]::GetDirectoryName($script:ScriptPath)) "Changelog.md" })
+    )) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { $changelogPath = $candidate; break }
     }
-    if (Test-Path -LiteralPath $changelogPath) {
+    if ($changelogPath) {
         $changelog = Get-Content -LiteralPath $changelogPath -Raw -Encoding UTF8
         # Strip markdown headers for cleaner display
         $changelog = $changelog -replace '^# Changelog\s*\n', ''
         $changelog = $changelog -replace '(?m)^## ', ''
     } else {
-        $changelog = "(Changelog file not found. See GitHub releases for version history.)"
+        $changelog = "(Changelog file not bundled with this build.`nSee https://github.com/TheAbider/RackStack/releases for full version history.)"
     }
 
     # Display with pagination

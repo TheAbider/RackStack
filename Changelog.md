@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## v1.94.3
+
+- **Fix:** "What's New" and "View Changelog" now find `Changelog.md` reliably in modular, monolithic, and compiled EXE modes — previously used `$PSScriptRoot` inside a dot-sourced module, which resolved to the `Modules/` subdirectory and always missed the file. Uses `$script:ModuleRoot` with fallbacks and shows a link to GitHub Releases when the changelog isn't bundled with the build.
+- **Fix:** Settings menu help documentation now lists options `[14]` What's New and `[15]` System Info Banner.
+- **Fix:** Security & Access help documentation now lists option `[11]` Generate Strong Password.
+- **Fix:** VHD Optimization function (`Optimize-VHDFile`) is now reachable from the VHD Management menu (`[6]`) — previously implemented and advertised but had no caller.
+- **Fix:** Removed dead code: `Show-RoleTemplates` — an orphaned per-role checklist function whose name confusingly collided with the unrelated `Show-RoleTemplateSelector` installer; superseded by `Show-ServerReadiness` (Tools & Utilities `[7]`).
+- **Fix:** Test at `Run-Tests.ps1:4240` was silently passing because its regex partial-matched `Show-RoleTemplates` against `Show-RoleTemplateSelector`; the false-positive test block has been removed along with the dead function.
+- **Enhanced:** Help search (`help <keyword>`) now includes topics for What's New, System Info Banner, Strong Password, and VHD Optimize.
+- **Updated:** README.md function count refreshed.
+- 65 modules, 4520 tests, 167 CLI actions, 641 functions
+
 ## v1.94.2
 
 - **Fix:** "What's New" highlights view is now reachable from the Settings menu (`[14]`) — previously implemented but never wired into a menu.
