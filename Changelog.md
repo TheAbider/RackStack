@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.94.4
+
+- **Fix:** `Install-RackStack.ps1` bootstrap now retries GitHub API and download failures with exponential backoff — previously failed immediately on transient errors or HTTP 429 rate-limit, breaking fleet deploys via Ansible/PDQ/RMM tools. Honors `Retry-After` headers, retries on 408/429/500/502/503/504, up to 4 attempts with 2s → 4s → 8s → 16s backoff, adds explicit request timeouts.
+- **Hardened:** `Exit-Script` now disposes `$script:VMDeploymentCredential.Password` (SecureString) and clears the reference on exit — defense-in-depth so cached remote-deployment credentials don't linger in the PowerShell process longer than necessary.
+- **Tests:** Added regression tests asserting each v1.94.2/1.94.3 menu dispatcher actually calls the wired function (`Show-WhatsNew`, `Show-SystemBanner`, `New-StrongPassword`, `Optimize-VHDFile`). Prevents the "implemented but not reachable" class of bug found in the v1.94.2 audit from recurring.
+- **Tests:** Added regression tests asserting `Show-WhatsNew` and `Show-Changelog` resolve their changelog path via `$script:ModuleRoot` instead of the module-local `$PSScriptRoot`.
+- **Tests:** Added tests asserting `Install-RackStack.ps1` has the retry helper and that it's used by both the API call and the download.
+- 65 modules, 4535 tests, 167 CLI actions, 641 functions
+
 ## v1.94.3
 
 - **Fix:** "What's New" and "View Changelog" now find `Changelog.md` reliably in modular, monolithic, and compiled EXE modes — previously used `$PSScriptRoot` inside a dot-sourced module, which resolved to the `Modules/` subdirectory and always missed the file. Uses `$script:ModuleRoot` with fallbacks and shows a link to GitHub Releases when the changelog isn't bundled with the build.

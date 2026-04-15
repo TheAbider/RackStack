@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.94.3
+    Automated Test Runner for RackStack v1.94.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11935,6 +11935,54 @@ try {
     Write-TestResult "50-EntryPoint: action list has 167 entries" ($actionCount4 -eq 167) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
+}
+
+# v1.94.2 / v1.94.3 — newly wired features must be reachable from menus
+try {
+    $helpContent94 = Get-Content (Join-Path $modulesPath "34-Help.ps1") -Raw
+    $runnerContent94 = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
+    $vhdContent94 = Get-Content (Join-Path $modulesPath "41-VHDManagement.ps1") -Raw
+    $menuContent94 = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
+
+    # Settings dispatcher calls Show-WhatsNew on option 14 (v1.94.2 fix)
+    Write-TestResult "34-Help: Settings [14] dispatches to Show-WhatsNew" ($helpContent94 -match '"14"\s*\{\s*[\r\n\s]*Show-WhatsNew')
+
+    # Settings dispatcher calls Show-SystemBanner on option 15 (v1.94.2 fix)
+    Write-TestResult "34-Help: Settings [15] dispatches to Show-SystemBanner" ($helpContent94 -match '"15"\s*\{\s*[\r\n\s]*Show-SystemBanner')
+
+    # Security & Access dispatcher calls New-StrongPassword on option 11 (v1.94.2 fix)
+    Write-TestResult "49-MenuRunner: Security [11] dispatches to New-StrongPassword" ($runnerContent94 -match '"11"\s*\{\s*New-StrongPassword')
+
+    # Security & Access menu displays [11] option (v1.94.2 fix)
+    Write-TestResult "48-MenuDisplay: Security & Access lists [11] Generate Strong Password" ($menuContent94 -match '\[11\]\s+Generate Strong Password')
+
+    # Settings menu displays [14] and [15] options (v1.94.2 fix)
+    Write-TestResult "34-Help: Settings menu lists [14] What's New" ($helpContent94 -match "\[14\]\s+What's New")
+    Write-TestResult "34-Help: Settings menu lists [15] System Info Banner" ($helpContent94 -match '\[15\]\s+System Info Banner')
+
+    # VHD menu dispatcher calls Optimize-VHDFile on option 6 (v1.94.3 fix)
+    Write-TestResult "41-VHDManagement: Menu [6] dispatches to Optimize-VHDFile" ($vhdContent94 -match '"6"\s*\{[\s\S]{0,800}Optimize-VHDFile')
+    Write-TestResult "41-VHDManagement: Menu lists [6] Optimize VHD" ($vhdContent94 -match '\[6\]\s+Optimize VHD')
+
+    # Show-WhatsNew / Show-Changelog no longer use bare $PSScriptRoot (v1.94.3 fix)
+    Write-TestResult "34-Help: Show-WhatsNew uses ModuleRoot for changelog path" ($helpContent94 -match 'function Show-WhatsNew[\s\S]{0,2000}\$script:ModuleRoot')
+    Write-TestResult "34-Help: Show-Changelog uses ModuleRoot for changelog path" ($helpContent94 -match 'function Show-Changelog[\s\S]{0,2000}\$script:ModuleRoot')
+} catch {
+    Write-TestResult "v1.94.2/3 dispatcher tests" $false $_.Exception.Message
+}
+
+# v1.94.4 — bootstrap retry logic and credential hygiene
+try {
+    $bootstrapContent = Get-Content (Join-Path $PSScriptRoot "..\Install-RackStack.ps1") -Raw
+    Write-TestResult "Install-RackStack: has Invoke-WithRetry helper" ($bootstrapContent -match 'function Invoke-WithRetry')
+    Write-TestResult "Install-RackStack: retries GitHub API" ($bootstrapContent -match 'Invoke-WithRetry[\s\S]{0,500}Invoke-RestMethod')
+    Write-TestResult "Install-RackStack: retries downloads" ($bootstrapContent -match 'Invoke-WithRetry[\s\S]{0,500}Invoke-WebRequest')
+    Write-TestResult "Install-RackStack: handles HTTP 429" ($bootstrapContent -match '429')
+
+    $exitContent = Get-Content (Join-Path $modulesPath "47-ExitCleanup.ps1") -Raw
+    Write-TestResult "47-ExitCleanup: Exit-Script clears VMDeploymentCredential" ($exitContent -match 'VMDeploymentCredential[\s\S]{0,300}Dispose')
+} catch {
+    Write-TestResult "v1.94.4 Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

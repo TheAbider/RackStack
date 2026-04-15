@@ -84,10 +84,46 @@ if (-not (Test-Path -LiteralPath $InstallPath)) {
 
 $exePath = Join-Path $InstallPath "RackStack.exe"
 
+# Retry a web call with exponential backoff. Handles transient failures and HTTP 429 rate-limit.
+function Invoke-WithRetry {
+    param(
+        [Parameter(Mandatory)] [scriptblock]$Script,
+        [int]$MaxAttempts = 4,
+        [int]$InitialDelaySeconds = 2,
+        [string]$OperationName = "request"
+    )
+    $attempt = 0
+    $delay = $InitialDelaySeconds
+    while ($true) {
+        $attempt++
+        try {
+            return & $Script
+        }
+        catch {
+            $statusCode = $null
+            try { $statusCode = [int]$_.Exception.Response.StatusCode } catch { }
+            $transient = $statusCode -in @(408, 429, 500, 502, 503, 504) -or $statusCode -eq $null
+            if ($attempt -ge $MaxAttempts -or -not $transient) {
+                throw
+            }
+            # HTTP 429: respect Retry-After header if present
+            $retryAfter = $null
+            try { $retryAfter = [int]$_.Exception.Response.Headers['Retry-After'] } catch { }
+            $waitSeconds = if ($retryAfter -gt 0) { $retryAfter } else { $delay }
+            Write-Host "  $OperationName failed (attempt $attempt/$MaxAttempts): $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  Retrying in $waitSeconds seconds..." -ForegroundColor Yellow
+            Start-Sleep -Seconds $waitSeconds
+            $delay = [math]::Min($delay * 2, 60)
+        }
+    }
+}
+
 # Get latest release URL from GitHub API
 Write-Host "  Checking latest release..." -ForegroundColor Gray
 try {
-    $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/TheAbider/RackStack/releases/latest" -UseBasicParsing
+    $releaseInfo = Invoke-WithRetry -OperationName "GitHub API" -Script {
+        Invoke-RestMethod -Uri "https://api.github.com/repos/TheAbider/RackStack/releases/latest" -UseBasicParsing -TimeoutSec 30
+    }
     $version = $releaseInfo.tag_name
     $exeAsset = $releaseInfo.assets | Where-Object { $_.name -eq "RackStack.exe" } | Select-Object -First 1
 
@@ -100,7 +136,7 @@ try {
     Write-Host "  Latest version: $version" -ForegroundColor Green
 }
 catch {
-    Write-Host "  ERROR: Failed to query GitHub releases: $_" -ForegroundColor Red
+    Write-Host "  ERROR: Failed to query GitHub releases after retries: $_" -ForegroundColor Red
     exit 1
 }
 
@@ -126,11 +162,13 @@ if (Test-Path -LiteralPath $exePath) {
 if ($needsDownload) {
     Write-Host "  Downloading RackStack.exe ($([math]::Round($exeAsset.size / 1MB, 1)) MB)..." -ForegroundColor Gray
     try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $exePath -UseBasicParsing
+        Invoke-WithRetry -OperationName "Download" -Script {
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $exePath -UseBasicParsing -TimeoutSec 300
+        } | Out-Null
         Write-Host "  Downloaded to: $exePath" -ForegroundColor Green
     }
     catch {
-        Write-Host "  ERROR: Download failed: $_" -ForegroundColor Red
+        Write-Host "  ERROR: Download failed after retries: $_" -ForegroundColor Red
         exit 1
     }
 }

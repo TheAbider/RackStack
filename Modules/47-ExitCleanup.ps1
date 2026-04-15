@@ -6,6 +6,13 @@ function Exit-Script {
         Save-SessionState
     }
 
+    # Defense-in-depth: release any SecureString credentials held in script scope
+    # so they don't linger in memory longer than necessary.
+    if ($null -ne $script:VMDeploymentCredential) {
+        try { $script:VMDeploymentCredential.Password.Dispose() } catch { }
+        $script:VMDeploymentCredential = $null
+    }
+
     # Clean up temporary session files
     $stateFile = Join-Path $script:TempPath "session-state.json"
     if (Test-Path -LiteralPath $stateFile) {
