@@ -466,6 +466,7 @@ function Show-SecurityAccessMenu {
     Write-MenuItem "[8]  Add Local Admin Account"
     Write-MenuItem "[9]  Disable Built-in Admin" -Status $adminDisplay -StatusColor $adminColor
     Write-MenuItem "[10] Local Account Audit"
+    Write-MenuItem "[11] Generate Strong Password"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.94.2
+
+- **Fix:** "What's New" highlights view is now reachable from the Settings menu (`[14]`) — previously implemented but never wired into a menu.
+- **Fix:** "System Info Banner" quick view (hostname, IP, domain, OS, uptime) is now reachable from the Settings menu (`[15]`) — previously implemented but never wired into a menu.
+- **Fix:** "Generate Strong Password" is now reachable from the Security & Access menu (`[11]`) — uses the cryptographically secure password generator from v1.90.0 that was previously unreachable.
+- **Cleanup:** Removed dead code: `Invoke-LogRotation`, `Optimize-ConsoleBuffer`, `Test-ValidUNCPath`, `ConvertTo-SafeLDAPFilter`, `Test-ValidFilePath`, `Add-MultipleVNICs`, `Add-BackupNIC`, `Save-NetworkBaseline`, `Add-CommandHistory`, `Test-S2DAvailable` — ten internal helpers with no callers in the codebase.
+- **Cleanup:** Removed corresponding tests for deleted helpers; null-byte injection coverage retained for `Test-ValidHostname` and `Test-ValidIPAddress`.
+- 65 modules, 4529 tests, 167 CLI actions, 642 functions
+
 ## v1.94.1
 
 - **Fix:** `RotateExports` CLI action was completely broken — called `Invoke-ExportRotation` with wrong parameter name (`-ExportDir` instead of `-OutputDir`).

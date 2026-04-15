@@ -147,6 +147,8 @@ function Show-Help {
     Write-OutputColor "  │$("  [11] Edit Environment Defaults  Organization values in defaults.json".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [12] Edit Custom Licenses       KMS/AVMA keys in defaults.json".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [13] View Audit Log             JSON audit log with rotation".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [14] What's New                 Highlights for the current version".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [15] System Info Banner         Hostname, IP, domain, OS, uptime".PadRight(72))│" -color "Success"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -467,6 +469,14 @@ function Show-SettingsMenu {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  INFORMATION".PadRight(72))│" -color "Info"
+    Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+    Write-MenuItem "[14] What's New" -Status ("Version: " + $script:ScriptVersion) -StatusColor "Info"
+    Write-MenuItem "[15] System Info Banner"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "" -color "Info"
+
     Write-OutputColor "  [B] ◄ Back to Main Menu" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -535,6 +545,14 @@ function Start-Show-SettingsMenu {
                 Show-AuditLog
                 Write-PressEnter
             }
+            "14" {
+                Show-WhatsNew
+                Write-PressEnter
+            }
+            "15" {
+                Show-SystemBanner
+                Write-PressEnter
+            }
             "EXIT" {
                 Exit-Script
             }
@@ -545,7 +563,7 @@ function Start-Show-SettingsMenu {
                 return
             }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-15 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }

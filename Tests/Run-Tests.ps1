@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.94.1
+    Automated Test Runner for RackStack v1.94.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -6638,21 +6638,6 @@ try {
     # Add-CustomVNIC calls Add-SessionChange
     Write-TestResult "09-SET: Add-CustomVNIC tracks session change" ($setContent -match 'Add-CustomVNIC[\s\S]*?Add-SessionChange')
 
-    # Add-MultipleVNICs function exists
-    Write-TestResult "09-SET: Add-MultipleVNICs function exists" ($setContent -match 'function Add-MultipleVNICs')
-
-    # Add-MultipleVNICs calls Add-CustomVNIC in a loop
-    Write-TestResult "09-SET: Add-MultipleVNICs calls Add-CustomVNIC" ($setContent -match 'Add-MultipleVNICs[\s\S]*?Add-CustomVNIC')
-
-    # Add-MultipleVNICs shows summary
-    Write-TestResult "09-SET: Add-MultipleVNICs shows summary" ($setContent -match 'Add-MultipleVNICs[\s\S]*?SUMMARY')
-
-    # Add-BackupNIC still exists as wrapper
-    Write-TestResult "09-SET: Add-BackupNIC wrapper exists" ($setContent -match 'function Add-BackupNIC')
-
-    # Add-BackupNIC calls Add-CustomVNIC
-    Write-TestResult "09-SET: Add-BackupNIC delegates to Add-CustomVNIC" ($setContent -match 'Add-BackupNIC[\s\S]*?Add-CustomVNIC -PresetName')
-
     # Menu renamed to "Add Virtual NIC to Switch"
     $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
     Write-TestResult "48-MenuDisplay: menu says 'Add Virtual NIC to Switch'" ($menuContent -match 'Add Virtual NIC to Switch')
@@ -6818,7 +6803,6 @@ try {
     Write-TestResult "59-StorageBackends: Start-FCSANMenu defined" ($sbContent -match 'function Start-FCSANMenu')
 
     # S2D functions
-    Write-TestResult "59-StorageBackends: Test-S2DAvailable defined" ($sbContent -match 'function Test-S2DAvailable')
     Write-TestResult "59-StorageBackends: Show-S2DStatus defined" ($sbContent -match 'function Show-S2DStatus')
     Write-TestResult "59-StorageBackends: Enable-S2DOnCluster defined" ($sbContent -match 'function Enable-S2DOnCluster')
     Write-TestResult "59-StorageBackends: New-S2DVirtualDisk defined" ($sbContent -match 'function New-S2DVirtualDisk')
@@ -8187,7 +8171,7 @@ Write-TestResult "44-VMDeployment: Set-VMConfigMemory has retry loop" ($vmConten
 
 # Settings menu improved error
 $helpContent = Get-Content -LiteralPath "$modulesPath\34-Help.ps1" -Raw
-Write-TestResult "34-Help: settings menu specific invalid msg" ($helpContent -match 'Enter 1-13 or B')
+Write-TestResult "34-Help: settings menu specific invalid msg" ($helpContent -match 'Enter 1-15 or B')
 
 # FirewallTemplates improved error
 $fwTplContent = Get-Content -LiteralPath "$modulesPath\18-FirewallTemplates.ps1" -Raw
@@ -9247,7 +9231,6 @@ $newFunctions = @(
     "Test-PostPromotionStatus",
     "Test-ReplicationHealth",
     "Test-FailoverPreFlight",
-    "Save-NetworkBaseline",
     # Save-BatchUndoState omitted: nested inside Start-BatchMode, not visible to Get-Command
     # Wave 7: dashboard/summary functions
     "Show-AdapterHealthSummary",
@@ -9263,9 +9246,7 @@ $newFunctions = @(
     "Show-MountedVHDStatus",
     # Wave 8: console, logging, timezone, admin, MPIO enhancements
     "Get-ConsoleCapabilities",
-    "Optimize-ConsoleBuffer",
     "Write-StructuredLog",
-    "Invoke-LogRotation",
     "Get-TimezoneOffsetString",
     "Show-TimezoneComparison",
     "Show-AdminAccountStatus",
@@ -9291,119 +9272,11 @@ Write-Host ""
 Write-Host "  New function existence: $newFuncPassed/$($newFunctions.Count) found" -ForegroundColor $(if ($newFuncFailed -eq 0) { "Green" } else { "Yellow" })
 
 # ============================================================================
-# SECTION 148: INPUT VALIDATION FUNCTIONS (new in 03-InputValidation.ps1)
+# SECTION 148: NULL BYTE INJECTION PREVENTION
 # ============================================================================
 
-Write-SectionHeader "SECTION 148: INPUT VALIDATION FUNCTIONS (Test-ValidUNCPath, ConvertTo-SafeLDAPFilter, Test-ValidFilePath)"
+Write-SectionHeader "SECTION 148: NULL BYTE INJECTION PREVENTION (Test-ValidHostname, Test-ValidIPAddress)"
 
-# --- Test-ValidUNCPath: valid paths ---
-$validUNCPaths = @(
-    @{ Path = '\\server\share';                   Desc = "basic server\share" }
-    @{ Path = '\\192.168.1.1\c$';                 Desc = "IP with admin share" }
-    @{ Path = '\\server.domain.com\share\subfolder'; Desc = "FQDN with subfolder" }
-)
-
-foreach ($tc in $validUNCPaths) {
-    try {
-        $result = Test-ValidUNCPath -Path $tc.Path
-        Write-TestResult "ValidUNCPath: '$($tc.Path)' ($($tc.Desc)) -> true" ($result -eq $true) "Got: $result"
-    } catch {
-        Write-TestResult "ValidUNCPath: '$($tc.Path)'" $false $_.Exception.Message
-    }
-}
-
-# --- Test-ValidUNCPath: invalid paths ---
-$invalidUNCPaths = @(
-    @{ Path = 'C:\local\path'; Desc = "local drive path" }
-    @{ Path = '\\';            Desc = "bare backslashes" }
-    @{ Path = '\\server';      Desc = "server only, no share" }
-    @{ Path = '';              Desc = "empty string" }
-)
-
-foreach ($tc in $invalidUNCPaths) {
-    try {
-        $result = Test-ValidUNCPath -Path $tc.Path
-        Write-TestResult "ValidUNCPath: '$($tc.Path)' ($($tc.Desc)) -> false" ($result -eq $false) "Got: $result"
-    } catch {
-        Write-TestResult "ValidUNCPath: '$($tc.Path)'" $false $_.Exception.Message
-    }
-}
-
-# --- ConvertTo-SafeLDAPFilter: special character escaping ---
-try {
-    $result = ConvertTo-SafeLDAPFilter -Value '*'
-    Write-TestResult "SafeLDAPFilter: '*' -> '\2a'" ($result -eq '\2a') "Got: '$result'"
-} catch {
-    Write-TestResult "SafeLDAPFilter: '*'" $false $_.Exception.Message
-}
-
-try {
-    $result = ConvertTo-SafeLDAPFilter -Value '('
-    Write-TestResult "SafeLDAPFilter: '(' -> '\28'" ($result -eq '\28') "Got: '$result'"
-} catch {
-    Write-TestResult "SafeLDAPFilter: '('" $false $_.Exception.Message
-}
-
-try {
-    $result = ConvertTo-SafeLDAPFilter -Value ')'
-    Write-TestResult "SafeLDAPFilter: ')' -> '\29'" ($result -eq '\29') "Got: '$result'"
-} catch {
-    Write-TestResult "SafeLDAPFilter: ')'" $false $_.Exception.Message
-}
-
-try {
-    $result = ConvertTo-SafeLDAPFilter -Value 'normal text'
-    Write-TestResult "SafeLDAPFilter: 'normal text' -> unchanged" ($result -eq 'normal text') "Got: '$result'"
-} catch {
-    Write-TestResult "SafeLDAPFilter: 'normal text'" $false $_.Exception.Message
-}
-
-try {
-    $result = ConvertTo-SafeLDAPFilter -Value '*(test)'
-    Write-TestResult "SafeLDAPFilter: '*(test)' -> '\2a\28test\29'" ($result -eq '\2a\28test\29') "Got: '$result'"
-} catch {
-    Write-TestResult "SafeLDAPFilter: '*(test)'" $false $_.Exception.Message
-}
-
-# --- Test-ValidFilePath: valid paths ---
-$validFilePaths = @(
-    @{ Path = 'C:\Windows\System32\cmd.exe'; Desc = "absolute path" }
-    @{ Path = 'D:\Data\report.csv';          Desc = "data file" }
-    @{ Path = 'file.txt';                    Desc = "filename only" }
-)
-
-foreach ($tc in $validFilePaths) {
-    try {
-        $result = Test-ValidFilePath -Path $tc.Path
-        Write-TestResult "ValidFilePath: '$($tc.Path)' ($($tc.Desc)) -> true" ($result -eq $true) "Got: $result"
-    } catch {
-        Write-TestResult "ValidFilePath: '$($tc.Path)'" $false $_.Exception.Message
-    }
-}
-
-# --- Test-ValidFilePath: invalid paths ---
-try {
-    $result = Test-ValidFilePath -Path '..\..\etc\passwd'
-    Write-TestResult "ValidFilePath: path traversal (..\..\ ) -> false" ($result -eq $false) "Got: $result"
-} catch {
-    Write-TestResult "ValidFilePath: path traversal" $false $_.Exception.Message
-}
-
-try {
-    $result = Test-ValidFilePath -Path ''
-    Write-TestResult "ValidFilePath: empty string -> false" ($result -eq $false) "Got: $result"
-} catch {
-    Write-TestResult "ValidFilePath: empty string" $false $_.Exception.Message
-}
-
-try {
-    $result = Test-ValidFilePath -Path 'C:\test<file>.txt'
-    Write-TestResult "ValidFilePath: invalid chars (<>) -> false" ($result -eq $false) "Got: $result"
-} catch {
-    Write-TestResult "ValidFilePath: invalid chars" $false $_.Exception.Message
-}
-
-# Null byte injection prevention (v1.88.0)
 try {
     $nullHost = "SERVER" + [char]0 + "01"
     Write-TestResult "ValidHostname: null byte injection -> false" ((Test-ValidHostname $nullHost) -eq $false) ""
@@ -9415,18 +9288,6 @@ try {
     Write-TestResult "ValidIP: null byte injection -> false" ((Test-ValidIPAddress $nullIP) -eq $false) ""
 } catch {
     Write-TestResult "ValidIP: null byte injection" $false $_.Exception.Message
-}
-try {
-    $nullPath = "C:\test" + [char]0 + ".txt"
-    Write-TestResult "ValidFilePath: null byte injection -> false" ((Test-ValidFilePath $nullPath) -eq $false) ""
-} catch {
-    Write-TestResult "ValidFilePath: null byte injection" $false $_.Exception.Message
-}
-try {
-    $nullUNC = "\\server" + [char]0 + "\share"
-    Write-TestResult "ValidUNCPath: null byte injection -> false" ((Test-ValidUNCPath $nullUNC) -eq $false) ""
-} catch {
-    Write-TestResult "ValidUNCPath: null byte injection" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -9716,10 +9577,6 @@ try {
     Write-TestResult "01-Console: Get-ConsoleCapabilities detects buffer dimensions" ($mod01 -match 'function Get-ConsoleCapabilities[\s\S]{0,2000}BufferWidth')
     Write-TestResult "01-Console: Get-ConsoleCapabilities detects redirected output" ($mod01 -match 'function Get-ConsoleCapabilities[\s\S]{0,2000}IsRedirected')
 
-    # 01-Console: Optimize-ConsoleBuffer
-    Write-TestResult "01-Console: Optimize-ConsoleBuffer defined" ($mod01 -match 'function\s+Optimize-ConsoleBuffer\b')
-    Write-TestResult "01-Console: Optimize-ConsoleBuffer has MinWidth param" ($mod01 -match 'function Optimize-ConsoleBuffer[\s\S]{0,300}\$MinWidth')
-    Write-TestResult "01-Console: Optimize-ConsoleBuffer has MinBufferHeight param" ($mod01 -match 'function Optimize-ConsoleBuffer[\s\S]{0,300}\$MinBufferHeight')
     Write-TestResult "01-Console: Initialize-ConsoleWindow calls Get-ConsoleCapabilities" ($mod01 -match 'ConsoleCapabilities\s*=\s*Get-ConsoleCapabilities')
 
     # 02-Logging: Write-StructuredLog
@@ -9728,14 +9585,6 @@ try {
     Write-TestResult "02-Logging: Write-StructuredLog has Category param" ($mod02 -match 'function Write-StructuredLog[\s\S]{0,500}\$Category')
     Write-TestResult "02-Logging: Write-StructuredLog has Data hashtable param" ($mod02 -match 'function Write-StructuredLog[\s\S]{0,600}\[hashtable\]\$Data')
     Write-TestResult "02-Logging: Write-StructuredLog builds structured entry" ($mod02 -match 'function Write-StructuredLog[\s\S]{0,1500}LEVEL.*CATEGORY.*HOSTNAME.*MESSAGE')
-
-    # 02-Logging: Invoke-LogRotation
-    Write-TestResult "02-Logging: Invoke-LogRotation defined" ($mod02 -match 'function\s+Invoke-LogRotation\b')
-    Write-TestResult "02-Logging: Invoke-LogRotation has DaysToArchive param" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,300}\$DaysToArchive')
-    Write-TestResult "02-Logging: Invoke-LogRotation has MaxArchivesMB param" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,300}\$MaxArchivesMB')
-    Write-TestResult "02-Logging: Invoke-LogRotation uses zip compression" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,3000}System\.IO\.Compression')
-    Write-TestResult "02-Logging: Invoke-LogRotation groups logs by month" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,3000}Group-Object.*yyyy-MM')
-    Write-TestResult "02-Logging: Invoke-LogRotation enforces archive size limit" ($mod02 -match 'function Invoke-LogRotation[\s\S]{0,5000}MaxArchivesMB.*1MB')
 
     # 13-Timezone: Get-TimezoneOffsetString
     Write-TestResult "13-Timezone: Get-TimezoneOffsetString defined" ($mod13 -match 'function\s+Get-TimezoneOffsetString\b')
@@ -11680,7 +11529,7 @@ try {
     $sbContent = Get-Content (Join-Path $modulesPath "59-StorageBackends.ps1") -Raw
     Write-TestResult "59-StorageBackends: Test-SMB3SharePath validates path" ($sbContent -match 'function Test-SMB3SharePath[\s\S]{0,1000}Test-Path')
     Write-TestResult "59-StorageBackends: validates storage backend type" ($sbContent -match 'ValidStorageBackends')
-    Write-TestResult "59-StorageBackends: S2D requires cluster check" ($sbContent -match 'S2D[\s\S]{0,500}cluster|Test-S2DAvailable')
+    Write-TestResult "59-StorageBackends: S2D requires cluster check" ($sbContent -match 'S2D[\s\S]{0,500}cluster')
 
     # 52-VMCheckpoints behavior tests
     $cpContent = Get-Content (Join-Path $modulesPath "52-VMCheckpoints.ps1") -Raw

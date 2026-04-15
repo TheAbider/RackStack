@@ -561,51 +561,6 @@ function Add-CustomVNIC {
     Write-PressEnter
 }
 
-# Function to add multiple vNICs in one session
-function Add-MultipleVNICs {
-    $createdVNICs = @()
-
-    while ($true) {
-        if ($global:ReturnToMainMenu) { return }
-        Add-CustomVNIC
-        if ($global:ReturnToMainMenu) { return }
-
-        # Check what was just created (by looking at session changes)
-        $lastChange = $script:SessionChanges | Select-Object -Last 1
-        if ($null -ne $lastChange -and $lastChange.Description -match "Added vNIC '([^']+)'") {
-            $regexMatches = $matches
-            $createdVNICs += $regexMatches[1]
-        }
-
-        Write-OutputColor "" -color "Info"
-        if (-not (Confirm-UserAction -Message "Add another virtual NIC?")) {
-            break
-        }
-    }
-
-    if ($createdVNICs.Count -gt 0) {
-        Write-OutputColor "" -color "Info"
-        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  SUMMARY: Created $($createdVNICs.Count) virtual NIC(s)".PadRight(72))│" -color "Info"
-        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-        foreach ($name in $createdVNICs) {
-            $lineStr = "  - $name"
-            if ($lineStr.Length -gt 72) { $lineStr = $lineStr.Substring(0, 69) + "..." }
-            Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
-        }
-        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
-    }
-}
-
-# Function to add a backup NIC to an existing SET (backward-compatible wrapper)
-function Add-BackupNIC {
-    param (
-        [string]$BackupName = "Backup"
-    )
-
-    Add-CustomVNIC -PresetName $BackupName
-}
-
 # Function to create a standard (non-SET) virtual switch
 function New-StandardVSwitch {
     param (

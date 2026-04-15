@@ -334,17 +334,6 @@ function Start-FCSANMenu {
 # STORAGE SPACES DIRECT (S2D)
 # ============================================================================
 
-# Function to check if S2D is available
-function Test-S2DAvailable {
-    try {
-        $cluster = Get-Cluster -ErrorAction SilentlyContinue
-        if (-not $cluster) { return $false }
-        $s2d = Get-ClusterS2D -ErrorAction SilentlyContinue
-        return ($null -ne $s2d)
-    }
-    catch { return $false }
-}
-
 # Function to show S2D status
 function Show-S2DStatus {
     Clear-Host

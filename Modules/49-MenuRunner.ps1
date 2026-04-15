@@ -262,9 +262,10 @@ function Start-Show-SecurityAccessMenu {
             "8" { Add-LocalAdminAccount }
             "9" { Disable-BuiltInAdminAccount }
             "10" { Show-LocalAccountAudit }
+            "11" { New-StrongPassword; Write-PressEnter }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-10 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-11 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }
