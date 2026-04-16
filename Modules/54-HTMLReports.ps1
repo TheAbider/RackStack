@@ -937,16 +937,19 @@ function Get-ReadinessChecks {
         $checks.Add(@{ Category = "Storage"; Name = "C: Drive Space"; Value = "Check failed"; Status = "Warn" })
     }
 
-    # DNS Resolution
-    try {
-        $dnsResult = Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
-        if ($dnsResult) {
-            $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "Working"; Status = "OK" })
-        } else {
-            $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "No response"; Status = "Warn" })
-        }
-    } catch {
+    # DNS Resolution (wrapped in Invoke-WithTimeout — Resolve-DnsName has no native timeout
+    # and will block the HTML report indefinitely on a slow/unresponsive DNS server)
+    $dnsOutcome = Invoke-WithTimeout -TimeoutSeconds 8 -Activity "DNS resolution check" -ScriptBlock {
+        Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
+    }
+    if ($dnsOutcome.TimedOut) {
+        $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "Timeout (>8s)"; Status = "Warn" })
+    } elseif ($dnsOutcome.Failed) {
         $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "Failed"; Status = "Fail" })
+    } elseif ($dnsOutcome.Result) {
+        $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "Working"; Status = "OK" })
+    } else {
+        $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "No response"; Status = "Warn" })
     }
 
     # Time Sync

@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.94.6
+
+- **Hardened:** DNS resolution checks in `HealthDashboard` and HTML health reports are now wrapped in `Invoke-WithTimeout` with an 8-second cap. Previously used raw `Resolve-DnsName -ErrorAction Stop`, which has no native timeout — a slow/unresponsive DNS server would block the UI indefinitely.
+- **Fix:** `Enable-RDP` now reads the `fDenyTSConnections` registry value with `-ErrorAction SilentlyContinue` and null-checks the result. Previously, a missing registry key (stripped/hardened builds) could produce a confusing null-reference error instead of a clean fallback.
+- **Fix:** Test `ConvertFrom-AgentFilename: invalid file returns empty SiteNumbers` now wraps `.Count` in `@()`. PS 5.1 returns `$null` for `.Count` on single objects, so the test could spuriously fail if the function ever returned a single-element non-array.
+- 65 modules, 4535 tests, 167 CLI actions, 641 functions
+
 ## v1.94.5
 
 - **Fix:** `55-QoLFeatures.ps1` was missing its closing `#endregion` marker. `sync-to-monolithic.ps1` has been silently chopping the last line of the file (assumed to be `#endregion`) for an unknown number of releases, dropping a harmless trailing comment line every build. Restored the marker and hardened the sync script to throw explicitly if the marker is missing, so this class of silent corruption can't recur.

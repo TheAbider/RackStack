@@ -5,9 +5,9 @@ function Enable-RDP {
     Write-CenteredOutput "Remote Desktop" -color "Info"
 
     try {
-        # Check current RDP status
-        $rdpStatus = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections"
-        $rdpAlreadyEnabled = ($rdpStatus.fDenyTSConnections -eq 0)
+        # Check current RDP status (null-safe — registry key may be missing on stripped builds)
+        $rdpStatus = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -ErrorAction SilentlyContinue
+        $rdpAlreadyEnabled = ($null -ne $rdpStatus -and $rdpStatus.fDenyTSConnections -eq 0)
 
         if ($rdpAlreadyEnabled) {
             Write-OutputColor "  Remote Desktop is already enabled." -color "Info"
@@ -21,9 +21,9 @@ function Enable-RDP {
             # Enable Remote Desktop
             Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
 
-            # Verify
-            $rdpStatus = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections"
-            if ($rdpStatus.fDenyTSConnections -eq 0) {
+            # Verify (null-safe re-read)
+            $rdpStatus = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -ErrorAction SilentlyContinue
+            if ($null -ne $rdpStatus -and $rdpStatus.fDenyTSConnections -eq 0) {
                 Write-OutputColor "  Remote Desktop has been enabled." -color "Success"
             }
             else {

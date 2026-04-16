@@ -1564,17 +1564,21 @@ function Show-ServerReadiness {
     }
 
     # --- DNS RESOLUTION ---
+    # Wrapped in Invoke-WithTimeout because Resolve-DnsName has no native timeout and
+    # will block the UI indefinitely on a slow/unresponsive DNS server.
     $total++
-    try {
-        $dnsResult = Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
-        if ($dnsResult) {
-            $ready++
-            $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "Working"; Color = "Success"; Symbol = "[OK]" }
-        } else {
-            $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "No response"; Color = "Warning"; Symbol = "[--]" }
-        }
-    } catch {
+    $dnsOutcome = Invoke-WithTimeout -TimeoutSeconds 8 -Activity "DNS resolution check" -ScriptBlock {
+        Resolve-DnsName -Name "dns.msftncsi.com" -Type A -DnsOnly -ErrorAction Stop
+    }
+    if ($dnsOutcome.TimedOut) {
+        $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "Timeout (>8s)"; Color = "Warning"; Symbol = "[--]" }
+    } elseif ($dnsOutcome.Failed) {
         $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "Failed"; Color = "Error"; Symbol = "[!!]" }
+    } elseif ($dnsOutcome.Result) {
+        $ready++
+        $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "Working"; Color = "Success"; Symbol = "[OK]" }
+    } else {
+        $items += @{ Category = "NETWORK"; Name = "DNS Resolution"; Value = "No response"; Color = "Warning"; Symbol = "[--]" }
     }
 
     # --- TIME SYNC ---

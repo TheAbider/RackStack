@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.94.5
+    Automated Test Runner for RackStack v1.94.6
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -3855,7 +3855,7 @@ try {
 
     $invalid = ConvertFrom-AgentFilename -FileName "notanagent.txt"
     Write-TestResult "ConvertFrom-AgentFilename: invalid file returns Valid=false" (-not $invalid.Valid)
-    Write-TestResult "ConvertFrom-AgentFilename: invalid file returns empty SiteNumbers" ($invalid.SiteNumbers.Count -eq 0)
+    Write-TestResult "ConvertFrom-AgentFilename: invalid file returns empty SiteNumbers" (@($invalid.SiteNumbers).Count -eq 0)
 } catch {
     Write-TestResult "ConvertFrom-AgentFilename: structure" $false $_.Exception.Message
 }
@@ -9892,7 +9892,7 @@ try {
     Write-TestResult "54-HTMLReports: Readiness checks hostname" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,1000}Hostname")
     Write-TestResult "54-HTMLReports: Readiness checks RDP" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,2000}RDP")
     Write-TestResult "54-HTMLReports: Readiness checks firewall" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,4000}Firewall")
-    Write-TestResult "54-HTMLReports: Readiness checks defender" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,9000}Defender")
+    Write-TestResult "54-HTMLReports: Readiness checks defender" ($mod54 -match "Get-ReadinessChecks[\s\S]{0,10000}Defender")
     Write-TestResult "54-HTMLReports: Export-HTMLReadinessReport uses Get-ReadinessChecks" ($mod54 -match "Export-HTMLReadinessReport[\s\S]{0,2000}Get-ReadinessChecks")
 
     # Harden CLI action tests (v1.30.0)
