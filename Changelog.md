@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.94.7
+
+- **Hardened:** `Set-HostName` DNS name-collision check is now wrapped in `Invoke-WithTimeout` with a 5-second cap — previously used raw `Resolve-DnsName` which has no native timeout and could hang the hostname menu on a slow DNS server.
+- **Hardened:** VM deployment name-collision check (`Test-VMNameExists`) is now wrapped in `Invoke-WithTimeout` with a 5-second cap — previously could hang the VM deployment wizard.
+- **Security:** `Register-ScheduledExport` now validates `OutputDir` and `Sections` parameters with `[ValidateScript()]` that rejects double-quotes, backticks, `$`, and control characters. These characters could otherwise break out of the scheduled task argument string and inject additional command-line flags when the task runs.
+- **Updated:** Function count refreshed — historical changelog footers claimed 641 functions; the actual `function` keyword grep count across all modules is 615. This release aligns the footer with reality and going forward the count comes from an actual grep.
+- 65 modules, 4535 tests, 167 CLI actions, 615 functions
+
 ## v1.94.6
 
 - **Hardened:** DNS resolution checks in `HealthDashboard` and HTML health reports are now wrapped in `Invoke-WithTimeout` with an 8-second cap. Previously used raw `Resolve-DnsName -ErrorAction Stop`, which has no native timeout — a slow/unresponsive DNS server would block the UI indefinitely.

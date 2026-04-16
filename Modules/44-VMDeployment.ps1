@@ -288,17 +288,17 @@ function Test-VMNameInDNS {
         [string]$VMName
     )
 
-    try {
-        $dnsResult = Resolve-DnsName -Name $VMName -ErrorAction SilentlyContinue
-        if ($dnsResult) {
-            return @{
-                Exists = $true
-                IPAddress = ($dnsResult | Where-Object { $_.Type -eq "A" }).IPAddress
-            }
+    # Wrap DNS lookup in Invoke-WithTimeout — Resolve-DnsName has no native timeout
+    # and a slow DNS server would hang VM deployment indefinitely. VM names are
+    # validated to ASCII alnum + hyphen so literal embedding is safe.
+    $safeName = $VMName -replace "[^a-zA-Z0-9-]", ''
+    $dnsScript = [scriptblock]::Create("Resolve-DnsName -Name '$safeName' -ErrorAction SilentlyContinue")
+    $dnsOutcome = Invoke-WithTimeout -TimeoutSeconds 5 -Activity "VM name DNS check" -ScriptBlock $dnsScript
+    if (-not $dnsOutcome.TimedOut -and -not $dnsOutcome.Failed -and $dnsOutcome.Result) {
+        return @{
+            Exists = $true
+            IPAddress = ($dnsOutcome.Result | Where-Object { $_.Type -eq "A" }).IPAddress
         }
-    }
-    catch {
-        # DNS lookup failed - name doesn't exist
     }
 
     return @{

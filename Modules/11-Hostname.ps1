@@ -55,22 +55,23 @@ function Set-HostName {
         }
     }
 
-    # Check DNS for name collision (informational, non-blocking)
-    try {
-        $dnsResult = Resolve-DnsName -Name $newHostname -ErrorAction SilentlyContinue -DnsOnly
-        if ($null -ne $dnsResult) {
-            $resolvedIPs = @($dnsResult | Where-Object { $_.QueryType -eq 'A' -or $_.QueryType -eq 'AAAA' } | ForEach-Object { $_.IPAddress }) -join ', '
-            if ($resolvedIPs) {
-                Write-OutputColor "  Warning: '$newHostname' resolves in DNS to: $resolvedIPs" -color "Warning"
-                Write-OutputColor "  This may be a stale DNS record or an active machine." -color "Warning"
-                if (-not (Confirm-UserAction -Message "Continue with this name?")) {
-                    return
-                }
+    # Check DNS for name collision (informational, non-blocking, timeout-bounded)
+    # Wrapped in Invoke-WithTimeout because Resolve-DnsName has no native timeout
+    # and a slow DNS server would hang the Set-HostName menu indefinitely.
+    # Invoke-WithTimeout runs the script in a fresh local runspace without closure
+    # over outer variables, so we bake the hostname in via [scriptblock]::Create.
+    # Safe here because $newHostname was validated by Test-ValidHostname (ASCII alnum + hyphen only).
+    $dnsScript = [scriptblock]::Create("Resolve-DnsName -Name '$newHostname' -ErrorAction SilentlyContinue -DnsOnly")
+    $dnsOutcome = Invoke-WithTimeout -TimeoutSeconds 5 -Activity "DNS name-collision check" -ScriptBlock $dnsScript
+    if (-not $dnsOutcome.TimedOut -and -not $dnsOutcome.Failed -and $null -ne $dnsOutcome.Result) {
+        $resolvedIPs = @($dnsOutcome.Result | Where-Object { $_.QueryType -eq 'A' -or $_.QueryType -eq 'AAAA' } | ForEach-Object { $_.IPAddress }) -join ', '
+        if ($resolvedIPs) {
+            Write-OutputColor "  Warning: '$newHostname' resolves in DNS to: $resolvedIPs" -color "Warning"
+            Write-OutputColor "  This may be a stale DNS record or an active machine." -color "Warning"
+            if (-not (Confirm-UserAction -Message "Continue with this name?")) {
+                return
             }
         }
-    }
-    catch {
-        # DNS check failed (non-fatal) — proceed normally
     }
 
     Write-OutputColor "`n  Hostname Change Summary:" -color "Info"

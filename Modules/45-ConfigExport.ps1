@@ -2333,10 +2333,24 @@ function Get-ServerInventory {
 function Register-ScheduledExport {
     param(
         [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript({
+            # Reject characters that could break out of the scheduled task argument string
+            # (double-quote, backtick, `$`, and control chars). These would let the path
+            # inject additional command-line flags when composed into the task action.
+            if ($_ -match '["`$\x00-\x1f]') {
+                throw "OutputDir contains characters that are not allowed in a scheduled task path: $_"
+            }
+            $true
+        })]
         [string]$OutputDir,
         [Parameter(Mandatory=$true)]
         [ValidateSet('Hourly', 'Daily', 'Weekly')]
         [string]$Frequency,
+        [ValidateScript({
+            if ($_ -match '["`$\x00-\x1f]') { throw "Sections contains disallowed characters: $_" }
+            $true
+        })]
         [string]$Sections,
         [string]$OutputFormat = 'JSOn'
     )

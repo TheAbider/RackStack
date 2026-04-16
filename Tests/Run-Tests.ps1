@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.94.6
+    Automated Test Runner for RackStack v1.94.7
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10210,7 +10210,7 @@ try {
     $mod45 = Get-Content -Path (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw -ErrorAction SilentlyContinue
     Write-TestResult "45-ConfigExport: Register-ScheduledExport function exists" ($mod45 -match "function Register-ScheduledExport")
     Write-TestResult "45-ConfigExport: Register-ScheduledExport creates output dir" ($mod45 -match "Register-ScheduledExport[\s\S]{0,2000}New-Item.*Directory")
-    Write-TestResult "45-ConfigExport: Register-ScheduledExport uses ScriptPath" ($mod45 -match "Register-ScheduledExport[\s\S]{0,1000}ScriptPath")
+    Write-TestResult "45-ConfigExport: Register-ScheduledExport uses ScriptPath" ($mod45 -match "Register-ScheduledExport[\s\S]{0,2000}ScriptPath")
     Write-TestResult "45-ConfigExport: Register-ScheduledExport uses SYSTEM principal" ($mod45 -match "Register-ScheduledExport[\s\S]{0,4000}SYSTEM")
     Write-TestResult "45-ConfigExport: Register-ScheduledExport supports Hourly/Daily/Weekly" ($mod45 -match "Register-ScheduledExport[\s\S]{0,3000}Hourly[\s\S]{0,500}Daily[\s\S]{0,500}Weekly")
     Write-TestResult "45-ConfigExport: Unregister-ScheduledExport function exists" ($mod45 -match "function Unregister-ScheduledExport")
