@@ -216,10 +216,27 @@ if ($regionMap.Contains($qolRegionName)) {
         # Module 55 has the #region header; module 56 has its own #region header that we strip
         # Combined: mod55 content (including its #region but NOT its #endregion) + blank line + mod56 content (stripping its #region, keeping its #endregion which becomes the combined #endregion)
         $combined = @()
-        # Add all of mod55 except the last line (#endregion)
+
+        # Sanity checks — these caught a real bug in v1.94.5 where 55's trailing #endregion
+        # was missing and the sync was silently chopping an innocent comment line instead.
+        if ($mod55Content[0] -notmatch '^\s*#region') {
+            throw "55-QoLFeatures.ps1 must start with a #region marker (found: '$($mod55Content[0])')"
+        }
+        $mod55Trailing = ($mod55Content[-1]).Trim()
+        if ($mod55Trailing -ne '#endregion') {
+            throw "55-QoLFeatures.ps1 must end with '#endregion' (found: '$mod55Trailing'). Sync-to-monolithic strips the last line assuming it is #endregion."
+        }
+        if ($mod56Content[0] -notmatch '^\s*#region') {
+            throw "56-OperationsMenu.ps1 must start with a #region marker (found: '$($mod56Content[0])')"
+        }
+        if ($mod56Content[-1].Trim() -ne '#endregion') {
+            throw "56-OperationsMenu.ps1 must end with '#endregion' (found: '$($mod56Content[-1].Trim())')"
+        }
+
+        # Add all of mod55 except the last line (#endregion, validated above)
         $combined += $mod55Content[0..($mod55Content.Count - 2)]
         $combined += ""
-        # Add all of mod56 except the first line (#region)
+        # Add all of mod56 except the first line (#region, validated above)
         $combined += $mod56Content[1..($mod56Content.Count - 1)]
 
         $replacements += @{

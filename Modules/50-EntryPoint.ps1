@@ -11808,7 +11808,7 @@ function Start-BatchMode {
                     UndoScript  = $_.UndoScript.ToString()
                 }
             })
-            $serializableStack | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $batchUndoPath -Force -ErrorAction Stop
+            $serializableStack | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $batchUndoPath -Encoding UTF8 -Force -ErrorAction Stop
         }
         catch {
             # Don't break batch execution if persistence fails

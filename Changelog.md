@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.94.5
+
+- **Fix:** `55-QoLFeatures.ps1` was missing its closing `#endregion` marker. `sync-to-monolithic.ps1` has been silently chopping the last line of the file (assumed to be `#endregion`) for an unknown number of releases, dropping a harmless trailing comment line every build. Restored the marker and hardened the sync script to throw explicitly if the marker is missing, so this class of silent corruption can't recur.
+- **Fix:** Batch-mode undo state JSON (`50-EntryPoint.ps1:11811`) now writes with `-Encoding UTF8` — previously used the default ANSI encoding which would corrupt non-ASCII characters (e.g., international hostnames, Unicode passwords) saved into the batch undo trail, breaking undo on reload.
+- **Hardened:** First-boot script generator (`43-OfflineVHD.ps1:259`) now writes `SetupComplete.cmd` with explicit `-Encoding ASCII`. `cmd.exe` expects ASCII/ANSI and rejects UTF-16 BOM, so the explicit encoding prevents surprises on PowerShell hosts where `Default` differs from `ASCII`.
+- 65 modules, 4535 tests, 167 CLI actions, 641 functions
+
 ## v1.94.4
 
 - **Fix:** `Install-RackStack.ps1` bootstrap now retries GitHub API and download failures with exponential backoff — previously failed immediately on transient errors or HTTP 429 rate-limit, breaking fleet deploys via Ansible/PDQ/RMM tools. Honors `Retry-After` headers, retries on 408/429/500/502/503/504, up to 4 attempts with 2s → 4s → 8s → 16s backoff, adds explicit request timeouts.
