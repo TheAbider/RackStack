@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.94.8
+
+- **Fix:** Performance Dashboard now guards against the `Failed` path from `Invoke-WithTimeout`. Previously, if the runspace that wraps the CIM queries failed to start (e.g., runspace pool exhausted, insufficient resources), `$cimResult.Result` would be `$null` and the subsequent `$cimResult.Result.CPU` access would crash the dashboard. The guard mirrors the existing `TimedOut` handling and offers the same `[R]` retry path.
+- 65 modules, 4535 tests, 167 CLI actions, 615 functions
+
 ## v1.94.7
 
 - **Hardened:** `Set-HostName` DNS name-collision check is now wrapped in `Invoke-WithTimeout` with a 5-second cap — previously used raw `Resolve-DnsName` which has no native timeout and could hang the hostname menu on a slow DNS server.

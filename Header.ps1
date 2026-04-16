@@ -30,7 +30,7 @@
     7h3 4b1d3r
 
 .VERSION
-    1.94.7
+    1.94.8
 
 .LAST UPDATED
     04/15/2026

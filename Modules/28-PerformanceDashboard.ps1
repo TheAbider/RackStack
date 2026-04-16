@@ -25,6 +25,15 @@ function Show-PerformanceDashboard {
             return
         }
 
+        # Guard against Failed path from Invoke-WithTimeout (e.g., runspace creation failed).
+        # In that case Result is $null and naive .CPU/.OS access would crash.
+        if ($cimResult.Failed -or $null -eq $cimResult.Result) {
+            Write-OutputColor "  WMI/CIM query failed: $($cimResult.Error). Press [R] to retry." -color "Error"
+            $choice = Read-Host "  "
+            if ($choice -and $choice.ToLower().Trim() -eq "r") { continue }
+            return
+        }
+
         $cpuAll = $cimResult.Result.CPU
         $os = $cimResult.Result.OS
 
