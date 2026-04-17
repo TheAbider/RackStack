@@ -236,6 +236,16 @@ function Show-StorageReplicaManagement {
                         Write-OutputColor "  Storage Replica partnership created!" -color "Success"
                         Add-SessionChange -Category "Storage" -Description "Created SR partnership: $srcServer -> $destServer"
                         Clear-MenuCache
+
+                        # Register manual-only undo — removing an SR partnership breaks replication.
+                        # Runs only if user explicitly invokes "Undo last change".
+                        $srcEsc = $srcServer -replace "'", "''"
+                        $rgEsc = $rgName -replace "'", "''"
+                        Add-UndoAction -Category "Storage" -Description "Remove SR partnership '$rgName' (breaks replication)" -UndoScript {
+                            param($SrcServer, $RGName)
+                            Write-Host "  Removing SR partnership '$RGName' on '$SrcServer'..." -ForegroundColor Yellow
+                            Remove-SRPartnership -SourceComputerName $SrcServer -SourceRGName $RGName -Confirm:$false -ErrorAction Stop
+                        }.GetNewClosure() -UndoParams @{ SrcServer = $srcEsc; RGName = $rgEsc }
                     }
                     catch {
                         Write-OutputColor "  Failed: $_" -color "Error"

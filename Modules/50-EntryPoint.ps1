@@ -320,6 +320,7 @@ function Assert-Elevation {
                 @{ Action = 'Readiness';        Description = 'Pre-deployment readiness checklist' }
                 @{ Action = 'BaselineDiff';     Description = 'Compare two saved baselines' }
                 @{ Action = 'RotateExports';    Description = 'Prune old export files by retention count' }
+                @{ Action = 'SelfTest';         Description = 'Tool self-diagnostic (modules, version, defaults, FileServer)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -846,6 +847,131 @@ function Invoke-CLIAction {
                 Write-OutputColor "  RotateExports failed: $_" -color "Error"
                 [Environment]::Exit(1)
             }
+        }
+        'SelfTest' {
+            Write-OutputColor "  Running $($script:ToolFullName) self-test..." -color "Info"
+            Write-OutputColor "" -color "Info"
+
+            $checks = @()
+
+            # Check 1: PowerShell version >= 5.1 (hard requirement for the tool)
+            $psv = $PSVersionTable.PSVersion
+            $psOk = $psv.Major -gt 5 -or ($psv.Major -eq 5 -and $psv.Minor -ge 1)
+            $checks += @{ Name = 'PowerShellVersion'; Passed = $psOk; Detail = "$($psv.Major).$($psv.Minor).$($psv.Build)" }
+
+            # Check 2: Running elevated (admin)
+            $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            $checks += @{ Name = 'Elevated'; Passed = $isAdmin; Detail = if ($isAdmin) { 'Admin' } else { 'NOT admin — many features will fail' } }
+
+            # Check 3: Version consistency across Header.ps1 / RackStack.ps1 / $script:ScriptVersion (modular only)
+            $verDetail = "ScriptVersion=$($script:ScriptVersion)"
+            $verOk = $true
+            if ($script:ModuleRoot) {
+                foreach ($relFile in @('Header.ps1', 'RackStack.ps1')) {
+                    $p = Join-Path $script:ModuleRoot $relFile
+                    if (Test-Path -LiteralPath $p) {
+                        $c = Get-Content -LiteralPath $p -Raw -ErrorAction SilentlyContinue
+                        if ($c -match '\.VERSION\s*\r?\n\s*([\d.]+)') {
+                            $regexMatches = $matches
+                            $otherVer = $regexMatches[1]
+                            if ($otherVer -ne $script:ScriptVersion) { $verOk = $false; $verDetail += " $relFile=$otherVer" }
+                        }
+                    }
+                }
+            }
+            $checks += @{ Name = 'VersionConsistency'; Passed = $verOk; Detail = $verDetail }
+
+            # Check 4: Module count (65 expected — modular mode only)
+            $modulesDir = if ($script:ModuleRoot) { Join-Path $script:ModuleRoot 'Modules' } else { $null }
+            if ($modulesDir -and (Test-Path -LiteralPath $modulesDir)) {
+                $modCount = @(Get-ChildItem -LiteralPath $modulesDir -Filter '*.ps1' -ErrorAction SilentlyContinue).Count
+                $modOk = $modCount -eq 65
+                $checks += @{ Name = 'ModuleCount'; Passed = $modOk; Detail = "$modCount found (65 expected)" }
+            } else {
+                $checks += @{ Name = 'ModuleCount'; Passed = $true; Detail = 'Skipped (monolithic/EXE mode)' }
+            }
+
+            # Check 5: defaults.json validity — parses if present, missing is acceptable
+            $defOk = $true
+            $defDetail = 'Not present (optional)'
+            if ($script:DefaultsPath -and (Test-Path -LiteralPath $script:DefaultsPath)) {
+                try {
+                    $null = Get-Content -LiteralPath $script:DefaultsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                    $defDetail = 'Parses as JSON'
+                } catch {
+                    $defOk = $false
+                    $defDetail = "Parse error: $($_.Exception.Message)"
+                }
+            }
+            $checks += @{ Name = 'DefaultsJsonValid'; Passed = $defOk; Detail = $defDetail }
+
+            # Check 6: Temp path exists and is writable (transcripts, reports, exports land here)
+            $tempOk = $false
+            $tempDetail = $script:TempPath
+            try {
+                if (-not (Test-Path -LiteralPath $script:TempPath)) {
+                    New-Item -Path $script:TempPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                }
+                $probe = Join-Path $script:TempPath "selftest_$([guid]::NewGuid().ToString('N').Substring(0,8)).tmp"
+                Set-Content -LiteralPath $probe -Value 'probe' -ErrorAction Stop
+                Remove-Item -LiteralPath $probe -Force -ErrorAction Stop
+                $tempOk = $true
+            } catch {
+                $tempDetail = "$($script:TempPath) not writable: $($_.Exception.Message)"
+            }
+            $checks += @{ Name = 'TempPathWritable'; Passed = $tempOk; Detail = $tempDetail }
+
+            # Check 7: FileServer reachability — HEAD request with 5s timeout (skipped if not configured)
+            if (Test-FileServerConfigured) {
+                $fsOk = $false
+                $fsDetail = 'Unreachable'
+                try {
+                    $agentFolder = if ($script:AgentInstaller.FolderName) { $script:AgentInstaller.FolderName } else { 'Agents' }
+                    $testUrl = Get-FileServerUrl -FilePath $agentFolder
+                    $req = [System.Net.WebRequest]::Create($testUrl)
+                    $req.Method = 'HEAD'
+                    $req.Timeout = 5000
+                    $hdrs = Get-FileServerHeaders
+                    foreach ($k in $hdrs.Keys) { $req.Headers.Add($k, $hdrs[$k]) }
+                    $resp = $req.GetResponse()
+                    try { $fsOk = $true; $fsDetail = "HTTP $([int]$resp.StatusCode)" } finally { $resp.Close() }
+                } catch {
+                    # 400/403 on a HEAD to a listing endpoint still proves reachability
+                    if ($_.Exception.Message -match '\(4\d\d\)') { $fsOk = $true; $fsDetail = "Reachable (HTTP 4xx on HEAD is normal for listing endpoints)" }
+                    else { $fsDetail = "Unreachable: $($_.Exception.Message)" }
+                }
+                $checks += @{ Name = 'FileServerReachable'; Passed = $fsOk; Detail = $fsDetail }
+            } else {
+                $checks += @{ Name = 'FileServerReachable'; Passed = $true; Detail = 'Not configured (optional)' }
+            }
+
+            # Check 8: Agent installer config — informational
+            $aiDetail = if (Test-AgentInstallerConfigured) { "Configured ($($script:AgentInstaller.ToolName))" } else { 'Not configured (optional)' }
+            $checks += @{ Name = 'AgentInstallerConfigured'; Passed = $true; Detail = $aiDetail }
+
+            # Display + aggregate
+            $failed = @($checks | Where-Object { -not $_.Passed }).Count
+            foreach ($chk in $checks) {
+                $status = if ($chk.Passed) { '[PASS]' } else { '[FAIL]' }
+                $color = if ($chk.Passed) { 'Success' } else { 'Error' }
+                Write-OutputColor "  $status $($chk.Name): $($chk.Detail)" -color $color
+            }
+            Write-OutputColor "" -color "Info"
+            $totalChecks = @($checks).Count
+            $resultColor = if ($failed -eq 0) { 'Success' } else { 'Error' }
+            Write-OutputColor "  SelfTest: $($totalChecks - $failed)/$totalChecks passed, $failed failed" -color $resultColor
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $jsonResult = @{
+                    Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SelfTest'
+                    Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    TotalChecks = $totalChecks; Passed = ($totalChecks - $failed); Failed = $failed
+                    Success = ($failed -eq 0); Checks = $checks
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10 -Compress)
+            }
+
+            if ($failed -gt 0) { [Environment]::Exit(1) }
         }
         'Batch' {
             if (-not $script:CLIConfig) {

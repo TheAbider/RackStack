@@ -356,6 +356,16 @@ function Add-NodeToCluster {
         Write-OutputColor "  Successfully joined cluster '$clusterName'!" -color "Success"
         Add-SessionChange -Category "Cluster" -Description "Joined cluster $clusterName"
         Clear-MenuCache
+
+        # Register manual-only undo — removing a node from a production cluster is a heavy operation.
+        # The user must explicitly invoke "Undo last change" to trigger this; it never runs automatically.
+        $nodeEsc = $env:COMPUTERNAME -replace "'", "''"
+        $clusterEsc = $clusterName -replace "'", "''"
+        Add-UndoAction -Category "Cluster" -Description "Leave cluster '$clusterName'" -UndoScript {
+            param($Node, $Cluster)
+            Write-Host "  Removing node '$Node' from cluster '$Cluster'..." -ForegroundColor Yellow
+            Remove-ClusterNode -Cluster $Cluster -Name $Node -Force -ErrorAction Stop
+        }.GetNewClosure() -UndoParams @{ Node = $nodeEsc; Cluster = $clusterEsc }
     }
     catch {
         Write-OutputColor "  Failed to join cluster: $_" -color "Error"

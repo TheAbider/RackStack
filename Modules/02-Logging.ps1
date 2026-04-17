@@ -42,10 +42,18 @@ function Write-StructuredLog {
     $entry = "${timestamp} | ${Level} | ${Category} | ${hostname} | ${Message}"
 
     if ($null -ne $Data -and $Data.Count -gt 0) {
+        # Auto-redact values whose KEY looks like a secret — defense-in-depth so a future caller
+        # that accidentally routes a credential through Write-StructuredLog can't leak it to disk.
+        # Matches the name, not the value; value-pattern matching would have too many false positives.
+        $secretKeyPattern = '(?i)(password|passwd|pwd|secret|token|apikey|api[-_]?key|credential|clientsecret|authorization|bearer)'
         $kvPairs = @()
         foreach ($key in $Data.Keys) {
             $val = $Data[$key]
-            if ($null -eq $val) { $val = "(null)" }
+            if ($null -eq $val) {
+                $val = "(null)"
+            } elseif ($key -match $secretKeyPattern) {
+                $val = "[REDACTED]"
+            }
             $kvPairs += "${key}=$val"
         }
         $entry += " | $($kvPairs -join '; ')"

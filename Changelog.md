@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.95.0
+
+- **New:** `-Action SelfTest` — a tool self-diagnostic action for operators running `RackStack.exe` across a fleet. Verifies PowerShell version, elevation, version consistency across `Header.ps1`/`RackStack.ps1`/`$script:ScriptVersion`, module count (65 in modular mode), `defaults.json` parse validity, temp-path writability, FileServer reachability (HEAD with 5s timeout), and agent-installer configuration. Supports `-OutputFormat JSON` for structured monitoring; exits `1` if any check fails.
+- **New:** Expanded help search topics. The interactive `help <keyword>` searcher now recognises 9 new category topics covering CLI actions that previously only appeared in `-ListActions`: SelfTest, Security Audits, Network Audits, Storage & Cluster Audits, Hyper-V & VM Audits, System Audits, Fleet & Reporting, Server Roles Audit, and Scores & Dashboards. Each topic lists its specific action names so `help security` now discovers `TLSAudit`, `KerberosAudit`, `CredGuardAudit`, etc.
+- **New:** `Write-StructuredLog` now auto-redacts values for keys that look like secrets (matches `password`, `passwd`, `pwd`, `secret`, `token`, `apikey`, `api_key`, `credential`, `clientsecret`, `authorization`, `bearer` — case-insensitive). Values are replaced with `[REDACTED]` before the line is written to disk. Defense-in-depth so a future caller that accidentally routes a credential through structured logging can't leak it to the transcript or log file.
+- **New:** Joining a failover cluster (`Add-ClusterNode`) and creating a Storage Replica partnership (`New-SRPartnership`) now register a **manual-only** undo entry — the user can trigger it explicitly via "Undo last change" but it never runs automatically. The undo script paths are single-quote-escaped to prevent injection. Removing a cluster node or breaking replication is destructive, so the undo is opt-in rather than opt-out.
+- 65 modules, 4535 tests, 168 CLI actions, 615 functions
+
 ## v1.94.11
 
 - **Fix:** `-Action Batch -Silent` no longer cancels on the confirmation prompt. Previously `Confirm-UserAction` in silent mode returned the DefaultNo answer, so every headless batch run aborted before doing anything. The confirmation is now skipped entirely in `-Silent` mode (the caller already committed by invoking Batch with a config).
