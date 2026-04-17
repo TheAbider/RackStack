@@ -173,6 +173,7 @@ function Join-Domain {
 
     $maxAttempts = $script:MaxRetryAttempts
     $attempt = 0
+    $lastError = $null  # preserve last exception across retries so the final summary can include it
 
     while ($attempt -lt $maxAttempts) {
         $attempt++
@@ -201,6 +202,7 @@ function Join-Domain {
         }
         catch {
             $errMsg = $_.Exception.Message
+            $lastError = $errMsg  # keep the most recent failure for the retry-exhaustion summary
             Write-RackStackError -Code "RS-2009" -Detail $errMsg
 
             # Provide specific guidance based on error
@@ -234,5 +236,8 @@ function Join-Domain {
     }
 
     Write-OutputColor "  Maximum attempts reached. Domain join failed." -color "Critical"
+    if ($lastError) {
+        Write-OutputColor "  Last error: $lastError" -color "Critical"
+    }
 }
 #endregion

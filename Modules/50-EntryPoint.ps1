@@ -321,6 +321,8 @@ function Assert-Elevation {
                 @{ Action = 'BaselineDiff';     Description = 'Compare two saved baselines' }
                 @{ Action = 'RotateExports';    Description = 'Prune old export files by retention count' }
                 @{ Action = 'SelfTest';         Description = 'Tool self-diagnostic (modules, version, defaults, FileServer)' }
+                @{ Action = 'CheckForUpdate';   Description = 'Compare running version to latest GitHub release (exit 2 if newer)' }
+                @{ Action = 'ExportLogs';       Description = 'Bundle transcripts + session state + env snapshot into a support zip' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -846,6 +848,170 @@ function Invoke-CLIAction {
             } catch {
                 Write-OutputColor "  RotateExports failed: $_" -color "Error"
                 [Environment]::Exit(1)
+            }
+        }
+        'CheckForUpdate' {
+            # Query GitHub releases for the latest version and compare to $script:ScriptVersion.
+            # Exit codes: 0 = up to date, 2 = newer version available, 1 = error reaching GitHub.
+            Write-OutputColor "  Checking for updates..." -color "Info"
+            $apiUrl = 'https://api.github.com/repos/TheAbider/RackStack/releases/latest'
+            $currentVer = $script:ScriptVersion
+            try {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+                $headers = @{ 'User-Agent' = "$($script:ToolName)/$currentVer" }
+                $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+                $latestTag = [string]$release.tag_name
+                $latestVer = $latestTag -replace '^v', ''
+
+                # Naïve-but-correct version compare: coerce "1.95.0" -> [version]
+                $cmp = 0
+                try {
+                    $cur = [version]($currentVer -replace '[^\d.]')
+                    $lat = [version]($latestVer -replace '[^\d.]')
+                    if ($lat -gt $cur) { $cmp = 1 } elseif ($lat -lt $cur) { $cmp = -1 }
+                } catch {
+                    # Fall back to string compare if parse fails
+                    if ($latestVer -ne $currentVer) { $cmp = 1 }
+                }
+
+                $updateAvailable = ($cmp -gt 0)
+                $status = if ($updateAvailable) { 'update-available' } elseif ($cmp -lt 0) { 'ahead-of-release' } else { 'up-to-date' }
+
+                if ($updateAvailable) {
+                    Write-OutputColor "  Update available: $currentVer -> $latestVer" -color "Warning"
+                    Write-OutputColor "  Release URL: $($release.html_url)" -color "Info"
+                    Write-OutputColor "  Published: $($release.published_at)" -color "Info"
+                } elseif ($cmp -lt 0) {
+                    Write-OutputColor "  Running version ($currentVer) is ahead of latest release ($latestVer)." -color "Info"
+                } else {
+                    Write-OutputColor "  You are running the latest version ($currentVer)." -color "Success"
+                }
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $currentVer; Action = 'CheckForUpdate'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        CurrentVersion  = $currentVer
+                        LatestVersion   = $latestVer
+                        UpdateAvailable = $updateAvailable
+                        Status          = $status
+                        ReleaseUrl      = [string]$release.html_url
+                        PublishedAt     = [string]$release.published_at
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10 -Compress)
+                }
+
+                if ($updateAvailable) { [Environment]::Exit(2) }
+            } catch {
+                Write-OutputColor "  CheckForUpdate failed: $($_.Exception.Message)" -color "Error"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $errJson = @{
+                        Tool = $script:ToolFullName; Version = $currentVer; Action = 'CheckForUpdate'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        Success = $false; Error = $_.Exception.Message
+                    }
+                    Write-Output ($errJson | ConvertTo-Json -Depth 10 -Compress)
+                }
+                [Environment]::Exit(1)
+            }
+        }
+        'ExportLogs' {
+            # Bundle transcript + structured log + session state + SelfTest snapshot into a zip.
+            # Useful for support tickets — one attachment with everything an operator needs.
+            Write-OutputColor "  Bundling logs for support..." -color "Info"
+            $exportDir = if ($script:CLIConfig) { $script:CLIConfig.Trim('"') } else { $script:TempPath }
+            if (-not (Test-Path -LiteralPath $exportDir)) {
+                try { New-Item -Path $exportDir -ItemType Directory -Force -ErrorAction Stop | Out-Null }
+                catch {
+                    Write-OutputColor "  ERROR: Export directory not creatable: $exportDir" -color "Error"
+                    [Environment]::Exit(1)
+                }
+            }
+            $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+            $bundleName = "$($script:ToolName)_LogBundle_${env:COMPUTERNAME}_${stamp}"
+            $stageDir = Join-Path $env:TEMP $bundleName
+            $zipPath = Join-Path $exportDir "$bundleName.zip"
+            $collected = @()
+            try {
+                New-Item -Path $stageDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+
+                # 1. Transcript (current session, if any)
+                if ($script:TranscriptPath -and (Test-Path -LiteralPath $script:TranscriptPath)) {
+                    try {
+                        # Flush by stopping & restarting transcript — keeps logging alive after we zip
+                        Stop-ScriptTranscript
+                        Copy-Item -LiteralPath $script:TranscriptPath -Destination $stageDir -Force -ErrorAction Stop
+                        Start-ScriptTranscript | Out-Null
+                        $collected += (Split-Path $script:TranscriptPath -Leaf)
+                    } catch { }
+                }
+
+                # 2. Most recent transcripts from TempPath (up to 10, for failure context)
+                try {
+                    $recent = @(Get-ChildItem -LiteralPath $script:TempPath -Filter "$($script:ToolName)Config_*.log" -ErrorAction SilentlyContinue |
+                                Sort-Object LastWriteTime -Descending | Select-Object -First 10)
+                    foreach ($f in $recent) {
+                        $destName = $f.Name
+                        if (-not (Test-Path -LiteralPath (Join-Path $stageDir $destName))) {
+                            Copy-Item -LiteralPath $f.FullName -Destination $stageDir -Force -ErrorAction SilentlyContinue
+                            $collected += "$destName"
+                        }
+                    }
+                } catch { }
+
+                # 3. Session state + favourites (no credentials — these files don't carry secrets)
+                foreach ($p in @($script:SessionStatePath, $script:FavoritesPath, $script:HistoryPath)) {
+                    if ($p -and (Test-Path -LiteralPath $p)) {
+                        try { Copy-Item -LiteralPath $p -Destination $stageDir -Force -ErrorAction SilentlyContinue; $collected += (Split-Path $p -Leaf) } catch { }
+                    }
+                }
+
+                # 4. Current changelog (version context for the support reader)
+                if ($script:ModuleRoot) {
+                    $clog = Join-Path $script:ModuleRoot 'Changelog.md'
+                    if (Test-Path -LiteralPath $clog) {
+                        try { Copy-Item -LiteralPath $clog -Destination $stageDir -Force -ErrorAction SilentlyContinue; $collected += 'Changelog.md' } catch { }
+                    }
+                }
+
+                # 5. Environment snapshot (not secrets — tool, version, PS, OS, hostname)
+                $envJson = @{
+                    Tool          = $script:ToolFullName
+                    Version       = $script:ScriptVersion
+                    Hostname      = $env:COMPUTERNAME
+                    UserName      = $env:USERNAME
+                    PSVersion     = "$($PSVersionTable.PSVersion)"
+                    OSBuildNumber = $script:OSBuildNumber
+                    ToolName      = $script:ToolName
+                    FileServerConfigured = [bool](Test-FileServerConfigured)
+                    AgentInstallerConfigured = [bool](Test-AgentInstallerConfigured)
+                    Timestamp     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                } | ConvertTo-Json -Depth 10
+                $envPath = Join-Path $stageDir 'environment.json'
+                [System.IO.File]::WriteAllText($envPath, $envJson, (New-Object System.Text.UTF8Encoding $false))
+                $collected += 'environment.json'
+
+                # 6. Zip it
+                if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue }
+                Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $zipPath -Force -ErrorAction Stop
+
+                $zipSize = (Get-Item -LiteralPath $zipPath).Length
+                Write-OutputColor "  Log bundle written: $zipPath ($([math]::Round($zipSize / 1KB, 1)) KB, $($collected.Count) files)" -color "Success"
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ExportLogs'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        ZipPath = $zipPath; ZipSize = $zipSize; FileCount = $collected.Count; Files = $collected
+                        Success = $true
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10 -Compress)
+                }
+            } catch {
+                Write-OutputColor "  ExportLogs failed: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            } finally {
+                if (Test-Path -LiteralPath $stageDir) { Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue }
             }
         }
         'SelfTest' {

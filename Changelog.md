@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.96.0
+
+- **New:** `-Action CheckForUpdate` — queries the GitHub Releases API and compares the running version to the latest published tag. Supports `-OutputFormat JSON`. Exit codes: `0` = up to date, `2` = newer version available, `1` = GitHub unreachable / parse error. Designed for scheduled tasks or CI gates that want to detect drift against the published build.
+- **New:** `-Action ExportLogs` — bundles the current transcript, up to ten recent transcripts, session state, favorites, command history, the current `Changelog.md`, and an environment snapshot into a single zip ready to attach to a support ticket. Pass `-Config <directory>` to control where the zip lands (defaults to `$script:TempPath`). Supports `-OutputFormat JSON` which reports the zip path, size, and the list of files that were included.
+- **New:** Bootstrap installer (`Install-RackStack.ps1`) now verifies the downloaded `RackStack.exe` against the SHA256 published in the release notes body. Parses the hash out of the release body, compares to `Get-FileHash -Algorithm SHA256`, deletes the file and exits `1` on mismatch. Defense-in-depth against an intermediary tampering with the GitHub asset download.
+- **New:** `Install-RackStack.ps1 -Install` — proper Windows install. Copies `RackStack.exe` to `C:\Program Files\RackStack`, adds that directory to the system `PATH`, creates an All-Users Start Menu shortcut, and registers the tool under `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RackStack` so Windows Settings → Apps lists it with a working Uninstall button. After install, `RackStack` works from any admin terminal and `RackStack -Action CheckForUpdate` tells you when to reinstall.
+- **New:** `Install-RackStack.ps1 -Uninstall` — reverses `-Install`. Removes the Program Files directory, strips the PATH entry, removes the Start Menu shortcut, and unregisters from Programs and Features. No network needed. The same reversal is also embedded as the `UninstallString` so clicking "Uninstall" in Windows Settings works even offline.
+- **Fix:** OS build number detection now warns (via `Write-Host` in yellow) when both the registry read AND the WMI fallback fail, instead of silently pinning `$script:OSBuildNumber = 0`. A zero build number made every version-gated feature misbehave (tool thought it was running on a pre-2008R2 OS) with no diagnostic.
+- **Fix:** Domain join retry exhaustion now includes the last exception message in the failure summary. Previously the operator saw only "Maximum attempts reached" with no hint about why (DNS? credentials? DC unreachable?). The last error is preserved across retries and printed after the final attempt.
+- 65 modules, 4535 tests, 170 CLI actions, 615 functions
+
 ## v1.95.0
 
 - **New:** `-Action SelfTest` — a tool self-diagnostic action for operators running `RackStack.exe` across a fleet. Verifies PowerShell version, elevation, version consistency across `Header.ps1`/`RackStack.ps1`/`$script:ScriptVersion`, module count (65 in modular mode), `defaults.json` parse validity, temp-path writability, FileServer reachability (HEAD with 5s timeout), and agent-installer configuration. Supports `-OutputFormat JSON` for structured monitoring; exits `1` if any check fails.

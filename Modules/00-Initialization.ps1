@@ -164,7 +164,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.95.0"
+$script:ScriptVersion = "1.96.0"
 $script:ScriptStartTime = Get-Date
 
 # CLI headless mode parameters (populated from param block in monolithic/exe)
@@ -184,7 +184,18 @@ $script:CLIQuiet    = if ($Quiet -or $OutputFormat -eq 'JSON') { $true } else { 
 # OS version detection (for feature compatibility)
 # 2012/2012 R2 lack SET, Storage Replica, Defender PowerShell module
 # 2008 R2 SP1 supported with WMF 5.1 installed (run Install-Prerequisites.ps1)
-$script:OSBuildNumber = try { [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop).CurrentBuildNumber } catch { try { [int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber } catch { 0 } }
+$script:OSBuildNumber = try {
+    [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop).CurrentBuildNumber
+} catch {
+    try {
+        [int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber
+    } catch {
+        # Both detection paths failed — warn loudly rather than silently pinning to 0.
+        # BuildNumber=0 would make every version-gated feature think we're on a pre-2008R2 OS.
+        Write-Host "[WARN] OS build number detection failed (registry + WMI both unreachable). Feature compatibility checks may misbehave." -ForegroundColor Yellow
+        0
+    }
+}
 $script:IsServer2008R2 = $script:OSBuildNumber -eq 7601        # 6.1.7601 (SP1)
 $script:IsServer2012 = $script:OSBuildNumber -eq 9200           # 6.2.9200
 $script:IsServer2012R2 = $script:OSBuildNumber -eq 9600         # 6.3.9600
