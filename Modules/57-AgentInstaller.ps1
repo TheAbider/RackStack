@@ -445,7 +445,21 @@ function Install-SelectedAgent {
     if (-not $Agent) { return }
 
     $toolName = $script:AgentInstaller.ToolName
-    $tempPath = Join-Path $env:TEMP $Agent.FileName
+
+    # Path-traversal guard on FileName from FileServer listing — defense-in-depth
+    # against a tampered listing that tries to escape $env:TEMP via ../ or absolute path.
+    $fn = [string]$Agent.FileName
+    if ([string]::IsNullOrWhiteSpace($fn) -or
+        $fn.Contains('..') -or
+        $fn.Contains('/') -or
+        $fn.Contains('\') -or
+        $fn.Contains("`0") -or
+        $fn -match '^[A-Za-z]:' -or
+        $fn.Length -gt 255) {
+        Write-OutputColor "  Rejected unsafe agent filename: '$fn'" -color "Error"
+        return
+    }
+    $tempPath = Join-Path $env:TEMP $fn
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

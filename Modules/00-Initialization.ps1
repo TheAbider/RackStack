@@ -142,6 +142,10 @@ $script:VHDCachePath = "D:\Virtual Machines\_BaseImages"    # Cached sysprepped 
 $script:ClusterVHDCachePath = "C:\ClusterStorage\Volume1\_BaseImages"  # Cached VHDs on clusters
 $script:StorageInitialized = $false                                    # Whether host storage has been initialized
 
+# Dashboard color thresholds for CPU/memory/disk usage (override via defaults.json DashboardWarningPercent / DashboardCriticalPercent)
+$script:DashboardWarningPercent = 70
+$script:DashboardCriticalPercent = 90
+
 # Storage backend type: iSCSI, FC, S2D, SMB3, NVMeoF, Local (override via defaults.json StorageBackendType)
 $script:StorageBackendType = "iSCSI"
 
@@ -160,7 +164,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.94.9"
+$script:ScriptVersion = "1.94.10"
 $script:ScriptStartTime = Get-Date
 
 # CLI headless mode parameters (populated from param block in monolithic/exe)

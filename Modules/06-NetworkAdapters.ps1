@@ -307,16 +307,18 @@ function Show-AdapterHealthSummary {
 
             Write-OutputColor "  $name  $($adapter.LinkSpeed)  $status$driver" -color $color
 
-            # Check for errors
+            # Check for errors (best-effort — some virtual/loopback adapters don't expose stats)
             try {
-                $stats = Get-NetAdapterStatistics -Name $adapter.Name -ErrorAction SilentlyContinue
+                $stats = Get-NetAdapterStatistics -Name $adapter.Name -ErrorAction Stop
                 if ($null -ne $stats) {
                     $errors = $stats.InErrors + $stats.OutErrors
                     if ($errors -gt 0) {
                         Write-OutputColor "    Errors: $errors (In: $($stats.InErrors), Out: $($stats.OutErrors))" -color "Warning"
                     }
                 }
-            } catch { }
+            } catch {
+                Write-OutputColor "    Stats unavailable: $($_.Exception.Message)" -color "Debug"
+            }
         }
     } catch {
         Write-OutputColor "  Could not check adapters: $($_.Exception.Message)" -color "Warning"

@@ -215,16 +215,20 @@ function Show-VLANSummary {
             }
         }
 
-        # Also check Hyper-V vNIC VLANs
+        # Also check Hyper-V vNIC VLANs (skipped when Hyper-V role not installed)
         try {
-            $vmNics = Get-VMNetworkAdapter -ManagementOS -ErrorAction SilentlyContinue
+            $vmNics = Get-VMNetworkAdapter -ManagementOS -ErrorAction Stop
             foreach ($nic in $vmNics) {
                 if ($null -ne $nic.VlanSetting -and $nic.VlanSetting.AccessVlanId -gt 0) {
                     $vlanFound = $true
                     Write-OutputColor "  $($nic.Name) (vNIC): VLAN $($nic.VlanSetting.AccessVlanId)" -color "Info"
                 }
             }
-        } catch { }
+        } catch {
+            if ($_.Exception.Message -notmatch 'not recognized|not installed|ObjectNotFound|not running') {
+                Write-OutputColor "  vNIC VLAN enumeration skipped: $($_.Exception.Message)" -color "Debug"
+            }
+        }
 
         if (-not $vlanFound) {
             Write-OutputColor "  No VLAN assignments found" -color "Info"

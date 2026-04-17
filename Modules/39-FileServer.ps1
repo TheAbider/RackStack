@@ -107,7 +107,11 @@ function Get-FileServerFiles {
                 $url = "https://${account}.blob.core.windows.net/${container}?restype=container&comp=list&prefix=${encodedFolder}&delimiter=/&${sas}"
 
                 $response = Invoke-WebRequest -Uri $url -UseBasicParsing -ErrorAction Stop
-                [xml]$xml = $response.Content
+                # Parse XML with XXE protection — Azure blob listings are trusted but
+                # defense-in-depth against MITM / compromised SAS tokens injecting entities
+                $xml = New-Object System.Xml.XmlDocument
+                $xml.XmlResolver = $null
+                $xml.LoadXml($response.Content)
 
                 $blobs = $xml.EnumerationResults.Blobs.Blob
                 if ($blobs) {
@@ -270,6 +274,23 @@ function Get-FileServerFile {
         return @{
             Success = $false
             Error = "FileServer not configured. Update the settings in defaults.json."
+            FilePath = $null
+        }
+    }
+
+    # Path-traversal guard on FileName — the listing source is trusted (authenticated
+    # Azure SAS / Cloudflare Access), but a tampered listing could inject `..\` or
+    # absolute paths that escape $DestinationPath. Reject anything that isn't a bare filename.
+    if ([string]::IsNullOrWhiteSpace($FileName) -or
+        $FileName.Contains('..') -or
+        $FileName.Contains('/') -or
+        $FileName.Contains('\') -or
+        $FileName.Contains("`0") -or
+        $FileName -match '^[A-Za-z]:' -or
+        $FileName.Length -gt 255) {
+        return @{
+            Success = $false
+            Error = "Rejected unsafe filename: '$FileName'"
             FilePath = $null
         }
     }

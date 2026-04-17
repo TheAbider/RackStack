@@ -868,7 +868,8 @@ function Invoke-CLIAction {
                     Write-OutputColor "  ERROR: Config file contains no properties." -color "Error"
                     [Environment]::Exit(1)
                 }
-                Start-BatchMode -Config $configHash
+                $batchErrors = Start-BatchMode -Config $configHash
+                [Environment]::Exit([int]([int]$batchErrors -gt 0))
             }
             catch {
                 Write-OutputColor "  ERROR: Failed to load config: $_" -color "Error"
@@ -10645,7 +10646,10 @@ function Invoke-CLIAction {
                 $gpXml = "$env:TEMP\gpresult_$([guid]::NewGuid().ToString('N').Substring(0,8)).xml"
                 $gpProc = Start-Process -FilePath "gpresult.exe" -ArgumentList "/X `"$gpXml`" /F" -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
                 if ($gpProc.ExitCode -eq 0 -and (Test-Path -LiteralPath $gpXml)) {
-                    [xml]$gp = Get-Content -LiteralPath $gpXml -ErrorAction Stop
+                    # Parse gpresult XML with XXE protection (XmlResolver=$null disables external DTD/entity resolution)
+                    $gp = New-Object System.Xml.XmlDocument
+                    $gp.XmlResolver = $null
+                    $gp.Load($gpXml)
                     Remove-Item -LiteralPath $gpXml -Force -ErrorAction SilentlyContinue
                     # Computer GPOs
                     $compNode = $gp.Rsop.ComputerResults
@@ -11672,7 +11676,7 @@ function Start-BatchMode {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Batch mode aborted. Fix the errors above and try again." -color "Critical"
         Stop-ScriptTranscript
-        return
+        return 1  # validation failure → non-zero exit
     }
 
     $configType = if ($Config.ConfigType) { $Config.ConfigType.ToUpper() } else { "VM" }
@@ -11743,7 +11747,7 @@ function Start-BatchMode {
         if (-not (Confirm-UserAction -Message "Proceed with batch configuration?")) {
             Write-OutputColor "  Batch mode cancelled by user." -color "Info"
             Stop-ScriptTranscript
-            return
+            return 0  # user-cancelled → clean exit
         }
     }
 
@@ -12922,7 +12926,8 @@ function Start-BatchMode {
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Configured Defender exclusions for Hyper-V"
                 Clear-MenuCache
-                $pathsList = ($addedPaths | ForEach-Object { "'$_'" }) -join ','
+                # Escape embedded single quotes so a path like  foo'; bad-code ;'  can't break out of the single-quoted literal
+                $pathsList = ($addedPaths | ForEach-Object { "'$($_ -replace "'", "''")'" }) -join ','
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Remove Defender exclusions"; Reversible = $true; UndoScript = [scriptblock]::Create("foreach (`$p in @($pathsList)) { Remove-MpPreference -ExclusionPath `$p -ErrorAction SilentlyContinue }") })
                 Save-BatchUndoState
             }
@@ -13086,7 +13091,7 @@ function Start-BatchMode {
 
         # Stop transcript
         Stop-ScriptTranscript
-        return
+        return $errors  # propagate dry-run error count
     }
 
     # Undo prompt on errors
@@ -13151,6 +13156,9 @@ function Start-BatchMode {
         Write-OutputColor "⚠ Reboot required to complete changes. AutoReboot is disabled." -color "Warning"
         Write-OutputColor "  Run 'Restart-Computer' when ready." -color "Info"
     }
+
+    # Return the error count so CLI callers can set a meaningful exit code
+    return $errors
 }
 
 # Check for batch config file (only if script path is valid)
@@ -13168,8 +13176,8 @@ if ($script:ScriptPath) {
             $batchConfig = Get-Content -LiteralPath $batchConfigPath -Raw | ConvertFrom-Json
             $configHash = @{}
             $batchConfig.PSObject.Properties | ForEach-Object { $configHash[$_.Name] = $_.Value }
-            Start-BatchMode -Config $configHash
-            [Environment]::Exit(0)
+            $batchErrors = Start-BatchMode -Config $configHash
+            [Environment]::Exit([int]([int]$batchErrors -gt 0))
         }
         catch {
             Write-OutputColor "  Failed to load batch config: $_" -color "Error"

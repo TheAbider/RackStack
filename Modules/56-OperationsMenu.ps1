@@ -824,6 +824,16 @@ function Import-Defaults {
         $script:TempPath = $merged.TempPath
     }
 
+    # Override dashboard color thresholds (CPU/memory/disk — used by the main menu dashboard in 48-MenuDisplay.ps1)
+    if ($null -ne $merged.DashboardWarningPercent) {
+        $w = [int]$merged.DashboardWarningPercent
+        if ($w -ge 1 -and $w -le 100) { $script:DashboardWarningPercent = $w }
+    }
+    if ($null -ne $merged.DashboardCriticalPercent) {
+        $c = [int]$merged.DashboardCriticalPercent
+        if ($c -ge 1 -and $c -le 100) { $script:DashboardCriticalPercent = $c }
+    }
+
     # Override timezone region
     if ($merged.TimeZoneRegion) {
         $script:TimeZoneRegion = $merged.TimeZoneRegion

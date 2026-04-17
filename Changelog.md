@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.94.10
+
+- **Fix:** Batch mode now returns a meaningful exit code — `Start-BatchMode` returns the failed-step count and both CLI callers (`-Action Batch` and the auto-run from `batch_config.json`) set the process exit code accordingly. Previously both paths unconditionally exited `0`, so CI/CD orchestration couldn't detect when batch steps failed.
+- **Fix:** Main menu dashboard color thresholds (`DashboardWarningPercent` / `DashboardCriticalPercent`) were advertised in `defaults.example.json` but never loaded from `defaults.json` — dashboards were permanently pinned to the hardcoded 70/90 defaults. Wired through `Import-Defaults` with 1-100 range validation.
+- **Fix:** VLAN status view no longer silently swallows errors when Hyper-V isn't installed — errors that aren't "Hyper-V not available" are logged at Debug level so troubleshooting is possible.
+- **Fix:** Adapter diagnostics now log when `Get-NetAdapterStatistics` fails (e.g., for virtual/loopback adapters that don't expose counters) instead of eating the error silently.
+- **Hardened:** Azure Blob Storage XML listing (`39-FileServer.ps1`) and Group Policy XML parse (`50-EntryPoint.ps1` GPAudit) are now parsed with `XmlResolver = $null` to block external-entity (XXE) resolution. Defense-in-depth against tampered XML even on trusted channels.
+- **Hardened:** `Get-FileServerFile` and the agent installer now reject filenames containing `..`, path separators, drive-letter prefixes, null bytes, or excessive length. Prevents a tampered FileServer listing from writing outside the intended cache / temp directory.
+- **Hardened:** Batch-mode Defender exclusion undo script now properly escapes single quotes in each path before building the `[scriptblock]::Create(...)` literal, so a path containing `'` can't break out of the quoted list.
+- 65 modules, 4535 tests, 167 CLI actions, 615 functions
+
 ## v1.94.9
 
 - **Fix:** Firewall rule audit counted zero enabled rules on some systems — the `FirewallRuleAudit` CLI action was comparing the `.Enabled` property returned by `Get-NetFirewallRule` to the string `'True'`, but that property is a `GpoBoolean` enum whose string form isn't guaranteed to be `"True"`. Now compares to the boolean `$true` directly, which matches reliably across Windows Server builds.
