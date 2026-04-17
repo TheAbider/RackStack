@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.94.11
+
+- **Fix:** `-Action Batch -Silent` no longer cancels on the confirmation prompt. Previously `Confirm-UserAction` in silent mode returned the DefaultNo answer, so every headless batch run aborted before doing anything. The confirmation is now skipped entirely in `-Silent` mode (the caller already committed by invoking Batch with a config).
+- **Fix:** `-Action Batch -Silent` no longer hangs on `Read-Host` when creating a local admin account. In silent mode the password now comes from (in priority order): `Config.LocalAdminPassword` (inline), the env var named by `Config.LocalAdminPasswordEnv`, or `$env:RACKSTACK_LOCAL_ADMIN_PWD`. If none are set, the step fails cleanly with a diagnostic instead of blocking forever.
+- **Fix:** `-Action Batch -Silent` no longer hangs on the post-failure undo prompt. The prompt now goes through `Confirm-UserAction`, which in silent mode returns the safe default (skip undo) rather than blocking on `Read-Host`.
+- **Fix:** `-Action Batch -OutputFormat JSON` now emits a machine-readable summary on completion — `{Action, Timestamp, Hostname, ConfigType, DryRun, TotalSteps, ChangesApplied, Skipped, Errors, RebootNeeded, Success}`. Previously the Batch action silently produced no JSON even when JSON was requested.
+- 65 modules, 4535 tests, 167 CLI actions, 615 functions
+
 ## v1.94.10
 
 - **Fix:** Batch mode now returns a meaningful exit code — `Start-BatchMode` returns the failed-step count and both CLI callers (`-Action Batch` and the auto-run from `batch_config.json`) set the process exit code accordingly. Previously both paths unconditionally exited `0`, so CI/CD orchestration couldn't detect when batch steps failed.
