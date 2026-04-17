@@ -132,12 +132,21 @@ function Get-AgentInstallerList {
             if ($fileName -match $script:AgentInstaller.FilePattern) {
                 $parsed = ConvertFrom-AgentFilename -FileName $fileName
                 if ($parsed.Valid) {
+                    # Look up optional caller-supplied hash from AgentInstaller.HashManifest (filename → SHA256)
+                    $manifestHash = ''
+                    if ($script:AgentInstaller.PSObject.Properties.Name -contains 'HashManifest' -and $script:AgentInstaller.HashManifest) {
+                        $manifest = $script:AgentInstaller.HashManifest
+                        if ($manifest.PSObject.Properties.Name -contains $fileName) {
+                            $manifestHash = [string]$manifest.$fileName
+                        }
+                    }
                     $agents += @{
                         FilePath = $file.FilePath
                         FileName = $fileName
                         SiteNumbers = $parsed.SiteNumbers
                         SiteName = $parsed.SiteName
                         DisplayName = $parsed.DisplayName
+                        ExpectedHash = $manifestHash
                     }
                 }
             }
@@ -471,7 +480,10 @@ function Install-SelectedAgent {
     }
 
     # Download using Get-FileServerFile (from FILESERVER DOWNLOAD region)
-    $dlResult = Get-FileServerFile -FilePath $Agent.FilePath -DestinationPath $env:TEMP -FileName $Agent.FileName
+    # Pass ExpectedHash through if the agent entry supplies one — defense-in-depth
+    # against FileServer tampering. Get-FileServerFile skips verification if empty.
+    $expectedHash = if ($Agent.ContainsKey('ExpectedHash')) { [string]$Agent.ExpectedHash } else { '' }
+    $dlResult = Get-FileServerFile -FilePath $Agent.FilePath -DestinationPath $env:TEMP -FileName $Agent.FileName -ExpectedHash $expectedHash
 
     if (-not $dlResult.Success -or -not (Test-Path -LiteralPath $tempPath)) {
         Write-OutputColor "  Failed to download installer. $($dlResult.Error)" -color "Error"

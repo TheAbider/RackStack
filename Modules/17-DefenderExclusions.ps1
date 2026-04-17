@@ -98,19 +98,39 @@ function Set-DefenderExclusions {
                 if ($navResult.ShouldReturn) { return }
                 if ($customPath) { $customPath = $customPath.Trim('"') }
                 if ($customPath -and (Test-Path -LiteralPath $customPath -IsValid)) {
-                    try {
-                        Add-MpPreference -ExclusionPath $customPath -ErrorAction Stop
-                        Write-OutputColor "  Added path exclusion: $customPath" -color "Success"
-                        Add-SessionChange -Category "Security" -Description "Added Defender exclusion: $customPath"
-                        Clear-MenuCache
-                        Add-UndoAction -Category "Security" -Description "Added Defender exclusion: $customPath" -UndoScript {
-                            param($Path)
-                            Remove-MpPreference -ExclusionPath $Path -ErrorAction SilentlyContinue
-                        }.GetNewClosure() -UndoParams @{ Path = $customPath }
+                    # Warn on sensitive paths that would disable scanning on critical OS directories
+                    $normalized = $customPath.TrimEnd('\').ToLowerInvariant()
+                    $sensitivePaths = @(
+                        'c:', 'c:\', 'c:\windows', 'c:\program files', 'c:\program files (x86)',
+                        'c:\programdata', 'c:\users', 'c:\windows\system32', 'c:\windows\syswow64',
+                        $env:SystemRoot.TrimEnd('\').ToLowerInvariant(),
+                        $env:SystemDrive.TrimEnd('\').ToLowerInvariant()
+                    ) | Select-Object -Unique
+                    $isSensitive = $sensitivePaths -contains $normalized
+                    $proceed = $true
+                    if ($isSensitive) {
+                        Write-OutputColor "" -color "Warning"
+                        Write-OutputColor "  WARNING: '$customPath' is a critical OS directory." -color "Error"
+                        Write-OutputColor "  Excluding it disables Defender scanning across the system." -color "Error"
+                        $proceed = Confirm-UserAction -Message "Add this exclusion anyway?"
                     }
-                    catch {
-                        Write-RackStackError -Code "RS-3007" -Detail "Defender exclusion failed for path '$customPath': $($_.Exception.Message)"
-                        Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
+                    if (-not $proceed) {
+                        Write-OutputColor "  Exclusion cancelled." -color "Info"
+                    } else {
+                        try {
+                            Add-MpPreference -ExclusionPath $customPath -ErrorAction Stop
+                            Write-OutputColor "  Added path exclusion: $customPath" -color "Success"
+                            Add-SessionChange -Category "Security" -Description "Added Defender exclusion: $customPath"
+                            Clear-MenuCache
+                            Add-UndoAction -Category "Security" -Description "Added Defender exclusion: $customPath" -UndoScript {
+                                param($Path)
+                                Remove-MpPreference -ExclusionPath $Path -ErrorAction SilentlyContinue
+                            }.GetNewClosure() -UndoParams @{ Path = $customPath }
+                        }
+                        catch {
+                            Write-RackStackError -Code "RS-3007" -Detail "Defender exclusion failed for path '$customPath': $($_.Exception.Message)"
+                            Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
+                        }
                     }
                 } else {
                     Write-OutputColor "  Invalid path." -color "Error"

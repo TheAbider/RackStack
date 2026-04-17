@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## v1.94.9
+
+- **Fix:** Firewall rule audit counted zero enabled rules on some systems — the `FirewallRuleAudit` CLI action was comparing the `.Enabled` property returned by `Get-NetFirewallRule` to the string `'True'`, but that property is a `GpoBoolean` enum whose string form isn't guaranteed to be `"True"`. Now compares to the boolean `$true` directly, which matches reliably across Windows Server builds.
+- **Hardened:** Defender custom exclusion menu now detects sensitive OS directories (`C:\`, `C:\Windows`, `C:\Program Files`, `C:\ProgramData`, `C:\Users`, `%SystemRoot%`, `%SystemDrive%`) and requires an extra confirmation before adding them. Previously the syntax-only path check accepted them without warning, silently disabling Defender scanning across critical areas.
+- **Hardened:** Agent installer now threads an optional SHA256 hash through the FileServer downloader (`-ExpectedHash`). If a hash manifest is configured for agent installers, downloads are verified against it in addition to the existing remote-hash companion file — caller-side defense-in-depth against FileServer tampering.
+- **Hardened:** Generated admin passwords copied to the clipboard now auto-clear after 60 seconds (while the RackStack window remains open). The clear is conditional — if the user has copied something else in the meantime it's left alone.
+- **Hardened:** Password strength feedback no longer logs the exact character count — length bucket labels (`14+ chars`, `10-13 chars`, `8-9 chars`, `<8 chars`) replace `($length chars)` so transcripts don't narrow the search space for anyone who later reads them.
+- **Hardened:** CI workflow now sets `timeout-minutes: 15` on the test job so a hung test can't tie up the self-hosted runner indefinitely (the full suite normally runs in ~2.5 minutes).
+- 65 modules, 4535 tests, 167 CLI actions, 615 functions
+
 ## v1.94.8
 
 - **Fix:** Performance Dashboard now guards against the `Failed` path from `Invoke-WithTimeout`. Previously, if the runspace that wraps the CIM queries failed to start (e.g., runspace pool exhausted, insufficient resources), `$cimResult.Result` would be `$null` and the subsequent `$cimResult.Result.CPU` access would crash the dashboard. The guard mirrors the existing `TimedOut` handling and offers the same `[R]` retry path.

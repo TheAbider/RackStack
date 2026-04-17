@@ -101,11 +101,11 @@ function Show-PasswordStrength {
         $score = 0
         $feedback = @()
 
-        # Length scoring
-        if ($plainText.Length -ge 14) { $score += 3; $feedback += "Length: Excellent ($($plainText.Length) chars)" }
-        elseif ($plainText.Length -ge 10) { $score += 2; $feedback += "Length: Good ($($plainText.Length) chars)" }
-        elseif ($plainText.Length -ge 8) { $score += 1; $feedback += "Length: Fair ($($plainText.Length) chars)" }
-        else { $feedback += "Length: Too short ($($plainText.Length) chars)" }
+        # Length scoring — bucket instead of exact length so transcripts don't narrow the search space
+        if ($plainText.Length -ge 14) { $score += 3; $feedback += "Length: Excellent (14+ chars)" }
+        elseif ($plainText.Length -ge 10) { $score += 2; $feedback += "Length: Good (10-13 chars)" }
+        elseif ($plainText.Length -ge 8) { $score += 1; $feedback += "Length: Fair (8-9 chars)" }
+        else { $feedback += "Length: Too short (<8 chars)" }
 
         # Complexity scoring
         if ($plainText -cmatch '[A-Z]') { $score++; $feedback += "Uppercase: Yes" }
@@ -376,10 +376,23 @@ function New-StrongPassword {
     Write-OutputColor "  │$("  Length: $Length | Complexity: Upper+Lower+Digit+Special".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
-    # Copy to clipboard if available
+    # Copy to clipboard with auto-clear timer — fire-and-forget background job.
+    # Only clears if clipboard still holds the same value (user may have copied something else).
+    # If this shell exits before the TTL elapses the job dies with it — clipboard is then no worse than before.
     try {
         Set-Clipboard -Value $password -ErrorAction Stop
-        Write-OutputColor "  Copied to clipboard." -color "Success"
+        $clipTTL = 60
+        Start-Job -ScriptBlock {
+            param($ttl, $expected)
+            Start-Sleep -Seconds $ttl
+            try {
+                $current = Get-Clipboard -Raw -ErrorAction Stop
+                if ($current -eq $expected) {
+                    Set-Clipboard -Value '' -ErrorAction Stop
+                }
+            } catch { }
+        } -ArgumentList $clipTTL, $password | Out-Null
+        Write-OutputColor "  Copied to clipboard (auto-clears in ${clipTTL}s while this window is open)." -color "Success"
     }
     catch {
         Write-OutputColor "  Tip: Select and copy the password above." -color "Info"

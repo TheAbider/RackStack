@@ -9,6 +9,8 @@ jobs:
   test:
     # Push = self-hosted (fast, only repo owner can push). PR = GitHub-hosted (safe from fork attacks).
     runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || 'self-hosted' }}
+    # Prevents a hung test from tying up the runner — full suite normally runs in ~2.5 min
+    timeout-minutes: 15
     defaults:
       run:
         shell: pwsh

@@ -10574,8 +10574,9 @@ function Invoke-CLIAction {
             $fwSummary = @{}
             try {
                 $rules = @(Get-NetFirewallRule -ErrorAction Stop)
-                $enabled = @($rules | Where-Object { $_.Enabled -eq 'True' })
-                $disabled = @($rules | Where-Object { $_.Enabled -ne 'True' })
+                # .Enabled is a GpoBoolean enum — compare to $true, not the string 'True'
+                $enabled = @($rules | Where-Object { $_.Enabled -eq $true })
+                $disabled = @($rules | Where-Object { $_.Enabled -ne $true })
                 $inbound = @($enabled | Where-Object { $_.Direction -eq 'Inbound' })
                 $outbound = @($enabled | Where-Object { $_.Direction -eq 'Outbound' })
                 $allowIn = @($inbound | Where-Object { $_.Action -eq 'Allow' })
