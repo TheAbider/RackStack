@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.96.0
+    Automated Test Runner for RackStack v1.97.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11835,7 +11835,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 170 entries" ($listActionCount -eq 170) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 173 entries" ($listActionCount -eq 173) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -11868,7 +11868,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 170 entries" ($actionCount2 -eq 170) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 173 entries" ($actionCount2 -eq 173) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -11894,7 +11894,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 170 entries" ($actionCount3 -eq 170) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 173 entries" ($actionCount3 -eq 173) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -11932,7 +11932,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 170 entries" ($actionCount4 -eq 170) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 173 entries" ($actionCount4 -eq 173) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

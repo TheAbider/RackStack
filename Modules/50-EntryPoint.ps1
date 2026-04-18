@@ -322,6 +322,9 @@ function Assert-Elevation {
                 @{ Action = 'RotateExports';    Description = 'Prune old export files by retention count' }
                 @{ Action = 'SelfTest';         Description = 'Tool self-diagnostic (modules, version, defaults, FileServer)' }
                 @{ Action = 'CheckForUpdate';   Description = 'Compare running version to latest GitHub release (exit 2 if newer)' }
+                @{ Action = 'UpdateSelf';       Description = 'In-place upgrade of the installed EXE (SHA256-verified, atomic swap)' }
+                @{ Action = 'Rollback';         Description = 'Restore the previous version from the .old backup after UpdateSelf' }
+                @{ Action = 'ScheduleUpdateCheck'; Description = 'Register a weekly scheduled task that runs CheckForUpdate and writes JSON to disk' }
                 @{ Action = 'ExportLogs';       Description = 'Bundle transcripts + session state + env snapshot into a support zip' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
@@ -847,6 +850,213 @@ function Invoke-CLIAction {
                 }
             } catch {
                 Write-OutputColor "  RotateExports failed: $_" -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
+        'UpdateSelf' {
+            # In-place update of the installed RackStack.exe. Uses the fact that Windows allows
+            # renaming a running EXE (even though it forbids deletion) to atomically swap in the
+            # new binary while the current process keeps running from the renamed handle.
+            #
+            # Steps:
+            #   1. Require the install registry entry — UpdateSelf only makes sense for -Install'd copies
+            #   2. Query GitHub Releases for the latest tag; abort if already latest
+            #   3. Download latest RackStack.exe to a staging dir
+            #   4. Verify SHA256 against the release body
+            #   5. If a .old exists from a previous update, move it to .pending-delete (startup cleans it)
+            #   6. Rename primary RackStack.exe -> RackStack.exe.old (backup for -Action Rollback)
+            #   7. Copy the staging EXE to the primary name
+            #   8. Update the Programs and Features DisplayVersion + EstimatedSize
+            $installedRegKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RackStack'
+            if (-not (Test-Path -LiteralPath $installedRegKey)) {
+                Write-OutputColor "  UpdateSelf requires a prior -Install. Current version is not registered under Programs and Features." -color "Error"
+                Write-OutputColor "  Install with:  irm https://raw.githubusercontent.com/TheAbider/RackStack/master/Install-RackStack.ps1 | iex" -color "Info"
+                [Environment]::Exit(1)
+            }
+            $installProps = Get-ItemProperty -Path $installedRegKey -ErrorAction SilentlyContinue
+            $installLoc = $installProps.InstallLocation
+            if (-not $installLoc -or -not (Test-Path -LiteralPath $installLoc)) {
+                Write-OutputColor "  InstallLocation from registry is missing or not present: $installLoc" -color "Error"
+                [Environment]::Exit(1)
+            }
+            $targetExe   = Join-Path $installLoc 'RackStack.exe'
+            $backupExe   = "$targetExe.old"
+            $purgedExe   = "$targetExe.pending-delete"
+
+            Write-OutputColor "  Checking for updates..." -color "Info"
+            try {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+                $api = 'https://api.github.com/repos/TheAbider/RackStack/releases/latest'
+                $hdrs = @{ 'User-Agent' = "$($script:ToolName)/$($script:ScriptVersion)" }
+                $release = Invoke-RestMethod -Uri $api -Headers $hdrs -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+                $latestTag = [string]$release.tag_name
+                $latestVer = $latestTag -replace '^v', ''
+
+                # Bail out if already on latest (or ahead)
+                try {
+                    $cur = [version]($script:ScriptVersion -replace '[^\d.]')
+                    $lat = [version]($latestVer -replace '[^\d.]')
+                    if ($lat -le $cur) {
+                        Write-OutputColor "  Already on latest version ($($script:ScriptVersion))." -color "Success"
+                        if ($script:CLIOutputFormat -eq 'JSON') {
+                            Write-Output (@{ Tool=$script:ToolFullName; Version=$script:ScriptVersion; Action='UpdateSelf'; Timestamp=(Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname=$env:COMPUTERNAME; Success=$true; UpdateApplied=$false; Reason='already-latest' } | ConvertTo-Json -Depth 10 -Compress)
+                        }
+                        [Environment]::Exit(0)
+                    }
+                } catch { }
+
+                $exeAsset = $release.assets | Where-Object { $_.name -eq 'RackStack.exe' } | Select-Object -First 1
+                if (-not $exeAsset) {
+                    Write-OutputColor "  No RackStack.exe asset in release $latestTag." -color "Error"
+                    [Environment]::Exit(1)
+                }
+
+                # Parse SHA256 from release body (same trust root as Install-RackStack.ps1 bootstrap)
+                $expectedHash = $null
+                if ($release.body) {
+                    $m = [regex]::Match($release.body, '(?im)^\s*([a-f0-9]{64})\s+RackStack\.exe\s*$')
+                    if ($m.Success) { $expectedHash = $m.Groups[1].Value.ToLower() }
+                }
+
+                $stageDir = Join-Path $env:TEMP "RackStackUpdate_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+                New-Item -Path $stageDir -ItemType Directory -Force | Out-Null
+                $stageExe = Join-Path $stageDir 'RackStack.exe'
+                Write-OutputColor "  Downloading $latestTag ($([math]::Round($exeAsset.size / 1MB, 1)) MB)..." -color "Info"
+                Invoke-WebRequest -Uri $exeAsset.browser_download_url -OutFile $stageExe -UseBasicParsing -TimeoutSec 300 -ErrorAction Stop
+
+                if ($expectedHash) {
+                    $actual = (Get-FileHash -LiteralPath $stageExe -Algorithm SHA256 -ErrorAction Stop).Hash.ToLower()
+                    if ($actual -ne $expectedHash) {
+                        Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
+                        Write-OutputColor "  SHA256 mismatch — aborting update (expected $expectedHash, got $actual)" -color "Error"
+                        [Environment]::Exit(1)
+                    }
+                    Write-OutputColor "  SHA256 verified." -color "Success"
+                } else {
+                    Write-OutputColor "  WARNING: No SHA256 in release body — skipping verification." -color "Warning"
+                }
+
+                # If a previous .old still exists (user ran UpdateSelf twice without launching in between),
+                # rename it out of the way so the startup cleanup can purge it next boot
+                if (Test-Path -LiteralPath $backupExe) {
+                    if (Test-Path -LiteralPath $purgedExe) { Remove-Item -LiteralPath $purgedExe -Force -ErrorAction SilentlyContinue }
+                    try { Rename-Item -LiteralPath $backupExe -NewName ([System.IO.Path]::GetFileName($purgedExe)) -Force -ErrorAction Stop } catch { }
+                }
+                # Rename current EXE to .old (Windows allows this even though the EXE is running)
+                Rename-Item -LiteralPath $targetExe -NewName 'RackStack.exe.old' -Force -ErrorAction Stop
+                # Copy new EXE into place
+                Copy-Item -LiteralPath $stageExe -Destination $targetExe -Force -ErrorAction Stop
+                Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
+
+                # Update registry DisplayVersion + EstimatedSize so Programs and Features reflects the new state
+                try {
+                    Set-ItemProperty -Path $installedRegKey -Name 'DisplayVersion' -Value $latestVer -ErrorAction Stop
+                    Set-ItemProperty -Path $installedRegKey -Name 'EstimatedSize'  -Value ([int]((Get-Item -LiteralPath $targetExe).Length / 1KB)) -Type DWord -ErrorAction Stop
+                } catch {
+                    Write-OutputColor "  Update applied but registry refresh failed: $($_.Exception.Message)" -color "Warning"
+                }
+
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Updated $($script:ScriptVersion) -> $latestVer" -color "Success"
+                Write-OutputColor "  Relaunch to pick up the new version." -color "Info"
+                Write-OutputColor "  Rollback if needed: RackStack -Action Rollback" -color "Debug"
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    $jsonResult = @{
+                        Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'UpdateSelf'
+                        Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                        PreviousVersion = $script:ScriptVersion; NewVersion = $latestVer
+                        InstallLocation = $installLoc; UpdatedExe = $targetExe
+                        Success = $true; UpdateApplied = $true
+                    }
+                    Write-Output ($jsonResult | ConvertTo-Json -Depth 10 -Compress)
+                }
+            } catch {
+                Write-OutputColor "  UpdateSelf failed: $($_.Exception.Message)" -color "Error"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    Write-Output (@{ Tool=$script:ToolFullName; Version=$script:ScriptVersion; Action='UpdateSelf'; Timestamp=(Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname=$env:COMPUTERNAME; Success=$false; Error=$_.Exception.Message } | ConvertTo-Json -Depth 10 -Compress)
+                }
+                [Environment]::Exit(1)
+            }
+        }
+        'Rollback' {
+            # Restore the previous version from RackStack.exe.old.
+            # Strategy: rename current EXE to .pending-delete (startup cleanup will purge it next boot),
+            # then rename .old back to the primary name. Windows allows both renames on a running EXE.
+            $installedRegKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RackStack'
+            if (-not (Test-Path -LiteralPath $installedRegKey)) {
+                Write-OutputColor "  Rollback requires a prior -Install." -color "Error"
+                [Environment]::Exit(1)
+            }
+            $installLoc = (Get-ItemProperty -Path $installedRegKey -ErrorAction SilentlyContinue).InstallLocation
+            $targetExe = Join-Path $installLoc 'RackStack.exe'
+            $backupExe = "$targetExe.old"
+            $purgedExe = "$targetExe.pending-delete"
+            if (-not (Test-Path -LiteralPath $backupExe)) {
+                Write-OutputColor "  No backup found ($backupExe). Run -Action UpdateSelf first to create a backup." -color "Error"
+                [Environment]::Exit(1)
+            }
+            try {
+                if (Test-Path -LiteralPath $purgedExe) { Remove-Item -LiteralPath $purgedExe -Force -ErrorAction SilentlyContinue }
+                Rename-Item -LiteralPath $targetExe -NewName 'RackStack.exe.pending-delete' -Force -ErrorAction Stop
+                Rename-Item -LiteralPath $backupExe -NewName 'RackStack.exe' -Force -ErrorAction Stop
+
+                # Try to refresh the registry version from the rolled-back EXE
+                try {
+                    $rolledBackVer = (Get-Item -LiteralPath $targetExe -ErrorAction Stop).VersionInfo.FileVersion
+                    if ($rolledBackVer) {
+                        Set-ItemProperty -Path $installedRegKey -Name 'DisplayVersion' -Value $rolledBackVer -ErrorAction SilentlyContinue
+                    }
+                } catch { }
+
+                Write-OutputColor "  Rolled back. Relaunch to run the previous version." -color "Success"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    Write-Output (@{ Tool=$script:ToolFullName; Version=$script:ScriptVersion; Action='Rollback'; Timestamp=(Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname=$env:COMPUTERNAME; Success=$true; InstallLocation=$installLoc } | ConvertTo-Json -Depth 10 -Compress)
+                }
+            } catch {
+                Write-OutputColor "  Rollback failed: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
+        'ScheduleUpdateCheck' {
+            # Register a weekly scheduled task that runs 'RackStack -Action CheckForUpdate -OutputFormat JSON'
+            # and writes the result to $script:TempPath\RackStack_UpdateCheck.json. Fleets can then aggregate
+            # that file via their RMM / SCCM / file server and know which hosts are out of date.
+            $installedRegKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RackStack'
+            if (-not (Test-Path -LiteralPath $installedRegKey)) {
+                Write-OutputColor "  ScheduleUpdateCheck requires a prior -Install (needs a stable EXE path)." -color "Error"
+                [Environment]::Exit(1)
+            }
+            $installLoc = (Get-ItemProperty -Path $installedRegKey -ErrorAction SilentlyContinue).InstallLocation
+            $installedExe = Join-Path $installLoc 'RackStack.exe'
+            if (-not (Test-Path -LiteralPath $installedExe)) {
+                Write-OutputColor "  Installed EXE not found at $installedExe" -color "Error"
+                [Environment]::Exit(1)
+            }
+            $taskName = "$($script:ToolName)_UpdateCheck"
+            $outputJsonPath = Join-Path $script:TempPath "$($script:ToolName)_UpdateCheck.json"
+            # We use cmd.exe redirection so the EXE's stdout JSON lands on disk
+            $cmdLine = "/c `"`"$installedExe`" -Action CheckForUpdate -OutputFormat JSON > `"$outputJsonPath`" 2>&1`""
+            try {
+                # Remove any existing task with the same name so this is idempotent
+                $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                if ($existing) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }
+
+                $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $cmdLine
+                $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At '03:00AM'
+                $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+                $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RunOnlyIfNetworkAvailable
+                Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Weekly $($script:ToolFullName) update check" -ErrorAction Stop | Out-Null
+
+                Write-OutputColor "  Scheduled task '$taskName' registered." -color "Success"
+                Write-OutputColor "  Runs: Sundays at 03:00 as SYSTEM" -color "Info"
+                Write-OutputColor "  Output: $outputJsonPath" -color "Info"
+
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    Write-Output (@{ Tool=$script:ToolFullName; Version=$script:ScriptVersion; Action='ScheduleUpdateCheck'; Timestamp=(Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname=$env:COMPUTERNAME; Success=$true; TaskName=$taskName; OutputPath=$outputJsonPath; Schedule='Weekly Sunday 03:00' } | ConvertTo-Json -Depth 10 -Compress)
+                }
+            } catch {
+                Write-OutputColor "  ScheduleUpdateCheck failed: $($_.Exception.Message)" -color "Error"
                 [Environment]::Exit(1)
             }
         }

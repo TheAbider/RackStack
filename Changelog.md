@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.97.0
+
+- **New:** `-Action UpdateSelf` — in-place upgrade of the installed `RackStack.exe`. Queries the GitHub Releases API, downloads the new EXE to a staging directory, SHA256-verifies it against the release body, then uses Windows' rename-of-running-EXE trick to atomically swap: the current binary is renamed to `RackStack.exe.old` (kept as rollback backup) and the new one is copied into the primary name. Registry `DisplayVersion` and `EstimatedSize` are refreshed so Windows Settings → Apps stays accurate. Supports `-OutputFormat JSON`; exits `0` if already latest, `1` on error. Requires a prior `-Install`.
+- **New:** `-Action Rollback` — restore the previous `RackStack.exe` from the `.old` backup left by `UpdateSelf` (or a re-run of `-Install`). Uses the same rename-based atomic swap: the current EXE is moved to `.pending-delete` and the backup is renamed back to `RackStack.exe`. Useful when a new version introduces a regression that only surfaces in your environment.
+- **New:** `-Action ScheduleUpdateCheck` — registers a weekly scheduled task that runs `RackStack -Action CheckForUpdate -OutputFormat JSON` as `SYSTEM` and writes the JSON result to `$TempPath\RackStack_UpdateCheck.json`. Fleets can aggregate that file via their RMM / SCCM / file server and know which hosts are out of date without having to push a check out of band.
+- **New:** `Install-RackStack.ps1 -Rollback` — out-of-tool rollback for when the installed EXE is too broken to run its own `-Action Rollback`. Swaps `RackStack.exe.old` back to primary, refreshes the registry `DisplayVersion`, no network needed. Downloaded fresh from GitHub via the usual `irm | iex` one-liner.
+- **New:** `Install-RackStack.ps1 -Install` now works as an upgrade path too. Previously a re-run against an existing install would fail because Windows locks running EXEs against overwrite. It now renames the existing `RackStack.exe` aside (doubles as the `.old` rollback backup) before copying the new one into place, mirroring the `UpdateSelf` strategy.
+- **New:** Every `-Install` now generates `RackStack-TabComplete.ps1` in `C:\Program Files\RackStack` containing a `Register-ArgumentCompleter` for the installed EXE's action list. Operators opt in by dot-sourcing it from their PowerShell profile — `RackStack -Action <TAB>` then cycles through every supported action, `-Tier` completes `Light|Standard|Aggressive`, and `-OutputFormat` completes `Console|JSON`.
+- **New:** Startup now removes any `RackStack.exe.pending-delete` sibling of the running EXE — this is the cleanup half of the atomic swap used by `UpdateSelf` and `Rollback`. Windows forbids deleting a running EXE, so the superseded binary is first renamed to `.pending-delete` and purged on the next launch of the new process.
+- 65 modules, 4535 tests, 173 CLI actions, 615 functions
+
 ## v1.96.0
 
 - **New:** `-Action CheckForUpdate` — queries the GitHub Releases API and compares the running version to the latest published tag. Supports `-OutputFormat JSON`. Exit codes: `0` = up to date, `2` = newer version available, `1` = GitHub unreachable / parse error. Designed for scheduled tasks or CI gates that want to detect drift against the published build.

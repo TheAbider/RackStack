@@ -57,7 +57,7 @@
 #>
 
 param(
-    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate', 'Aggregate', 'Compare', 'Export', 'Trend', 'CertCheck', 'ReportHTML', 'ListeningPorts', 'SoftwareList', 'Uptime', 'ServiceAudit', 'EventAudit', 'NetInfo', 'ScheduledExport', 'ValidateConfig', 'Watch', 'Query', 'Diff', 'Baseline', 'Alert', 'FleetScan', 'PatchStatus', 'UserAudit', 'FirewallAudit', 'TaskAudit', 'DiskAudit', 'TLSAudit', 'SMBAudit', 'DriverAudit', 'TimeAudit', 'BootAudit', 'GPOAudit', 'MemoryAudit', 'ProcessAudit', 'BackupAudit', 'ShareAudit', 'DNSAudit', 'PowerAudit', 'RegistryAudit', 'ProfileAudit', 'HyperVAudit', 'NetworkAudit', 'StorageAudit', 'FeatureAudit', 'AutoStartAudit', 'BIOSAudit', 'ClusterAudit', 'AuditPolicyAudit', 'EnvAudit', 'CrashAudit', 'LocalGroupAudit', 'WMIAudit', 'TempAudit', 'UpdatePolicyAudit', 'IISAudit', 'SSHAudit', 'BitLockerAudit', 'PrintAudit', 'CredGuardAudit', 'PortAudit', 'AntivirusAudit', 'DotNetAudit', 'RDPAudit', 'VPNAudit', 'HostsFileAudit', 'NetStatAudit', 'LicenseAudit', 'USBDeviceAudit', 'AppLockerAudit', 'EventSubAudit', 'HotfixAudit', 'SysInfoAudit', 'LogonAudit', 'ACLAudit', 'RecoveryAudit', 'ServiceAccountAudit', 'ProxyAudit', 'PendingRebootAudit', 'PageFileAudit', 'CPUAudit', 'DefenderExclusionAudit', 'KerberosAudit', 'DHCPAudit', 'NUMAAudit', 'SymlinkAudit', 'StartupScriptAudit', 'SecureChannelAudit', 'ComObjectAudit', 'FirewallLogAudit', 'ScheduledRebootAudit', 'PowerShellAudit', 'RouteTableAudit', 'TokenPrivilegeAudit', 'WindowsCapabilityAudit', 'ARPTableAudit', 'LocaleAudit', 'TaskHistoryAudit', 'NTFSAudit', 'Win11Cleanup', 'DarkMode', 'LightMode', 'iSCSIAudit', 'NICTeamAudit', 'SMBSessionAudit', 'WindowsUpdateAudit', 'ClusterQuorumAudit', 'S2DAudit', 'VirtualSwitchAudit', 'MPIOPathAudit', 'ServiceRecoveryAudit', 'VMOvercommitAudit', 'DedupAudit', 'ClusterNetworkAudit', 'ReplicaLagAudit', 'HandleLeakAudit', 'ShadowCopyAudit', 'QoSPolicyAudit', 'LiveMigrationAudit', 'DomainTrustAudit', 'DiskLatencyAudit', 'NICOffloadAudit', 'StorageTimeoutAudit', 'EventLogCapacityAudit', 'TcpSettingsAudit', 'WinRMAudit', 'ClusterHealthScore', 'VMInventoryExport', 'VMSnapshotAudit', 'StorageHealthScore', 'CSVSpaceAudit', 'SMBConnectionAudit', 'VolumeLabelAudit', 'NICErrorAudit', 'VMResourceWaste', 'HealthDashboard', 'SCCMClientAudit', 'SCOMAgentAudit', 'WACConnectivityAudit', 'AzureADAudit', 'ServerScore', 'FleetReport', 'PasswordPolicy', 'FirewallRuleAudit', 'GPResultAudit', 'DNSCacheAudit', 'TPMAudit', 'SecureBootAudit', 'TimeSkewAudit', 'NetworkProfileAudit', 'InsecureServiceAudit', 'Readiness', 'BaselineDiff', 'RotateExports', 'SLAReport', 'Validate', 'NetMap', 'PolicyCheck', 'SelfTest', 'CheckForUpdate', 'ExportLogs')]
+    [ValidateSet('Cleanup', 'Debloat', 'HealthCheck', 'Batch', 'QuickScan', 'Inventory', 'DriftCheck', 'Snapshot', 'Compliance', 'Harden', 'Remediate', 'Aggregate', 'Compare', 'Export', 'Trend', 'CertCheck', 'ReportHTML', 'ListeningPorts', 'SoftwareList', 'Uptime', 'ServiceAudit', 'EventAudit', 'NetInfo', 'ScheduledExport', 'ValidateConfig', 'Watch', 'Query', 'Diff', 'Baseline', 'Alert', 'FleetScan', 'PatchStatus', 'UserAudit', 'FirewallAudit', 'TaskAudit', 'DiskAudit', 'TLSAudit', 'SMBAudit', 'DriverAudit', 'TimeAudit', 'BootAudit', 'GPOAudit', 'MemoryAudit', 'ProcessAudit', 'BackupAudit', 'ShareAudit', 'DNSAudit', 'PowerAudit', 'RegistryAudit', 'ProfileAudit', 'HyperVAudit', 'NetworkAudit', 'StorageAudit', 'FeatureAudit', 'AutoStartAudit', 'BIOSAudit', 'ClusterAudit', 'AuditPolicyAudit', 'EnvAudit', 'CrashAudit', 'LocalGroupAudit', 'WMIAudit', 'TempAudit', 'UpdatePolicyAudit', 'IISAudit', 'SSHAudit', 'BitLockerAudit', 'PrintAudit', 'CredGuardAudit', 'PortAudit', 'AntivirusAudit', 'DotNetAudit', 'RDPAudit', 'VPNAudit', 'HostsFileAudit', 'NetStatAudit', 'LicenseAudit', 'USBDeviceAudit', 'AppLockerAudit', 'EventSubAudit', 'HotfixAudit', 'SysInfoAudit', 'LogonAudit', 'ACLAudit', 'RecoveryAudit', 'ServiceAccountAudit', 'ProxyAudit', 'PendingRebootAudit', 'PageFileAudit', 'CPUAudit', 'DefenderExclusionAudit', 'KerberosAudit', 'DHCPAudit', 'NUMAAudit', 'SymlinkAudit', 'StartupScriptAudit', 'SecureChannelAudit', 'ComObjectAudit', 'FirewallLogAudit', 'ScheduledRebootAudit', 'PowerShellAudit', 'RouteTableAudit', 'TokenPrivilegeAudit', 'WindowsCapabilityAudit', 'ARPTableAudit', 'LocaleAudit', 'TaskHistoryAudit', 'NTFSAudit', 'Win11Cleanup', 'DarkMode', 'LightMode', 'iSCSIAudit', 'NICTeamAudit', 'SMBSessionAudit', 'WindowsUpdateAudit', 'ClusterQuorumAudit', 'S2DAudit', 'VirtualSwitchAudit', 'MPIOPathAudit', 'ServiceRecoveryAudit', 'VMOvercommitAudit', 'DedupAudit', 'ClusterNetworkAudit', 'ReplicaLagAudit', 'HandleLeakAudit', 'ShadowCopyAudit', 'QoSPolicyAudit', 'LiveMigrationAudit', 'DomainTrustAudit', 'DiskLatencyAudit', 'NICOffloadAudit', 'StorageTimeoutAudit', 'EventLogCapacityAudit', 'TcpSettingsAudit', 'WinRMAudit', 'ClusterHealthScore', 'VMInventoryExport', 'VMSnapshotAudit', 'StorageHealthScore', 'CSVSpaceAudit', 'SMBConnectionAudit', 'VolumeLabelAudit', 'NICErrorAudit', 'VMResourceWaste', 'HealthDashboard', 'SCCMClientAudit', 'SCOMAgentAudit', 'WACConnectivityAudit', 'AzureADAudit', 'ServerScore', 'FleetReport', 'PasswordPolicy', 'FirewallRuleAudit', 'GPResultAudit', 'DNSCacheAudit', 'TPMAudit', 'SecureBootAudit', 'TimeSkewAudit', 'NetworkProfileAudit', 'InsecureServiceAudit', 'Readiness', 'BaselineDiff', 'RotateExports', 'SLAReport', 'Validate', 'NetMap', 'PolicyCheck', 'SelfTest', 'CheckForUpdate', 'ExportLogs', 'UpdateSelf', 'Rollback', 'ScheduleUpdateCheck')]
     [string]$Action = 'QuickScan',
 
     [ValidateSet('Light', 'Standard', 'Aggressive')]
@@ -86,7 +86,12 @@ param(
 
     # Reverse -Install: remove EXE from Program Files, strip PATH entry, remove Start
     # Menu shortcut, unregister from Programs and Features. Safe to run repeatedly.
-    [switch]$Uninstall
+    [switch]$Uninstall,
+
+    # Restore the previous RackStack.exe from RackStack.exe.old. Use this if an UpdateSelf
+    # (or a re-run of -Install) produced a broken binary. Works even when the installed EXE
+    # is too broken to run — no dependency on the tool itself.
+    [switch]$Rollback
 )
 
 $ErrorActionPreference = 'Stop'
@@ -113,6 +118,40 @@ $programExe       = Join-Path $programDir 'RackStack.exe'
 $startMenuDir     = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
 $startMenuLnk     = Join-Path $startMenuDir 'RackStack.lnk'
 $uninstallRegKey  = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RackStack'
+
+# -Rollback: swap RackStack.exe.old back to the primary name. No download needed.
+# Works even when the installed tool is too broken to run its own -Action Rollback.
+if ($Rollback) {
+    Write-Host "  Rolling back RackStack..." -ForegroundColor Cyan
+    $backup = "$programExe.old"
+    if (-not (Test-Path -LiteralPath $backup)) {
+        Write-Host "  No backup found at $backup" -ForegroundColor Yellow
+        Write-Host "  Nothing to roll back to — was UpdateSelf ever run?" -ForegroundColor Yellow
+        exit 1
+    }
+    $purged = "$programExe.pending-delete"
+    try {
+        if (Test-Path -LiteralPath $purged) { Remove-Item -LiteralPath $purged -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $programExe) {
+            Rename-Item -LiteralPath $programExe -NewName 'RackStack.exe.pending-delete' -Force -ErrorAction Stop
+        }
+        Rename-Item -LiteralPath $backup -NewName 'RackStack.exe' -Force -ErrorAction Stop
+
+        # Refresh registry DisplayVersion from the rolled-back EXE so Programs and Features is accurate
+        if (Test-Path -LiteralPath $uninstallRegKey) {
+            try {
+                $rolledVer = (Get-Item -LiteralPath $programExe -ErrorAction Stop).VersionInfo.FileVersion
+                if ($rolledVer) { Set-ItemProperty -Path $uninstallRegKey -Name 'DisplayVersion' -Value $rolledVer -ErrorAction SilentlyContinue }
+            } catch { }
+        }
+        Write-Host "  Rolled back. The previous RackStack.exe is now primary." -ForegroundColor Green
+        Write-Host "  The superseded binary will be removed on next launch." -ForegroundColor Gray
+    } catch {
+        Write-Host "  ERROR: Rollback failed: $_" -ForegroundColor Red
+        exit 1
+    }
+    exit 0
+}
 
 # -Uninstall: reverse a prior -Install and exit. No GitHub round-trip needed.
 if ($Uninstall) {
@@ -278,10 +317,30 @@ if ($Install) {
     Write-Host ""
     Write-Host "  Installing to $programDir..." -ForegroundColor Cyan
 
-    # 1. Copy EXE into Program Files
+    # 1. Copy EXE into Program Files.
+    # If we're upgrading an existing install, the current RackStack.exe may be running and
+    # therefore locked against overwrite/delete. Windows allows *rename* of a running EXE,
+    # so we rename the old one aside first; this doubles as the backup for -Action Rollback.
     New-Item -Path $programDir -ItemType Directory -Force | Out-Null
+    if (Test-Path -LiteralPath $programExe) {
+        $backupName = 'RackStack.exe.old'
+        $backup = Join-Path $programDir $backupName
+        if (Test-Path -LiteralPath $backup) {
+            # Previous backup exists — move it to pending-delete so startup cleans it up
+            $pending = Join-Path $programDir 'RackStack.exe.pending-delete'
+            if (Test-Path -LiteralPath $pending) { Remove-Item -LiteralPath $pending -Force -ErrorAction SilentlyContinue }
+            try { Rename-Item -LiteralPath $backup -NewName 'RackStack.exe.pending-delete' -Force -ErrorAction Stop } catch { Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue }
+        }
+        try {
+            Rename-Item -LiteralPath $programExe -NewName $backupName -Force -ErrorAction Stop
+        } catch {
+            Write-Host "  ERROR: Could not rename existing RackStack.exe aside: $_" -ForegroundColor Red
+            Write-Host "  Close any running RackStack processes and try again, or use -Rollback." -ForegroundColor Yellow
+            exit 1
+        }
+    }
     Copy-Item -LiteralPath $exePath -Destination $programExe -Force
-    Write-Host "  [1/4] Copied RackStack.exe" -ForegroundColor Gray
+    Write-Host "  [1/4] Copied RackStack.exe (upgrade-safe rename, prior version saved as .old)" -ForegroundColor Gray
 
     # 2. Add to system PATH so `RackStack` works from any admin terminal.
     # Also update the current process PATH so the operator can test without opening a new shell.
@@ -333,12 +392,64 @@ if ($Install) {
     Set-ItemProperty -Path $uninstallRegKey -Name 'NoModify'        -Value 1 -Type DWord
     Set-ItemProperty -Path $uninstallRegKey -Name 'NoRepair'        -Value 1 -Type DWord
     Set-ItemProperty -Path $uninstallRegKey -Name 'UninstallString' -Value $uninstallCmd
-    Write-Host "  [4/4] Registered under Programs and Features" -ForegroundColor Gray
+    Write-Host "  [4/5] Registered under Programs and Features" -ForegroundColor Gray
+
+    # 5. Generate an opt-in tab completer. User dot-sources it from their PS profile to enable
+    # `RackStack -Action <TAB>` autocompletion. We query the freshly installed EXE for its action
+    # list so the completer always matches the installed version's supported actions.
+    $tabCompletePath = Join-Path $programDir 'RackStack-TabComplete.ps1'
+    try {
+        $rawJson = & $programExe -ListActions -OutputFormat JSON -Quiet 2>$null | Out-String
+        $actionNames = @()
+        if ($rawJson -and $rawJson.Trim().StartsWith('[')) {
+            $actionNames = @((ConvertFrom-Json -InputObject $rawJson) | ForEach-Object { $_.Action })
+        }
+        if ($actionNames.Count -gt 0) {
+            $actionLiteral = ($actionNames | ForEach-Object { "'$_'" }) -join ','
+            # Single-quoted here-string so we don't have to escape the many $ signs inside the completer.
+            # Only the action list gets templated in via -replace.
+            $tabBody = @'
+# RackStack tab completion — opt-in. Dot-source this file from your PowerShell profile to enable:
+#   notepad $PROFILE.AllUsersAllHosts
+#   . "C:\Program Files\RackStack\RackStack-TabComplete.ps1"
+# After reloading your shell, `RackStack -Action <TAB>` will cycle through every available action.
+Register-ArgumentCompleter -Native -CommandName RackStack -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $line = $commandAst.ToString()
+    $tokens = $line -split '\s+'
+    $prev = if ($tokens.Count -ge 2) { $tokens[$tokens.Count - 2] } else { '' }
+    if ($prev -ieq '-Action') {
+        @(__ACTIONS__) | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    } elseif ($prev -ieq '-Tier') {
+        @('Light','Standard','Aggressive') | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    } elseif ($prev -ieq '-OutputFormat') {
+        @('Console','JSON') | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    }
+}
+'@
+            $tabContent = $tabBody -replace '__ACTIONS__', $actionLiteral
+            [System.IO.File]::WriteAllText($tabCompletePath, $tabContent, (New-Object System.Text.UTF8Encoding $true))
+            Write-Host "  [5/5] Generated tab completer ($($actionNames.Count) actions)" -ForegroundColor Gray
+        } else {
+            Write-Host "  [5/5] Skipped tab completer (action list not available from EXE)" -ForegroundColor Gray
+        }
+    } catch {
+        Write-Host "  [5/5] Skipped tab completer: $_" -ForegroundColor Gray
+    }
 
     Write-Host ""
     Write-Host "  RackStack v$versionTag installed." -ForegroundColor Green
     Write-Host "  - Run: " -ForegroundColor Cyan -NoNewline; Write-Host "RackStack" -ForegroundColor White -NoNewline; Write-Host "   (from any admin terminal)" -ForegroundColor Cyan
-    Write-Host "  - Update check: " -ForegroundColor Cyan -NoNewline; Write-Host "RackStack -Action CheckForUpdate" -ForegroundColor White
+    Write-Host "  - Check for updates: " -ForegroundColor Cyan -NoNewline; Write-Host "RackStack -Action CheckForUpdate" -ForegroundColor White
+    Write-Host "  - Update in place: " -ForegroundColor Cyan -NoNewline; Write-Host "RackStack -Action UpdateSelf" -ForegroundColor White
+    Write-Host "  - Weekly update task: " -ForegroundColor Cyan -NoNewline; Write-Host "RackStack -Action ScheduleUpdateCheck" -ForegroundColor White
+    Write-Host "  - Tab completion: " -ForegroundColor Cyan -NoNewline; Write-Host ". '$tabCompletePath'" -ForegroundColor White -NoNewline; Write-Host "   (add to `$PROFILE)" -ForegroundColor Cyan
     Write-Host "  - Uninstall: " -ForegroundColor Cyan -NoNewline; Write-Host "Windows Settings -> Apps -> RackStack -> Uninstall" -ForegroundColor White
     Write-Host ""
     exit 0

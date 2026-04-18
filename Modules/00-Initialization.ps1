@@ -164,8 +164,20 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.96.0"
+$script:ScriptVersion = "1.97.0"
 $script:ScriptStartTime = Get-Date
+
+# Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.
+# Windows couldn't delete the superseded EXE while it was running; now that we're a fresh process
+# from the new EXE, the pending-delete file is free of handles and can be removed.
+# We leave `.old` alone — it's the rollback backup and is retained until the next UpdateSelf.
+if ($script:ScriptPath -and $script:ScriptPath -match '\.exe$') {
+    try {
+        $_exeDir = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
+        $_stale = Join-Path $_exeDir 'RackStack.exe.pending-delete'
+        if (Test-Path -LiteralPath $_stale) { Remove-Item -LiteralPath $_stale -Force -ErrorAction SilentlyContinue }
+    } catch { }
+}
 
 # CLI headless mode parameters (populated from param block in monolithic/exe)
 # When -Action is specified, the tool runs that action and exits without interactive menus
