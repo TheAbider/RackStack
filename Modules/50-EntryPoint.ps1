@@ -326,6 +326,9 @@ function Assert-Elevation {
                 @{ Action = 'Rollback';         Description = 'Restore the previous version from the .old backup after UpdateSelf' }
                 @{ Action = 'ScheduleUpdateCheck'; Description = 'Register a weekly scheduled task that runs CheckForUpdate and writes JSON to disk' }
                 @{ Action = 'ExportLogs';       Description = 'Bundle transcripts + session state + env snapshot into a support zip' }
+                @{ Action = 'Dashboard';        Description = 'Serve HealthDashboard as HTML + JSON via HttpListener (default 127.0.0.1:8080)' }
+                @{ Action = 'History';          Description = 'Show the last N CLI invocations (rolling log of 50 entries)' }
+                @{ Action = 'Replay';           Description = 'Re-run a prior invocation by index (1 = most recent; see History)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -353,6 +356,43 @@ function Assert-Elevation {
     }
 }
 
+# Append an entry to the rolling CLI action history log. Keeps the last 50 entries.
+# Used by -Action History / -Action Replay. History and Replay themselves are excluded
+# to avoid filling the log with meta-actions.
+function Add-CLIActionHistoryEntry {
+    if ($script:CLIAction -in @('History','Replay')) { return }
+    try {
+        if (-not (Test-Path -LiteralPath $script:TempPath)) {
+            New-Item -Path $script:TempPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        }
+        $historyPath = Join-Path $script:TempPath "$($script:ToolName)-ActionHistory.json"
+        $entries = @()
+        if (Test-Path -LiteralPath $historyPath) {
+            try {
+                $raw = Get-Content -LiteralPath $historyPath -Raw -ErrorAction Stop
+                if ($raw) { $entries = @((ConvertFrom-Json -InputObject $raw -ErrorAction Stop)) }
+            } catch { $entries = @() }
+        }
+        $newEntry = [ordered]@{
+            Timestamp    = (Get-Date -Format 'o')
+            Action       = [string]$script:CLIAction
+            Tier         = [string]$script:CLIProfile
+            Config       = [string]$script:CLIConfig
+            OutputFormat = [string]$script:CLIOutputFormat
+            Silent       = [bool]$script:CLISilent
+            Quiet        = [bool]$script:CLIQuiet
+            Stream       = [bool]$script:CLIStream
+            User         = $env:USERNAME
+        }
+        $entries += $newEntry
+        if ($entries.Count -gt 50) { $entries = @($entries[-50..-1]) }
+        $json = $entries | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($historyPath, $json, (New-Object System.Text.UTF8Encoding $true))
+    } catch {
+        # History is best-effort — never fail a real action because of a log write
+    }
+}
+
 # CLI headless mode action dispatcher
 function Invoke-CLIAction {
     if (-not $script:CLIQuiet) {
@@ -371,6 +411,9 @@ function Invoke-CLIAction {
         }
         Write-OutputColor "" -color "Info"
     }
+
+    # Persist this invocation (excludes History/Replay itself)
+    Add-CLIActionHistoryEntry
 
     switch ($script:CLIAction) {
         'Cleanup' {
@@ -1058,6 +1101,295 @@ function Invoke-CLIAction {
             } catch {
                 Write-OutputColor "  ScheduleUpdateCheck failed: $($_.Exception.Message)" -color "Error"
                 [Environment]::Exit(1)
+            }
+        }
+        'History' {
+            # Show the last N CLI invocations recorded in the rolling history file.
+            # -Config <N> controls how many entries to show (default 20, max 50).
+            $limit = 20
+            if ($script:CLIConfig -match '^\d+$') {
+                $limit = [math]::Max(1, [math]::Min(50, [int]$script:CLIConfig))
+            }
+            $historyPath = Join-Path $script:TempPath "$($script:ToolName)-ActionHistory.json"
+            if (-not (Test-Path -LiteralPath $historyPath)) {
+                Write-OutputColor "  No history yet at $historyPath" -color "Warning"
+                if ($script:CLIOutputFormat -eq 'JSON') {
+                    Write-Output (@{ Tool=$script:ToolFullName; Version=$script:ScriptVersion; Action='History'; Timestamp=(Get-Date -Format 'o'); Hostname=$env:COMPUTERNAME; Success=$true; Count=0; Entries=@() } | ConvertTo-Json -Compress -Depth 10)
+                }
+                [Environment]::Exit(0)
+            }
+            $entries = @()
+            try {
+                $raw = Get-Content -LiteralPath $historyPath -Raw -ErrorAction Stop
+                if ($raw) { $entries = @((ConvertFrom-Json -InputObject $raw -ErrorAction Stop)) }
+            } catch {
+                Write-OutputColor "  Could not parse history file: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+            # Show newest first, limit to N
+            $entries = @($entries)
+            [array]::Reverse($entries)
+            $shown = @($entries | Select-Object -First $limit)
+
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                Write-Output (@{ Tool=$script:ToolFullName; Version=$script:ScriptVersion; Action='History'; Timestamp=(Get-Date -Format 'o'); Hostname=$env:COMPUTERNAME; Success=$true; Count=$shown.Count; Total=$entries.Count; Entries=$shown } | ConvertTo-Json -Compress -Depth 10)
+            } else {
+                Write-OutputColor "  Last $($shown.Count) of $($entries.Count) action(s) — newest first:" -color "Info"
+                Write-OutputColor "" -color "Info"
+                $i = 1
+                foreach ($e in $shown) {
+                    $extra = @()
+                    if ($e.Config) { $extra += "-Config '$($e.Config)'" }
+                    if ($e.OutputFormat -and $e.OutputFormat -ne 'Console') { $extra += "-OutputFormat $($e.OutputFormat)" }
+                    if ($e.Tier -and $e.Tier -ne 'Standard') { $extra += "-Tier $($e.Tier)" }
+                    if ($e.Silent) { $extra += '-Silent' }
+                    if ($e.Quiet) { $extra += '-Quiet' }
+                    if ($e.Stream) { $extra += '-Stream' }
+                    $extraStr = if ($extra.Count -gt 0) { "  $($extra -join ' ')" } else { '' }
+                    $ts = try { ([datetime]$e.Timestamp).ToString('yyyy-MM-dd HH:mm:ss') } catch { [string]$e.Timestamp }
+                    Write-OutputColor ("  [{0,2}] {1}  -Action {2}{3}" -f $i, $ts, $e.Action, $extraStr) -color "Success"
+                    $i++
+                }
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Replay entry N with:  RackStack -Action Replay -Config N" -color "Debug"
+            }
+        }
+        'Replay' {
+            # Re-run a prior CLI invocation by its 1-based index from History (1 = most recent).
+            # Spawns a fresh RackStack process with the saved args so the replay exit code
+            # flows back correctly instead of being swallowed by this dispatcher.
+            if (-not $script:CLIConfig -or $script:CLIConfig -notmatch '^\d+$') {
+                Write-OutputColor "  ERROR: -Action Replay requires -Config <index>  (1 = most recent; see -Action History)" -color "Error"
+                [Environment]::Exit(1)
+            }
+            $idx = [int]$script:CLIConfig
+            $historyPath = Join-Path $script:TempPath "$($script:ToolName)-ActionHistory.json"
+            if (-not (Test-Path -LiteralPath $historyPath)) {
+                Write-OutputColor "  No history at $historyPath — nothing to replay." -color "Error"
+                [Environment]::Exit(1)
+            }
+            try {
+                $entries = @((ConvertFrom-Json -InputObject (Get-Content -LiteralPath $historyPath -Raw)))
+            } catch {
+                Write-OutputColor "  History file unreadable: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+            if ($entries.Count -eq 0) { Write-OutputColor "  History is empty." -color "Error"; [Environment]::Exit(1) }
+            if ($idx -lt 1 -or $idx -gt $entries.Count) {
+                Write-OutputColor "  Index out of range: $idx (have 1-$($entries.Count))" -color "Error"
+                [Environment]::Exit(1)
+            }
+            # Newest is last element; 1-based index from newest means count - idx
+            $target = $entries[$entries.Count - $idx]
+            $replayExe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            $argList = @('-Action', [string]$target.Action)
+            if ($target.Tier -and $target.Tier -ne 'Standard') { $argList += @('-Tier', [string]$target.Tier) }
+            if ($target.Config) { $argList += @('-Config', [string]$target.Config) }
+            if ($target.OutputFormat -and $target.OutputFormat -ne 'Console') { $argList += @('-OutputFormat', [string]$target.OutputFormat) }
+            if ($target.Silent) { $argList += '-Silent' }
+            if ($target.Quiet)  { $argList += '-Quiet' }
+            if ($target.Stream) { $argList += '-Stream' }
+            Write-OutputColor "  Replaying: -Action $($target.Action) $(($argList[2..($argList.Count-1)]) -join ' ')" -color "Info"
+            Write-OutputColor "  (originally run $($target.Timestamp) by $($target.User))" -color "Debug"
+            Write-OutputColor "" -color "Info"
+            try {
+                $p = Start-Process -FilePath $replayExe -ArgumentList $argList -Wait -PassThru -NoNewWindow -ErrorAction Stop
+                [Environment]::Exit($p.ExitCode)
+            } catch {
+                Write-OutputColor "  Replay failed: $($_.Exception.Message)" -color "Error"
+                [Environment]::Exit(1)
+            }
+        }
+        'Dashboard' {
+            # Simple HTTP server that surfaces the HealthDashboard data as HTML and JSON.
+            # Binds to 127.0.0.1:8080 by default. Override via -Config "host:port" or -Config "port".
+            # Admins who want LAN access can bind with -Config "0.0.0.0:8080" (already-elevated process
+            # bypasses the URL ACL reservation that HttpListener normally requires).
+            # Routes:
+            #   GET /              -> HTML page (refreshes every 10s via meta-refresh)
+            #   GET /api/health    -> HealthDashboard JSON
+            #   GET /api/version   -> Tool + OS version JSON
+            #   GET /api/selftest  -> SelfTest-equivalent JSON
+            $bindHost = '127.0.0.1'
+            $port = 8080
+            if ($script:CLIConfig) {
+                $cfg = $script:CLIConfig.Trim().Trim('"')
+                if ($cfg -match '^(\*|0\.0\.0\.0|\d{1,3}(?:\.\d{1,3}){3}|\[?::\]?|[A-Za-z][A-Za-z0-9\-.]*):(\d+)$') {
+                    $regexMatches = $matches
+                    $bindHost = $regexMatches[1]; $port = [int]$regexMatches[2]
+                } elseif ($cfg -match '^\d+$') {
+                    $port = [int]$cfg
+                } else {
+                    Write-OutputColor "  ERROR: -Config must be 'port' or 'host:port' (got '$cfg')" -color "Error"
+                    [Environment]::Exit(1)
+                }
+            }
+            if ($port -lt 1 -or $port -gt 65535) {
+                Write-OutputColor "  ERROR: port out of range: $port" -color "Error"
+                [Environment]::Exit(1)
+            }
+
+            $prefix = if ($bindHost -in @('*', '0.0.0.0')) { "http://+:$port/" } else { "http://${bindHost}:$port/" }
+            $listener = New-Object System.Net.HttpListener
+            $listener.Prefixes.Add($prefix)
+            try {
+                $listener.Start()
+            } catch {
+                Write-OutputColor "  Failed to bind $prefix - $($_.Exception.Message)" -color "Error"
+                Write-OutputColor "  If this is a wildcard/external bind, run: netsh http add urlacl url=$prefix user=Everyone" -color "Info"
+                [Environment]::Exit(1)
+            }
+
+            Write-OutputColor "  $($script:ToolFullName) Dashboard v$($script:ScriptVersion)" -color "Success"
+            Write-OutputColor "  Listening at $prefix" -color "Info"
+            Write-OutputColor "  Ctrl+C to stop." -color "Debug"
+            Write-OutputColor "" -color "Info"
+
+            try {
+                while ($listener.IsListening) {
+                    $ctx = $listener.GetContext()  # blocks — Ctrl+C kills the process
+                    $req = $ctx.Request
+                    $resp = $ctx.Response
+                    $routePath = $req.Url.AbsolutePath.ToLower()
+                    Write-OutputColor "  $(Get-Date -Format 'HH:mm:ss') $($req.HttpMethod) $routePath from $($req.RemoteEndPoint.Address)" -color "Debug"
+
+                    # Gather a snapshot once per request (dashboards call this on a timer)
+                    $snapshot = @{
+                        Tool       = $script:ToolFullName
+                        Version    = $script:ScriptVersion
+                        Hostname   = $env:COMPUTERNAME
+                        Timestamp  = (Get-Date -Format 'o')
+                        OSBuildNumber = $script:OSBuildNumber
+                    }
+                    # CPU / memory / uptime via CIM
+                    try {
+                        $osCim = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 5 -ErrorAction Stop
+                        $snapshot.MemoryUsedPct = [math]::Round((1 - ($osCim.FreePhysicalMemory / $osCim.TotalVisibleMemorySize)) * 100, 1)
+                        $snapshot.MemoryTotalGB = [math]::Round($osCim.TotalVisibleMemorySize / 1MB, 1)
+                        $snapshot.MemoryFreeGB  = [math]::Round($osCim.FreePhysicalMemory / 1MB, 1)
+                        $snapshot.LastBootTime  = $osCim.LastBootUpTime.ToString('o')
+                        $snapshot.UptimeHours   = [math]::Round(((Get-Date) - $osCim.LastBootUpTime).TotalHours, 1)
+                    } catch {
+                        $snapshot.MemoryUsedPct = $null
+                    }
+                    try {
+                        $cpuSample = Get-CimInstance Win32_Processor -OperationTimeoutSec 5 -ErrorAction Stop
+                        $snapshot.CPULoadPct = [math]::Round(((@($cpuSample) | Measure-Object LoadPercentage -Average).Average), 1)
+                    } catch {
+                        $snapshot.CPULoadPct = $null
+                    }
+                    try {
+                        $sysDisk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop
+                        if ($sysDisk.Size -gt 0) {
+                            $snapshot.SystemDriveUsedPct = [math]::Round((1 - ($sysDisk.FreeSpace / $sysDisk.Size)) * 100, 1)
+                            $snapshot.SystemDriveFreeGB  = [math]::Round($sysDisk.FreeSpace / 1GB, 1)
+                        }
+                    } catch {
+                        $snapshot.SystemDriveUsedPct = $null
+                    }
+
+                    $body = ''
+                    $contentType = 'text/html; charset=utf-8'
+                    $statusCode = 200
+
+                    switch -Regex ($routePath) {
+                        '^/api/version/?$' {
+                            $contentType = 'application/json; charset=utf-8'
+                            $body = (@{ Tool=$snapshot.Tool; Version=$snapshot.Version; Hostname=$snapshot.Hostname; Timestamp=$snapshot.Timestamp; OSBuildNumber=$snapshot.OSBuildNumber } | ConvertTo-Json -Compress -Depth 10)
+                            break
+                        }
+                        '^/api/health/?$' {
+                            $contentType = 'application/json; charset=utf-8'
+                            $body = ($snapshot | ConvertTo-Json -Compress -Depth 10)
+                            break
+                        }
+                        '^/api/selftest/?$' {
+                            $contentType = 'application/json; charset=utf-8'
+                            $stChecks = @()
+                            $psv = $PSVersionTable.PSVersion
+                            $stChecks += @{ Name='PowerShellVersion'; Passed=($psv.Major -gt 5 -or ($psv.Major -eq 5 -and $psv.Minor -ge 1)); Detail="$($psv.Major).$($psv.Minor).$($psv.Build)" }
+                            $stIsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+                            $stChecks += @{ Name='Elevated'; Passed=$stIsAdmin; Detail=if ($stIsAdmin) {'Admin'} else {'NOT admin'} }
+                            $stChecks += @{ Name='DefaultsJsonPresent'; Passed=[bool]($script:DefaultsPath -and (Test-Path -LiteralPath $script:DefaultsPath)); Detail=[string]$script:DefaultsPath }
+                            $stFailed = @($stChecks | Where-Object { -not $_.Passed }).Count
+                            $body = (@{ Tool=$snapshot.Tool; Version=$snapshot.Version; TotalChecks=@($stChecks).Count; Failed=$stFailed; Success=($stFailed -eq 0); Checks=$stChecks } | ConvertTo-Json -Compress -Depth 10)
+                            break
+                        }
+                        default {
+                            # Root / anything else: HTML dashboard (tolerates missing metrics)
+                            $warn = $script:DashboardWarningPercent; if (-not $warn) { $warn = 70 }
+                            $crit = $script:DashboardCriticalPercent; if (-not $crit) { $crit = 90 }
+                            function _color_for($pct) {
+                                if ($null -eq $pct) { return '#666' }
+                                if ($pct -ge $crit) { return '#c62828' }
+                                if ($pct -ge $warn) { return '#ef6c00' }
+                                return '#2e7d32'
+                            }
+                            $cpuPct = $snapshot.CPULoadPct
+                            $memPct = $snapshot.MemoryUsedPct
+                            $diskPct = $snapshot.SystemDriveUsedPct
+                            $cpuStr  = if ($null -ne $cpuPct)  { "$cpuPct%" } else { 'n/a' }
+                            $memStr  = if ($null -ne $memPct)  { "$memPct% of $($snapshot.MemoryTotalGB) GB" } else { 'n/a' }
+                            $diskStr = if ($null -ne $diskPct) { "$diskPct% used, $($snapshot.SystemDriveFreeGB) GB free" } else { 'n/a' }
+                            $upStr   = if ($null -ne $snapshot.UptimeHours) { "$($snapshot.UptimeHours) h" } else { 'n/a' }
+                            $h = [System.Net.WebUtility]::HtmlEncode
+                            $body = @"
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="10">
+<title>$($h.Invoke($snapshot.Tool)) - $($h.Invoke($snapshot.Hostname))</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:#f5f5f7;color:#111}
+header{background:#0b3d62;color:#fff;padding:18px 24px}
+header h1{margin:0;font-size:20px;font-weight:600}
+header p{margin:4px 0 0;opacity:0.85;font-size:13px}
+main{max-width:960px;margin:24px auto;padding:0 24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.card{background:#fff;border-radius:8px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card h2{margin:0 0 8px;font-size:13px;text-transform:uppercase;color:#555;letter-spacing:.05em}
+.big{font-size:28px;font-weight:600;line-height:1}
+.sub{font-size:13px;color:#555;margin-top:6px}
+footer{text-align:center;color:#999;font-size:12px;padding:16px}
+.links a{color:#0b3d62;text-decoration:none;margin-right:14px;font-size:13px}
+.links{text-align:right;padding:8px 24px;background:#fff;border-bottom:1px solid #e5e5e5}
+</style></head><body>
+<header>
+  <h1>$($h.Invoke($snapshot.Tool))</h1>
+  <p>$($h.Invoke($snapshot.Hostname)) · v$($h.Invoke($snapshot.Version)) · uptime $($h.Invoke($upStr)) · snapshot $($h.Invoke($snapshot.Timestamp))</p>
+</header>
+<div class="links">
+  <a href="/api/health">/api/health</a>
+  <a href="/api/version">/api/version</a>
+  <a href="/api/selftest">/api/selftest</a>
+</div>
+<main>
+  <div class="grid">
+    <div class="card"><h2>CPU</h2><div class="big" style="color:$(_color_for $cpuPct)">$($h.Invoke($cpuStr))</div><div class="sub">Warning &gt;= $warn%, Critical &gt;= $crit%</div></div>
+    <div class="card"><h2>Memory</h2><div class="big" style="color:$(_color_for $memPct)">$($h.Invoke($memStr))</div><div class="sub">$($snapshot.MemoryFreeGB) GB free</div></div>
+    <div class="card"><h2>$($h.Invoke($env:SystemDrive)) Drive</h2><div class="big" style="color:$(_color_for $diskPct)">$($h.Invoke($diskStr))</div><div class="sub">Warning &gt;= $($warn + 5)%</div></div>
+  </div>
+</main>
+<footer>Auto-refreshes every 10 seconds · Ctrl+C the host process to stop the server</footer>
+</body></html>
+"@
+                            break
+                        }
+                    }
+
+                    try {
+                        $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                        $resp.StatusCode = $statusCode
+                        $resp.ContentType = $contentType
+                        $resp.ContentLength64 = $bytes.Length
+                        $resp.Headers.Add('Cache-Control', 'no-store')
+                        $resp.OutputStream.Write($bytes, 0, $bytes.Length)
+                    } catch { }
+                    finally {
+                        try { $resp.Close() } catch { }
+                    }
+                }
+            } finally {
+                try { $listener.Stop() } catch { }
+                try { $listener.Close() } catch { }
             }
         }
         'CheckForUpdate' {
@@ -12190,6 +12522,20 @@ function Start-BatchMode {
         Write-OutputColor "  No changes will be made. Actions will be logged only.`n" -color "Warning"
     }
 
+    # ndjson stream: batch_start event so orchestration knows we've begun.
+    # (Actual per-step events are a future release — start/end gives timing + success at minimum.)
+    if ($script:CLIStream -and $script:CLIOutputFormat -eq 'JSON') {
+        Write-Output (@{
+            Type       = 'batch_start'
+            Tool       = $script:ToolFullName
+            Version    = $script:ScriptVersion
+            Hostname   = $env:COMPUTERNAME
+            ConfigType = $configType
+            DryRun     = [bool]$script:DryRunMode
+            Timestamp  = (Get-Date -Format 'o')
+        } | ConvertTo-Json -Compress -Depth 10)
+    }
+
     # Pre-execution summary
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  PLANNED ACTIONS".PadRight(72))│" -color "Info"
@@ -13671,6 +14017,8 @@ function Start-BatchMode {
             RebootNeeded  = [bool]$global:RebootNeeded
             Success       = ($errors -eq 0)
         }
+        # In stream mode the summary is emitted as a typed terminal event for consumers parsing line-by-line.
+        if ($script:CLIStream) { $batchJson.Type = 'batch_end' }
         Write-Output ($batchJson | ConvertTo-Json -Depth 10 -Compress)
     }
 

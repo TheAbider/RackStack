@@ -164,7 +164,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.97.0"
+$script:ScriptVersion = "1.98.0"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.
@@ -192,6 +192,7 @@ $script:CLIVersion  = if ($Version) { [bool]$Version } else { $false }
 $script:CLIListActions = if ($ListActions) { [bool]$ListActions } else { $false }
 # -Quiet auto-enabled when -OutputFormat JSON to ensure clean machine-readable output
 $script:CLIQuiet    = if ($Quiet -or $OutputFormat -eq 'JSON') { $true } else { $false }
+$script:CLIStream   = if ($Stream) { [bool]$Stream } else { $false }
 
 # OS version detection (for feature compatibility)
 # 2012/2012 R2 lack SET, Storage Replica, Defender PowerShell module
