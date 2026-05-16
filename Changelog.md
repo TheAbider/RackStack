@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.1
+
+- **Docs:** README polish. Promoted "sconfig for the modern era" to the top tagline, added a production-scale callout under the badges, tightened the opening paragraph with the 15-vs-167 comparison, and reserved (commented-out) embed slots for future screenshots.
+- 65 modules, 4535 tests, 176 CLI actions, 615 functions
+
 ## v1.98.0
 
 - **New:** `-Action Dashboard` — embedded HTTP server that surfaces live health data as HTML plus JSON endpoints. Binds to `127.0.0.1:8080` by default; override with `-Config "port"` or `-Config "host:port"` (e.g., `-Config "0.0.0.0:8080"` for LAN access on already-elevated processes). Routes: `/` (auto-refreshing HTML dashboard with CPU/memory/disk/uptime, colored against `DashboardWarningPercent`/`DashboardCriticalPercent`), `/api/health` (full snapshot JSON), `/api/version` (tool version JSON), `/api/selftest` (SelfTest-equivalent JSON). HTML auto-refreshes every 10 seconds via meta-refresh so even browsers without JavaScript stay current.

@@ -2,7 +2,10 @@
   <img src=".github/assets/banner.png" alt="RackStack" width="100%">
 </p>
 <p align="center">
-  <strong>The PowerShell toolkit that turns bare metal into production-ready Windows Servers.</strong>
+  <strong>sconfig for the modern era.</strong>
+</p>
+<p align="center">
+  The PowerShell toolkit that turns bare metal into production-ready Windows Servers.
 </p>
 <p align="center">
   <a href="#features">Features</a> &bull;
@@ -21,11 +24,19 @@
   <img alt="4500+ Tests" src="https://img.shields.io/badge/tests-4500%2B-brightgreen">
 </p>
 
+> Running in production across 300+ Hyper-V hosts spanning multiple isolated Active Directory forests.
+
 ---
 
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Think of it as **sconfig for the modern era** -- but instead of 15 options, you get 167 CLI actions and 60+ interactive menus covering network configuration, Hyper-V deployment, SAN/iSCSI setup, domain join, licensing, VM creation, health monitoring, drift detection, and batch automation -- all through an interactive console UI with undo support, transaction rollback, and audit logging.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Where sconfig gives you 15 options, RackStack gives you 167 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, and batch automation, all with undo, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
+
+<!--
+<p align="center">
+  <img src=".github/assets/screenshots/batch-mode.png" alt="RackStack batch mode running with idempotent step counter, completed step markers, and transaction rollback summary" width="800">
+</p>
+-->
 
 ## Features
 
@@ -57,6 +68,12 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **UX** -- 5 color themes, session resume, favorites, command history, undo framework, 72-char box-drawing UI
 
+<!--
+<p align="center">
+  <img src=".github/assets/screenshots/health-dashboard.png" alt="RackStack HealthDashboard showing disk I/O latency, NIC errors, memory pressure, Hyper-V guest health, and top CPU processes" width="800">
+</p>
+-->
+
 ## Quick Start
 
 ### Download & Run (recommended)
@@ -64,6 +81,12 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 Grab `RackStack.exe` from the [latest release](https://github.com/TheAbider/RackStack/releases/latest), drop it on your server, and run it as Administrator. That's it.
 
 On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `defaults.json` next to the exe. To pre-configure, download `defaults.example.json` from the release, rename it to `defaults.json`, fill in your values, and place it alongside the exe.
+
+<!--
+<p align="center">
+  <img src=".github/assets/screenshots/main-menu.png" alt="RackStack main interactive menu showing the 72-char box UI, category breadth, and theme rendering" width="800">
+</p>
+-->
 
 The exe auto-checks for updates from GitHub releases. Your `defaults.json` is never overwritten by updates.
 
@@ -337,6 +360,12 @@ $report.Issues
 # - set_fact:
 #     health: "{{ health_result.stdout | from_json }}"
 ```
+
+<!--
+<p align="center">
+  <img src=".github/assets/screenshots/server-score.png" alt="RackStack ServerScore CLI output showing the unified 0-100 health grade alongside structured JSON output for fleet automation" width="800">
+</p>
+-->
 
 **Exit codes:** `0` = success, `1` = error. All CLI actions return proper exit codes for CI/CD integration.
 
