@@ -640,9 +640,12 @@ function Set-PagefileConfiguration {
                         $currentDrive = $regexMatches[1]
                     }
                 }
+                # Invoke-WithTimeout runs in a fresh runspace, so $currentDrive isn't visible
+                # via closure. Pass it explicitly via -ArgumentList and a param() block.
                 $diskCim = Invoke-WithTimeout -ScriptBlock {
-                    Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$currentDrive'" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-                } -TimeoutSeconds 10 -Activity "Checking disk space"
+                    param($drive)
+                    Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$drive'" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+                } -TimeoutSeconds 10 -Activity "Checking disk space" -ArgumentList $currentDrive
                 $disk = if ($diskCim.TimedOut) { $null } else { $diskCim.Result }
                 if ($null -ne $disk) {
                     $freeSpaceMB = [math]::Floor($disk.FreeSpace / 1MB)

@@ -663,8 +663,11 @@ function Import-Defaults {
     # Check for company defaults files
     $companyFiles = @(Get-CompanyDefaultsFiles)
 
-    # Run first-run wizard if no defaults.json exists (skip in batch mode)
-    if (-not (Test-Path -LiteralPath $script:DefaultsPath)) {
+    # Run first-run wizard if no defaults.json exists. Skip in batch, CLI-silent,
+    # and test-runner contexts so non-interactive callers don't block on Read-Host.
+    if (-not (Test-Path -LiteralPath $script:DefaultsPath) -and
+        -not $script:CLISilent -and
+        -not $script:NonInteractive) {
         $batchConfig = Join-Path $script:ModuleRoot "batch_config.json"
         if (-not (Test-Path -LiteralPath $batchConfig)) {
             Show-FirstRunWizard
@@ -1452,7 +1455,14 @@ function Show-EditDefaults {
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) {
                     $octets = $val -split '\.'
-                    $validSubnet = ($octets.Count -eq 3) -and ($octets | ForEach-Object { $_ -match '^\d{1,3}$' -and [int]$_ -ge 0 -and [int]$_ -le 255 }) -notcontains $false
+                    $validSubnet = ($octets.Count -eq 3)  # PS 5.1: `-and` not short-circuit, so [int]"x" must not run when regex fails
+                    if ($validSubnet) {
+                        foreach ($octet in $octets) {
+                            if ($octet -notmatch '^\d{1,3}$') { $validSubnet = $false; break }
+                            $n = [int]$octet
+                            if ($n -lt 0 -or $n -gt 255) { $validSubnet = $false; break }
+                        }
+                    }
                     if ($validSubnet) {
                         $script:iSCSISubnet = $val
                         Initialize-SANTargetPairs

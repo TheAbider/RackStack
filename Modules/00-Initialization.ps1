@@ -12,8 +12,8 @@ $FullName = "Local Administrator"        # Full name for the new local admin acc
 $SwitchName = "LAN-SET"                  # Switch Embedded Team name
 $ManagementName = "Management"           # Management NIC name made by SET
 $BackupName = "Backup"                   # Backup NIC name made by SET
-$logFilePath = $null                     # Path for log file (set to enable logging)
-$emailAddress = $null                    # Email address for log notifications
+$script:logFilePath = $null              # Path for log file (set to enable logging)
+$script:emailAddress = $null             # Email address for log notifications
 
 # DNS Presets for quick configuration (custom presets merged from defaults.json)
 $script:DNSPresets = [ordered]@{
@@ -164,7 +164,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.2"
+$script:ScriptVersion = "1.98.3"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

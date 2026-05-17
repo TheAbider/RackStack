@@ -466,25 +466,20 @@ function Invoke-RecycleBinCleanup {
     Write-OutputColor "  ───────────────────" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Estimate recycle bin size using COM object
-    $recycleBinSize = 0
+    # Count recycle bin items using COM object. The previous "size" accumulator
+    # was meaningless (GetDetailsOf returns a localized string like "1.2 MB" and the
+    # `-replace '[^\d]', ''` stripped both the decimal and the unit), and the value
+    # was never actually displayed. Just count items.
     $recycleBinCount = 0
     try {
         $shell = New-Object -ComObject Shell.Application
         $recycleBin = $shell.NameSpace(0x0A)
         if ($null -ne $recycleBin) {
-            $items = $recycleBin.Items()
-            $recycleBinCount = $items.Count
-            foreach ($item in $items) {
-                try {
-                    $recycleBinSize += $recycleBin.GetDetailsOf($item, 2) -replace '[^\d]', ''
-                }
-                catch { $null = $_ }
-            }
+            $recycleBinCount = $recycleBin.Items().Count
         }
     }
     catch {
-        Write-OutputColor "  Could not estimate recycle bin size." -color "Warning"
+        Write-OutputColor "  Could not enumerate recycle bin." -color "Warning"
     }
     finally {
         if ($null -ne $shell) {

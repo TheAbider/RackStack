@@ -920,14 +920,21 @@ function Remove-DiskPartition {
         return
     }
 
-    # Warn about system/reserved partitions
-    if ($partition.Type -eq "System" -or $partition.Type -eq "Reserved" -or $partition.IsBoot) {
+    # Warn about system/reserved partitions and gate behind a stronger confirmation
+    # so the standard "DELETE" prompt below can't accidentally take out a boot volume.
+    $isBootOrSystem = ($partition.Type -eq "System" -or $partition.Type -eq "Reserved" -or $partition.IsBoot)
+    if ($isBootOrSystem) {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "!!! DANGER !!!" -color "Error"
         Write-OutputColor "  This appears to be a system/boot partition!" -color "Error"
-        Write-OutputColor "  Deleting it may make your system unbootable!" -color "Error"
+        Write-OutputColor "  Deleting it WILL make your system unbootable." -color "Error"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  Are you ABSOLUTELY SURE?" -color "Error"
+        Write-OutputColor "  Type 'OBLITERATE BOOT' (all caps, with space) to confirm:" -color "Error"
+        $bootConfirm = (Read-Host).Trim()
+        if ($bootConfirm -ne "OBLITERATE BOOT") {
+            Write-OutputColor "  Operation cancelled (boot/system partition protected)." -color "Info"
+            return
+        }
     }
 
     $driveLetter = if ($partition.DriveLetter) { "$($partition.DriveLetter):" } else { "No Letter" }

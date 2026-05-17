@@ -116,7 +116,7 @@ function Write-OutputColor {
             } else {
                 Write-Host $message.Substring($lastPipe) -ForegroundColor $borderColor
             }
-            if ($logFilePath) { Write-LogMessage -message "[$color] $message" -logFilePath $logFilePath }
+            if ($script:logFilePath) { Write-LogMessage -message "[$color] $message" -logFilePath $script:logFilePath }
             return
         }
     }
@@ -129,8 +129,8 @@ function Write-OutputColor {
     }
 
     # Log to file if enabled
-    if ($logFilePath) {
-        Write-LogMessage -message "[$color] $message" -logFilePath $logFilePath
+    if ($script:logFilePath) {
+        Write-LogMessage -message "[$color] $message" -logFilePath $script:logFilePath
     }
 }
 
@@ -313,8 +313,8 @@ function Write-RackStackError {
     Write-StructuredLog -Message "[$Code] $message" -Level "ERROR" -Category $category -Data $logData
 
     # File log if enabled
-    if ($logFilePath) {
-        Write-LogMessage -message "[$Code] $message$(if ($Detail) { " - $Detail" })" -logFilePath $logFilePath
+    if ($script:logFilePath) {
+        Write-LogMessage -message "[$Code] $message$(if ($Detail) { " - $Detail" })" -logFilePath $script:logFilePath
     }
 }
 

@@ -669,7 +669,10 @@ function New-StandardVSwitch {
                     Start-Sleep -Seconds 1
                 }
                 if ($vnicReady) {
-                    Rename-VMNetworkAdapter -ManagementOS -Name $SwitchName -NewName $ManagementName -ErrorAction SilentlyContinue
+                    # $script:ManagementName is initialized in 00-Initialization.ps1 and
+                    # overridable via defaults.json. The bare `$ManagementName` here was a
+                    # typo that silently no-op'd the rename on every External vSwitch.
+                    Rename-VMNetworkAdapter -ManagementOS -Name $SwitchName -NewName $script:ManagementName -ErrorAction SilentlyContinue
                 }
 
                 Write-OutputColor "  External switch '$SwitchName' created!" -color "Success"

@@ -77,8 +77,8 @@ function Add-SessionChange {
     }
 
     # Also log to file if logging is enabled
-    if ($logFilePath) {
-        Write-LogMessage -message "[$Category] $Description" -logFilePath $logFilePath
+    if ($script:logFilePath) {
+        Write-LogMessage -message "[$Category] $Description" -logFilePath $script:logFilePath
     }
 
     # Persist to session log on disk
@@ -112,7 +112,7 @@ function Add-SessionChange {
             Move-Item -LiteralPath $auditFile -Destination $archivePath -Force -ErrorAction Stop
         }
         catch {
-            Write-LogMessage -message "Failed to rotate audit log: $_" -logFilePath $logFilePath
+            Write-LogMessage -message "Failed to rotate audit log: $_" -logFilePath $script:logFilePath
         }
     }
 
@@ -559,12 +559,18 @@ function Invoke-WithTimeout {
         [Parameter(Mandatory=$true)]
         [scriptblock]$ScriptBlock,
         [int]$TimeoutSeconds = 30,
-        [string]$Activity = "Operation"
+        [string]$Activity = "Operation",
+        # Values forwarded to a param() block in the script body. The helper runs the
+        # block in a fresh [powershell]::Create() runspace, so closure variables from
+        # the caller are NOT visible. Callers that reference outer values must declare
+        # them via param() inside the block and pass them here positionally.
+        [object[]]$ArgumentList = @()
     )
 
     try {
         $ps = [powershell]::Create()
         [void]$ps.AddScript($ScriptBlock.ToString())
+        foreach ($arg in $ArgumentList) { [void]$ps.AddArgument($arg) }
         $handle = $ps.BeginInvoke()
     } catch {
         if ($null -ne $ps) { $ps.Dispose() }

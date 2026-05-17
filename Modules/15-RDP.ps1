@@ -23,7 +23,8 @@ function Enable-RDP {
 
             # Verify (null-safe re-read)
             $rdpStatus = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -ErrorAction SilentlyContinue
-            if ($null -ne $rdpStatus -and $rdpStatus.fDenyTSConnections -eq 0) {
+            $rdpEnabledNow = ($null -ne $rdpStatus -and $rdpStatus.fDenyTSConnections -eq 0)
+            if ($rdpEnabledNow) {
                 Write-OutputColor "  Remote Desktop has been enabled." -color "Success"
             }
             else {
@@ -67,9 +68,11 @@ function Enable-RDP {
             Write-OutputColor "  RDP is enabled but without NLA. Consider enabling manually." -color "Warning"
         }
 
-        Add-SessionChange -Category "System" -Description "Enabled Remote Desktop"
-        Clear-MenuCache
-        if (-not $rdpAlreadyEnabled) {
+        # Only record the session change / undo entry if RDP actually flipped from
+        # disabled to enabled in this run (avoids logging on registry-write failures
+        # and on the "already enabled" no-op path).
+        if (-not $rdpAlreadyEnabled -and $rdpEnabledNow) {
+            Add-SessionChange -Category "System" -Description "Enabled Remote Desktop"
             Add-UndoAction -Category "System" -Description "Enabled Remote Desktop" -UndoScript {
                 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 1 -ErrorAction SilentlyContinue
                 Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue

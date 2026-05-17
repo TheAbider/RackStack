@@ -309,7 +309,7 @@ function Show-AllSystemTimezones {
             $tz = $allTz[$i]
             $offset = $tz.BaseUtcOffset
             $sign = if ($offset -lt [TimeSpan]::Zero) { "-" } else { "+" }
-            $offsetStr = "UTC${sign}$("{0:D2}:{1:D2}" -f [math]::Abs($offset.Hours), $offset.Minutes)"
+            $offsetStr = "UTC${sign}$("{0:D2}:{1:D2}" -f [math]::Abs($offset.Hours), [math]::Abs($offset.Minutes))"
             $marker = if ($tz.Id -eq $currentTz.Id) { " <-- Current" } else { "" }
             $num = $i + 1
             $label = "  [$num]  $offsetStr  $($tz.Id)$marker"

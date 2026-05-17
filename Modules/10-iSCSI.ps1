@@ -60,6 +60,23 @@ function Test-iSCSIAdapterSide {
         }
     }
 
+    # Refuse to run on an adapter that owns the default route. The original
+    # implementation wiped all IPv4 from the target NIC and assigned a temp IP for
+    # ping testing; if the target was the operator's management/RDP NIC this kicked
+    # them off the box. Side detection is intended for dedicated iSCSI NICs only.
+    try {
+        $defaultRouteIfs = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForEach-Object { $_.InterfaceAlias })
+        if ($AdapterName -in $defaultRouteIfs) {
+            Write-OutputColor "    REFUSING to wipe IPs on '$AdapterName': it owns the default route (likely your management/RDP NIC)." -color "Error"
+            Write-OutputColor "    Side detection runs on dedicated iSCSI adapters only. Disable management on this NIC or pick a different one." -color "Warning"
+            $result.Side = "Skipped"
+            return $result
+        }
+    } catch {
+        # If Get-NetRoute fails (older OS, restricted role), continue — the original
+        # restore-on-exit path still rebuilds IPs from the snapshot taken at function start.
+    }
+
     # Temporarily assign IP on the adapter
     $tempIPAssigned = $false
     try {
@@ -727,8 +744,12 @@ function Get-SANTargetsForHost {
         }
         if (-not $assignment) { return @() }
 
-        # Find primary pair by name
-        $primaryPair = $script:SANTargetPairs | Where-Object { $_.Name -eq $assignment.PrimaryPair }
+        # Find primary pair by Name. Default-built pairs use an Index field and no
+        # Name key; tolerate both by matching against either Name or "Pair$Index"
+        # so the lookup still works when Initialize-SANTargetPairs hasn't added Name.
+        $primaryPair = $script:SANTargetPairs | Where-Object {
+            $_.Name -eq $assignment.PrimaryPair -or "Pair$($_.Index)" -eq $assignment.PrimaryPair
+        }
         if (-not $primaryPair -and @($script:SANTargetPairs).Count -gt 0) {
             $primaryPair = $script:SANTargetPairs[0]
         }
@@ -738,11 +759,13 @@ function Get-SANTargetsForHost {
             return $primaryPair
         }
 
-        # Build retry order from assignment
+        # Build retry order from assignment (same Name-or-Pair$Index match)
         $retryOrder = @()
         $retryOrder += $primaryPair
         foreach ($retryName in $assignment.RetryOrder) {
-            $retryPair = $script:SANTargetPairs | Where-Object { $_.Name -eq $retryName }
+            $retryPair = $script:SANTargetPairs | Where-Object {
+                $_.Name -eq $retryName -or "Pair$($_.Index)" -eq $retryName
+            }
             if ($retryPair) {
                 $retryOrder += $retryPair
             }

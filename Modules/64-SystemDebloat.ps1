@@ -587,11 +587,12 @@ function Invoke-WorkstationDebloat {
             $svcNameCapture = $svcInfo.Name
             $startTypeCapture = $originalStartType
             Add-UndoAction -Category "Debloat" -Description "Disabled service $($svcInfo.DisplayName)" -UndoScript {
-                Set-Service -Name $svcNameCapture -StartupType $startTypeCapture -ErrorAction SilentlyContinue
-                if ($startTypeCapture -eq "Automatic") {
-                    Start-Service -Name $svcNameCapture -ErrorAction SilentlyContinue
+                param($SvcName, $StartType)
+                Set-Service -Name $SvcName -StartupType $StartType -ErrorAction SilentlyContinue
+                if ($StartType -eq "Automatic") {
+                    Start-Service -Name $SvcName -ErrorAction SilentlyContinue
                 }
-            }
+            } -UndoParams @{ SvcName = $svcNameCapture; StartType = $startTypeCapture }
         }
         catch {
             Write-OutputColor "  [FAILED] $($svcInfo.DisplayName) — $_" -color "Error"
@@ -627,9 +628,10 @@ function Invoke-WorkstationDebloat {
             $taskPathCapture = $task.TaskPath
             $taskNameCapture = $task.TaskName
             Add-UndoAction -Category "Debloat" -Description "Disabled task $($task.TaskName)" -UndoScript {
-                Get-ScheduledTask -TaskPath $taskPathCapture -TaskName $taskNameCapture -ErrorAction SilentlyContinue |
+                param($TaskPath, $TaskName)
+                Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue |
                     Enable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
-            }
+            } -UndoParams @{ TaskPath = $taskPathCapture; TaskName = $taskNameCapture }
         }
         catch {
             Write-OutputColor "  [FAILED] $($task.TaskName) — $_" -color "Error"
@@ -840,13 +842,14 @@ function Invoke-WorkstationDebloat {
                 $regPrevious = $previousValue
                 $regExisted = $previousExists
                 Add-UndoAction -Category "Debloat" -Description "Registry: $($tweak.Desc)" -UndoScript {
-                    if ($regExisted) {
-                        Set-ItemProperty -LiteralPath $regPath -Name $regName -Value $regPrevious -Force -ErrorAction SilentlyContinue
+                    param($RegPath, $RegName, $RegPrevious, $RegExisted)
+                    if ($RegExisted) {
+                        Set-ItemProperty -LiteralPath $RegPath -Name $RegName -Value $RegPrevious -Force -ErrorAction SilentlyContinue
                     }
                     else {
-                        Remove-ItemProperty -LiteralPath $regPath -Name $regName -Force -ErrorAction SilentlyContinue
+                        Remove-ItemProperty -LiteralPath $RegPath -Name $RegName -Force -ErrorAction SilentlyContinue
                     }
-                }
+                } -UndoParams @{ RegPath = $regPath; RegName = $regName; RegPrevious = $regPrevious; RegExisted = $regExisted }
             }
             catch {
                 Write-OutputColor "  [FAILED] $($tweak.Desc) — $_" -color "Error"
@@ -978,9 +981,10 @@ function Invoke-ServerDebloat {
             $taskPathCapture = $task.TaskPath
             $taskNameCapture = $task.TaskName
             Add-UndoAction -Category "Debloat" -Description "Disabled task $($task.TaskName)" -UndoScript {
-                Get-ScheduledTask -TaskPath $taskPathCapture -TaskName $taskNameCapture -ErrorAction SilentlyContinue |
+                param($TaskPath, $TaskName)
+                Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue |
                     Enable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
-            }
+            } -UndoParams @{ TaskPath = $taskPathCapture; TaskName = $taskNameCapture }
         }
         catch {
             Write-OutputColor "  [FAILED] $($task.TaskName) — $_" -color "Error"
@@ -1110,11 +1114,12 @@ function Invoke-ServerDebloat {
             $svcNameCapture = $svcInfo.Name
             $startTypeCapture = $originalStartType
             Add-UndoAction -Category "Debloat" -Description "Disabled service $($svcInfo.DisplayName)" -UndoScript {
-                Set-Service -Name $svcNameCapture -StartupType $startTypeCapture -ErrorAction SilentlyContinue
-                if ($startTypeCapture -eq "Automatic") {
-                    Start-Service -Name $svcNameCapture -ErrorAction SilentlyContinue
+                param($SvcName, $StartType)
+                Set-Service -Name $SvcName -StartupType $StartType -ErrorAction SilentlyContinue
+                if ($StartType -eq "Automatic") {
+                    Start-Service -Name $SvcName -ErrorAction SilentlyContinue
                 }
-            }
+            } -UndoParams @{ SvcName = $svcNameCapture; StartType = $startTypeCapture }
         }
         catch {
             Write-OutputColor "  [FAILED] $($svcInfo.DisplayName) — $_" -color "Error"
@@ -1171,13 +1176,14 @@ function Invoke-ServerDebloat {
 
                 $prevSMValue = $smCurrent
                 Add-UndoAction -Category "Debloat" -Description "Disabled Server Manager auto-start" -UndoScript {
-                    if ($null -ne $prevSMValue) {
-                        Set-ItemProperty -LiteralPath "HKLM:\SOFTWARE\Microsoft\ServerManager" -Name "DoNotOpenServerManagerAtLogon" -Value $prevSMValue -Force -ErrorAction SilentlyContinue
+                    param($PrevValue)
+                    if ($null -ne $PrevValue) {
+                        Set-ItemProperty -LiteralPath "HKLM:\SOFTWARE\Microsoft\ServerManager" -Name "DoNotOpenServerManagerAtLogon" -Value $PrevValue -Force -ErrorAction SilentlyContinue
                     }
                     else {
                         Remove-ItemProperty -LiteralPath "HKLM:\SOFTWARE\Microsoft\ServerManager" -Name "DoNotOpenServerManagerAtLogon" -Force -ErrorAction SilentlyContinue
                     }
-                }
+                } -UndoParams @{ PrevValue = $prevSMValue }
             }
             catch {
                 Write-OutputColor "  [FAILED] Server Manager auto-start — $_" -color "Error"
@@ -1245,8 +1251,9 @@ function Invoke-ServerDebloat {
 
                     $featureNameCapture = $feature.Name
                     Add-UndoAction -Category "Debloat" -Description "Disabled feature $($feature.Desc)" -UndoScript {
-                        Enable-WindowsOptionalFeature -Online -FeatureName $featureNameCapture -NoRestart -ErrorAction SilentlyContinue | Out-Null
-                    }
+                        param($FeatureName)
+                        Enable-WindowsOptionalFeature -Online -FeatureName $FeatureName -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                    } -UndoParams @{ FeatureName = $featureNameCapture }
                 }
                 catch {
                     Write-OutputColor "  [FAILED] $($feature.Desc) — $_" -color "Error"
@@ -1288,9 +1295,10 @@ function Invoke-ServerDebloat {
                         $taskPathCap = $task.TaskPath
                         $taskNameCap = $task.TaskName
                         Add-UndoAction -Category "Debloat" -Description "Disabled task $($task.TaskName)" -UndoScript {
-                            Get-ScheduledTask -TaskPath $taskPathCap -TaskName $taskNameCap -ErrorAction SilentlyContinue |
+                            param($TaskPath, $TaskName)
+                            Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue |
                                 Enable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
-                        }
+                        } -UndoParams @{ TaskPath = $taskPathCap; TaskName = $taskNameCap }
                     }
                     catch {
                         Write-OutputColor "  [FAILED] $($task.TaskName) — $_" -color "Error"
@@ -1736,11 +1744,12 @@ function Invoke-CustomDebloatExecution {
                 $svcNameCap = $svcInfo.Name
                 $startTypeCap = $originalStartType
                 Add-UndoAction -Category "Debloat" -Description "Disabled service $($svcInfo.DisplayName)" -UndoScript {
-                    Set-Service -Name $svcNameCap -StartupType $startTypeCap -ErrorAction SilentlyContinue
-                    if ($startTypeCap -eq "Automatic") {
-                        Start-Service -Name $svcNameCap -ErrorAction SilentlyContinue
+                    param($SvcName, $StartType)
+                    Set-Service -Name $SvcName -StartupType $StartType -ErrorAction SilentlyContinue
+                    if ($StartType -eq "Automatic") {
+                        Start-Service -Name $SvcName -ErrorAction SilentlyContinue
                     }
-                }
+                } -UndoParams @{ SvcName = $svcNameCap; StartType = $startTypeCap }
             }
             catch {
                 Write-OutputColor "  [FAILED] $($svcInfo.DisplayName) — $_" -color "Error"
@@ -1767,9 +1776,10 @@ function Invoke-CustomDebloatExecution {
                 $taskPathCap = $task.TaskPath
                 $taskNameCap = $task.TaskName
                 Add-UndoAction -Category "Debloat" -Description "Disabled task $($task.TaskName)" -UndoScript {
-                    Get-ScheduledTask -TaskPath $taskPathCap -TaskName $taskNameCap -ErrorAction SilentlyContinue |
+                    param($TaskPath, $TaskName)
+                    Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue |
                         Enable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
-                }
+                } -UndoParams @{ TaskPath = $taskPathCap; TaskName = $taskNameCap }
             }
             catch {
                 Write-OutputColor "  [FAILED] $($task.TaskName) — $_" -color "Error"
@@ -1862,13 +1872,14 @@ function Invoke-CustomDebloatExecution {
                 $rPrev = $prevVal
                 $rExisted = $prevExists
                 Add-UndoAction -Category "Debloat" -Description "Registry: $($tweak.Desc)" -UndoScript {
-                    if ($rExisted) {
-                        Set-ItemProperty -LiteralPath $rPath -Name $rName -Value $rPrev -Force -ErrorAction SilentlyContinue
+                    param($RegPath, $RegName, $RegPrevious, $RegExisted)
+                    if ($RegExisted) {
+                        Set-ItemProperty -LiteralPath $RegPath -Name $RegName -Value $RegPrevious -Force -ErrorAction SilentlyContinue
                     }
                     else {
-                        Remove-ItemProperty -LiteralPath $rPath -Name $rName -Force -ErrorAction SilentlyContinue
+                        Remove-ItemProperty -LiteralPath $RegPath -Name $RegName -Force -ErrorAction SilentlyContinue
                     }
-                }
+                } -UndoParams @{ RegPath = $rPath; RegName = $rName; RegPrevious = $rPrev; RegExisted = $rExisted }
             }
             catch {
                 Write-OutputColor "  [FAILED] $($tweak.Desc) — $_" -color "Error"
@@ -1927,8 +1938,9 @@ function Invoke-CustomDebloatExecution {
 
                     $fNameCap = $feature.Name
                     Add-UndoAction -Category "Debloat" -Description "Disabled feature $($feature.Desc)" -UndoScript {
-                        Enable-WindowsOptionalFeature -Online -FeatureName $fNameCap -NoRestart -ErrorAction SilentlyContinue | Out-Null
-                    }
+                        param($FeatureName)
+                        Enable-WindowsOptionalFeature -Online -FeatureName $FeatureName -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                    } -UndoParams @{ FeatureName = $fNameCap }
                 }
                 catch {
                     Write-OutputColor "  [FAILED] $($feature.Desc) — $_" -color "Error"
@@ -2001,8 +2013,9 @@ function Invoke-CustomDebloatExecution {
                             $sName = $item.Name
                             $sValue = $savedValue
                             Add-UndoAction -Category "Debloat" -Description "Removed startup entry $($item.Name)" -UndoScript {
-                                Set-ItemProperty -LiteralPath $sPath -Name $sName -Value $sValue -Force -ErrorAction SilentlyContinue
-                            }
+                                param($Path, $Name, $Value)
+                                Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Force -ErrorAction SilentlyContinue
+                            } -UndoParams @{ Path = $sPath; Name = $sName; Value = $sValue }
                         }
                         catch {
                             Write-OutputColor "  [FAILED] Startup: $($item.Name) — $_" -color "Error"

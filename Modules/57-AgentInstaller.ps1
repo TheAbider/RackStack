@@ -516,7 +516,21 @@ function Install-SelectedAgent {
         $elapsed = 0
         $earlyDetect = $false
         $userSkipped = $false
-        $installProcess = Start-Process -FilePath $tempPath -ArgumentList $script:AgentInstaller.InstallArgs -PassThru -WindowStyle Hidden -ErrorAction Stop
+        # Normalize InstallArgs to a string[] so Start-Process passes each switch as a
+        # separate argv entry. Older installers that parse via GetCommandLine() see a
+        # single concatenated string as one literal token and silently ignore the
+        # rest of the flags (e.g., would see "/s /norestart" as one switch and skip
+        # the silent-mode parse).
+        $argArray = if ($script:AgentInstaller.InstallArgs -is [System.Array]) {
+            @($script:AgentInstaller.InstallArgs)
+        } else {
+            @(($script:AgentInstaller.InstallArgs -split '\s+') | Where-Object { $_ })
+        }
+        if ($argArray.Count -gt 0) {
+            $installProcess = Start-Process -FilePath $tempPath -ArgumentList $argArray -PassThru -WindowStyle Hidden -ErrorAction Stop
+        } else {
+            $installProcess = Start-Process -FilePath $tempPath -PassThru -WindowStyle Hidden -ErrorAction Stop
+        }
 
         # Monitor installer: check process exit, agent detection, keypress, and timeout
         while (-not $installProcess.HasExited) {

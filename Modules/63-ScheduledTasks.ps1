@@ -665,6 +665,51 @@ function Import-ScheduledTaskXML {
     Write-OutputColor "  Source: $importPath" -color "Info"
     Write-OutputColor "" -color "Info"
 
+    # Pre-flight: surface what the task is actually going to do before the operator
+    # commits. Task XML can name LocalSystem as Principal and run arbitrary commands,
+    # so display the Actions and Principal blocks (parsed with XmlResolver disabled to
+    # block external-entity expansion) and require explicit confirmation.
+    try {
+        $xmlDoc = New-Object System.Xml.XmlDocument
+        $xmlDoc.XmlResolver = $null
+        $xmlDoc.LoadXml($xml)
+        $ns = New-Object System.Xml.XmlNamespaceManager($xmlDoc.NameTable)
+        $ns.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+        $principalNodes = @($xmlDoc.SelectNodes('//t:Principal', $ns))
+        $actionNodes    = @($xmlDoc.SelectNodes('//t:Actions/*', $ns))
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Task will run as:" -color "Warning"
+        if ($principalNodes.Count -eq 0) {
+            Write-OutputColor "    (no <Principal> block — defaults to the current user context)" -color "Info"
+        } else {
+            foreach ($p in $principalNodes) {
+                $userId  = $p.SelectSingleNode('t:UserId',  $ns)
+                $groupId = $p.SelectSingleNode('t:GroupId', $ns)
+                $runLvl  = $p.SelectSingleNode('t:RunLevel', $ns)
+                $who = if ($userId) { $userId.InnerText } elseif ($groupId) { $groupId.InnerText } else { '(unknown)' }
+                $lvl = if ($runLvl) { $runLvl.InnerText } else { 'LeastPrivilege' }
+                Write-OutputColor "    Identity: $who   RunLevel: $lvl" -color "Warning"
+            }
+        }
+        Write-OutputColor "  Actions:" -color "Warning"
+        if ($actionNodes.Count -eq 0) {
+            Write-OutputColor "    (no <Actions> declared — task will not do anything)" -color "Info"
+        } else {
+            foreach ($a in $actionNodes) {
+                $cmd  = $a.SelectSingleNode('t:Command',   $ns)
+                $args = $a.SelectSingleNode('t:Arguments', $ns)
+                $line = "    $($a.LocalName): $(if ($cmd) { $cmd.InnerText } else { '' }) $(if ($args) { $args.InnerText } else { '' })"
+                if ($line.Length -gt 100) { $line = $line.Substring(0, 97) + "..." }
+                Write-OutputColor $line -color "Warning"
+            }
+        }
+        Write-OutputColor "" -color "Info"
+    } catch {
+        Write-OutputColor "  Could not parse task XML for review: $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  Refusing to import an XML file that won't parse." -color "Error"
+        return
+    }
+
     if (-not (Confirm-UserAction -Message "Import this task?")) { return }
 
     try {

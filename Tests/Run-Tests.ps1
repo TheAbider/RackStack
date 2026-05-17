@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.2
+    Automated Test Runner for RackStack v1.98.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -232,7 +232,9 @@ $script:CommandHistory = @()
 $script:MaxHistoryItems = 100
 $script:VMDeploymentQueue = @()
 $script:iSCSICandidateAdapters = @()
-$logFilePath = $null  # Disable logging for tests
+$script:logFilePath = $null  # Disable logging for tests
+$script:CLISilent = $true     # Suppress interactive wizards/prompts during tests
+$script:NonInteractive = $true  # Belt-and-suspenders flag for any future prompt gates
 
 # Initialize color themes (will be overwritten when 00-Initialization loads, but needed as fallback)
 $script:ColorThemes = @{
@@ -11983,6 +11985,110 @@ try {
     Write-TestResult "47-ExitCleanup: Exit-Script clears VMDeploymentCredential" ($exitContent -match 'VMDeploymentCredential[\s\S]{0,300}Dispose')
 } catch {
     Write-TestResult "v1.94.4 Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+Write-SectionHeader "SECTION 159: v1.98.x FIX REGRESSIONS"
+# ============================================================================
+
+try {
+    # v1.98.2 — cluster quorum cmdlet shadowing fix
+    $cluster98 = Get-Content (Join-Path $modulesPath "27-FailoverClustering.ps1") -Raw
+    Write-TestResult "27-FailoverClustering: Set-ClusterQuorumConfig wrapper exists" ($cluster98 -match 'function\s+Set-ClusterQuorumConfig')
+    Write-TestResult "27-FailoverClustering: no bare Set-ClusterQuorum function (cmdlet shadow)" (-not ($cluster98 -match 'function\s+Set-ClusterQuorum\s*\{'))
+    Write-TestResult "27-FailoverClustering: dispatcher routes [6] to Set-ClusterQuorumConfig" ($cluster98 -match '"6"\s*\{\s*Set-ClusterQuorumConfig')
+    Write-TestResult "27-FailoverClustering: vote sums coerced to [int] (no false-HEALTHY)" ($cluster98 -match '\[int\]\(\(\$nodes\s*\|\s*Measure-Object\s*-Property\s*NodeWeight\s*-Sum\)\.Sum\)')
+
+    # v1.98.2 — MPIO null guard
+    $mpio98 = Get-Content (Join-Path $modulesPath "26-MPIO.ps1") -Raw
+    Write-TestResult "26-MPIO: VendorId/ProductId null-guarded before Trim" ($mpio98 -match '\$null\s+-ne\s+\$device\.VendorId')
+
+    # v1.98.2 — iSCSI fixes
+    $iscsi98 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
+    Write-TestResult "10-iSCSI: hostname HV pattern rejects trailing letters" ($iscsi98 -match 'HV\(\\d\+\)\(\?!\[A-Za-z\]\)')
+    Write-TestResult "10-iSCSI: same-side cabling warning excludes Both" ($iscsi98 -match '-ne\s+"None"\s+-and\s+\$sides\[0\]\s+-ne\s+"Both"')
+    Write-TestResult "10-iSCSI: manual target list filters empty entries" ($iscsi98 -match 'manualTargets\s+-split\s+'',\s*''[\s\S]{0,200}Where-Object\s*\{\s*\$_\s*\}')
+    Write-TestResult "10-iSCSI: MSiSCSI start path calls Clear-MenuCache" ($iscsi98 -match 'Start-Service\s+-Name\s+MSiSCSI[\s\S]{0,300}Clear-MenuCache')
+
+    # v1.98.3 — iSCSI deferred fixes
+    Write-TestResult "10-iSCSI: refuses to wipe IPs on default-route adapter" ($iscsi98 -match 'REFUSING\s+to\s+wipe\s+IPs')
+    Write-TestResult "10-iSCSI: queries default-route via Get-NetRoute 0.0.0.0/0" ($iscsi98 -match "Get-NetRoute\s+-DestinationPrefix\s+'0\.0\.0\.0/0'")
+    Write-TestResult "10-iSCSI: SAN pair lookup tolerates Name-or-PairIndex" ($iscsi98 -match '\$_\.Name\s+-eq\s+\$assignment\.PrimaryPair\s+-or\s+"Pair\$\(\$_\.Index\)"')
+
+    # v1.98.2 — FileServer response leak fix
+    $fileSrv98 = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
+    Write-TestResult "39-FileServer: response Close in outer finally" ($fileSrv98 -match 'GetResponse\(\)[\s\S]{0,600}finally\s*\{\s*\$response\.Close\(\)')
+
+    # v1.98.2 — OfflineVHD null filter
+    $offlineVhd98 = Get-Content (Join-Path $modulesPath "43-OfflineVHD.ps1") -Raw
+    Write-TestResult "43-OfflineVHD: Get-VHD pipeline filters nulls" ($offlineVhd98 -match 'Where-Object\s*\{\s*\$null\s+-ne\s+\$_\s+-and\s+\$_\.Attached')
+
+    # v1.98.2 — VM RAM preflight free-not-total
+    $vmDeploy98 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
+    Write-TestResult "44-VMDeployment: RAM preflight uses host-reserved-from-free math" ($vmDeploy98 -match '\$hostReservedGB\s*=\s*\[math\]::Max\(0,\s*\$totalRAMGB\s*-\s*\$freeRAMGB\s*-\s*\$existingRAMGB\)')
+
+    # v1.98.2 — DNS wrapped in Invoke-WithTimeout
+    $sysCheck98 = Get-Content (Join-Path $modulesPath "05-SystemCheck.ps1") -Raw
+    Write-TestResult "05-SystemCheck: DNS resolve wrapped in Invoke-WithTimeout" ($sysCheck98 -match 'Invoke-WithTimeout[\s\S]{0,300}Resolve-DnsName\s+-Name\s+"google\.com"')
+
+    # v1.98.2 — Dashboard hardening
+    $entry98 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "50-EntryPoint: Dashboard sets HttpListener HeaderWait timeout" ($entry98 -match 'TimeoutManager\.HeaderWait\s*=\s*\[TimeSpan\]::FromSeconds\(5\)')
+    Write-TestResult "50-EntryPoint: Dashboard returns 405 for non-GET" ($entry98 -match '\$req\.HttpMethod\s+-ne\s+''GET''[\s\S]{0,400}StatusCode\s*=\s*405')
+    Write-TestResult "50-EntryPoint: Dashboard returns 413 for request body" ($entry98 -match '\$req\.ContentLength64\s+-gt\s+0[\s\S]{0,300}StatusCode\s*=\s*413')
+    Write-TestResult "50-EntryPoint: Dashboard returns 404 for unknown route" ($entry98 -match 'routePath\s+-ne\s+''/''\s+-and\s+\$routePath\s+-ne\s+''''[\s\S]{0,200}statusCode\s*=\s*404')
+    Write-TestResult "50-EntryPoint: Dashboard DNS audit wraps Resolve-DnsName" ($entry98 -match 'Invoke-WithTimeout\s+-ScriptBlock\s+\$dnsSb')
+
+    # v1.98.3 — Invoke-WithTimeout learns -ArgumentList
+    $nav98 = Get-Content (Join-Path $modulesPath "04-Navigation.ps1") -Raw
+    Write-TestResult "04-Navigation: Invoke-WithTimeout accepts -ArgumentList" ($nav98 -match 'function\s+Invoke-WithTimeout[\s\S]{0,1000}\[object\[\]\]\$ArgumentList')
+    Write-TestResult "04-Navigation: Invoke-WithTimeout forwards via AddArgument" ($nav98 -match '\$ps\.AddArgument\(\$arg\)')
+
+    # v1.98.3 — 09-SET $script:ManagementName
+    $set98 = Get-Content (Join-Path $modulesPath "09-SET.ps1") -Raw
+    Write-TestResult "09-SET: External vSwitch rename uses script-scoped ManagementName" ($set98 -match 'Rename-VMNetworkAdapter\s+-ManagementOS\s+-Name\s+\$SwitchName\s+-NewName\s+\$script:ManagementName')
+
+    # v1.98.3 — 13-Timezone Abs on minutes
+    $tz98 = Get-Content (Join-Path $modulesPath "13-Timezone.ps1") -Raw
+    Write-TestResult "13-Timezone: minute offset wrapped in [math]::Abs (no -03:-30)" ($tz98 -match '\[math\]::Abs\(\$offset\.Hours\),\s*\[math\]::Abs\(\$offset\.Minutes\)')
+
+    # v1.98.3 — 14-WindowsUpdates failure path
+    $upd98 = Get-Content (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw
+    Write-TestResult "14-WindowsUpdates: RebootNeeded/SessionChange only on success" ($upd98 -match 'complete!"[\s\S]{0,400}\$global:RebootNeeded\s*=\s*\$true[\s\S]{0,300}Add-SessionChange')
+
+    # v1.98.3 — 15-RDP gating
+    $rdp98 = Get-Content (Join-Path $modulesPath "15-RDP.ps1") -Raw
+    Write-TestResult "15-RDP: SessionChange gated on rdpEnabledNow" ($rdp98 -match '-not\s+\$rdpAlreadyEnabled\s+-and\s+\$rdpEnabledNow')
+
+    # v1.98.3 — 20-DiskCleanup dead size accumulator removed
+    $cleanup98 = Get-Content (Join-Path $modulesPath "20-DiskCleanup.ps1") -Raw
+    Write-TestResult "20-DiskCleanup: recycle-bin no longer accumulates garbled bytes" (-not ($cleanup98 -match '\$recycleBinSize\s*\+='))
+
+    # v1.98.3 — 38-StorageManager boot partition extra gate
+    $sm98 = Get-Content (Join-Path $modulesPath "38-StorageManager.ps1") -Raw
+    Write-TestResult "38-StorageManager: boot partition deletion requires OBLITERATE BOOT" ($sm98 -match "OBLITERATE BOOT")
+
+    # v1.98.3 — 55-QoLFeatures pagefile check via param/ArgumentList
+    $qol98 = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
+    Write-TestResult "55-QoLFeatures: pagefile check passes drive via ArgumentList" ($qol98 -match 'Invoke-WithTimeout[\s\S]{0,800}-ArgumentList\s+\$currentDrive')
+
+    # v1.98.3 — 57-AgentInstaller args normalized to array
+    $agentInst98 = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
+    Write-TestResult "57-AgentInstaller: InstallArgs split to array before Start-Process" ($agentInst98 -match 'InstallArgs\s+-split\s+''\\s\+''')
+
+    # v1.98.3 — 62-HyperVReplica export path collected before Enable-VMReplication
+    $repl98 = Get-Content (Join-Path $modulesPath "62-HyperVReplica.ps1") -Raw
+    $replPromptIdx = $repl98.IndexOf("Enter export path for external media")
+    $replEnableIdx = $repl98.IndexOf("Enable-VMReplication @replParams")
+    Write-TestResult "62-HyperVReplica: export path prompt precedes Enable-VMReplication" ($replPromptIdx -gt -1 -and $replEnableIdx -gt -1 -and $replPromptIdx -lt $replEnableIdx)
+
+    # v1.98.3 — 63-ScheduledTasks XML preview before register
+    $taskImp98 = Get-Content (Join-Path $modulesPath "63-ScheduledTasks.ps1") -Raw
+    Write-TestResult "63-ScheduledTasks: import parses XML with XmlResolver = null" ($taskImp98 -match '\$xmlDoc\.XmlResolver\s*=\s*\$null')
+    Write-TestResult "63-ScheduledTasks: import surfaces Principal block for review" ($taskImp98 -match 'Task will run as:')
+    Write-TestResult "63-ScheduledTasks: import surfaces Actions block for review" ($taskImp98 -match 'Actions:')
+} catch {
+    Write-TestResult "v1.98.x fix regression Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

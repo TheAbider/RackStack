@@ -12843,14 +12843,26 @@ function Start-BatchMode {
                 Add-SessionChange -Category "Network" -Description "Set IP $($Config.IPAddress)/$cidr on $adapterName"
                 Clear-MenuCache
 
-                # Register undo (restore previous IP config)
+                # Register undo (restore previous IP + gateway + DNS config). DNS was
+                # captured but not actually restored prior to v1.98.3 — the previous
+                # scriptblock recreated IP/route only, leaving DNS pointed at the failed
+                # step's values.
                 $undoAdapter = $adapterName
                 $undoAdapterEsc = $undoAdapter -replace "'", "''"
                 $undoOldIP = if ($oldIP) { $oldIP.IPAddress } else { $null }
                 $undoOldPrefix = if ($oldIP) { $oldIP.PrefixLength } else { 24 }
                 $undoOldGW = $oldGW
-                $undoOldDNS = $oldDNS
-                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore network config on $undoAdapter"; Reversible = $true; UndoScript = [scriptblock]::Create("Remove-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; if ('$undoOldIP') { New-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -IPAddress '$undoOldIP' -PrefixLength $undoOldPrefix $(if($undoOldGW){"-DefaultGateway '$undoOldGW'"}) -ErrorAction SilentlyContinue }") })
+                $undoOldDNS = @($oldDNS) | Where-Object { $_ }
+                $undoOldDNSLiteral = if ($undoOldDNS -and $undoOldDNS.Count -gt 0) {
+                    "@('" + (($undoOldDNS | ForEach-Object { $_ -replace "'", "''" }) -join "','") + "')"
+                } else {
+                    '@()'
+                }
+                $undoSnippet = "Remove-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; " +
+                               "Remove-NetRoute -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; " +
+                               "if ('$undoOldIP') { New-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -IPAddress '$undoOldIP' -PrefixLength $undoOldPrefix $(if($undoOldGW){"-DefaultGateway '$undoOldGW'"}) -ErrorAction SilentlyContinue }; " +
+                               "`$dnsRestore = $undoOldDNSLiteral; if (`$dnsRestore.Count -gt 0) { Set-DnsClientServerAddress -InterfaceAlias '$undoAdapterEsc' -ServerAddresses `$dnsRestore -ErrorAction SilentlyContinue } else { Set-DnsClientServerAddress -InterfaceAlias '$undoAdapterEsc' -ResetServerAddresses -ErrorAction SilentlyContinue }"
+                $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore network config on $undoAdapter"; Reversible = $true; UndoScript = [scriptblock]::Create($undoSnippet) })
                 Save-BatchUndoState
             }
             catch {
@@ -13216,11 +13228,22 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Local admin: skipped" -color "Debug"
     }
 
-    # Step 12: Disable built-in Administrator
+    # Step 12: Disable built-in Administrator. Refuses to run if the replacement
+    # local admin (step 11) isn't actually present and enabled — otherwise the box
+    # would have no enabled administrator account left, locking the operator out.
     $stepNum++
     if ($Config.DisableBuiltInAdmin) {
         Write-OutputColor "  [$stepNum/$totalSteps] Disabling built-in Administrator..." -color "Info"
-        if ($script:DryRunMode) {
+        $replacementAdminName = if ($Config.LocalAdminName) { $Config.LocalAdminName } else { $script:localadminaccountname }
+        $replacementAdmin = $null
+        try { $replacementAdmin = Get-LocalUser -Name $replacementAdminName -ErrorAction Stop } catch { $replacementAdmin = $null }
+        $replacementOK = ($null -ne $replacementAdmin -and $replacementAdmin.Enabled)
+        if (-not $replacementOK -and -not $script:DryRunMode) {
+            Write-OutputColor "           SKIPPED: replacement local admin '$replacementAdminName' is not present + enabled." -color "Error"
+            Write-OutputColor "           Refusing to disable the built-in account when no other admin is available." -color "Warning"
+            $errors++
+        }
+        elseif ($script:DryRunMode) {
             Write-OutputColor "           [DRY RUN] Would disable built-in Administrator account" -color "Info"
             $changesApplied++
         }

@@ -244,18 +244,28 @@ function Install-WindowsUpdates {
         }
         Remove-Job $installJob -Force -ErrorAction SilentlyContinue
 
-        if ($installState -eq "Failed") {
-            Write-OutputColor "`nWindows update installation encountered errors." -color "Warning"
+        # Treat anything that isn't "Completed" as a non-success: jobs that hit the
+        # one-hour timeout cap are stopped via Stop-Job which leaves the state at
+        # "Stopped", not "Failed". Falling through to the success branch on a Stopped
+        # job produced a fake "Installed N updates" session change and falsely flagged
+        # RebootNeeded — exactly what this guard was meant to prevent.
+        if ($installState -ne "Completed") {
+            $reasonText = switch ($installState) {
+                "Stopped" { "timed out after $([math]::Floor($maxInstallTime / 60)) minutes" }
+                "Failed"  { "encountered errors" }
+                default   { "did not complete (state: $installState)" }
+            }
+            Write-OutputColor "`nWindows update installation $reasonText." -color "Warning"
             if ($installError) { Write-OutputColor "  Error: $($installError.Trim())" -color "Error" }
             Write-OutputColor "  Some updates may not have been installed. Check Windows Update settings." -color "Warning"
         }
         else {
             Write-OutputColor "`nWindows updates installation complete!" -color "Success"
+            Write-OutputColor "  A reboot may be required to complete the installation." -color "Warning"
+            $global:RebootNeeded = $true
+            Add-SessionChange -Category "System" -Description "Installed $updateCount Windows update(s)"
+            Clear-MenuCache
         }
-        Write-OutputColor "  A reboot may be required to complete the installation." -color "Warning"
-        $global:RebootNeeded = $true
-        Add-SessionChange -Category "System" -Description "Installed $updateCount Windows update(s)"
-        Clear-MenuCache
     }
     catch {
         Write-RackStackError -Code "RS-1009" -Detail "Windows Update operation failed: $($_.Exception.Message)"

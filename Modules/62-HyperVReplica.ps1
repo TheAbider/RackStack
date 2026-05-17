@@ -576,12 +576,11 @@ function Enable-VMReplicationWizard {
                 return
             }
         }
-        Enable-VMReplication @replParams
-
-        Write-OutputColor "  Replication enabled. Starting initial replication..." -color "Info"
-
+        # Collect the export path BEFORE enabling replication so a nav-return on the
+        # prompt doesn't leave the VM in a half-configured state (replication enabled
+        # but no initial replication started).
+        $exportPath = $null
         if ($initChoice -eq "2") {
-            # External media — prompt for export path
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  Enter export path for external media:" -color "Info"
             $exportPath = Read-Host "  "
@@ -589,6 +588,13 @@ function Enable-VMReplicationWizard {
             if ($navResult.ShouldReturn) { return }
             if (-not [string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = $exportPath.Trim('"') }
             if ([string]::IsNullOrWhiteSpace($exportPath)) { $exportPath = "$env:SystemDrive\Hyper-V\ReplicaExport" }
+        }
+
+        Enable-VMReplication @replParams
+
+        Write-OutputColor "  Replication enabled. Starting initial replication..." -color "Info"
+
+        if ($initChoice -eq "2") {
             Start-VMInitialReplication -VMName $vmName -DestinationPath $exportPath -ErrorAction Stop
             Write-OutputColor "  Initial replication exported to: $exportPath" -color "Success"
             Write-OutputColor "  Transfer this to the replica server and import it there." -color "Info"
