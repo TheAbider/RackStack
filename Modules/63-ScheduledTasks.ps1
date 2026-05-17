@@ -696,9 +696,9 @@ function Import-ScheduledTaskXML {
             Write-OutputColor "    (no <Actions> declared — task will not do anything)" -color "Info"
         } else {
             foreach ($a in $actionNodes) {
-                $cmd  = $a.SelectSingleNode('t:Command',   $ns)
-                $args = $a.SelectSingleNode('t:Arguments', $ns)
-                $line = "    $($a.LocalName): $(if ($cmd) { $cmd.InnerText } else { '' }) $(if ($args) { $args.InnerText } else { '' })"
+                $cmd      = $a.SelectSingleNode('t:Command',   $ns)
+                $taskArgs = $a.SelectSingleNode('t:Arguments', $ns)
+                $line = "    $($a.LocalName): $(if ($cmd) { $cmd.InnerText } else { '' }) $(if ($taskArgs) { $taskArgs.InnerText } else { '' })"
                 if ($line.Length -gt 100) { $line = $line.Substring(0, 97) + "..." }
                 Write-OutputColor $line -color "Warning"
             }
