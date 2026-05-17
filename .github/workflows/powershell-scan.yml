@@ -102,8 +102,17 @@ jobs:
                   Group = $g.Group
               }
           }
+          # ConvertTo-Json in Windows PowerShell 5.1 unwraps a single-element
+          # array into a bare object, which makes the JS consumer in the next
+          # step throw `TypeError: grouped is not iterable`. Force array shape
+          # when there's exactly one group so for-of works either way.
           $jsonGrouped = if ($normalizedGroups.Count -gt 0) {
-              @($normalizedGroups) | ConvertTo-Json -Depth 10
+              $json = @($normalizedGroups) | ConvertTo-Json -Depth 10
+              if ($normalizedGroups.Count -eq 1 -and -not $json.StartsWith('[')) {
+                  "[$json]"
+              } else {
+                  $json
+              }
           } else {
               "[]"
           }
