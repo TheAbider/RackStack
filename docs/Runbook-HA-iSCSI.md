@@ -2,7 +2,7 @@
 
 This runbook covers the end-to-end setup of dual-path iSCSI SAN connectivity with MPIO (Multipath I/O) for Hyper-V hosts, including integration with Failover Clustering.
 
-> **Note:** As of v1.3.0, RackStack supports six storage backends: iSCSI, Fibre Channel, S2D, SMB3, NVMe-oF, and Local. This runbook covers the iSCSI backend specifically. For other backends, see [Storage Backends](Storage-Backends).
+> **Note:** As of v1.3.0, RackStack supports six storage backends: iSCSI, Fibre Channel, S2D, SMB3, NVMe-oF, and Local. This runbook covers the iSCSI backend specifically. For other backends, see [Storage Backends](Storage-Backends.md).
 
 > **Note:** IP addresses, subnet (default `172.16.1`), and target mappings shown in this guide are defaults. Configure yours in `defaults.json` via `iSCSISubnet` and `SANTargetMappings`.
 
@@ -509,4 +509,4 @@ See [Configuration > SANTargetPairings](Configuration#santargetpairings-v150) fo
 
 ---
 
-See also: [Storage Backends](Storage-Backends) | [Storage Manager](Storage-Manager) | [Cluster Management](Cluster-Management) | [Troubleshooting](Troubleshooting)
+See also: [Storage Backends](Storage-Backends.md) | [Storage Manager](Storage-Manager.md) | [Cluster Management](Cluster-Management.md) | [Troubleshooting](Troubleshooting.md)

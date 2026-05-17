@@ -21,7 +21,7 @@ RackStack includes 10 built-in server role templates for common Windows Server r
 
 | Key | Name | Features | Reboot | Post-Install |
 |-----|------|----------|:------:|:------------:|
-| **DC** | Domain Controller | AD-Domain-Services, DNS, RSAT-AD-Tools, RSAT-DNS-Server, GPMC | Yes | [AD DS Promotion](AD-DS-Promotion) |
+| **DC** | Domain Controller | AD-Domain-Services, DNS, RSAT-AD-Tools, RSAT-DNS-Server, GPMC | Yes | [AD DS Promotion](AD-DS-Promotion.md) |
 | **FS** | File Server | FS-FileServer, FS-Data-Deduplication, FS-DFS-Namespace, FS-DFS-Replication, FS-Resource-Manager | No | -- |
 | **WEB** | Web Server (IIS) | Web-Server, Web-Asp-Net45, Web-Mgmt-Console, Web-Scripting-Tools, Web-Security, Web-Filtering | No | -- |
 | **DHCP** | DHCP Server | DHCP, RSAT-DHCP | No | DHCP setup steps |
@@ -141,7 +141,7 @@ After installing AD DS features, the DC template directs you to the **AD DS Prom
 
 **Menu path:** System Configuration > `[3]` Promote to Domain Controller
 
-Three promotion types are available: New Forest, Additional DC, and RODC. See [AD DS Promotion](AD-DS-Promotion) for the full walkthrough.
+Three promotion types are available: New Forest, Additional DC, and RODC. See [AD DS Promotion](AD-DS-Promotion.md) for the full walkthrough.
 
 ### DHCP Server
 
@@ -185,4 +185,4 @@ In batch mode:
 
 ---
 
-See also: [AD DS Promotion](AD-DS-Promotion) | [Configuration Guide](Configuration) | [Batch Mode](Batch-Mode) | [Troubleshooting](Troubleshooting)
+See also: [AD DS Promotion](AD-DS-Promotion.md) | [Configuration Guide](Configuration.md) | [Batch Mode](Batch-Mode.md) | [Troubleshooting](Troubleshooting.md)

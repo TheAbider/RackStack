@@ -399,7 +399,7 @@ function Show-MountedVHDStatus {
     try {
         $mounted = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.Location -like "*.vhd*" } | ForEach-Object {
             try { Get-VHD -Path $_.Location -ErrorAction SilentlyContinue } catch { }
-        } | Where-Object { $_.Attached -eq $true })
+        } | Where-Object { $null -ne $_ -and $_.Attached -eq $true })
 
         if ($null -eq $mounted -or @($mounted).Count -eq 0) {
             Write-OutputColor "  No VHDs currently mounted" -color "Info"

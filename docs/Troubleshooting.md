@@ -204,7 +204,7 @@ Hosts 5-24 cycle through the same pattern (host 5 = same as host 1, etc.).
 
 ## Storage Backends
 
-> See [Storage Backends](Storage-Backends) for full documentation on all six backends.
+> See [Storage Backends](Storage-Backends.md) for full documentation on all six backends.
 
 ### Auto-Detect Mismatch
 
@@ -351,7 +351,7 @@ Hosts 5-24 cycle through the same pattern (host 5 = same as host 1, etc.).
 
 ## Server Role Templates
 
-> See [Server Role Templates](Server-Role-Templates) for full documentation.
+> See [Server Role Templates](Server-Role-Templates.md) for full documentation.
 
 ### Feature Install Fails
 
@@ -384,7 +384,7 @@ Hosts 5-24 cycle through the same pattern (host 5 = same as host 1, etc.).
 
 ## AD DS Promotion
 
-> See [AD DS Promotion](AD-DS-Promotion) for full documentation.
+> See [AD DS Promotion](AD-DS-Promotion.md) for full documentation.
 
 ### Static IP Required
 
@@ -442,7 +442,7 @@ Hosts 5-24 cycle through the same pattern (host 5 = same as host 1, etc.).
 
 ## Hyper-V Replica
 
-> See [Hyper-V Replica](Hyper-V-Replica) for full documentation.
+> See [Hyper-V Replica](Hyper-V-Replica.md) for full documentation.
 
 ### Connection Test Failed
 

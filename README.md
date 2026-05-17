@@ -28,7 +28,7 @@
 
 ---
 
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Where sconfig gives you 15 options, RackStack gives you 167 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, and batch automation, all with undo, transaction rollback, and audit logging.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Where sconfig gives you 15 options, RackStack gives you 176 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, and batch automation, all with undo, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
 
@@ -52,7 +52,7 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Automation** -- JSON-driven batch mode (24 idempotent steps with transaction rollback), Quick Setup Wizard, configuration export/import, HTML reports, JSON audit logging with rotation
 
-**Monitoring** -- 167 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
+**Monitoring** -- 176 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
 
 **Monitoring & Diagnostics** -- Health dashboard (disk I/O latency, NIC errors, memory pressure, Hyper-V guest health, top CPU processes), performance snapshots with trend reports and "days until full" estimates, event log viewer, service manager, network diagnostics (ping, traceroute, port test, subnet sweep, DNS, ARP)
 
@@ -122,6 +122,28 @@ The output is **`RackStack v{version}.ps1`** -- a self-contained single file wit
 - **Windows Server 2008 R2 SP1, 2012, 2012 R2, 2016, 2019, 2022, or 2025** (also runs on Windows 10/11 for development/testing)
 - **Administrator privileges** (auto-elevates if needed)
 - **Optional:** PSScriptAnalyzer (for linting), a file server for ISO/VHD downloads (see [File Server Setup](docs/FileServer-Setup.md))
+
+## Documentation
+
+In-depth guides live in [`docs/`](docs/):
+
+| Topic | Guide |
+|---|---|
+| Full configuration reference | [Configuration](docs/Configuration.md) |
+| Batch / headless server builds | [Batch Mode](docs/Batch-Mode.md) |
+| Storage backends (iSCSI, FC, S2D, SMB3, NVMe-oF, Local) | [Storage Backends](docs/Storage-Backends.md) |
+| Disk and volume management | [Storage Manager](docs/Storage-Manager.md) |
+| Failover Clustering workflows | [Cluster Management](docs/Cluster-Management.md) |
+| Hyper-V Replica setup | [Hyper-V Replica](docs/Hyper-V-Replica.md) |
+| Promoting a server to Domain Controller | [AD DS Promotion](docs/AD-DS-Promotion.md) |
+| Custom server role templates | [Server Role Templates](docs/Server-Role-Templates.md) |
+| Exporting and diffing configuration profiles | [Configuration Export](docs/Configuration-Export.md) |
+| Preparing VHD templates | [VHD Preparation](docs/VHD-Preparation.md) |
+| File server for ISO / VHD / agent distribution | [File Server Setup](docs/FileServer-Setup.md) |
+| Diagnostics and recovery | [Troubleshooting](docs/Troubleshooting.md) |
+| Runbook: HA iSCSI build | [Runbook: HA iSCSI](docs/Runbook-HA-iSCSI.md) |
+| Runbook: live host migration | [Runbook: Host Migration](docs/Runbook-Host-Migration.md) |
+| Runbook: VM deployment | [Runbook: VM Deployment](docs/Runbook-VM-Deployment.md) |
 
 ## Configuration
 
@@ -268,6 +290,12 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
 | `CustomVMTemplates` | Override built-in VM template specs or add new templates (partial overrides supported) |
 | `CustomVMDefaults` | Default vCPU, RAM, disk size/type for non-template (custom) VMs |
 | `CustomRoleTemplates` | Add custom server role templates with Windows features, merged with 10 built-in templates |
+| `TimeZoneRegion` | Skip the timezone continent picker and jump to a region (e.g. `"North America"`, `"Europe"`); empty = show picker |
+| `MonitoredServices` | List of services the health dashboard alerts on if not running |
+| `DryRun` | Global preview mode for batch and CLI actions; `true` reports what would change without making changes |
+| `DashboardWarningPercent` / `DashboardCriticalPercent` | CPU/memory/disk thresholds for color-coded warnings on the main menu dashboard (defaults 70 / 90) |
+| `Timeouts` | Override per-operation timeouts (CIM queries, DNS resolves, network probes); seconds |
+| `CLIDefaults` | Per-action defaults for headless invocations (e.g. default `Tier` for `Cleanup`, default `Config` path) |
 
 > `defaults.json` is gitignored -- your secrets never leave your machine.
 
@@ -295,7 +323,7 @@ Automate full server builds with a JSON config file:
 
 Place `batch_config.json` next to the script and it runs automatically on launch. Set fields to `null` to skip steps. All steps are idempotent -- re-running the same config safely skips already-completed items. Use `ConfigType: "HOST"` for Hyper-V hosts -- adds extra steps (SET switch, custom vNICs, iSCSI, MPIO, host storage, Defender exclusions, agent install, cluster validation) for a total of 24 automated steps with transaction rollback on failure.
 
-New in v1.8.0: `InstallAgents` array for multi-agent installs, `ValidateCluster` for cluster readiness checks.
+Use `InstallAgents` for multi-agent installs and `ValidateCluster` for pre-deployment cluster readiness checks.
 
 ## CLI Headless Mode
 
@@ -371,7 +399,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 167 CLI Actions
+### 176 CLI Actions
 
 | Category | Actions |
 |----------|---------|

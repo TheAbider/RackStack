@@ -1214,7 +1214,10 @@ function Invoke-CLIAction {
             $port = 8080
             if ($script:CLIConfig) {
                 $cfg = $script:CLIConfig.Trim().Trim('"')
-                if ($cfg -match '^(\*|0\.0\.0\.0|\d{1,3}(?:\.\d{1,3}){3}|\[?::\]?|[A-Za-z][A-Za-z0-9\-.]*):(\d+)$') {
+                # Restricted to wildcards, loopback, and explicit IPv4. Hostnames are
+                # rejected because HttpListener can't bind unowned names, so allowing them
+                # only created confusing failure modes.
+                if ($cfg -match '^(\*|0\.0\.0\.0|127\.0\.0\.1|localhost|\[::1\]|\d{1,3}(?:\.\d{1,3}){3}):(\d+)$') {
                     $regexMatches = $matches
                     $bindHost = $regexMatches[1]; $port = [int]$regexMatches[2]
                 } elseif ($cfg -match '^\d+$') {
@@ -1240,6 +1243,16 @@ function Invoke-CLIAction {
                 [Environment]::Exit(1)
             }
 
+            # Defense-in-depth timeouts so a slow/half-open client can't stall the loop.
+            # Particularly relevant when bound to 0.0.0.0 on a multi-tenant LAN.
+            try {
+                $listener.TimeoutManager.HeaderWait      = [TimeSpan]::FromSeconds(5)
+                $listener.TimeoutManager.IdleConnection  = [TimeSpan]::FromSeconds(10)
+                $listener.TimeoutManager.RequestQueue    = [TimeSpan]::FromSeconds(10)
+            } catch {
+                # Older .NET HttpListener may not expose TimeoutManager; non-fatal.
+            }
+
             Write-OutputColor "  $($script:ToolFullName) Dashboard v$($script:ScriptVersion)" -color "Success"
             Write-OutputColor "  Listening at $prefix" -color "Info"
             Write-OutputColor "  Ctrl+C to stop." -color "Debug"
@@ -1252,6 +1265,26 @@ function Invoke-CLIAction {
                     $resp = $ctx.Response
                     $routePath = $req.Url.AbsolutePath.ToLower()
                     Write-OutputColor "  $(Get-Date -Format 'HH:mm:ss') $($req.HttpMethod) $routePath from $($req.RemoteEndPoint.Address)" -color "Debug"
+
+                    # Reject non-GET early — this is a read-only health endpoint
+                    if ($req.HttpMethod -ne 'GET') {
+                        try {
+                            $resp.StatusCode = 405
+                            $resp.Headers.Add('Allow', 'GET')
+                            $resp.ContentLength64 = 0
+                        } catch { }
+                        try { $resp.Close() } catch { }
+                        continue
+                    }
+                    # Reject requests carrying a body — none of the routes need one
+                    if ($req.ContentLength64 -gt 0) {
+                        try {
+                            $resp.StatusCode = 413
+                            $resp.ContentLength64 = 0
+                        } catch { }
+                        try { $resp.Close() } catch { }
+                        continue
+                    }
 
                     # Gather a snapshot once per request (dashboards call this on a timer)
                     $snapshot = @{
@@ -1316,7 +1349,14 @@ function Invoke-CLIAction {
                             break
                         }
                         default {
-                            # Root / anything else: HTML dashboard (tolerates missing metrics)
+                            # Only the root path renders the HTML dashboard. Anything else
+                            # gets a clean 404 so scanners don't see misleading 200s.
+                            if ($routePath -ne '/' -and $routePath -ne '') {
+                                $statusCode = 404
+                                $contentType = 'text/plain; charset=utf-8'
+                                $body = "Not Found: $routePath"
+                                break
+                            }
                             $warn = $script:DashboardWarningPercent; if (-not $warn) { $warn = 70 }
                             $crit = $script:DashboardCriticalPercent; if (-not $crit) { $crit = 90 }
                             function _color_for($pct) {
@@ -5666,17 +5706,20 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 if ($null -ne $suffixSearch) { $suffixList = @($suffixSearch.SuffixSearchList) }
             } catch { }
 
-            # Resolution tests
+            # Resolution tests (wrapped so a hung resolver doesn't stall the audit)
             $resTests = @()
             $testTargets = @('dns.msftncsi.com', 'time.windows.com')
             foreach ($target in $testTargets) {
                 $resolved = $false
                 $resolvedIP = ''
-                try {
-                    $result = Resolve-DnsName -Name $target -Type A -ErrorAction Stop | Select-Object -First 1
+                $dnsSb = [scriptblock]::Create("Resolve-DnsName -Name '$target' -Type A -ErrorAction Stop | Select-Object -First 1")
+                $dnsRun = Invoke-WithTimeout -ScriptBlock $dnsSb -TimeoutSeconds 5 -Activity "DNS resolve $target"
+                if ($dnsRun.TimedOut -or $null -eq $dnsRun.Result) {
+                    $dnsIssues++
+                } else {
                     $resolved = $true
-                    $resolvedIP = "$($result.IPAddress)"
-                } catch { $dnsIssues++ }
+                    $resolvedIP = "$($dnsRun.Result.IPAddress)"
+                }
                 $resTests += @{ Target = $target; Resolved = $resolved; IP = $resolvedIP }
             }
 

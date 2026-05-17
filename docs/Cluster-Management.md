@@ -193,4 +193,4 @@ Configure cluster paths in `defaults.json`:
 
 ---
 
-See also: [Storage Manager](Storage-Manager) | [Configuration Export](Configuration-Export) | [Runbook: Host Migration](Runbook-Host-Migration)
+See also: [Storage Manager](Storage-Manager.md) | [Configuration Export](Configuration-Export.md) | [Runbook: Host Migration](Runbook-Host-Migration.md)

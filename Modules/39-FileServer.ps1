@@ -646,12 +646,16 @@ function Get-FileServerHashFile {
         }
 
         $response = $request.GetResponse()
-        $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
         try {
-            $content = $reader.ReadToEnd().Trim()
+            $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
+            try {
+                $content = $reader.ReadToEnd().Trim()
+            }
+            finally {
+                $reader.Close()
+            }
         }
         finally {
-            $reader.Close()
             $response.Close()
         }
 

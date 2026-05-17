@@ -97,7 +97,7 @@ iSCSI supports dual-path connectivity with A-side/B-side SAN controllers and MPI
 
 **New in v1.5.0:** Custom SAN target pairings allow you to define your own A/B pair assignments and host-to-pair retry order. Convention: A side = even suffixes, B side = odd. See [Configuration > SANTargetPairings](Configuration#santargetpairings-v150).
 
-> For a complete step-by-step guide, see [HA iSCSI with MPIO](Runbook-HA-iSCSI).
+> For a complete step-by-step guide, see [HA iSCSI with MPIO](Runbook-HA-iSCSI.md).
 
 ---
 
@@ -285,4 +285,4 @@ When using batch mode with `ConfigType: "HOST"`, the following keys control stor
 
 ---
 
-See also: [HA iSCSI with MPIO](Runbook-HA-iSCSI) | [Configuration Guide](Configuration) | [Batch Mode](Batch-Mode) | [Troubleshooting](Troubleshooting)
+See also: [HA iSCSI with MPIO](Runbook-HA-iSCSI.md) | [Configuration Guide](Configuration.md) | [Batch Mode](Batch-Mode.md) | [Troubleshooting](Troubleshooting.md)

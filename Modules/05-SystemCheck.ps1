@@ -398,15 +398,19 @@ function Test-AllConnectivity {
         Write-OutputColor "  No connectivity! Check network configuration." -color "Error"
     }
 
-    # DNS resolution test
+    # DNS resolution test (wrapped to avoid hanging the readiness check on a degraded resolver)
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Testing DNS resolution..." -color "Info"
-    try {
-        $dnsTest = Resolve-DnsName -Name "google.com" -Type A -ErrorAction Stop
-        Write-OutputColor "[OK ] DNS resolution working (google.com -> $(($dnsTest | Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress }) -join ', '))" -color "Success"
-    }
-    catch {
+    $dnsResult = Invoke-WithTimeout -ScriptBlock {
+        Resolve-DnsName -Name "google.com" -Type A -ErrorAction Stop
+    } -TimeoutSeconds 8 -Activity "DNS resolve"
+    if ($dnsResult.TimedOut) {
+        Write-OutputColor "[FAIL] DNS resolution timed out" -color "Error"
+    } elseif ($null -eq $dnsResult.Result) {
         Write-OutputColor "[FAIL] DNS resolution failed" -color "Error"
+    } else {
+        $dnsTest = $dnsResult.Result
+        Write-OutputColor "[OK ] DNS resolution working (google.com -> $(($dnsTest | Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress }) -join ', '))" -color "Success"
     }
 
     # HTTPS connectivity test (catches firewalls that block ICMP but allow HTTPS)

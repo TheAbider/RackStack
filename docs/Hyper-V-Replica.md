@@ -283,4 +283,4 @@ Permanently removes replication configuration from a VM. This stops all replicat
 
 ---
 
-See also: [Cluster Management](Cluster-Management) | [Storage Backends](Storage-Backends) | [Batch Mode](Batch-Mode) | [Troubleshooting](Troubleshooting)
+See also: [Cluster Management](Cluster-Management.md) | [Storage Backends](Storage-Backends.md) | [Batch Mode](Batch-Mode.md) | [Troubleshooting](Troubleshooting.md)

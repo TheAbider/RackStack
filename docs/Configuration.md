@@ -62,19 +62,19 @@ Copy `defaults.example.json` to `defaults.json` and customize for your environme
 | `VMNaming` | VM naming pattern, site ID source, and detection regex |
 | `CustomVMTemplates` | Override built-in VM template specs or add new templates (partial overrides supported) |
 | `CustomVMDefaults` | Default vCPU, RAM, disk size/type for non-template (custom) VMs |
-| `StorageBackendType` | Storage backend selection: iSCSI, FC, S2D, SMB3, NVMeoF, or Local (see [Storage Backends](Storage-Backends)) |
-| `CustomRoleTemplates` | Custom server role templates, merged with 10 built-in templates (see [Server Role Templates](Server-Role-Templates)) |
-| `FileServer` | File server credentials for ISO/VHD downloads (see [File Server Setup](File-Server-Setup)) |
+| `StorageBackendType` | Storage backend selection: iSCSI, FC, S2D, SMB3, NVMeoF, or Local (see [Storage Backends](Storage-Backends.md)) |
+| `CustomRoleTemplates` | Custom server role templates, merged with 10 built-in templates (see [Server Role Templates](Server-Role-Templates.md)) |
+| `FileServer` | File server credentials for ISO/VHD downloads (see [File Server Setup](FileServer-Setup.md)) |
 
 > **New in v1.2.0:** Custom SET vNICs, iSCSI A/B side auto-detect, `AgentFolder` rename. See sections below.
 
-> **New in v1.3.0:** Storage backend selection and auto-detection. Six backends supported: iSCSI, FC, S2D, SMB3, NVMeoF, Local. See [Storage Backends](Storage-Backends).
+> **New in v1.3.0:** Storage backend selection and auto-detection. Six backends supported: iSCSI, FC, S2D, SMB3, NVMeoF, Local. See [Storage Backends](Storage-Backends.md).
 
-> **New in v1.4.0:** Server role templates, AD DS promotion, Hyper-V Replica, batch mode expanded to 22 steps. See [Server Role Templates](Server-Role-Templates), [AD DS Promotion](AD-DS-Promotion), [Hyper-V Replica](Hyper-V-Replica).
+> **New in v1.4.0:** Server role templates, AD DS promotion, Hyper-V Replica, batch mode expanded to 22 steps. See [Server Role Templates](Server-Role-Templates.md), [AD DS Promotion](AD-DS-Promotion.md), [Hyper-V Replica](Hyper-V-Replica.md).
 
 > **New in v1.5.0:** Custom SAN target pairings (configurable A/B pair assignments per host), flexible virtual switch management (External, Internal, Private switches in addition to SET). See [SANTargetPairings](#santargetpairings-v150) and [Virtual Switch Management](#virtual-switch-management-v150).
 
-> **New in v1.5.5:** Cloud storage support -- FileServer module natively supports Azure Blob Storage (`StorageType: "azure"`) and static JSON index files (`StorageType: "static"`) for S3/CloudFront. See [FileServer](#fileserver-file-server) and [File Server Setup](File-Server-Setup).
+> **New in v1.5.5:** Cloud storage support -- FileServer module natively supports Azure Blob Storage (`StorageType: "azure"`) and static JSON index files (`StorageType: "static"`) for S3/CloudFront. See [FileServer](#fileserver-file-server) and [File Server Setup](FileServer-Setup.md).
 
 ---
 
@@ -357,7 +357,7 @@ If `DefenderCommonVMPaths` **is** specified in `defaults.json`, those paths are 
 }
 ```
 
-File server configuration for downloading ISOs, VHDs, and agent installers. See the [File Server Setup](File-Server-Setup) guide for full setup instructions.
+File server configuration for downloading ISOs, VHDs, and agent installers. See the [File Server Setup](FileServer-Setup.md) guide for full setup instructions.
 
 - `StorageType` -- `"nginx"` (default, any web server with JSON directory listing), `"azure"` (Azure Blob Storage), `"static"` (JSON index files, works with S3+CloudFront)
 - `BaseURL` -- Full URL to the root directory (for nginx/static types). Empty = cloud features disabled.
@@ -385,7 +385,7 @@ Controls which storage backend is active. This determines which management subme
 | `"NVMeoF"` | NVMe over Fabrics |
 | `"Local"` | Local disks / Direct-Attached Storage only |
 
-RackStack can also auto-detect the backend from system state. See [Storage Backends](Storage-Backends) for detection logic and backend-specific features.
+RackStack can also auto-detect the backend from system state. See [Storage Backends](Storage-Backends.md) for detection logic and backend-specific features.
 
 ### Custom Role Templates (v1.4.0)
 
@@ -413,7 +413,7 @@ Define custom server role templates that appear alongside the 10 built-in templa
 | `RequiresReboot` | bool | Whether features require a reboot |
 | `ServerOnly` | bool | Block installation on client OS if `true` |
 
-See [Server Role Templates](Server-Role-Templates) for the full list of built-in templates and usage details.
+See [Server Role Templates](Server-Role-Templates.md) for the full list of built-in templates and usage details.
 
 ---
 
@@ -479,7 +479,7 @@ When using batch mode with `ConfigType: "HOST"`, additional keys control Hyper-V
 | `CustomVNICs` | array | Virtual NICs to create on External/SET switch (see [Custom vNICs](#custom-vnics-v120)) |
 | `SANTargetPairings` | object/null | Custom SAN pair definitions (see [SANTargetPairings](#santargetpairings-v150)) |
 | `ServerRoleTemplate` | string/null | Role template to install: DC, FS, WEB, DHCP, DNS, PRINT, WSUS, NPS, HV, RDS, or custom key |
-| `PromoteToDC` | bool | Promote server to Domain Controller (see [AD DS Promotion](AD-DS-Promotion)) |
+| `PromoteToDC` | bool | Promote server to Domain Controller (see [AD DS Promotion](AD-DS-Promotion.md)) |
 | `DCPromoType` | string | DC promotion type: `"NewForest"`, `"AdditionalDC"`, or `"RODC"` |
 | `ForestName` | string/null | Domain FQDN for New Forest promotion |
 | `ForestMode` / `DomainMode` | string | Functional level: `"Win2012R2"`, `"WinThreshold"` (default), `"Win2019"`, `"Win2022"`, `"Win2025"` |
@@ -493,4 +493,4 @@ When using batch mode with `ConfigType: "HOST"`, additional keys control Hyper-V
 | `HostStorageDrive` | string/null | Drive letter (e.g., `"D"`) or `null` for auto-select |
 | `ConfigureDefenderExclusions` | bool | Add Defender exclusions for Hyper-V and VM paths |
 
-For full details, default values, and examples, see the [Batch Mode Guide](Batch-Mode).
+For full details, default values, and examples, see the [Batch Mode Guide](Batch-Mode.md).

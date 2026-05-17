@@ -193,8 +193,8 @@ Both profiles and batch configs are JSON files that configure servers, but they 
 | **Drift detection** | Yes | No |
 | **Use case** | Cloning common settings, compliance checking | Full unattended server builds |
 
-For full HOST automation including SET switches, iSCSI, and storage setup, use [Batch Mode](Batch-Mode). For day-to-day profile management and drift checks, use Configuration Profiles.
+For full HOST automation including SET switches, iSCSI, and storage setup, use [Batch Mode](Batch-Mode.md). For day-to-day profile management and drift checks, use Configuration Profiles.
 
 ---
 
-See also: [Configuration Guide](Configuration) | [Batch Mode](Batch-Mode) | [Cluster Management](Cluster-Management)
+See also: [Configuration Guide](Configuration.md) | [Batch Mode](Batch-Mode.md) | [Cluster Management](Cluster-Management.md)

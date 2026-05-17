@@ -146,7 +146,7 @@ VHD downloads require a file server configured in `defaults.json`:
 }
 ```
 
-See [File Server Setup](File-Server-Setup) for full configuration details.
+See [File Server Setup](FileServer-Setup.md) for full configuration details.
 
 ---
 
@@ -212,4 +212,4 @@ From the **Configure Server** menu, **Defender Exclusions** provides:
 
 ---
 
-See also: [Configuration Guide](Configuration) | [Batch Mode](Batch-Mode) | [File Server Setup](File-Server-Setup)
+See also: [Configuration Guide](Configuration.md) | [Batch Mode](Batch-Mode.md) | [File Server Setup](FileServer-Setup.md)

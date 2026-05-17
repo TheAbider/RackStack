@@ -3183,8 +3183,13 @@ function Test-VMDeploymentPreFlight {
     try { $runningVMs = @(Get-VM -ErrorAction Stop | Where-Object { $_.State -eq "Running" }) } catch { $runningVMs = @() }
     $existingRAMGB = 0
     foreach ($rv in $runningVMs) { $existingRAMGB += [math]::Round($rv.MemoryAssigned / 1GB, 1) }
-    $ramStatus = if (($requiredRAMGB + $existingRAMGB) -gt ($totalRAMGB * 0.95)) { "FAIL" }
-                 elseif (($requiredRAMGB + $existingRAMGB) -gt ($totalRAMGB * 0.8)) { "WARN" }
+    # Use FreePhysicalMemory (current free) as the budget rather than TotalVisibleMemorySize.
+    # This accounts for host OS / non-VM RAM that's already committed and would otherwise be
+    # invisible to a Total*0.95 budget check.
+    $hostReservedGB = [math]::Max(0, $totalRAMGB - $freeRAMGB - $existingRAMGB)
+    $availableForNewGB = [math]::Max(0, $totalRAMGB - $hostReservedGB - $existingRAMGB)
+    $ramStatus = if ($requiredRAMGB -gt $availableForNewGB) { "FAIL" }
+                 elseif ($requiredRAMGB -gt ($availableForNewGB * 0.85)) { "WARN" }
                  else { "OK" }
     $results += @{
         Resource = "RAM"

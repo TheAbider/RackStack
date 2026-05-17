@@ -65,8 +65,8 @@ Batch mode processes steps sequentially. Set a value to `null` or `false` to ski
 | 11 | `CreateLocalAdmin` | Create a local admin account (prompts for password) |
 | 12 | `DisableBuiltInAdmin` | Disable the built-in Administrator account |
 | 13 | `DomainName` | Join an Active Directory domain (prompts for credentials) |
-| 14 | `ServerRoleTemplate` | Install a server role template (see [Server Role Templates](Server-Role-Templates)) |
-| 15 | `PromoteToDC` | Promote to Domain Controller (see [AD DS Promotion](AD-DS-Promotion)) |
+| 14 | `ServerRoleTemplate` | Install a server role template (see [Server Role Templates](Server-Role-Templates.md)) |
+| 15 | `PromoteToDC` | Promote to Domain Controller (see [AD DS Promotion](AD-DS-Promotion.md)) |
 | 16 | `InstallUpdates` | Install Windows Updates (can take 10-60+ minutes) |
 | 17 | `InitializeHostStorage` | Create VM storage directories and set Hyper-V default paths (HOST only) |
 | 18 | `CreateVirtualSwitch` | Create a virtual switch: SET, External, Internal, or Private (HOST only) |
@@ -177,7 +177,7 @@ These fields are only processed when `ConfigType` is `HOST`:
 | `PromoteToDC` | bool | false | Promote to Domain Controller after domain join |
 | `DCPromoType` | string | `"NewForest"` | `"NewForest"`, `"AdditionalDC"`, or `"RODC"` |
 | `ForestName` | string/null | null | Domain FQDN for New Forest (e.g., `"corp.contoso.com"`) |
-| `ForestMode` | string | `"WinThreshold"` | Forest functional level (New Forest only). See [AD DS Promotion](AD-DS-Promotion) |
+| `ForestMode` | string | `"WinThreshold"` | Forest functional level (New Forest only). See [AD DS Promotion](AD-DS-Promotion.md) |
 | `DomainMode` | string | `"WinThreshold"` | Domain functional level (New Forest only) |
 | `InstallUpdates` | bool | false | Install Windows Updates (10-60+ minutes) |
 | `AutoReboot` | bool | true | Auto-reboot after changes (10-second countdown) |
@@ -324,4 +324,4 @@ Before executing any steps, batch mode runs a full validation pass:
 
 ---
 
-See also: [Configuration Guide](Configuration) | [Storage Manager](Storage-Manager) | [Storage Backends](Storage-Backends) | [Server Role Templates](Server-Role-Templates) | [AD DS Promotion](AD-DS-Promotion)
+See also: [Configuration Guide](Configuration.md) | [Storage Manager](Storage-Manager.md) | [Storage Backends](Storage-Backends.md) | [Server Role Templates](Server-Role-Templates.md) | [AD DS Promotion](AD-DS-Promotion.md)

@@ -1,5 +1,23 @@
 ﻿# Changelog
 
+## v1.98.2
+
+- **Fix:** `Set-ClusterQuorum` interactive menu function was named identically to the built-in PowerShell cmdlet. Calls inside the wrapper resolved to the wrapper itself instead of the FailoverClusters cmdlet, so changing quorum type from the menu silently no-op'd (or recursed) on every option (Node Majority, Disk Witness, File Share, Cloud Witness). Renamed the wrapper to `Set-ClusterQuorumConfig`; cmdlet calls inside now resolve to the real cmdlet (27-FailoverClustering).
+- **Fix:** Cluster health check's "Active votes / Total votes" math could report HEALTHY when no nodes were enumerated because `Measure-Object` returns `$null` Sum on an empty input. Coalesced both sums to `[int]` so the comparison can't false-positive (27-FailoverClustering).
+- **Fix:** MPIO claimed-device display crashed with NullReferenceException on entries with a null `VendorId` or `ProductId` (some hardware returns one or both as null). Added null guards (26-MPIO).
+- **Fix:** iSCSI hostname pattern `HV(\d+)` matched anywhere in the name, so a hostname like `HV24ABC` returned 24 silently. Anchored to require the digits not be followed by letters (10-iSCSI).
+- **Fix:** iSCSI cabling report fired the "both adapters on same side" warning even when both adapters reached A AND B (already reported by the prior "reaches both sides" warning). Excluded `"Both"` from the duplicate-side check so users see one warning, not two (10-iSCSI).
+- **Fix:** iSCSI manual target entry now filters empty strings produced by trailing or repeated commas (`"1.2.3.4,,5.6.7.8"` no longer attempts a connection to an empty target). Adds a clear "no valid IPs" message if all entries were blank (10-iSCSI).
+- **Fix:** MSiSCSI service auto-start path now calls `Clear-MenuCache` so the iSCSI menu status line refreshes without a manual reload (10-iSCSI).
+- **Fix:** FileServer SHA256 helper leaked the outer `HttpWebResponse` if `New-Object System.IO.StreamReader` threw. Reordered the try/finally so the response handle is always closed even on inner failures (39-FileServer).
+- **Fix:** `Show-MountedVHDStatus` could pass null pipeline entries into the downstream filter when `Get-VHD` threw on a corrupted VHD. Added explicit null filter before the `Attached -eq $true` test (43-OfflineVHD).
+- **Fix:** VM-deployment RAM preflight used `TotalVisibleMemorySize * 0.95` as the budget, ignoring RAM already consumed by the host OS itself. Now derives headroom from `FreePhysicalMemory + existing VM allocations` so deploys are warned/blocked based on actual free RAM (44-VMDeployment).
+- **Fix:** Readiness-check DNS resolve and the DNS audit's per-target resolve are now wrapped in `Invoke-WithTimeout` (5-8 seconds) so a degraded resolver can't stall the operation (05-SystemCheck, 50-EntryPoint).
+- **Hardened:** Dashboard HTTP server. `HttpListener` timeouts (5s header / 10s idle / 10s queue), non-GET methods return 405 immediately, requests carrying a body return 413, and unknown paths return 404 instead of falling through to the HTML dashboard. The `-Config "host:port"` regex no longer accepts arbitrary DNS-style hostnames (only wildcards, loopback, and explicit IPv4) so operators can't accidentally request a bind that `HttpListener` will refuse (50-EntryPoint).
+- **Docs:** README CLI-action count refreshed from 167 to 176 (drift since v1.94.x). Replaced stale "New in v1.8.0" callout with a non-versioned description. Added a Documentation section linking the in-depth guides under `docs/`. Added Configuration field-table rows for `TimeZoneRegion`, `MonitoredServices`, `DryRun`, `DashboardWarningPercent`/`CriticalPercent`, `Timeouts`, and `CLIDefaults`.
+- **Docs:** Repaired ~30 broken wiki-style cross-doc links across 12 files under `docs/` (`[Storage Backends](Storage-Backends)` etc. now carry the `.md` suffix so they resolve on github.com).
+- 65 modules, 4535 tests, 176 CLI actions, 615 functions
+
 ## v1.98.1
 
 - **Docs:** README polish. Promoted "sconfig for the modern era" to the top tagline, added a production-scale callout under the badges, tightened the opening paragraph with the 15-vs-167 comparison, and reserved (commented-out) embed slots for future screenshots.

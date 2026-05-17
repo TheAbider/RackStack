@@ -163,7 +163,7 @@ function Show-ClusterManagementMenu {
             "3" { Test-ClusterValidation }
             "4" { Edit-ClusterSharedVolume }
             "5" { Set-LiveMigrationSettings }
-            "6" { Set-ClusterQuorum }
+            "6" { Set-ClusterQuorumConfig }
             "7" { Show-ClusterStatus; continue }
             "8" { Suspend-ClusterNodeForMaintenance }
             "9" { Resume-ClusterNodeFromMaintenance }
@@ -774,8 +774,10 @@ function Set-LiveMigrationSettings {
     }
 }
 
-# Function to configure cluster quorum
-function Set-ClusterQuorum {
+# Function to configure cluster quorum. Named distinctly from the built-in
+# Microsoft.FailoverClusters\Set-ClusterQuorum cmdlet so the cmdlet calls
+# inside this function resolve to the real cmdlet, not back to this wrapper.
+function Set-ClusterQuorumConfig {
     Clear-Host
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -1171,8 +1173,10 @@ function Test-ClusterQuorumHealth {
         # Check node votes
         $nodes = @(Get-ClusterNode -ErrorAction SilentlyContinue)
         $upNodes = @($nodes | Where-Object { $_.State -eq 'Up' })
-        $totalVotes = ($nodes | Measure-Object -Property NodeWeight -Sum).Sum
-        $activeVotes = ($upNodes | Measure-Object -Property NodeWeight -Sum).Sum
+        # Measure-Object returns $null Sum when the input is empty. Coalesce so the
+        # downstream "active >= majority" comparison can't false-positive on no-nodes.
+        $totalVotes = [int](($nodes | Measure-Object -Property NodeWeight -Sum).Sum)
+        $activeVotes = [int](($upNodes | Measure-Object -Property NodeWeight -Sum).Sum)
 
         # Account for quorum witness vote (disk, file share, or cloud witness)
         if ($null -ne $quorum -and $null -ne $quorum.QuorumResource) {

@@ -46,7 +46,9 @@ function Show-MPIOStatusSummary {
             Write-OutputColor "  │$("  Claimed Devices:  $($claimedDevices.Count) hardware ID(s)".PadRight(72))│" -color "Info"
 
             foreach ($device in $claimedDevices) {
-                $vendorProduct = "$($device.VendorId.Trim()) / $($device.ProductId.Trim())"
+                $vendor = if ($null -ne $device.VendorId) { $device.VendorId.Trim() } else { '?' }
+                $product = if ($null -ne $device.ProductId) { $device.ProductId.Trim() } else { '?' }
+                $vendorProduct = "$vendor / $product"
                 if ($vendorProduct.Length -gt 52) { $vendorProduct = $vendorProduct.Substring(0, 49) + "..." }
                 Write-OutputColor "  │$("    $vendorProduct".PadRight(72))│" -color "Info"
             }

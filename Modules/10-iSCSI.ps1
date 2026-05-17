@@ -197,7 +197,7 @@ function Test-iSCSICabling {
         Write-OutputColor "" -color "Info"
     }
 
-    if ($sides.Count -ge 2 -and $sides[0] -eq $sides[1] -and $sides[0] -ne "None") {
+    if ($sides.Count -ge 2 -and $sides[0] -eq $sides[1] -and $sides[0] -ne "None" -and $sides[0] -ne "Both") {
         Write-OutputColor "  WARNING: Both adapters reach the same side ($($sides[0]))." -color "Warning"
         Write-OutputColor "  Check cabling - they should be on different switches." -color "Warning"
         Write-OutputColor "" -color "Info"
@@ -236,8 +236,9 @@ function Get-HostNumberFromHostname {
         return [int]$regexMatches[1]
     }
 
-    # Pattern: HV{number} anywhere
-    if ($Hostname -match 'HV(\d+)') {
+    # Pattern: HV{number} anywhere, but the digits must not be followed by letters
+    # (rejects names like "HV24ABC" where the trailing letters change the meaning)
+    if ($Hostname -match 'HV(\d+)(?![A-Za-z])') {
         $regexMatches = $matches
         return [int]$regexMatches[1]
     }
@@ -943,6 +944,7 @@ function Connect-iSCSITargets {
             Start-Service -Name MSiSCSI -ErrorAction Stop
             Start-Sleep -Seconds 2
             Write-OutputColor "  MSiSCSI service started successfully." -color "Success"
+            Clear-MenuCache
         }
         catch {
             Write-OutputColor "  Failed to start MSiSCSI service: $_" -color "Error"
@@ -1425,8 +1427,12 @@ function Start-Show-iSCSISANMenu {
                             $navResult = Test-NavigationCommand -UserInput $manualTargets
                             if ($navResult.ShouldReturn) { return }
                             if (-not [string]::IsNullOrWhiteSpace($manualTargets)) {
-                                $targetList = $manualTargets -split ',' | ForEach-Object { $_.Trim() }
-                                Connect-iSCSITargets -TargetPortalAddresses $targetList
+                                $targetList = @($manualTargets -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+                                if ($targetList.Count -gt 0) {
+                                    Connect-iSCSITargets -TargetPortalAddresses $targetList
+                                } else {
+                                    Write-OutputColor "  No valid target IPs after trimming." -color "Warning"
+                                }
                             }
                         }
                         '^[Pp]$' {

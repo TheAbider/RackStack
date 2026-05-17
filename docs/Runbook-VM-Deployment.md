@@ -262,4 +262,4 @@ For remote standalone hosts, RackStack uses WinRM/PowerShell Remoting to:
 | Dynamic memory settings error | Min > Startup or Startup > Max | RackStack auto-calculates: 25% min, 50% startup |
 | Linux VM boot fails | Wrong Secure Boot template | RackStack sets UEFI CA for Linux automatically |
 
-For more detailed troubleshooting, see the [Troubleshooting Guide](Troubleshooting).
+For more detailed troubleshooting, see the [Troubleshooting Guide](Troubleshooting.md).

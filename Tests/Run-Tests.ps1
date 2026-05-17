@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.1
+    Automated Test Runner for RackStack v1.98.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -531,7 +531,7 @@ $requiredFunctions = @(
     # Credentials (45)
     "Get-StoredCredential",
     # Cluster (27)
-    "Set-ClusterQuorum",
+    "Set-ClusterQuorumConfig",
     # v1.82.1 additions
     "Export-ProfileComparisonHTML",
     "New-DiskPartition",

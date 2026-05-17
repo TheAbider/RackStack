@@ -280,4 +280,4 @@ All variants:
 
 ---
 
-See also: [Server Role Templates](Server-Role-Templates) | [Configuration Guide](Configuration) | [Batch Mode](Batch-Mode) | [Troubleshooting](Troubleshooting)
+See also: [Server Role Templates](Server-Role-Templates.md) | [Configuration Guide](Configuration.md) | [Batch Mode](Batch-Mode.md) | [Troubleshooting](Troubleshooting.md)
