@@ -69,41 +69,56 @@ jobs:
         id: vercheck
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
-          $cur = (Select-String -Path Header.ps1 -Pattern '^\s+(\d+\.\d+\.\d+)\s*$' | Select-Object -First 1).Matches.Groups[1].Value
-          $prevContent = git show HEAD~1:Header.ps1 2>$null
-          $prev = if ($prevContent) {
-            $match = ($prevContent | Select-String -Pattern '^\s+(\d+\.\d+\.\d+)\s*$' | Select-Object -First 1)
-            if ($match) { $match.Matches.Groups[1].Value } else { '' }
-          } else { '' }
+          # Read both Header.ps1 versions as single strings and match with (?m) so
+          # CRLF / array-pipeline quirks across PS 5 vs PS 7 don't matter.
+          $curText = Get-Content Header.ps1 -Raw
+          $cur = if ($curText -match '(?ms)^\.VERSION\s*\r?\n\s+(\d+\.\d+\.\d+)') { $matches[1] } else { '' }
+
+          $prev = ''
+          $prevText = (git show HEAD~1:Header.ps1 2>$null) -join "`n"
+          # `git show` failure for HEAD~1 (e.g., shallow clone, first commit) is a non-fatal
+          # signal — treat as "no prev version known" and let the bump check handle it.
+          $global:LASTEXITCODE = 0
+          if ($prevText -and $prevText.Length -gt 0) {
+            if ($prevText -match '(?ms)^\.VERSION\s*\r?\n\s+(\d+\.\d+\.\d+)') { $prev = $matches[1] }
+          }
+
           $bumped = ($cur -and $cur -ne $prev)
-          Write-Host "Previous version: $prev"
-          Write-Host "Current version:  $cur"
-          Write-Host "Bumped:           $bumped"
-          "version=$cur"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "prev=$prev"       | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "bumped=$bumped"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $bumpedStr = if ($bumped) { 'true' } else { 'false' }
+          Write-Host "Previous version: '$prev'"
+          Write-Host "Current version:  '$cur'"
+          Write-Host "Bumped:           $bumpedStr"
+          "version=$cur"      | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "prev=$prev"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "bumped=$bumpedStr" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          # Reset LASTEXITCODE so any earlier native-command exit doesn't propagate as our exit
+          $global:LASTEXITCODE = 0
+          exit 0
 
       - name: Check release does not already exist
         id: releasecheck
-        if: steps.vercheck.outputs.bumped == 'True'
+        if: steps.vercheck.outputs.bumped == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ver = '${{ steps.vercheck.outputs.version }}'
           $existing = gh release view "v$ver" --json tagName 2>$null
-          $exists = -not [string]::IsNullOrWhiteSpace($existing)
-          Write-Host "Release v$ver already exists: $exists"
-          "exists=$exists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $global:LASTEXITCODE = 0  # `gh release view` exits non-zero when release missing — that's expected here
+          $existsBool = -not [string]::IsNullOrWhiteSpace($existing)
+          $existsStr = if ($existsBool) { 'true' } else { 'false' }
+          Write-Host "Release v$ver already exists: $existsStr"
+          "exists=$existsStr" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          exit 0
 
       - name: Install ps2exe
-        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         run: |
           if (-not (Get-Module ps2exe -ListAvailable)) {
             Install-Module ps2exe -Force -Scope CurrentUser -AllowClobber
           }
 
       - name: Compile RackStack.exe
-        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         run: |
           $ver = '${{ steps.vercheck.outputs.version }}'
           $mono = "builds\RackStack v$ver.ps1"
@@ -115,7 +130,7 @@ jobs:
 
       - name: Generate SHA256 hashes
         id: hashes
-        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         run: |
           $ver = '${{ steps.vercheck.outputs.version }}'
           $assets = @(
@@ -131,7 +146,7 @@ jobs:
           Get-Content 'release-hashes.txt'
 
       - name: Build release notes
-        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         run: |
           $ver = '${{ steps.vercheck.outputs.version }}'
           # Extract this version's section from Changelog.md (## vX.Y.Z ... next ## or EOF)
@@ -159,7 +174,7 @@ jobs:
           $body | Set-Content 'release-body.md' -Encoding utf8
 
       - name: Create GitHub Release
-        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -172,20 +187,41 @@ jobs:
             "defaults.example.json"
           Write-Host "Release v$ver published."
 
-      - name: Apply retention rule (z bump deletes prior z in same minor)
-        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+      - name: Apply retention rule (only latest z in minor survives)
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ver  = '${{ steps.vercheck.outputs.version }}'
-          $prev = '${{ steps.vercheck.outputs.prev }}'
           $vParts = $ver -split '\.'
-          $pParts = $prev -split '\.'
-          # Only z bumps (same x.y) delete the prior z. y/x bumps start a new chain.
-          if ($pParts.Length -eq 3 -and $vParts[0] -eq $pParts[0] -and $vParts[1] -eq $pParts[1] -and $vParts[2] -ne $pParts[2]) {
-            Write-Host "Z bump $prev -> $ver — deleting prior release v$prev per retention rule"
-            gh release delete "v$prev" --yes --cleanup-tag 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Host "  (prior release v$prev did not exist or was already deleted)" }
-          } else {
-            Write-Host "Not a z bump within the same minor — keeping prior release lineup intact"
+          if ($vParts.Length -ne 3) {
+            Write-Host "Unexpected version format '$ver' — skipping retention cleanup"
+            exit 0
           }
+          $thisMinor = "$($vParts[0]).$($vParts[1])"  # e.g. "1.98"
+          # Enumerate ALL existing releases (not just immediate prev) so we correctly
+          # collapse the 1.98.x lineup down to just v1.98.8 even if v1.98.7 was missed
+          # and v1.98.6 is still the latest existing release. End-state: only the new
+          # `$ver` release exists in this minor.
+          $allReleases = gh release list --json tagName --limit 200 | ConvertFrom-Json
+          $global:LASTEXITCODE = 0
+          $toDelete = @()
+          foreach ($r in $allReleases) {
+            $tag = $r.tagName
+            $tagVer = $tag -replace '^v', ''
+            $tagParts = $tagVer -split '\.'
+            if ($tagParts.Length -eq 3 -and "$($tagParts[0]).$($tagParts[1])" -eq $thisMinor -and $tagVer -ne $ver) {
+              $toDelete += $tag
+            }
+          }
+          if ($toDelete.Count -eq 0) {
+            Write-Host "Retention: no older releases in minor $thisMinor — nothing to delete"
+          } else {
+            Write-Host "Retention: deleting $($toDelete.Count) older $thisMinor.x release(s) so only v$ver survives"
+            foreach ($tag in $toDelete) {
+              Write-Host "  -> gh release delete $tag --cleanup-tag"
+              gh release delete $tag --yes --cleanup-tag 2>$null
+              $global:LASTEXITCODE = 0
+            }
+          }
+          exit 0
