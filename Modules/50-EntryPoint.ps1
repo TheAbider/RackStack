@@ -4104,6 +4104,9 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Recent update history via COM
             $recentUpdates = @()
             $succeeded = 0; $failed = 0
+            $session = $null
+            $searcher = $null
+            $history = $null
             try {
                 $session = New-Object -ComObject Microsoft.Update.Session
                 $searcher = $session.CreateUpdateSearcher()
@@ -4124,9 +4127,19 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                         }
                         if ($resultText -eq 'Succeeded' -or $resultText -eq 'SucceededWithErrors') { $succeeded++ }
                         elseif ($resultText -eq 'Failed') { $failed++ }
+                        if ($null -ne $entry) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($entry) } catch { } }
                     }
                 }
-            } catch { }
+            } catch { } finally {
+                # Microsoft.Update.Session holds non-GC'd COM references that survive until process exit
+                # if we don't release them; this matters in batch mode where the dispatch is invoked many
+                # times per fleet sweep and the leak compounds.
+                foreach ($comObj in @($history, $searcher, $session)) {
+                    if ($null -ne $comObj) {
+                        try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($comObj) } catch { }
+                    }
+                }
+            }
 
             # Console output
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -7352,6 +7365,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             $cgRunning = $false
             $hvciRunning = $false
             $securityServices = @()
+            # Win32_DeviceGuard exists on Server 2016+ and Win10+ only — without a probe-availability flag,
+            # an older host or a missing namespace would silently emit "Credential Guard: Not running" and
+            # bump $cgIssues even though we never actually observed the state.
+            $cgProbeAvailable = $true
+            $cgProbeError = $null
 
             try {
                 $dgInfo = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\Microsoft\Windows\DeviceGuard' -OperationTimeoutSec 8 -ErrorAction Stop
@@ -7365,7 +7383,10 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                         $securityServices += $svcName
                     }
                 }
-            } catch { }
+            } catch {
+                $cgProbeAvailable = $false
+                $cgProbeError = $_.Exception.Message
+            }
 
             # LSA protection
             $lsaPPL = $false
@@ -7374,19 +7395,28 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 if ($null -ne $lsaReg -and $null -ne $lsaReg.RunAsPPL) { $lsaPPL = $lsaReg.RunAsPPL -eq 1 }
             } catch { }
 
-            if (-not $cgRunning) { $cgIssues++ }
+            # Only count VBS/CG misses as issues when the WMI probe actually succeeded.
+            if ($cgProbeAvailable) {
+                if (-not $cgRunning) { $cgIssues++ }
+            }
             if (-not $lsaPPL) { $cgIssues++ }
+
+            $cgAuditStatus = if ($cgProbeAvailable) { 'OK' } else { 'PartiallyUnavailable' }
 
             # Console output
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  CREDENTIAL GUARD AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            $vbsColor = if ($vbsRunning) { "Success" } else { "Warning" }
-            Write-OutputColor "  │$("  VBS:              $(if ($vbsRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $vbsColor
-            $cgColor = if ($cgRunning) { "Success" } else { "Warning" }
-            Write-OutputColor "  │$("  Credential Guard: $(if ($cgRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $cgColor
-            $hvciColor = if ($hvciRunning) { "Success" } else { "Info" }
-            Write-OutputColor "  │$("  HVCI:             $(if ($hvciRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $hvciColor
+            if (-not $cgProbeAvailable) {
+                Write-OutputColor "  │$("  VBS/CG probe unavailable (Win32_DeviceGuard not present on this host)".PadRight(72))│" -color "Warning"
+            } else {
+                $vbsColor = if ($vbsRunning) { "Success" } else { "Warning" }
+                Write-OutputColor "  │$("  VBS:              $(if ($vbsRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $vbsColor
+                $cgColor = if ($cgRunning) { "Success" } else { "Warning" }
+                Write-OutputColor "  │$("  Credential Guard: $(if ($cgRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $cgColor
+                $hvciColor = if ($hvciRunning) { "Success" } else { "Info" }
+                Write-OutputColor "  │$("  HVCI:             $(if ($hvciRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $hvciColor
+            }
             $lsaColor = if ($lsaPPL) { "Success" } else { "Warning" }
             Write-OutputColor "  │$("  LSASS Protection: $(if ($lsaPPL) { 'Enabled (PPL)' } else { 'Not enabled' })".PadRight(72))│" -color $lsaColor
             if (@($securityServices).Count -gt 0) {
@@ -7400,7 +7430,8 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 $jsonResult = @{
                     Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'CredGuardAudit'
                     Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
-                    Summary = @{ VBSRunning = $vbsRunning; CredentialGuard = $cgRunning; HVCI = $hvciRunning; LSAProtection = $lsaPPL; SecurityServices = $securityServices; Issues = $cgIssues }
+                    Status = $cgAuditStatus
+                    Summary = @{ VBSRunning = $vbsRunning; CredentialGuard = $cgRunning; HVCI = $hvciRunning; LSAProtection = $lsaPPL; SecurityServices = $securityServices; Issues = $cgIssues; ProbeAvailable = $cgProbeAvailable; ProbeError = $cgProbeError }
                 }
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
@@ -7993,7 +8024,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 }
             }
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  Devices: $(@($usbDevices).Count)   Storage blocked: $usbStorageDisabled   Issues: $usbIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Devices: $(@($usbDevices).Count)   Storage blocked: $usbStorageDisabled   Issues: $usbIssues".PadRight(72))│" -color $(if ($usbIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8014,43 +8045,62 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             $alIssues = 0
             $alPolicies = @()
             $alConfigured = $false
+            $alRunning = $false
+            # Workstation SKUs and older Server SKUs ship without the AppLocker module — without this flag,
+            # the audit would silently report "Issues: 0 / Configured: False" and look green to a reviewer.
+            $alStatus = 'OK'
 
-            try {
-                $alSvc = Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue
-                $alRunning = $null -ne $alSvc -and $alSvc.Status -eq 'Running'
+            if (-not (Get-Command Get-AppLockerPolicy -ErrorAction SilentlyContinue)) {
+                $alStatus = 'Unavailable'
+                foreach ($rt in @('Exe', 'Msi', 'Script', 'Appx', 'Dll')) {
+                    $alPolicies += @{ Type = $rt; RuleCount = 0; Enforcement = 'Cmdlet not available' }
+                }
+            } else {
+                try {
+                    $alSvc = Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+                    $alRunning = $null -ne $alSvc -and $alSvc.Status -eq 'Running'
 
-                $ruleTypes = @('Exe', 'Msi', 'Script', 'Appx', 'Dll')
-                foreach ($rt in $ruleTypes) {
-                    try {
-                        $rules = @(Get-AppLockerPolicy -Effective -ErrorAction Stop | Select-Object -ExpandProperty RuleCollections | Where-Object { $_.RuleCollectionType -eq $rt })
-                        if (@($rules).Count -gt 0) { $alConfigured = $true }
-                        $alPolicies += @{ Type = $rt; RuleCount = @($rules).Count; Enforcement = if (@($rules).Count -gt 0) { 'Configured' } else { 'Not configured' } }
-                    } catch {
+                    $ruleTypes = @('Exe', 'Msi', 'Script', 'Appx', 'Dll')
+                    foreach ($rt in $ruleTypes) {
+                        try {
+                            $rules = @(Get-AppLockerPolicy -Effective -ErrorAction Stop | Select-Object -ExpandProperty RuleCollections | Where-Object { $_.RuleCollectionType -eq $rt })
+                            if (@($rules).Count -gt 0) { $alConfigured = $true }
+                            $alPolicies += @{ Type = $rt; RuleCount = @($rules).Count; Enforcement = if (@($rules).Count -gt 0) { 'Configured' } else { 'Not configured' } }
+                        } catch {
+                            $alPolicies += @{ Type = $rt; RuleCount = 0; Enforcement = 'Not available' }
+                        }
+                    }
+                } catch {
+                    $alStatus = 'Unavailable'
+                    foreach ($rt in @('Exe', 'Msi', 'Script', 'Appx', 'Dll')) {
                         $alPolicies += @{ Type = $rt; RuleCount = 0; Enforcement = 'Not available' }
                     }
-                }
-            } catch {
-                foreach ($rt in @('Exe', 'Msi', 'Script', 'Appx', 'Dll')) {
-                    $alPolicies += @{ Type = $rt; RuleCount = 0; Enforcement = 'Not available' }
                 }
             }
 
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  APPLOCKER AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  AppIDSvc:   $(if ($alRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $(if ($alRunning) { "Success" } else { "Info" })
-            Write-OutputColor "  │$("  Configured: $alConfigured".PadRight(72))│" -color $(if ($alConfigured) { "Success" } else { "Info" })
-            foreach ($p in $alPolicies) {
-                Write-OutputColor "  │$("  $($p.Type.PadRight(12)) Rules: $($p.RuleCount)  ($($p.Enforcement))".PadRight(72))│" -color $(if ($p.RuleCount -gt 0) { "Success" } else { "Info" })
+            if ($alStatus -eq 'Unavailable') {
+                Write-OutputColor "  │$("  AppLocker cmdlet not available on this SKU (Server Core / Workstation)".PadRight(72))│" -color "Warning"
+            } else {
+                Write-OutputColor "  │$("  AppIDSvc:   $(if ($alRunning) { 'Running' } else { 'Not running' })".PadRight(72))│" -color $(if ($alRunning) { "Success" } else { "Info" })
+                Write-OutputColor "  │$("  Configured: $alConfigured".PadRight(72))│" -color $(if ($alConfigured) { "Success" } else { "Info" })
+                foreach ($p in $alPolicies) {
+                    Write-OutputColor "  │$("  $($p.Type.PadRight(12)) Rules: $($p.RuleCount)  ($($p.Enforcement))".PadRight(72))│" -color $(if ($p.RuleCount -gt 0) { "Success" } else { "Info" })
+                }
             }
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  Issues: $alIssues".PadRight(72))│" -color "Success"
+            $alSummaryColor = if ($alStatus -eq 'Unavailable') { 'Warning' } else { 'Success' }
+            $alSummaryText = if ($alStatus -eq 'Unavailable') { "Status: Unavailable" } else { "Issues: $alIssues" }
+            Write-OutputColor "  │$("  $alSummaryText".PadRight(72))│" -color $alSummaryColor
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
             if ($script:CLIOutputFormat -eq 'JSON') {
                 $jsonResult = @{
                     Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'AppLockerAudit'
                     Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+                    Status = $alStatus
                     Summary = @{ AppIDSvcRunning = $alRunning; Configured = $alConfigured; Issues = $alIssues }
                     Policies = $alPolicies
                 }
@@ -8415,7 +8465,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 }
             }
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  Issues: $recIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $recIssues".PadRight(72))│" -color $(if ($recIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8523,7 +8573,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             if ($proxyConfig['HTTP_PROXY']) { Write-OutputColor "  │$("  HTTP_PROXY:   $($proxyConfig['HTTP_PROXY'])".PadRight(72))│" -color "Info" }
             if ($proxyConfig['HTTPS_PROXY']) { Write-OutputColor "  │$("  HTTPS_PROXY:  $($proxyConfig['HTTPS_PROXY'])".PadRight(72))│" -color "Info" }
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  Issues: $proxyIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $proxyIssues".PadRight(72))│" -color $(if ($proxyIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -8751,7 +8801,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             Write-OutputColor "  │$("  Cached Tickets: $($kerbConfig['CachedTickets'])".PadRight(72))│" -color "Info"
             if ($kerbConfig.ContainsKey('MaxTokenSize')) { Write-OutputColor "  │$("  Max Token Size: $($kerbConfig['MaxTokenSize'])".PadRight(72))│" -color "Info" }
-            Write-OutputColor "  │$("  Issues: $kbIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $kbIssues".PadRight(72))│" -color $(if ($kbIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'KerberosAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $kbIssues }; Config = $kerbConfig }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($kbIssues -gt 0) { [Environment]::Exit(1) }
@@ -8768,7 +8818,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             if (@($leases).Count -eq 0) { Write-OutputColor "  │$("  (No DHCP-enabled adapters)".PadRight(72))│" -color "Info" }
             else { foreach ($l in $leases) { Write-OutputColor "  │$("  $($l.IPAddress.PadRight(16)) DHCP: $($l.DHCPServer)".PadRight(72))│" -color "Info"; Write-OutputColor "  │$("    Expires: $($l.LeaseExpires)".PadRight(72))│" -color "Info" } }
-            Write-OutputColor "  │$("  DHCP Adapters: $(@($leases).Count)   Issues: $dhcpIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  DHCP Adapters: $(@($leases).Count)   Issues: $dhcpIssues".PadRight(72))│" -color $(if ($dhcpIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'DHCPAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ DHCPAdapters = @($leases).Count; Issues = $dhcpIssues }; Leases = $leases }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($dhcpIssues -gt 0) { [Environment]::Exit(1) }
@@ -8784,7 +8834,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  │$("  NUMA AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             foreach ($n in $numaNodes) { Write-OutputColor "  │$("  $($n.DeviceID): $($n.Cores) cores, $($n.Logical) logical, L2:$($n.L2KB)KB L3:$($n.L3KB)KB".PadRight(72))│" -color "Info" }
-            Write-OutputColor "  │$("  NUMA Nodes: $(@($numaNodes).Count)   Issues: $numaIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  NUMA Nodes: $(@($numaNodes).Count)   Issues: $numaIssues".PadRight(72))│" -color $(if ($numaIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NUMAAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Nodes = @($numaNodes).Count; Issues = $numaIssues }; Nodes = $numaNodes }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($numaIssues -gt 0) { [Environment]::Exit(1) }
@@ -8816,7 +8866,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
             if (@($scripts).Count -eq 0) { Write-OutputColor "  │$("  (No GPO startup/shutdown scripts configured)".PadRight(72))│" -color "Success" }
             else { foreach ($s in $scripts) { $line = "  [$($s.Type)] $($s.Script)"; if ($line.Length -gt 72) { $line = $line.Substring(0,69) + "..." }; Write-OutputColor "  │$($line.PadRight(72))│" -color "Info" } }
-            Write-OutputColor "  │$("  Scripts: $(@($scripts).Count)   Issues: $ssIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Scripts: $(@($scripts).Count)   Issues: $ssIssues".PadRight(72))│" -color $(if ($ssIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'StartupScriptAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Scripts = @($scripts).Count; Issues = $ssIssues }; Scripts = $scripts }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($ssIssues -gt 0) { [Environment]::Exit(1) }
@@ -8827,7 +8877,20 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             $scIssues = 0; $scStatus = @{}
             try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop; $scStatus['DomainJoined'] = $cs.PartOfDomain -eq $true; $scStatus['Domain'] = "$($cs.Domain)" } catch { }
             if ($scStatus['DomainJoined']) {
-                try { $nltest = & nltest /sc_query:$($scStatus['Domain']) 2>&1; $nltestStr = $nltest -join ' '; $scStatus['SecureChannel'] = if ($nltestStr -match 'NERR_Success') { 'OK' } else { 'FAIL' }; if ($scStatus['SecureChannel'] -ne 'OK') { $scIssues++ }; if ($nltestStr -match 'Trusted DC Name\s*(.+?)(?:\s|$)') { $regexMatches = $matches; $scStatus['TrustedDC'] = $regexMatches[1].Trim() } } catch { $scStatus['SecureChannel'] = 'Error' }
+                # nltest emits localized text ("NERR_Success" / "ERROR_..." vary by Windows MUI), so the
+                # earlier `-match 'NERR_Success'` check failed on any non-English host. Trust the exit code,
+                # which is locale-invariant — and cross-check with Test-ComputerSecureChannel for redundancy.
+                try {
+                    $global:LASTEXITCODE = 0
+                    $nltest = & nltest /sc_query:$($scStatus['Domain']) 2>&1
+                    $nltestExit = $LASTEXITCODE
+                    $nltestStr = $nltest -join ' '
+                    $tcscOk = $null
+                    try { $tcscOk = Test-ComputerSecureChannel -ErrorAction Stop } catch { $tcscOk = $null }
+                    $scStatus['SecureChannel'] = if ($nltestExit -eq 0 -and ($tcscOk -ne $false)) { 'OK' } else { 'FAIL' }
+                    if ($scStatus['SecureChannel'] -ne 'OK') { $scIssues++ }
+                    if ($nltestStr -match 'Trusted DC Name\s*(.+?)(?:\s|$)') { $regexMatches = $matches; $scStatus['TrustedDC'] = $regexMatches[1].Trim() }
+                } catch { $scStatus['SecureChannel'] = 'Error'; $scIssues++ }
             } else { $scStatus['SecureChannel'] = 'N/A (not domain-joined)' }
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
             Write-OutputColor "  │$("  SECURE CHANNEL AUDIT - $env:COMPUTERNAME".PadRight(72))│" -color "Info"
@@ -8876,7 +8939,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  │$("  Log File: $(if ($logStats['LogExists']) { 'Present' } else { 'Not found (logging may be disabled)' })".PadRight(72))│" -color $(if ($logStats['LogExists']) { "Success" } else { "Warning" })
             if ($logStats['LogExists'] -and $logStats.ContainsKey('Drops')) { Write-OutputColor "  │$("  Recent: $($logStats['Drops']) drops, $($logStats['Allows']) allows (last 500 lines)".PadRight(72))│" -color "Info" }
             if (@($recentDrops).Count -gt 0) { Write-OutputColor "  │$("  RECENT DROPS".PadRight(72))│" -color "Warning"; foreach ($d in ($recentDrops | Select-Object -First 5)) { Write-OutputColor "  │$("  $($d.SrcIP):$($d.SrcPort) -> $($d.DstIP):$($d.DstPort) ($($d.Protocol))".PadRight(72))│" -color "Warning" } }
-            Write-OutputColor "  │$("  Issues: $flIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $flIssues".PadRight(72))│" -color $(if ($flIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'FirewallLogAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ LogExists = $logStats['LogExists']; Drops = $logStats['Drops']; Allows = $logStats['Allows']; Issues = $flIssues }; RecentDrops = $recentDrops }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($flIssues -gt 0) { [Environment]::Exit(1) }
@@ -8895,7 +8958,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  │$("  Reboot-related tasks: $(@($rebootTasks).Count)".PadRight(72))│" -color "Info"
             foreach ($t in $rebootTasks) { Write-OutputColor "  │$("  $($t.Name) [$($t.State)]".PadRight(72))│" -color "Info" }
             if (@($rebootEvents).Count -gt 0) { Write-OutputColor "  │$("  RECENT REBOOT EVENTS".PadRight(72))│" -color "Info"; foreach ($e in $rebootEvents) { Write-OutputColor "  │$("  $($e.Time)  $($e.Type)".PadRight(72))│" -color "Info" } }
-            Write-OutputColor "  │$("  Issues: $srIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $srIssues".PadRight(72))│" -color $(if ($srIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ScheduledRebootAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ RebootTasks = @($rebootTasks).Count; RebootEvents = @($rebootEvents).Count; Issues = $srIssues }; Tasks = $rebootTasks; Events = $rebootEvents }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($srIssues -gt 0) { [Environment]::Exit(1) }
@@ -8947,7 +9010,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  │$("  Default gateways: $(@($defaultRoutes).Count)".PadRight(72))│" -color "Info"
             foreach ($dr in $defaultRoutes) { Write-OutputColor "  │$("    $($dr.NextHop) via $($dr.Interface) (metric $($dr.Metric))".PadRight(72))│" -color "Info" }
             Write-OutputColor "  │$("  IPv4 routes: $(@($ipv4Routes).Count)   Total: $(@($routes).Count)".PadRight(72))│" -color "Info"
-            Write-OutputColor "  │$("  Issues: $rtIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $rtIssues".PadRight(72))│" -color $(if ($rtIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'RouteTableAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ TotalRoutes = @($routes).Count; IPv4Routes = @($ipv4Routes).Count; DefaultGateways = @($defaultRoutes).Count; Issues = $rtIssues }; Routes = $routes }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($rtIssues -gt 0) { [Environment]::Exit(1) }
@@ -8985,7 +9048,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             if (@($rsatCaps).Count -gt 0) { Write-OutputColor "  │$("  RSAT TOOLS".PadRight(72))│" -color "Info"; foreach ($r in $rsatCaps) { $rName = $r.Name -replace 'Rsat\.', '' -replace '~~~~.*', ''; Write-OutputColor "  │$("  $rName".PadRight(72))│" -color "Success" } }
             foreach ($c in ($capabilities | Where-Object { $_.Name -notmatch 'Rsat' } | Select-Object -First 10)) { $cName = $c.Name -replace '~~~~.*', ''; if ($cName.Length -gt 65) { $cName = $cName.Substring(0,62) + "..." }; Write-OutputColor "  │$("  $cName".PadRight(72))│" -color "Info" }
             if (@($capabilities).Count -gt @($rsatCaps).Count + 10) { Write-OutputColor "  │$("  ... and $(@($capabilities).Count - @($rsatCaps).Count - 10) more".PadRight(72))│" -color "Info" }
-            Write-OutputColor "  │$("  Issues: $wcIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $wcIssues".PadRight(72))│" -color $(if ($wcIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'WindowsCapabilityAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Installed = @($capabilities).Count; RSAT = @($rsatCaps).Count; Issues = $wcIssues }; Capabilities = $capabilities }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($wcIssues -gt 0) { [Environment]::Exit(1) }
@@ -9029,7 +9092,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  │$("  UI Language:   $($localeConfig['UILanguage']) ($($localeConfig['UIDisplayName']))".PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("  Time Zone:     $($localeConfig['TimeZone']) ($($localeConfig['UTCOffset']))".PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("  Date Format:   $($localeConfig['DateFormat'])   Decimal: $($localeConfig['NumberDecimal'])".PadRight(72))│" -color "Info"
-            Write-OutputColor "  │$("  Issues: $lcIssues".PadRight(72))│" -color "Success"
+            Write-OutputColor "  │$("  Issues: $lcIssues".PadRight(72))│" -color $(if ($lcIssues -gt 0) { "Warning" } else { "Info" })
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
             if ($script:CLIOutputFormat -eq 'JSON') { $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'LocaleAudit'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Summary = @{ Issues = $lcIssues }; Locale = $localeConfig }; Write-Output ($jsonResult | ConvertTo-Json -Depth 10) }
             if ($lcIssues -gt 0) { [Environment]::Exit(1) }
@@ -10443,6 +10506,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             catch {
                 Write-OutputColor "  Failover Clustering not available: $($_.Exception.Message)" -color "Warning"
                 $score = 0
+                $grade = "F"  # $grade is otherwise only set inside the try; consumers parsing the JSON path were getting an empty string
             }
             if ($script:CLIOutputFormat -eq 'JSON') {
                 $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ClusterHealthScore'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; ClusterName = "$clusterName"; Score = $score; Grade = "$grade"; Checks = $checks }
@@ -10664,8 +10728,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 $sChecks += @{ Check = "Latency"; Score = $latScore; Max = 20; Detail = "$($highLat.Count) high, $($medLat.Count) elevated" }
                 Write-OutputColor "  Latency: $($perf.Count) disks ($latScore/20)" -color $(if ($latScore -ge 15) { "Success" } elseif ($latScore -ge 10) { "Warning" } else { "Error" })
             } catch {
-                $latScore = 20
-                $sChecks += @{ Check = "Latency"; Score = 20; Max = 20; Detail = "Counters unavailable (assumed OK)" }
+                # Probe failure must NOT score as max — "assumed OK" was hiding real
+                # telemetry blackouts behind a green checkmark. Score 0 with explicit
+                # Unavailable status; JSON consumers can distinguish "no data" from "good data."
+                $latScore = 0
+                $sChecks += @{ Check = "Latency"; Score = 0; Max = 20; Detail = "Counters unavailable (probe failed)"; Status = "Unavailable" }
             }
             # 4. MPIO/redundancy (10 points)
             $mpioScore = 10
@@ -11281,7 +11348,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 if ($critEvts -ge 20) { $evtScore = 0 } elseif ($critEvts -ge 10) { $evtScore = 3 } elseif ($critEvts -gt 0) { $evtScore = 7 }
                 $categories += @{ Name = "Events"; Score = $evtScore; Max = 10; Detail = "$critEvts critical/error (24h)" }
                 Write-OutputColor "  Events: $critEvts issues ($evtScore/10)" -color $(if ($evtScore -ge 7) { "Success" } elseif ($evtScore -ge 3) { "Warning" } else { "Error" })
-            } catch { $categories += @{ Name = "Events"; Score = 10; Max = 10; Detail = "Query failed (assumed ok)" } }
+            } catch { $categories += @{ Name = "Events"; Score = 0; Max = 10; Detail = "Query failed (probe blocked / unavailable)"; Status = "Unavailable" } }
             # 6. Uptime (10 points)
             $uptScore = 10
             try {
@@ -11291,16 +11358,18 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                     $categories += @{ Name = "Uptime"; Score = $uptScore; Max = 10; Detail = "${uptDays} days" }
                     Write-OutputColor "  Uptime: ${uptDays}d ($uptScore/10)" -color $(if ($uptScore -ge 7) { "Success" } elseif ($uptScore -ge 3) { "Warning" } else { "Error" })
                 }
-            } catch { $categories += @{ Name = "Uptime"; Score = 10; Max = 10; Detail = "Unknown" } }
+            } catch { $categories += @{ Name = "Uptime"; Score = 0; Max = 10; Detail = "Unknown (probe failed)"; Status = "Unavailable" } }
             # 7. Network (10 points)
             $netScore = 10
             try {
-                $nicErrs = ($categories | Out-Null); $stats = @(Get-NetAdapterStatistics -ErrorAction SilentlyContinue)
+                # Removed dead `$nicErrs = ($categories | Out-Null)` — it was a copy-paste artifact
+                # that did nothing (assigned $null to a variable that's never read again).
+                $stats = @(Get-NetAdapterStatistics -ErrorAction SilentlyContinue)
                 $totalErrs = ($stats | ForEach-Object { $_.InErrors + $_.OutErrors } | Measure-Object -Sum).Sum
                 if ($totalErrs -gt 1000) { $netScore = 0 } elseif ($totalErrs -gt 100) { $netScore = 5 }
                 $categories += @{ Name = "Network"; Score = $netScore; Max = 10; Detail = "$totalErrs NIC errors" }
                 Write-OutputColor "  Network: $totalErrs errors ($netScore/10)" -color $(if ($netScore -ge 7) { "Success" } else { "Warning" })
-            } catch { $categories += @{ Name = "Network"; Score = 10; Max = 10; Detail = "Query failed" } }
+            } catch { $categories += @{ Name = "Network"; Score = 0; Max = 10; Detail = "Query failed (probe unavailable)"; Status = "Unavailable" } }
             # Calculate total
             $totalScore = ($categories | Measure-Object -Property Score -Sum).Sum
             $maxScore = ($categories | Measure-Object -Property Max -Sum).Sum
@@ -11379,12 +11448,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "" -color "Info"
             $ppIssues = 0
             $ppResults = @{}
+            $secEdit = "$env:TEMP\secpol_$([guid]::NewGuid().ToString('N').Substring(0,8)).cfg"
             try {
-                $secEdit = "$env:TEMP\secpol_$([guid]::NewGuid().ToString('N').Substring(0,8)).cfg"
                 $seceditProc = Start-Process -FilePath "secedit.exe" -ArgumentList "/export /cfg `"$secEdit`"" -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
                 if ($seceditProc.ExitCode -eq 0 -and (Test-Path -LiteralPath $secEdit)) {
                     $cfg = Get-Content -LiteralPath $secEdit -ErrorAction Stop
-                    Remove-Item -LiteralPath $secEdit -Force -ErrorAction SilentlyContinue
                     # Parse password policy
                     $minLen = ($cfg | Where-Object { $_ -match '^MinimumPasswordLength\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
                     $complexity = ($cfg | Where-Object { $_ -match '^PasswordComplexity\s*=' }) -replace '.*=\s*', '' | ForEach-Object { [int]$_.Trim() }
@@ -11439,6 +11507,12 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             } catch {
                 Write-OutputColor "  ERROR: $($_.Exception.Message)" -color "Error"
                 $ppIssues = 1
+            } finally {
+                # secedit /export writes the full local security policy in plaintext; always remove
+                # the temp file even if Get-Content or downstream parsing threw mid-way.
+                if (Test-Path -LiteralPath $secEdit) {
+                    Remove-Item -LiteralPath $secEdit -Force -ErrorAction SilentlyContinue
+                }
             }
             if ($script:CLIOutputFormat -eq 'JSON') {
                 $jsonResult = @{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PasswordPolicy'; Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME; Issues = $ppIssues; Policy = $ppResults }
@@ -11747,8 +11821,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "" -color "Info"
             $sbIssues = 0
             $sbInfo = @{}
-            # Check boot mode (UEFI vs Legacy)
-            $firmware = try { Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State" -ErrorAction Stop; "UEFI" } catch { "Legacy/Unknown" }
+            # Check boot mode (UEFI vs Legacy). Pipe Get-ItemProperty to Out-Null so its
+            # returned object doesn't get emitted to the pipeline alongside the string —
+            # without this, $firmware was a 2-element array on UEFI hosts and the equality
+            # check at the bottom of the audit always reported a phantom Boot Mode mismatch.
+            $firmware = try { Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State" -ErrorAction Stop | Out-Null; "UEFI" } catch { "Legacy/Unknown" }
             $secureBoot = $false
             try {
                 $sbState = Confirm-SecureBootUEFI -ErrorAction Stop

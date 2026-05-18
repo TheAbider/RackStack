@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.8
+    Automated Test Runner for RackStack v1.98.9
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -6651,7 +6651,10 @@ try {
     # defaults.example.json has CustomVNICs
     $defaultsExamplePath = Join-Path (Join-Path $PSScriptRoot "..") "defaults.example.json"
     $defaultsContent = Get-Content $defaultsExamplePath -Raw
-    Write-TestResult "defaults.example.json: has CustomVNICs section" ($defaultsContent -match '"CustomVNICs"')
+    # CustomVNICs was removed from defaults.example.json in v1.98.9 — the documented schema
+    # was a lie (Import-Defaults never read it; the only consumer is batch_config.json's
+    # separate schema). Test inverted to assert the lie is gone.
+    Write-TestResult "defaults.example.json: CustomVNICs schema lie removed" (-not ($defaultsContent -match '"CustomVNICs"'))
 
 } catch {
     Write-TestResult "Custom vNIC Feature Tests" $false $_.Exception.Message

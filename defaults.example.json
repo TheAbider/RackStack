@@ -75,15 +75,6 @@
         "_AgentFolder_help": "Subfolder for agent installer files. Works with any MSP agent (Kaseya, ConnectWise, Datto, etc.)."
     },
 
-    "_section_virtual_switches": "========== VIRTUAL SWITCH & vNICs ==========",
-
-    "CustomVNICs": [
-        { "Name": "Backup", "VLAN": null },
-        { "Name": "Cluster", "VLAN": 100 },
-        { "Name": "Live Migration", "VLAN": 200 }
-    ],
-    "_CustomVNICs_help": "Virtual NICs to create on the SET switch during batch mode. Each entry needs a 'Name' (required) and optional 'VLAN' (1-4094, or null for no VLAN). These are management OS adapters for different traffic types. Common names: Backup, Cluster, Live Migration, Storage. RackStack creates these after the SET switch is built.",
-
     "_section_storage": "========== STORAGE BACKEND ==========",
 
     "StorageBackendType": "iSCSI",

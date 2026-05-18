@@ -69,11 +69,10 @@ function Show-MainMenu {
         } else { @{ FreeGB = 0; TotalGB = 0; UsedPct = 0 } }
     } -CacheSeconds 60
 
-    # Build dashboard lines (using configurable thresholds)
-    $cpuColor = if ($dashCPU -lt $warningThreshold) { "Success" } elseif ($dashCPU -lt $criticalThreshold) { "Warning" } else { "Error" }
-    $memColor = if ($dashOS.MemPct -lt $warningThreshold) { "Success" } elseif ($dashOS.MemPct -lt $criticalThreshold) { "Warning" } else { "Error" }
-    $diskColor = if ($dashDisk.UsedPct -lt ($warningThreshold + 5)) { "Success" } elseif ($dashDisk.UsedPct -lt $criticalThreshold) { "Warning" } else { "Error" }
-
+    # Per-metric color variables were removed in v1.98.9 — they were assigned but never
+    # consumed (the box renders the values with $worstColor below, not per-metric).
+    # If you want per-metric coloring back, wire them into the Write-MenuItem -StatusColor
+    # parameter at the dashboard render site.
     $worstColor = if ($dashCPU -ge $criticalThreshold -or $dashOS.MemPct -ge $criticalThreshold -or $dashDisk.UsedPct -ge $criticalThreshold) { "Error" }
                   elseif ($dashCPU -ge $warningThreshold -or $dashOS.MemPct -ge $warningThreshold -or $dashDisk.UsedPct -ge ($warningThreshold + 5)) { "Warning" }
                   else { "Success" }
