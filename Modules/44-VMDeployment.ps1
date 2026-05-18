@@ -229,54 +229,67 @@ function Test-VMNameExists {
         [PSCredential]$Credential = $null
     )
 
+    # Return shape:
+    #   Exists  — $true if a VM with this name exists on the target
+    #   Checked — $true only if all probes succeeded; $false when ANY node/host probe failed.
+    #             Callers should refuse to proceed (or warn loudly) when Checked = $false,
+    #             because "not found" is then indistinguishable from "couldn't enumerate".
+    #   Error   — exception message when Checked = $false
+    $checked = $true
+    $errMsg = $null
     try {
         if ($ClusterName) {
-            # Check across all cluster nodes
-            $clusterNodes = Get-ClusterNode -Cluster $ClusterName -ErrorAction SilentlyContinue
-            foreach ($node in $clusterNodes) {
-                $params = @{
-                    ComputerName = $node.Name
-                    Name = $VMName
-                    ErrorAction = "SilentlyContinue"
-                }
-                if ($Credential) { $params.Credential = $Credential }
-
-                $vm = Get-VM @params
-                if ($vm) {
-                    return @{
-                        Exists = $true
-                        Location = $node.Name
-                        VM = $vm
+            $clusterNodes = $null
+            try { $clusterNodes = Get-ClusterNode -Cluster $ClusterName -ErrorAction Stop } catch { $checked = $false; $errMsg = "Get-ClusterNode: $($_.Exception.Message)" }
+            if ($null -ne $clusterNodes) {
+                foreach ($node in $clusterNodes) {
+                    $params = @{ ComputerName = $node.Name; Name = $VMName; ErrorAction = "Stop" }
+                    if ($Credential) { $params.Credential = $Credential }
+                    try {
+                        $vm = Get-VM @params
+                        if ($vm) {
+                            return @{ Exists = $true; Location = $node.Name; VM = $vm; Checked = $true; Error = $null }
+                        }
+                    } catch {
+                        # Treat any per-node probe failure as "could not verify" rather than
+                        # silently assuming the name is free.
+                        if ($_.Exception.Message -notmatch 'Hyper-V was unable to find a virtual machine') {
+                            $checked = $false
+                            $errMsg = "Get-VM on $($node.Name): $($_.Exception.Message)"
+                            break
+                        }
                     }
                 }
             }
         }
         else {
-            $params = @{
-                Name = $VMName
-                ErrorAction = "SilentlyContinue"
-            }
+            $params = @{ Name = $VMName; ErrorAction = "Stop" }
             if ($ComputerName) { $params.ComputerName = $ComputerName }
             if ($Credential) { $params.Credential = $Credential }
-
-            $vm = Get-VM @params
-            if ($vm) {
-                return @{
-                    Exists = $true
-                    Location = if ($ComputerName) { $ComputerName } else { $env:COMPUTERNAME }
-                    VM = $vm
+            try {
+                $vm = Get-VM @params
+                if ($vm) {
+                    return @{ Exists = $true; Location = if ($ComputerName) { $ComputerName } else { $env:COMPUTERNAME }; VM = $vm; Checked = $true; Error = $null }
+                }
+            } catch {
+                if ($_.Exception.Message -notmatch 'Hyper-V was unable to find a virtual machine') {
+                    $checked = $false
+                    $errMsg = "Get-VM: $($_.Exception.Message)"
                 }
             }
         }
     }
     catch {
-        # Error checking - assume doesn't exist
+        $checked = $false
+        $errMsg = $_.Exception.Message
     }
 
     return @{
         Exists = $false
         Location = $null
         VM = $null
+        Checked = $checked
+        Error = $errMsg
     }
 }
 
@@ -2454,8 +2467,22 @@ function Test-DeploymentDiskSpace {
     }
     if ($null -eq $freeBytes -and $StoragePath -match '^[A-Za-z]:') {
         $driveLetter = $StoragePath.Substring(0, 1)
-        $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
-        if ($volume) { $freeBytes = $volume.SizeRemaining }
+        # In remote-standalone mode the storage path is on the REMOTE host — checking
+        # Get-Volume locally produces the operator's workstation free space, not the host's.
+        # In cluster mode this branch is normally bypassed (CSV path took the previous arm),
+        # but a node-local path (E:\VMs without ClusterStorage) requires per-node check.
+        $isRemoteStandalone = ($script:VMDeploymentMode -eq "Standalone") -and ($script:VMDeploymentTarget) -and ($script:VMDeploymentTarget -ne $env:COMPUTERNAME)
+        if ($isRemoteStandalone) {
+            try {
+                $icmParams = @{ ComputerName = $script:VMDeploymentTarget; ScriptBlock = { param($d) Get-Volume -DriveLetter $d -ErrorAction SilentlyContinue }; ArgumentList = $driveLetter; ErrorAction = 'Stop' }
+                if ($script:VMDeploymentCredential) { $icmParams.Credential = $script:VMDeploymentCredential }
+                $volume = Invoke-Command @icmParams
+                if ($volume) { $freeBytes = $volume.SizeRemaining }
+            } catch { $null = $_ }
+        } else {
+            $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
+            if ($volume) { $freeBytes = $volume.SizeRemaining }
+        }
     }
 
     if ($null -eq $freeBytes) {
@@ -2740,12 +2767,25 @@ function Add-VMToQueue {
         }
     }
 
-    # Check for existing VM on host with same name
-    $existingVM = Get-VM -Name $vmName -ErrorAction SilentlyContinue
-    if ($null -ne $existingVM) {
+    # Check for existing VM on the DEPLOYMENT TARGET (not the operator's local box).
+    # Test-VMNameExists already handles remote-standalone + cluster + credential — reusing
+    # it here makes the collision check actually target-aware. The prior local-only Get-VM
+    # let the operator queue a duplicate name that lived on a remote host or cluster node.
+    $nameCheck = Test-VMNameExists -VMName $vmName `
+        -ComputerName $(if ($script:VMDeploymentMode -eq "Standalone") { $script:VMDeploymentTarget } else { $null }) `
+        -ClusterName $(if ($script:VMDeploymentMode -eq "Cluster") { $script:VMDeploymentTarget } else { $null }) `
+        -Credential $script:VMDeploymentCredential
+    if ($nameCheck.Exists) {
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  A VM named '$vmName' already exists on this host." -color "Warning"
+        Write-OutputColor "  A VM named '$vmName' already exists on $($nameCheck.Location)." -color "Warning"
         if (-not (Confirm-UserAction -Message "Add VM with conflicting name to queue?")) {
+            Write-OutputColor "  VM not added." -color "Info"
+            return
+        }
+    } elseif (-not $nameCheck.Checked) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Could not verify if '$vmName' already exists on target: $($nameCheck.Error)" -color "Warning"
+        if (-not (Confirm-UserAction -Message "Add VM to queue without name-collision verification?")) {
             Write-OutputColor "  VM not added." -color "Info"
             return
         }
@@ -3168,19 +3208,59 @@ function Test-VMDeploymentPreFlight {
         Status = if ($spaceCheck.HasSpace) { "OK" } else { "FAIL" }
     }
 
+    # Target-aware probe selection. The tool ships in three modes:
+    #   - Local Standalone  → query the box the tool runs on
+    #   - Remote Standalone → query the remote Hyper-V host (NOT the operator's workstation)
+    #   - Cluster           → aggregate across all cluster nodes
+    # The prior code unconditionally probed the local box, producing pre-flight reports with
+    # "Available: 64 GB / 16 logical CPUs / vSwitch-Prod present" pulled from the operator's
+    # workstation while the actual deployment target had 8 GB / 4 cores / no such switch.
+    $isRemoteStandalone = ($script:VMDeploymentMode -eq "Standalone") -and ($script:VMDeploymentTarget) -and ($script:VMDeploymentTarget -ne $env:COMPUTERNAME)
+    $isCluster = ($script:VMDeploymentMode -eq "Cluster")
+
+    # Helper: invoke a Hyper-V probe scriptblock against the right target. Returns $null on failure.
+    $remoteInvoke = {
+        param($Script, $ArgsArray = @())
+        try {
+            if ($isCluster) {
+                $nodes = @(Get-ClusterNode -Cluster $script:VMDeploymentTarget -ErrorAction Stop | Where-Object { $_.State -eq 'Up' } | ForEach-Object { $_.Name })
+                if ($nodes.Count -eq 0) { return $null }
+                $icmParams = @{ ComputerName = $nodes; ScriptBlock = $Script; ErrorAction = 'Stop' }
+                if ($script:VMDeploymentCredential) { $icmParams.Credential = $script:VMDeploymentCredential }
+                if ($ArgsArray.Count -gt 0) { $icmParams.ArgumentList = $ArgsArray }
+                return Invoke-Command @icmParams
+            } elseif ($isRemoteStandalone) {
+                $icmParams = @{ ComputerName = $script:VMDeploymentTarget; ScriptBlock = $Script; ErrorAction = 'Stop' }
+                if ($script:VMDeploymentCredential) { $icmParams.Credential = $script:VMDeploymentCredential }
+                if ($ArgsArray.Count -gt 0) { $icmParams.ArgumentList = $ArgsArray }
+                return Invoke-Command @icmParams
+            } else {
+                if ($ArgsArray.Count -gt 0) { return & $Script @ArgsArray } else { return & $Script }
+            }
+        } catch {
+            return $null
+        }
+    }
+
     # 2. RAM check
-    $osCim = Invoke-WithTimeout -ScriptBlock {
+    $osResults = & $remoteInvoke {
         Get-CimInstance -ClassName Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
-    } -TimeoutSeconds 10 -Activity "Checking system memory"
-    $os = if ($osCim.TimedOut) { $null } else { $osCim.Result }
-    $totalRAMGB = if ($os) { [math]::Round($os.TotalVisibleMemorySize / 1MB, 1) } else { 0 }
-    $freeRAMGB = if ($os) { [math]::Round($os.FreePhysicalMemory / 1MB, 1) } else { 0 }
+    }
+    $osList = if ($null -eq $osResults) { @() } elseif ($osResults -is [array]) { @($osResults) } else { @($osResults) }
+    $totalRAMGB = 0; $freeRAMGB = 0
+    foreach ($o in $osList) {
+        if ($o) {
+            $totalRAMGB += [math]::Round($o.TotalVisibleMemorySize / 1MB, 1)
+            $freeRAMGB  += [math]::Round($o.FreePhysicalMemory / 1MB, 1)
+        }
+    }
     $requiredRAMGB = 0
     foreach ($vm in $VMConfigs) {
         if ($vm.MemoryGB) { $requiredRAMGB += $vm.MemoryGB }
     }
-    $runningVMs = @()
-    try { $runningVMs = @(Get-VM -ErrorAction Stop | Where-Object { $_.State -eq "Running" }) } catch { $runningVMs = @() }
+    $runningVMs = & $remoteInvoke { Get-VM -ErrorAction Stop | Where-Object { $_.State -eq "Running" } }
+    if ($null -eq $runningVMs) { $runningVMs = @() }
+    $runningVMs = @($runningVMs)
     $existingRAMGB = 0
     foreach ($rv in $runningVMs) { $existingRAMGB += [math]::Round($rv.MemoryAssigned / 1GB, 1) }
     # Use FreePhysicalMemory (current free) as the budget rather than TotalVisibleMemorySize.
@@ -3198,11 +3278,16 @@ function Test-VMDeploymentPreFlight {
         Status = $ramStatus
     }
 
-    # 3. vCPU ratio check
-    $cpuCim = Invoke-WithTimeout -ScriptBlock {
+    # 3. vCPU ratio check — aggregate logical processors across the actual target(s).
+    $cpuResults = & $remoteInvoke {
         (Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
-    } -TimeoutSeconds 10 -Activity "Checking CPU info"
-    $logicalProcs = if ($cpuCim.TimedOut) { 0 } else { $cpuCim.Result }
+    }
+    $logicalProcs = 0
+    if ($cpuResults -is [array]) {
+        foreach ($c in $cpuResults) { if ($c) { $logicalProcs += [int]$c } }
+    } elseif ($null -ne $cpuResults) {
+        $logicalProcs = [int]$cpuResults
+    }
     $newvCPUs = 0
     foreach ($vm in $VMConfigs) { if ($vm.vCPU) { $newvCPUs += $vm.vCPU } }
     $existingvCPUs = 0
@@ -3217,12 +3302,25 @@ function Test-VMDeploymentPreFlight {
         Status = $cpuStatus
     }
 
-    # 4. VM switch check
+    # 4. VM switch check — must verify switches exist on the deployment target, not the
+    # operator's workstation. In cluster mode, require the switch on EVERY node (Hyper-V
+    # live migration / failover assumes the same vSwitch name on all nodes).
+    $vmSwResults = & $remoteInvoke {
+        Get-VMSwitch -ErrorAction SilentlyContinue | ForEach-Object { @{ Host = $env:COMPUTERNAME; Name = $_.Name } }
+    }
     $existingSwitches = @()
-    try {
-        $vmSw = Get-VMSwitch -ErrorAction SilentlyContinue
-        $existingSwitches = if ($null -ne $vmSw) { @($vmSw.Name) } else { @() }
-    } catch { $existingSwitches = @() }
+    $switchByHost = @{}
+    if ($null -ne $vmSwResults) {
+        foreach ($s in $vmSwResults) {
+            if ($s -and $s.Name) {
+                $existingSwitches += $s.Name
+                $hostKey = if ($s.Host) { $s.Host } else { $script:VMDeploymentTarget }
+                if (-not $switchByHost.ContainsKey($s.Name)) { $switchByHost[$s.Name] = @() }
+                $switchByHost[$s.Name] += $hostKey
+            }
+        }
+    }
+    $existingSwitches = @($existingSwitches | Select-Object -Unique)
     $switchNames = @($VMConfigs | ForEach-Object { $_.NICs } | ForEach-Object { $_.SwitchName } | Where-Object { $_ } | Select-Object -Unique)
     $missingSwitches = @($switchNames | Where-Object { $_ -notin $existingSwitches })
     $switchStatus = if ($missingSwitches.Count -gt 0) { "FAIL" } else { "OK" }
@@ -3352,17 +3450,28 @@ function Test-VMPostDeployment {
         $results += @{ Check = "Ping"; Status = "SKIP"; Detail = "No IP available" }
     }
 
-    # 6. RDP port 3389
+    # 6. RDP port 3389. BeginConnect+WaitOne returns $true even on RST (refused), so the prior
+    # version reported "PASS: Port open" for VMs whose Windows Firewall blocked 3389. Call
+    # EndConnect to actually distinguish accept from reject, and check tcp.Connected.
     if ($guestIP) {
         $rdp = $false
+        $tcp = $null
         try {
             $tcp = New-Object System.Net.Sockets.TcpClient
-            try {
-                $connect = $tcp.BeginConnect($guestIP, 3389, $null, $null)
-                $rdp = $connect.AsyncWaitHandle.WaitOne(3000, $false)
-            } catch {}
-            finally { $tcp.Close() }
-        } catch {}
+            $connect = $tcp.BeginConnect($guestIP, 3389, $null, $null)
+            if ($connect.AsyncWaitHandle.WaitOne(3000, $false)) {
+                try {
+                    $tcp.EndConnect($connect)
+                    $rdp = $tcp.Connected
+                } catch {
+                    $rdp = $false  # RST / refused — caller wants to know
+                }
+            }
+        } catch {
+            $rdp = $false
+        } finally {
+            if ($null -ne $tcp) { $tcp.Close() }
+        }
         $results += @{ Check = "RDP (3389)"; Status = if ($rdp) { "PASS" } else { "WARN" }; Detail = if ($rdp) { "Port open" } else { "Port closed/filtered" } }
     }
     else {

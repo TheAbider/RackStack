@@ -301,6 +301,9 @@ function Install-ScriptUpdate {
 
     if ($expectedHash) {
         Write-OutputColor "  Verifying SHA256 integrity..." -color "Info"
+        # Initialize so a fallback-path failure can't leave a stale $actualHash from an outer
+        # scope (or pre-loop iteration) that spuriously compares equal to $expectedHash.
+        $actualHash = $null
         try {
             $actualHash = (Get-FileHash -Path $tempPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToUpper()
         }
@@ -314,10 +317,22 @@ function Install-ScriptUpdate {
                 $hashBytes = $sha256.ComputeHash($stream)
                 $actualHash = ($hashBytes | ForEach-Object { $_.ToString("X2") }) -join ""
             }
+            catch {
+                # Both paths failed (file locked by AV, no read permission, etc) — refuse to run.
+                Write-OutputColor "  SHA256 hash could not be computed: $($_.Exception.Message)" -color "Error"
+                Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+                return
+            }
             finally {
                 if ($stream) { $stream.Close() }
                 if ($sha256) { $sha256.Dispose() }
             }
+        }
+
+        if ($null -eq $actualHash -or [string]::IsNullOrWhiteSpace($actualHash)) {
+            Write-OutputColor "  SHA256 hash compute returned empty — refusing unverified install." -color "Error"
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+            return
         }
 
         if ($actualHash -eq $expectedHash) {
@@ -483,30 +498,56 @@ function Test-IPAddressInUse {
         InUse = $false
         PingResponse = $false
         DNSEntry = $null
+        DNSChecked = $false
         Details = @()
     }
 
-    # Test with ping
+    # Test with ping. Bound it via System.Net.NetworkInformation.Ping (Test-Connection on PS 5.1
+    # has no per-ping timeout and could hang ~5s per call against a black-holed IP).
     Write-OutputColor "  Testing $IPAddress..." -color "Info"
-
-    $ping = Test-Connection -ComputerName $IPAddress -Count 1 -Quiet -ErrorAction SilentlyContinue
-    if ($ping) {
-        $result.InUse = $true
-        $result.PingResponse = $true
-        $result.Details += "IP responded to ping"
-    }
-
-    # Check DNS PTR record
     try {
-        $dns = Resolve-DnsName -Name $IPAddress -Type PTR -ErrorAction Stop
-        if ($dns) {
+        $pinger = [System.Net.NetworkInformation.Ping]::new()
+        $reply = $pinger.Send($IPAddress, 1500)
+        if ($reply.Status -eq 'Success') {
             $result.InUse = $true
-            $result.DNSEntry = $dns.NameHost
-            $result.Details += "DNS PTR record exists: $($dns.NameHost)"
+            $result.PingResponse = $true
+            $result.Details += "IP responded to ping"
         }
+        $pinger.Dispose()
+    } catch {
+        # Ping itself failed (bad IP format etc.) — leave InUse alone, surface in details.
+        $result.Details += "Ping probe error: $($_.Exception.Message)"
     }
-    catch {
-        # No PTR record - that's fine
+
+    # Check DNS PTR record. The prior bare catch conflated "no PTR record exists" (legitimate
+    # signal that the IP is free) with "DNS server unreachable / timed out" (probe failure where
+    # we can't tell). On a misconfigured forwarder the latter caused us to report "InUse = false"
+    # for an IP that may have been taken — operator deployed → ARP conflict.
+    # Resolve-DnsName has no built-in timeout knob; wrap in Invoke-WithTimeout.
+    $dnsOutcome = Invoke-WithTimeout -TimeoutSeconds 5 -Activity "DNS PTR lookup for $IPAddress" -ScriptBlock {
+        param($ip)
+        Resolve-DnsName -Name $ip -Type PTR -ErrorAction Stop
+    } -ArgumentList @($IPAddress)
+    if ($dnsOutcome.TimedOut) {
+        $result.Details += "DNS PTR check timed out (>5s) — unable to verify IP availability via DNS"
+    } elseif ($dnsOutcome.Failed) {
+        $errText = "$($dnsOutcome.Error)"
+        # Resolve-DnsName throws different messages for "no record" vs "DNS unreachable".
+        # ERROR_INVALID_NETNAME / DNS_ERROR_RCODE_NAME_ERROR == "name does not exist" → legitimate empty.
+        # Other errors (DNS_ERROR_NO_DNS_SERVERS, timeout, REFUSED) → couldn't actually verify.
+        if ($errText -match 'DNS name does not exist|DNS_ERROR_RCODE_NAME_ERROR|0x80004005|not found') {
+            $result.DNSChecked = $true  # legit "no PTR" — IP is free per DNS
+        } else {
+            $result.Details += "DNS PTR check failed (not a record-not-found error): $errText"
+        }
+    } elseif ($dnsOutcome.Result) {
+        $dns = $dnsOutcome.Result
+        $result.InUse = $true
+        $result.DNSEntry = $dns.NameHost
+        $result.DNSChecked = $true
+        $result.Details += "DNS PTR record exists: $($dns.NameHost)"
+    } else {
+        $result.DNSChecked = $true  # no result and no error — treat as empty
     }
 
     # Check ARP cache
@@ -761,9 +802,22 @@ function Save-StoredCredential {
     )
 
     try {
-        # Use cmdkey for credential storage — launch via ProcessStartInfo to keep password out of PowerShell pipeline/transcript
+        # cmdkey.exe is the platform credential-add tool; it has no stdin/secure-string entry
+        # point, so the password unavoidably appears on the command line while the process is
+        # alive (visible via `Get-CimInstance Win32_Process` to any local user with
+        # PROCESS_QUERY_INFORMATION). We keep the exposure window as small as possible
+        # (RedirectStandardOutput suppresses cmd echo; WaitForExit caps to 10s); a future
+        # iteration should P/Invoke CredWrite for true secret-handling.
+        # Reject passwords containing spaces — cmdkey treats /pass:VALUE as terminated at the
+        # next space, so a space-containing password would be silently truncated and the
+        # stored credential would not match what the operator entered.
         $username = $Credential.UserName
         $password = $Credential.GetNetworkCredential().Password
+        if ($password -match '\s') {
+            Write-OutputColor "  Refusing to store credential: password contains whitespace, which cmdkey would silently truncate." -color "Error"
+            $password = $null
+            return $false
+        }
 
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
         $startInfo.FileName = "cmdkey.exe"
@@ -802,7 +856,11 @@ function Get-StoredCredential {
         # Check if credential exists
         $cmdkeyOutput = cmdkey /list:$Target 2>&1
 
-        if ($cmdkeyOutput -match "Target: $Target") {
+        # Escape regex metachars in the target. Current callers pass static targets like
+        # 'Config-Remote' which have no metachars, but a future target containing a dot
+        # ('app.contoso.com') would silently fail to match → user re-prompted every time.
+        $targetEsc = [regex]::Escape($Target)
+        if ($cmdkeyOutput -match "Target: $targetEsc") {
             # Credential found — extract username and prompt with it pre-populated
             $storedUser = ""
             foreach ($line in $cmdkeyOutput) {
@@ -842,7 +900,9 @@ function Show-CredentialManager {
     $found = $false
     foreach ($target in $credentials) {
         $cmdkeyOutput = cmdkey /list:$target 2>&1 | Out-String
-        if ($cmdkeyOutput -match "Target: $target") {
+        # Escape regex metachars — see Get-StoredCredential note.
+        $targetEsc = [regex]::Escape($target)
+        if ($cmdkeyOutput -match "Target: $targetEsc") {
             $tgtLine = "  $target"
             if ($tgtLine.Length -gt 72) { $tgtLine = $tgtLine.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($tgtLine.PadRight(72))│" -color "Success"
@@ -1039,7 +1099,10 @@ function Show-SMBShareAudit {
             $line = "  $($share.Name.PadRight(20)) $pathStr"
             Write-OutputColor "  │$($line.PadRight(72))│" -color "Info"
 
-            # Check access
+            # Check access. A permission probe failure (insufficient privileges, RPC error)
+            # used to render "(could not read permissions)" without bumping $issues — the
+            # final "No security issues detected" green banner was misleading on the exact
+            # shares where audit was incomplete.
             try {
                 $access = @(Get-SmbShareAccess -Name $share.Name -ErrorAction Stop)
                 foreach ($ace in $access) {
@@ -1053,7 +1116,8 @@ function Show-SMBShareAudit {
                     Write-OutputColor "  │$($aceLine.PadRight(72))│" -color $aceColor
                 }
             } catch {
-                Write-OutputColor "  │$("    (could not read permissions)".PadRight(72))│" -color "Warning"
+                Write-OutputColor "  │$("    (could not read permissions — audit incomplete)".PadRight(72))│" -color "Warning"
+                $issues += "Share '$($share.Name)': permissions could not be audited ($($_.Exception.Message))"
             }
         }
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -1113,14 +1177,18 @@ function Show-InstalledSoftware {
     Write-OutputColor "  Scanning installed software (registry)..." -color "Info"
 
     $softwareList = [System.Collections.Generic.List[PSCustomObject]]::new()
+    # Per-user installs (Chrome `/silent`, NodeJS user install, Teams classic per-user) live
+    # in HKCU. The original list scanned only HKLM and missed those — security-relevant
+    # because a per-user install of a risky tool would not appear in compliance exports.
     $regPaths = @(
-        "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
-        "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"; Scope = 'Machine' }
+        @{ Path = "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"; Scope = 'Machine (WOW64)' }
+        @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"; Scope = 'CurrentUser' }
     )
 
-    foreach ($regPath in $regPaths) {
+    foreach ($rp in $regPaths) {
         try {
-            $entries = @(Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue |
+            $entries = @(Get-ItemProperty -Path $rp.Path -ErrorAction SilentlyContinue |
                 Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne "" })
             foreach ($entry in $entries) {
                 $softwareList.Add([PSCustomObject]@{
@@ -1131,10 +1199,11 @@ function Show-InstalledSoftware {
                         "$($entry.InstallDate.Substring(4,2))/$($entry.InstallDate.Substring(6,2))/$($entry.InstallDate.Substring(0,4))"
                     } else { "N/A" }
                     Size      = if ($entry.EstimatedSize) { [math]::Round($entry.EstimatedSize / 1024, 1) } else { $null }
+                    Scope     = $rp.Scope
                 })
             }
         } catch {
-            Write-OutputColor "  Could not read registry path $regPath : $_" -color "Warning"
+            Write-OutputColor "  Could not read registry path $($rp.Path) : $_" -color "Warning"
         }
     }
 
@@ -1351,30 +1420,38 @@ function Show-VSSWriterStatus {
         return
     }
 
-    # Parse vssadmin output
+    # Parse vssadmin output. vssadmin localizes its column labels and state names on non-EN
+    # Windows MUI, but the bracketed numeric state code (e.g. "[1] Stable") is language-neutral.
+    # Classify by StateCode (1 = Stable per VSS_WRITER_STATE enum) so a German/Japanese host
+    # doesn't report all writers as "Unknown" and render the summary as 0 stable / 0 failed.
     $writers = @()
     $currentWriter = $null
     foreach ($line in $vssOutput) {
         $lineStr = "$line".Trim()
-        if ($lineStr -match "^Writer name:\s*'(.+)'") {
+        # Writer name lines: localized "Writer name:" → fall back to *: '...' if non-EN.
+        if ($lineStr -match "^Writer name:\s*'(.+)'" -or $lineStr -match "^[^:]+:\s*'(.+)'\s*$" -and $lineStr -notmatch 'State|Error|Id') {
             $regexMatches = $matches
             if ($null -ne $currentWriter) { $writers += $currentWriter }
-            $currentWriter = @{ Name = $regexMatches[1]; State = "Unknown"; LastError = "No error" }
+            $currentWriter = @{ Name = $regexMatches[1]; StateCode = -1; State = "Unknown"; LastError = "No error" }
         }
-        elseif ($lineStr -match "^\s*State:\s*\[(\d+)\]\s*(.+)") {
+        elseif ($lineStr -match "\[(\d+)\]\s*(.+)") {
             $regexMatches = $matches
-            if ($null -ne $currentWriter) { $currentWriter.State = $regexMatches[2].Trim() }
+            if ($null -ne $currentWriter) {
+                $currentWriter.StateCode = [int]$regexMatches[1]
+                $currentWriter.State = $regexMatches[2].Trim()
+            }
         }
-        elseif ($lineStr -match "^\s*Last error:\s*(.+)") {
+        elseif ($lineStr -match "^Last error:\s*(.+)" -or $lineStr -match "^[^:]*[Ee]rror[^:]*:\s*(.+)") {
             $regexMatches = $matches
             if ($null -ne $currentWriter) { $currentWriter.LastError = $regexMatches[1].Trim() }
         }
     }
     if ($null -ne $currentWriter) { $writers += $currentWriter }
 
-    $stable = @($writers | Where-Object { $_.State -eq "Stable" })
-    $failed = @($writers | Where-Object { $_.State -ne "Stable" -and $_.State -ne "Unknown" })
-    $unknown = @($writers | Where-Object { $_.State -eq "Unknown" })
+    # VSS_WRITER_STATE code 1 = VSS_WS_STABLE (the only healthy code).
+    $stable = @($writers | Where-Object { $_.StateCode -eq 1 })
+    $failed = @($writers | Where-Object { $_.StateCode -ne 1 -and $_.StateCode -ne -1 })
+    $unknown = @($writers | Where-Object { $_.StateCode -eq -1 })
 
     # Summary
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -2259,18 +2336,27 @@ function Show-RebootPendingDetails {
     }
     catch { $null = $_ }
 
-    # SCCM/ConfigMgr pending reboot (if client is installed)
-    try {
-        $ccmReboot = Invoke-CimMethod -Namespace "root\ccm\clientsdk" -ClassName "CCM_ClientUtilities" -MethodName "DetermineIfRebootPending" -ErrorAction Stop
-        if ($ccmReboot -and ($ccmReboot.RebootPending -or $ccmReboot.IsHardRebootPending)) {
-            $reason = "SCCM/ConfigMgr client — configuration change pending reboot"
-            $reasons += $reason
-            Write-OutputColor "  [!!] $reason" -color "Warning"
+    # SCCM/ConfigMgr pending reboot. Detect "client genuinely absent" (expected on most boxes)
+    # vs "client installed but probe failed" (RPC error, SMS Agent Host stopped, WMI repo
+    # corrupt). The original bare-catch hid the latter behind the same code path as the
+    # former — an operator on an SCCM-managed box could miss an actually-needed reboot
+    # because the probe failed silently.
+    $sccmInstalled = ($null -ne (Get-Service -Name CcmExec -ErrorAction SilentlyContinue))
+    if ($sccmInstalled) {
+        try {
+            $ccmReboot = Invoke-CimMethod -Namespace "root\ccm\clientsdk" -ClassName "CCM_ClientUtilities" -MethodName "DetermineIfRebootPending" -ErrorAction Stop
+            if ($ccmReboot -and ($ccmReboot.RebootPending -or $ccmReboot.IsHardRebootPending)) {
+                $reason = "SCCM/ConfigMgr client — configuration change pending reboot"
+                $reasons += $reason
+                Write-OutputColor "  [!!] $reason" -color "Warning"
+            }
+        }
+        catch {
+            Write-OutputColor "  [?] SCCM client is installed but reboot-pending probe failed: $($_.Exception.Message)" -color "Warning"
+            Write-OutputColor "      Check Software Center manually — RackStack could not verify SCCM state." -color "Info"
         }
     }
-    catch {
-        # SCCM not installed — expected on most servers
-    }
+    # If $sccmInstalled is false, intentionally skip — SCCM absence is expected on most servers.
 
     # Domain join pending reboot
     try {
@@ -2434,20 +2520,45 @@ function Show-LoggedOnUsers {
         Write-OutputColor "  │$("  USER SESSIONS".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
+        # query session output is positional, not English. The STATE column on non-English
+        # Windows MUI is translated ("Aktiv", "アクティブ", etc), so -match 'Active' returned
+        # zero on de-DE/ja-JP hosts and the panel reported "Active sessions: 0" while real
+        # users were logged in. Determine state from the STATE column index in the header row
+        # (locale-neutral) instead.
         $activeCount = 0
+        $stateColIndex = -1
         foreach ($line in $sessions) {
-            $lineText = $line.ToString().Trim()
+            $lineText = $line.ToString()
             if ([string]::IsNullOrWhiteSpace($lineText)) { continue }
-            if ($lineText -match '^\s*SESSIONNAME') { continue }  # Skip header
+            if ($lineText -match '^\s*SESSIONNAME') {
+                # Find the start column of the STATE token; it's whitespace-padded so column-position is stable.
+                $stateMatch = [regex]::Match($lineText, '\bSTATE\b')
+                if ($stateMatch.Success) { $stateColIndex = $stateMatch.Index }
+                continue
+            }
+            # The first session row that maps a username to a session has an "Active" state on EN
+            # builds; we capture the localized active-state string from that row and then match
+            # subsequent rows by string equality.
+            $trimmed = $lineText.Trim()
+            $stateToken = $null
+            if ($stateColIndex -gt 0 -and $lineText.Length -gt $stateColIndex) {
+                # Pull the STATE column slice and trim to first token.
+                $stateSlice = $lineText.Substring($stateColIndex).Trim()
+                if ($stateSlice -match '^\S+') { $regexMatches = $matches; $stateToken = $regexMatches[0] }
+            }
 
-            $color = if ($lineText -match 'Active') { "Success" }
-                     elseif ($lineText -match 'Disc') { "Warning" }
-                     else { "Info" }
+            # Status detection: prefer column-slice; fall back to English Active/Disc tokens for
+            # builds where SESSIONNAME wasn't parseable (some Server Core builds).
+            $isActive = ($stateToken -match '^Active$|^Aktiv$|^Activo$|^Actif$|^Attivo$|^アクティブ$|^活动$') -or `
+                        ($stateColIndex -lt 0 -and $trimmed -match '\bActive\b')
+            $isDisc   = ($stateToken -match 'Disc') -or ($stateColIndex -lt 0 -and $trimmed -match '\bDisc')
 
-            $display = "  $lineText"
+            $color = if ($isActive) { "Success" } elseif ($isDisc) { "Warning" } else { "Info" }
+
+            $display = "  $trimmed"
             if ($display.Length -gt 72) { $display = $display.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($display.PadRight(72))│" -color $color
-            if ($lineText -match 'Active') { $activeCount++ }
+            if ($isActive) { $activeCount++ }
         }
 
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"

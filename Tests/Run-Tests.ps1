@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.11
+    Automated Test Runner for RackStack v1.98.12
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8710,8 +8710,8 @@ $hsContent2 = Get-Content (Join-Path $modulesPath "40-HostStorage.ps1") -Raw
 Write-TestResult "40-HostStorage: optical drive check uses Invoke-WithTimeout" ($hsContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking optical drives')
 Write-TestResult "40-HostStorage: D: volume query uses Invoke-WithTimeout" ($hsContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Querying D: volume')
 $vmContent2 = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
-Write-TestResult "44-VMDeployment: RAM check uses Invoke-WithTimeout" ($vmContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking system memory')
-Write-TestResult "44-VMDeployment: CPU check uses Invoke-WithTimeout" ($vmContent2 -match 'Invoke-WithTimeout -ScriptBlock[\s\S]{0,300}Checking CPU info')
+Write-TestResult "44-VMDeployment: RAM check routes through target-aware helper" ($vmContent2 -match '\$remoteInvoke[\s\S]{0,500}TotalVisibleMemorySize')
+Write-TestResult "44-VMDeployment: CPU check routes through target-aware helper" ($vmContent2 -match '\$remoteInvoke[\s\S]{0,500}NumberOfLogicalProcessors')
 
 # Clear-MenuCache after state-changing operations
 $hnContent2 = Get-Content (Join-Path $modulesPath "11-Hostname.ps1") -Raw
@@ -8969,9 +8969,9 @@ Write-TestResult "16-Firewall: validates port number range 1-65535" ($fwContent 
 # v1.21.2: VM name collision detection in Add-VMToQueue
 $vmContent = Get-Content (Join-Path $modulesPath "44-VMDeployment.ps1") -Raw
 Write-TestResult "44-VMDeployment: Add-VMToQueue checks for duplicate name in queue" ($vmContent -match 'Add-VMToQueue[\s\S]*?VMDeploymentQueue.*Where-Object.*VMName -eq')
-Write-TestResult "44-VMDeployment: Add-VMToQueue checks for existing VM on host" ($vmContent -match 'Add-VMToQueue[\s\S]*?Get-VM -Name \$vmName')
+Write-TestResult "44-VMDeployment: Add-VMToQueue checks for existing VM on host (target-aware)" ($vmContent -match 'Add-VMToQueue[\s\S]*?Test-VMNameExists -VMName \$vmName')
 Write-TestResult "44-VMDeployment: Add-VMToQueue warns on duplicate" ($vmContent -match 'already in the queue')
-Write-TestResult "44-VMDeployment: Add-VMToQueue warns on existing VM" ($vmContent -match 'already exists on this host')
+Write-TestResult "44-VMDeployment: Add-VMToQueue warns on existing VM" ($vmContent -match "already exists on \`$\(\`$nameCheck.Location\)")
 
 # v1.21.2: Max disk size validation (64 TB = 65536 GB)
 Write-TestResult "44-VMDeployment: disk size upper bound validation" ($vmContent -match 'diskSizeInt -gt 65536')
