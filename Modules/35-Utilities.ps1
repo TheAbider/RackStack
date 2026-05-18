@@ -259,7 +259,17 @@ function Install-ScriptUpdate {
 
     Write-OutputColor "  Downloading $($asset.name) ($([math]::Round($asset.size / 1MB, 1)) MB)..." -color "Info"
 
-    $tempPath = Join-Path $env:TEMP "RackStack_update_$($asset.name)"
+    # Sanitize the asset name before composing the temp file path. Even though GitHub
+    # asset names go through the release UI, a forged response or a name containing
+    # `..\` / `/` / null byte could write outside $env:TEMP. Strip path separators
+    # and reject obviously malformed names.
+    $safeAssetName = [string]$asset.name
+    if ($safeAssetName -match '[\\/]|\.\.|`0' -or [string]::IsNullOrWhiteSpace($safeAssetName)) {
+        Write-OutputColor "  Refusing to download asset with suspicious name: '$safeAssetName'" -color "Error"
+        return
+    }
+    $safeAssetName = $safeAssetName -replace '[^\w\.\-]', '_'
+    $tempPath = Join-Path $env:TEMP "RackStack_update_$safeAssetName"
 
     try {
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempPath -UseBasicParsing -ErrorAction Stop

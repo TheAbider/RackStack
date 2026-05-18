@@ -26,14 +26,20 @@ function Import-Favorites {
     }
 }
 
-# Save favorites to file
+# Save favorites to file. Write-then-rename so a process kill mid-write doesn't
+# truncate the on-disk file to zero bytes (Out-File -Force opens the target before
+# writing). Two concurrent RackStack instances still race on the final Move-Item but
+# at least each individual write is atomic from the consumer's view.
 function Export-Favorites {
     Initialize-AppConfigDir
     try {
-        $script:Favorites | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $script:FavoritesPath -Encoding UTF8 -Force
+        $tmpPath = "$($script:FavoritesPath).tmp"
+        $script:Favorites | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $tmpPath -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpPath -Destination $script:FavoritesPath -Force -ErrorAction Stop
     }
     catch {
         Write-OutputColor "  Warning: Could not save favorites: $($_.Exception.Message)" -color "Warning"
+        try { if (Test-Path -LiteralPath "$($script:FavoritesPath).tmp") { Remove-Item -LiteralPath "$($script:FavoritesPath).tmp" -Force -ErrorAction SilentlyContinue } } catch { }
     }
 }
 
@@ -259,10 +265,14 @@ function Export-CommandHistory {
         if ($script:CommandHistory.Count -gt $script:MaxHistoryItems) {
             $script:CommandHistory = $script:CommandHistory | Select-Object -Last $script:MaxHistoryItems
         }
-        $script:CommandHistory | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $script:HistoryPath -Encoding UTF8 -Force
+        # Write-then-rename for atomicity (see Export-Favorites comment)
+        $tmpPath = "$($script:HistoryPath).tmp"
+        $script:CommandHistory | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $tmpPath -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpPath -Destination $script:HistoryPath -Force -ErrorAction Stop
     }
     catch {
         Write-OutputColor "  Warning: Could not save command history: $($_.Exception.Message)" -color "Warning"
+        try { if (Test-Path -LiteralPath "$($script:HistoryPath).tmp") { Remove-Item -LiteralPath "$($script:HistoryPath).tmp" -Force -ErrorAction SilentlyContinue } } catch { }
     }
 }
 

@@ -140,7 +140,10 @@ function Join-Domain {
         }
     }
 
-    # Validate domain name format
+    # Validate domain name format. Project policy: require FQDN form (corp.local).
+    # Single-label NetBIOS-style names are intentionally rejected to discourage
+    # legacy-only environments from joining via the modern path. The accompanying
+    # tests at "12-DomainJoin: rejects domain without dot" enforce this policy.
     if ($targetDomain -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-]*[a-zA-Z0-9]$' -or $targetDomain -notmatch '\.') {
         Write-OutputColor "  Invalid domain name format. Expected format: corp.local" -color "Error"
         return

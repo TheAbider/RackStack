@@ -372,8 +372,11 @@ function Export-HTMLHealthReport {
         }
     } catch { }
     try {
+        # Surface every disabled firewall profile, not just the first one. With the
+        # earlier `break` an admin who disabled both Domain and Public profiles only
+        # saw "Domain disabled" in the issues summary.
         foreach ($fwProf in $fwProfiles) {
-            if ($fwProf.Enabled -ne $true) { $issues += "Firewall profile '$($fwProf.Name)' disabled"; break }
+            if ($fwProf.Enabled -ne $true) { $issues += "Firewall profile '$($fwProf.Name)' disabled" }
         }
     } catch { }
     if ($critEvents.Count -ge 5) { $issues += "$($critEvents.Count) critical/error events in last 24h" }

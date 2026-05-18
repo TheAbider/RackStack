@@ -1529,8 +1529,9 @@ function Move-OpticalDriveLetter {
     Write-OutputColor "  Moving CD/DVD from $($CurrentLetter): to $($newLetter):..." -color "Info"
 
     try {
-        # Use CIM to change CD-ROM drive letter
-        $cimVol = Get-CimInstance -ClassName Win32_Volume -ErrorAction Stop | Where-Object {
+        # Use CIM to change CD-ROM drive letter. -OperationTimeoutSec so a cold WMI
+        # repository doesn't hang the menu indefinitely.
+        $cimVol = Get-CimInstance -ClassName Win32_Volume -OperationTimeoutSec 8 -ErrorAction Stop | Where-Object {
             $_.DriveLetter -eq "$($CurrentLetter):"
         }
 
@@ -1647,8 +1648,8 @@ function Set-VolumeDriveLetter {
         }
     }
 
-    # Get CD/DVD drives
-    $cdroms = Get-CimInstance -ClassName Win32_CDROMDrive -ErrorAction SilentlyContinue
+    # Get CD/DVD drives. -OperationTimeoutSec to avoid hanging on a stuck WMI provider.
+    $cdroms = Get-CimInstance -ClassName Win32_CDROMDrive -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     foreach ($cd in $cdroms) {
         $cdLetter = if ($cd.Drive) { $cd.Drive.TrimEnd(':') } else { $null }
         $allVolumes += @{
@@ -1723,7 +1724,7 @@ function Set-VolumeDriveLetter {
         }
         try {
             if ($selected.Type -eq "CDROM") {
-                $cimVol = Get-CimInstance -ClassName Win32_Volume -ErrorAction Stop | Where-Object { $_.DriveLetter -eq "$($currentLetter):" }
+                $cimVol = Get-CimInstance -ClassName Win32_Volume -OperationTimeoutSec 8 -ErrorAction Stop | Where-Object { $_.DriveLetter -eq "$($currentLetter):" }
                 if ($cimVol) {
                     Set-CimInstance -InputObject $cimVol -Property @{ DriveLetter = $null } -ErrorAction Stop
                     Write-OutputColor "  CD/DVD drive letter removed." -color "Success"
@@ -1786,7 +1787,7 @@ function Set-VolumeDriveLetter {
     try {
         if ($selected.Type -eq "CDROM") {
             # CD/DVD drive - use CIM
-            $cimVol = Get-CimInstance -ClassName Win32_Volume -ErrorAction Stop | Where-Object {
+            $cimVol = Get-CimInstance -ClassName Win32_Volume -OperationTimeoutSec 8 -ErrorAction Stop | Where-Object {
                 $_.DriveLetter -eq "$($currentLetter):"
             }
             if ($cimVol) {

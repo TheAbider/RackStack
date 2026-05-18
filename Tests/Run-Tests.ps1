@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.5
+    Automated Test Runner for RackStack v1.98.6
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -2783,9 +2783,23 @@ try {
                 if ($content.Contains($pat)) { $credFound += "$($moduleFile.Name): credential value found" }
             }
         }
+        $pass = $credFound.Count -eq 0
+        Write-TestResult "No hardcoded credentials in module files" $pass $(if (-not $pass) { $credFound -join '; ' } else { "Clean" })
+    } else {
+        # No defaults.json on this host (public repo / CI without secrets). We can't
+        # scan for specific known values, but we CAN scan for likely-credential
+        # *patterns* in the tracked source so the check isn't vacuous.
+        $patternHits = @()
+        foreach ($moduleFile in $moduleFiles) {
+            $content = Get-Content $moduleFile.FullName -Raw
+            # Cloudflare Access ClientId pattern + ClientSecret-style long hex
+            if ($content -match '\b[a-f0-9]{32}\.access\b' -or $content -match 'ClientSecret\s*=\s*"[A-Za-z0-9]{40,}"') {
+                $patternHits += "$($moduleFile.Name): looks-like-credential pattern"
+            }
+        }
+        $pass = $patternHits.Count -eq 0
+        Write-TestResult "No hardcoded credentials in module files (pattern scan)" $pass $(if (-not $pass) { $patternHits -join '; ' } else { "Clean (no defaults.json — pattern scan only)" })
     }
-    $pass = $credFound.Count -eq 0
-    Write-TestResult "No hardcoded credentials in module files" $pass $(if (-not $pass) { $credFound -join '; ' } else { "Clean" })
 } catch {
     Write-TestResult "Credential leak check" $false $_.Exception.Message
 }
@@ -2798,9 +2812,16 @@ try {
         foreach ($pat in $credPatterns) {
             if ($monoRaw2.Contains($pat)) { $credLeaks += "credential value found" }
         }
+        $pass = $credLeaks.Count -eq 0
+        Write-TestResult "No hardcoded credentials in monolithic" $pass
+    } else {
+        # Same pattern-scan fallback as the modules check above.
+        if ($monoRaw2 -match '\b[a-f0-9]{32}\.access\b' -or $monoRaw2 -match 'ClientSecret\s*=\s*"[A-Za-z0-9]{40,}"') {
+            $credLeaks += "looks-like-credential pattern in monolithic"
+        }
+        $pass = $credLeaks.Count -eq 0
+        Write-TestResult "No hardcoded credentials in monolithic (pattern scan)" $pass $(if (-not $pass) { $credLeaks -join '; ' } else { "Clean (no defaults.json — pattern scan only)" })
     }
-    $pass = $credLeaks.Count -eq 0
-    Write-TestResult "No hardcoded credentials in monolithic" $pass
 } catch {
     Write-TestResult "Credential leak check (monolithic)" $false $_.Exception.Message
 }
@@ -3171,7 +3192,9 @@ foreach ($tc in $renamedFunctions) {
         $oldExists = $null -ne (Get-Command -Name $tc.Old -ErrorAction SilentlyContinue)
         Write-TestResult "Old function removed: $($tc.Old)" (-not $oldExists) $(if ($oldExists) { "Still exists!" } else { "" })
     } catch {
-        Write-TestResult "Old function removed: $($tc.Old)" $true
+        # Exception during Get-Command is NOT a pass — fail with the message so a real
+        # tool-resolution problem surfaces instead of being silently logged as PASS.
+        Write-TestResult "Old function removed: $($tc.Old)" $false $_.Exception.Message
     }
 }
 
@@ -4143,12 +4166,15 @@ if ($cimAvailable) {
         Write-TestResult "Test-FeaturePrerequisites: reboot check" $false $_.Exception.Message
     }
 } else {
-    Write-TestResult "Test-FeaturePrerequisites: Hyper-V returns 3+ checks" $true "SKIPPED - CIM unavailable"
-    Write-TestResult "Test-FeaturePrerequisites: returns Status field" $true "SKIPPED - CIM unavailable"
-    Write-TestResult "Test-FeaturePrerequisites: returns Name field" $true "SKIPPED - CIM unavailable"
-    Write-TestResult "Test-FeaturePrerequisites: MPIO checks Windows Server" $true "SKIPPED - CIM unavailable"
-    Write-TestResult "Test-FeaturePrerequisites: Clustering checks Domain" $true "SKIPPED - CIM unavailable"
-    Write-TestResult "Test-FeaturePrerequisites: all features check reboot" $true "SKIPPED - CIM unavailable"
+    # CIM unavailable on this host — use the proper -Skipped path so these don't
+    # vacuously inflate the pass count (the previous `$true "SKIPPED ..."` form
+    # counted as PASS because $Passed was $true and the SKIPPED text was just the Message).
+    Write-TestResult "Test-FeaturePrerequisites: Hyper-V returns 3+ checks" $false -Skipped -Message "CIM unavailable"
+    Write-TestResult "Test-FeaturePrerequisites: returns Status field"     $false -Skipped -Message "CIM unavailable"
+    Write-TestResult "Test-FeaturePrerequisites: returns Name field"       $false -Skipped -Message "CIM unavailable"
+    Write-TestResult "Test-FeaturePrerequisites: MPIO checks Windows Server" $false -Skipped -Message "CIM unavailable"
+    Write-TestResult "Test-FeaturePrerequisites: Clustering checks Domain" $false -Skipped -Message "CIM unavailable"
+    Write-TestResult "Test-FeaturePrerequisites: all features check reboot" $false -Skipped -Message "CIM unavailable"
 }
 
 # ============================================================================
@@ -9747,11 +9773,14 @@ try {
     Write-TestResult "50-EntryPoint: QuickScan runs disk analysis" ($mod50 -match "'QuickScan'[\s\S]{0,800}Show-EnhancedCleanupAnalysis")
     Write-TestResult "50-EntryPoint: QuickScan runs debloat analysis" ($mod50 -match "'QuickScan'[\s\S]{0,1000}Show-DebloatAnalysis")
 
-    # Bootstrap installer
+    # Bootstrap installer. The existence assertion must NOT be inside the `if (Test-Path)`
+    # gate — that made the assertion vacuously $true any time it ran. Assert against the
+    # actual Test-Path result, then conditionally run the content checks.
     $bootstrapPath = Join-Path $script:ModuleRoot "Install-RackStack.ps1"
-    if (Test-Path -LiteralPath $bootstrapPath) {
+    $bootstrapExists = Test-Path -LiteralPath $bootstrapPath
+    Write-TestResult "Install-RackStack: bootstrap installer exists" $bootstrapExists
+    if ($bootstrapExists) {
         $bootstrapContent = Get-Content -LiteralPath $bootstrapPath -Raw
-        Write-TestResult "Install-RackStack: bootstrap installer exists" $true
         Write-TestResult "Install-RackStack: checks for admin" ($bootstrapContent -match 'IsInRole.*Administrator')
         Write-TestResult "Install-RackStack: queries GitHub releases API" ($bootstrapContent -match 'api\.github\.com/repos.*releases/latest')
         Write-TestResult "Install-RackStack: downloads RackStack.exe" ($bootstrapContent -match 'Invoke-WebRequest.*RackStack\.exe|browser_download_url')

@@ -13279,7 +13279,15 @@ function Start-BatchMode {
     $isDomainJoined = if ($null -ne $csInfo) { $csInfo.PartOfDomain } else { $false }
     if ($Config.DomainName -and -not $isDomainJoined) {
         Write-OutputColor "  [$stepNum/$totalSteps] Joining domain '$($Config.DomainName)'..." -color "Info"
-        if ($script:DryRunMode) {
+        # Validate the supplied DomainName before invoking Add-Computer. The DC-promote
+        # path already calls Test-ValidDomainName; this batch step was missing the same
+        # gate, so a malformed value in defaults.json reached Add-Computer with a
+        # generic failure instead of a clear "bad domain name" error.
+        if (-not (Test-ValidDomainName -DomainName $Config.DomainName)) {
+            Write-OutputColor "           ERROR: '$($Config.DomainName)' is not a valid domain name. Skipping join." -color "Error"
+            $errors++
+        }
+        elseif ($script:DryRunMode) {
             Write-OutputColor "           [DRY RUN] Would join domain '$($Config.DomainName)'" -color "Info"
             $changesApplied++
         }

@@ -387,7 +387,10 @@ function New-ScenarioBatchConfig {
     }
 
     try {
-        $config | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $outputPath -Encoding UTF8
+        # Write-then-rename so a kill mid-Set-Content doesn't leave a truncated file.
+        $tmpPath = "$outputPath.tmp"
+        $config | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $tmpPath -Encoding UTF8
+        Move-Item -LiteralPath $tmpPath -Destination $outputPath -Force -ErrorAction Stop
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Template saved to: $outputPath" -color "Success"
         Write-OutputColor "  Edit the JSON file to customize remaining values, then use batch mode to apply." -color "Info"
@@ -721,9 +724,13 @@ function Export-BatchConfigFromState {
         }
 
         try {
-            $config | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
+            # Write-then-rename for atomicity
+            $tmpPath = "$savePath.tmp"
+            $config | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $tmpPath -Encoding UTF8 -Force
+            Move-Item -LiteralPath $tmpPath -Destination $savePath -Force -ErrorAction Stop
         } catch {
             Write-OutputColor "  Failed to save batch config: $_" -color "Error"
+            try { if (Test-Path -LiteralPath "$savePath.tmp") { Remove-Item -LiteralPath "$savePath.tmp" -Force -ErrorAction SilentlyContinue } } catch { }
             return
         }
 

@@ -98,7 +98,10 @@ function Set-DefenderExclusions {
                 if ($navResult.ShouldReturn) { return }
                 if ($customPath) { $customPath = $customPath.Trim('"') }
                 if ($customPath -and (Test-Path -LiteralPath $customPath -IsValid)) {
-                    # Warn on sensitive paths that would disable scanning on critical OS directories
+                    # Warn on sensitive paths that would disable scanning on critical OS
+                    # directories. Check exact-match AND prefix-match — `C:\Windows\System32\Foo`
+                    # should trigger the warning even though it isn't itself an exact-listed
+                    # sensitive path (the previous `-contains` check missed every sub-path).
                     $normalized = $customPath.TrimEnd('\').ToLowerInvariant()
                     $sensitivePaths = @(
                         'c:', 'c:\', 'c:\windows', 'c:\program files', 'c:\program files (x86)',
@@ -106,7 +109,13 @@ function Set-DefenderExclusions {
                         $env:SystemRoot.TrimEnd('\').ToLowerInvariant(),
                         $env:SystemDrive.TrimEnd('\').ToLowerInvariant()
                     ) | Select-Object -Unique
-                    $isSensitive = $sensitivePaths -contains $normalized
+                    $isSensitive = $false
+                    foreach ($sp in $sensitivePaths) {
+                        if ($normalized -eq $sp -or $normalized.StartsWith("$sp\")) {
+                            $isSensitive = $true
+                            break
+                        }
+                    }
                     $proceed = $true
                     if ($isSensitive) {
                         Write-OutputColor "" -color "Warning"

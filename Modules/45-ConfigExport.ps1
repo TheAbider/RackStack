@@ -999,6 +999,13 @@ function Import-ConfigurationProfile {
         $domCs = if ($domCim.TimedOut) { $null } else { $domCim.Result }
         if ($configProfile.Domain.JoinDomain -and $null -ne $domCs -and -not $domCs.PartOfDomain) {
             Write-OutputColor "  [13/13] Joining domain '$($configProfile.Domain.Domainname)'..." -color "Info"
+            # Validate before Add-Computer (mirrors the gate in 50-EntryPoint:13280).
+            if (-not (Test-ValidDomainName -DomainName $configProfile.Domain.Domainname)) {
+                Write-OutputColor "        ERROR: '$($configProfile.Domain.Domainname)' is not a valid domain name. Skipping." -color "Error"
+                $errors++
+                Write-OutputColor "" -color "Info"
+                return
+            }
             Write-OutputColor "        Enter domain credentials:" -color "Info"
             try {
                 $domainCred = Get-Credential -Message "Enter credentials to join $($configProfile.Domain.Domainname)"
