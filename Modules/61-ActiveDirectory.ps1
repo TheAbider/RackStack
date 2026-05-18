@@ -65,22 +65,32 @@ function Test-ADDSPrerequisites {
         Detail = if ($dnsConfigured) { "DNS servers configured" } else { "DNS must be configured" }
     }
 
-    # Check 4: Not already a DC
-    $isNotDC = $true
+    # Check 4: Not already a DC. Use tri-state — a silent CIM probe failure used to leave
+    # $isNotDC = $true (the default), so a degraded WMI repository would report "Server is
+    # not a Domain Controller" and the user would proceed to Install-ADDSForest on a box
+    # that may already be a DC. Now: only assert Pass when both probes returned non-null.
+    $isNotDC = $false
+    $dcCheckDetail = "Could not verify DC state (WMI probe failed)"
     try {
-        $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        $compSys = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
-        if ($osInfo.ProductType -eq 2 -or $compSys.DomainRole -ge 4) {
-            $isNotDC = $false
+        $osInfo = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
+        $compSys = Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
+        if ($null -ne $osInfo -and $null -ne $compSys) {
+            if ($osInfo.ProductType -eq 2 -or $compSys.DomainRole -ge 4) {
+                $isNotDC = $false
+                $dcCheckDetail = "Server is already a Domain Controller"
+            } else {
+                $isNotDC = $true
+                $dcCheckDetail = "Server is not a Domain Controller"
+            }
         }
     }
     catch {
-        # Ignore
+        $dcCheckDetail = "Could not verify DC state: $($_.Exception.Message)"
     }
     $checks += @{
         Name   = "Not Already a DC"
         Passed = $isNotDC
-        Detail = if ($isNotDC) { "Server is not a Domain Controller" } else { "Server is already a Domain Controller" }
+        Detail = $dcCheckDetail
     }
 
     $allPassed = @($checks | Where-Object { -not $_.Passed }).Count -eq 0
@@ -206,7 +216,13 @@ function Read-DSRMPassword {
     Write-OutputColor "  Confirm DSRM password:" -color "Info"
     $dsrmConfirm = Read-Host "  Confirm Password" -AsSecureString
 
-    # Convert to plaintext for comparison
+    # Compare and complexity-check the password. DSRM is the most-privileged AD secret —
+    # we keep the plaintext on the managed heap as briefly as possible (it still touches
+    # PowerShell's heap because string ops, but we null the reference and run a forced
+    # collection before returning so it's not hanging around at function exit).
+    # Length-only validation in the prior implementation let "Password1" through; Install-ADDSForest
+    # would then reject it ~10 minutes into the role install after the DC pre-flight had passed.
+    # Now apply a 3-of-4 complexity check up front (mirrors local password complexity policy).
     $bstr1 = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($dsrmPassword)
     $bstr2 = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($dsrmConfirm)
     try {
@@ -218,8 +234,19 @@ function Read-DSRMPassword {
             return $null
         }
 
-        if ($plain1.Length -lt 8) {
-            Write-OutputColor "  DSRM password must be at least 8 characters." -color "Error"
+        if ($plain1.Length -lt 14) {
+            Write-OutputColor "  DSRM password must be at least 14 characters." -color "Error"
+            return $null
+        }
+
+        $classes = 0
+        if ($plain1 -cmatch '[a-z]') { $classes++ }
+        if ($plain1 -cmatch '[A-Z]') { $classes++ }
+        if ($plain1 -match '\d')      { $classes++ }
+        if ($plain1 -match '[^a-zA-Z0-9]') { $classes++ }
+        if ($classes -lt 3) {
+            Write-OutputColor "  DSRM password must contain at least 3 of: lowercase, uppercase, digit, symbol." -color "Error"
+            Write-OutputColor "  Install-ADDSForest would reject this password ~10 minutes into the role install." -color "Info"
             return $null
         }
     }
@@ -228,6 +255,7 @@ function Read-DSRMPassword {
         $plain2 = $null
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr1)
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr2)
+        [GC]::Collect()
     }
 
     return $dsrmPassword
@@ -274,7 +302,20 @@ function Test-PrePromotionReadiness {
 
     # Check 3: Network connectivity to existing DC (only for additional DC / RODC)
     if (-not $IsNewForest -and -not [string]::IsNullOrWhiteSpace($DomainName)) {
-        # Try to resolve the domain name
+        # Verify the AD-specific SRV record, not just the A record. A misconfigured DNS that
+        # points the domain name at a public IP will resolve via GetHostEntry but the box has
+        # no AD on the other end — Install-ADDSDomainController then fails mysteriously.
+        $srvFound = $false
+        try {
+            $srv = Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.$DomainName" -Type SRV -ErrorAction Stop
+            if ($srv -and @($srv | Where-Object { $_.Type -eq 'SRV' }).Count -gt 0) { $srvFound = $true }
+        } catch { }
+        if (-not $srvFound) {
+            Write-OutputColor "  │$("  [WARN] No SRV record for _ldap._tcp.dc._msdcs.$DomainName".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$("         DNS may be pointing at a non-AD resolver.".PadRight(72))│" -color "Warning"
+            $warningCount++
+        }
+        # Try to resolve the domain name (legacy A-record probe — kept as a secondary check)
         $domainResolve = try { [System.Net.Dns]::GetHostEntry($DomainName) } catch { $null }
         if ($null -eq $domainResolve) {
             Write-OutputColor "  │$("  [WARN] Cannot resolve domain: $DomainName".PadRight(72))│" -color "Warning"
@@ -287,13 +328,17 @@ function Test-PrePromotionReadiness {
             if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
             Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Success"
 
-            # Test LDAP (port 389)
+            # Test LDAP (port 389). WaitOne returning $true only means the wait completed —
+            # for a refused connection (RST), WaitOne returns true and we'd report "reachable"
+            # incorrectly. EndConnect distinguishes accept from reject.
             $ldapOk = $false
             $tcp = $null
             try {
                 $tcp = New-Object System.Net.Sockets.TcpClient
                 $connectResult = $tcp.BeginConnect("$dcIP", 389, $null, $null)
-                $ldapOk = $connectResult.AsyncWaitHandle.WaitOne(3000, $false)
+                if ($connectResult.AsyncWaitHandle.WaitOne(3000, $false)) {
+                    try { $tcp.EndConnect($connectResult); $ldapOk = $true } catch { $ldapOk = $false }
+                }
             }
             catch {
                 $ldapOk = $false
@@ -309,13 +354,15 @@ function Test-PrePromotionReadiness {
                 $warningCount++
             }
 
-            # Test Kerberos (port 88)
+            # Test Kerberos (port 88) — same EndConnect fix as the LDAP probe above.
             $kerberosOk = $false
             $tcp = $null
             try {
                 $tcp = New-Object System.Net.Sockets.TcpClient
                 $connectResult = $tcp.BeginConnect("$dcIP", 88, $null, $null)
-                $kerberosOk = $connectResult.AsyncWaitHandle.WaitOne(3000, $false)
+                if ($connectResult.AsyncWaitHandle.WaitOne(3000, $false)) {
+                    try { $tcp.EndConnect($connectResult); $kerberosOk = $true } catch { $kerberosOk = $false }
+                }
             }
             catch {
                 $kerberosOk = $false
@@ -612,10 +659,20 @@ function Show-ReplicationMonitor {
             if (Confirm-UserAction -Message "Force replication sync with all partners?") {
                 Write-OutputColor "  Forcing replication..." -color "Info"
                 try {
-                    $null = repadmin /syncall /AdeP 2>&1
-                    Write-OutputColor "  Replication sync initiated." -color "Success"
-                    Add-SessionChange -Category "AD DS" -Description "Forced AD replication sync"
-                    Clear-MenuCache
+                    # Capture both output and exit code. repadmin returns 0 on success and emits to
+                    # stdout; piping into $null hid replication failures (e.g. 8453 access-denied,
+                    # 8606 insufficient-attributes) behind a green "initiated" message.
+                    $global:LASTEXITCODE = 0
+                    $repadminOut = repadmin /syncall /AdeP 2>&1
+                    $repExit = $LASTEXITCODE
+                    if ($repExit -eq 0) {
+                        Write-OutputColor "  Replication sync initiated." -color "Success"
+                        Add-SessionChange -Category "AD DS" -Description "Forced AD replication sync"
+                        Clear-MenuCache
+                    } else {
+                        Write-OutputColor "  repadmin returned exit code ${repExit}:" -color "Error"
+                        ($repadminOut | Select-Object -Last 5) | ForEach-Object { Write-OutputColor "    $_" -color "Warning" }
+                    }
                 }
                 catch {
                     Write-OutputColor "  Replication sync failed: $_" -color "Error"
@@ -852,12 +909,15 @@ function Install-AdditionalDC {
         return
     }
 
-    # Step 4: Domain admin credentials
+    # Step 4: Domain admin credentials. In console mode (ps2exe-built RackStack) Get-Credential
+    # may return a PSCredential with empty user/password instead of $null on cancel — explicitly
+    # check both halves. A blank password used to make it through to Install-ADDSDomainController
+    # which then blocked for many seconds before Kerberos rejected the empty secret.
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  You will need domain admin credentials." -color "Info"
     $credential = Get-Credential -Message "Enter domain admin credentials for $domainName"
-    if ($null -eq $credential) {
-        Write-OutputColor "  Credential entry cancelled." -color "Warning"
+    if ($null -eq $credential -or [string]::IsNullOrWhiteSpace($credential.UserName) -or $credential.Password.Length -eq 0) {
+        Write-OutputColor "  Credential entry cancelled or incomplete." -color "Warning"
         Write-PressEnter
         return
     }
@@ -993,12 +1053,15 @@ function Install-ReadOnlyDC {
         return
     }
 
-    # Step 4: Domain admin credentials
+    # Step 4: Domain admin credentials. In console mode (ps2exe-built RackStack) Get-Credential
+    # may return a PSCredential with empty user/password instead of $null on cancel — explicitly
+    # check both halves. A blank password used to make it through to Install-ADDSDomainController
+    # which then blocked for many seconds before Kerberos rejected the empty secret.
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  You will need domain admin credentials." -color "Info"
     $credential = Get-Credential -Message "Enter domain admin credentials for $domainName"
-    if ($null -eq $credential) {
-        Write-OutputColor "  Credential entry cancelled." -color "Warning"
+    if ($null -eq $credential -or [string]::IsNullOrWhiteSpace($credential.UserName) -or $credential.Password.Length -eq 0) {
+        Write-OutputColor "  Credential entry cancelled or incomplete." -color "Warning"
         Write-PressEnter
         return
     }
@@ -1138,17 +1201,26 @@ function Show-ADDSStatus {
         return
     }
 
-    # Check if this server is a Domain Controller
+    # Check if this server is a Domain Controller — surface probe failure as Unknown
+    # so the status report doesn't silently render "Not a DC" on a degraded WMI repo.
     $isDC = $false
+    $dcStateKnown = $true
     try {
-        $compSys = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
-        $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        if ($osInfo.ProductType -eq 2 -or $compSys.DomainRole -ge 4) {
-            $isDC = $true
+        $compSys = Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
+        $osInfo = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop
+        if ($null -ne $osInfo -and $null -ne $compSys) {
+            if ($osInfo.ProductType -eq 2 -or $compSys.DomainRole -ge 4) {
+                $isDC = $true
+            }
+        } else {
+            $dcStateKnown = $false
         }
     }
     catch {
-        # Ignore
+        $dcStateKnown = $false
+    }
+    if (-not $dcStateKnown) {
+        Write-OutputColor "  │$("  DC Role:             Could not verify (WMI probe failed)".PadRight(72))│" -color "Warning"
     }
 
     if ($isDC) {

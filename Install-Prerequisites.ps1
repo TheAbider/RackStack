@@ -53,8 +53,17 @@ if ($psVer.Major -gt 5 -or ($psVer.Major -eq 5 -and $psVer.Minor -ge 1)) {
     exit 0
 }
 
-# Detect OS
-$os = Get-WmiObject -Class Win32_OperatingSystem
+# Detect OS. This script targets pre-WMF-5.1 Windows (PS 2.0+), so Get-CimInstance may not
+# exist — Get-WmiObject is the right call. No -OperationTimeoutSec on Get-WmiObject, but the
+# Win32_OperatingSystem class is hot in WMI so the call is bounded in practice. Wrap in try
+# anyway so a corrupt WMI repo surfaces an explicit error instead of hanging silently.
+try {
+    $os = Get-WmiObject -Class Win32_OperatingSystem -ErrorAction Stop
+} catch {
+    Write-Host "ERROR: Could not query Win32_OperatingSystem: $_" -ForegroundColor Red
+    Write-Host "WMI may be corrupted. Try 'winmgmt /resetrepository' as Administrator." -ForegroundColor Yellow
+    exit 1
+}
 $caption = $os.Caption
 $buildNumber = [int]$os.BuildNumber
 
@@ -186,21 +195,27 @@ if ($isZip) {
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
 
     try {
-        # Use Shell.Application for PS 2.0 compatibility (no Expand-Archive)
+        # Use Shell.Application for PS 2.0 compatibility (no Expand-Archive in old WMF).
+        if (-not (Test-Path $extractDir)) { New-Item -Path $extractDir -ItemType Directory -Force | Out-Null }
         $shell = New-Object -ComObject Shell.Application
         $zip = $shell.NameSpace($downloadPath)
-        $dest = $shell.NameSpace($tempDir)
-        if (-not (Test-Path $extractDir)) { New-Item -Path $extractDir -ItemType Directory -Force | Out-Null }
         $dest = $shell.NameSpace($extractDir)
         $dest.CopyHere($zip.Items(), 16)  # 16 = overwrite
 
-        # Find the MSU inside
-        $msuFile = Get-ChildItem $extractDir -Filter "*.msu" | Select-Object -First 1
+        # CopyHere is asynchronous — extraction can still be in flight when the call returns.
+        # Without this wait loop, Get-ChildItem below could find an empty directory and we'd
+        # report "No MSU found" even though extraction was about to succeed.
+        $deadline = (Get-Date).AddSeconds(60)
+        do {
+            Start-Sleep -Milliseconds 250
+            $msuFile = Get-ChildItem $extractDir -Filter "*.msu" -ErrorAction SilentlyContinue | Select-Object -First 1
+        } until ($msuFile -or (Get-Date) -gt $deadline)
+
         if ($msuFile) {
             $msuPath = $msuFile.FullName
             Write-Host "  Extracted: $($msuFile.Name)" -ForegroundColor Green
         } else {
-            Write-Host "  ERROR: No MSU found in ZIP." -ForegroundColor Red
+            Write-Host "  ERROR: No MSU found in ZIP (extraction timed out)." -ForegroundColor Red
             exit 1
         }
     } catch {
@@ -216,7 +231,11 @@ Write-Host "  DO NOT close this window or restart the computer." -ForegroundColo
 Write-Host ""
 
 try {
-    $process = Start-Process -FilePath "wusa.exe" -ArgumentList "`"$msuPath`" /quiet /norestart" -Wait -PassThru
+    # Pass arguments as an array, not a single concatenated string. wusa.exe parses its
+    # arguments per element, but Start-Process -ArgumentList with a single string has
+    # historically caused odd argument-binding issues on certain Windows builds when the
+    # MSU path contained spaces — the array form is unambiguous.
+    $process = Start-Process -FilePath "wusa.exe" -ArgumentList @("`"$msuPath`"", "/quiet", "/norestart") -Wait -PassThru
     $exitCode = $process.ExitCode
 
     if ($exitCode -eq 0 -or $exitCode -eq 3010) {

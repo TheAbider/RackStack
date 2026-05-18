@@ -407,8 +407,15 @@ if ($Install) {
 
     # 2. Add to system PATH so `RackStack` works from any admin terminal.
     # Also update the current process PATH so the operator can test without opening a new shell.
+    # Case-insensitive compare with trailing-slash + whitespace normalization, matching the
+    # Uninstall path's normalize logic — without this a previously-installed PATH entry that
+    # differs only in case (e.g. `c:\program files\rackstack`) would not be detected and the
+    # installer would add a second, duplicate entry.
     $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    if (($machinePath -split ';' | Where-Object { $_ -eq $programDir }).Count -eq 0) {
+    $pathNormalize = { param($p) ($p -as [string]).Trim().TrimEnd('\','/').ToLowerInvariant() }
+    $programDirNormInstall = & $pathNormalize $programDir
+    $hasEntry = @($machinePath -split ';' | Where-Object { $_ -and ((& $pathNormalize $_) -eq $programDirNormInstall) }).Count -gt 0
+    if (-not $hasEntry) {
         $newPath = ($machinePath.TrimEnd(';') + ';' + $programDir).TrimStart(';')
         [Environment]::SetEnvironmentVariable('Path', $newPath, 'Machine')
         $env:Path = $env:Path.TrimEnd(';') + ';' + $programDir
@@ -435,12 +442,23 @@ if ($Install) {
     # UninstallString runs an inline PowerShell command that reverses everything this block did.
     # Inline (vs. a saved script copy) avoids the chicken-and-egg of uninstalling the installer.
     $versionTag = $version -replace '^v', ''
+    # Windows Settings → Apps → Uninstall executes this string verbatim. Build a self-contained
+    # script that mirrors the top-of-file -Uninstall path: stop running processes first, then
+    # case-insensitively strip the PATH entry, then remove the directory + shortcut + reg key.
+    # Single-quote literals are escaped by doubling so paths with embedded apostrophes survive.
+    $progDirEscaped       = $programDir -replace "'", "''"
+    $startMenuLnkEscaped  = $startMenuLnk -replace "'", "''"
+    $uninstallRegKeyEsc   = $uninstallRegKey -replace "'", "''"
     $inlineUninstall = @(
-        "Remove-Item -LiteralPath '$programDir' -Recurse -Force -ErrorAction SilentlyContinue"
-        "Remove-Item -LiteralPath '$startMenuLnk' -Force -ErrorAction SilentlyContinue"
+        "Get-Process -Name 'RackStack' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"
+        "Start-Sleep -Milliseconds 500"
+        "`$n={param(`$p) (`$p -as [string]).Trim().TrimEnd('\','/').ToLowerInvariant()}"
+        "`$d=& `$n '$progDirEscaped'"
         "`$p=[Environment]::GetEnvironmentVariable('Path','Machine')"
-        "[Environment]::SetEnvironmentVariable('Path',((`$p -split ';' | Where-Object { `$_ -and `$_ -ne '$programDir' }) -join ';'),'Machine')"
-        "Remove-Item -LiteralPath '$uninstallRegKey' -Recurse -Force -ErrorAction SilentlyContinue"
+        "[Environment]::SetEnvironmentVariable('Path',((`$p -split ';' | Where-Object { `$_ -and ((& `$n `$_) -ne `$d) }) -join ';'),'Machine')"
+        "Remove-Item -LiteralPath '$startMenuLnkEscaped' -Force -ErrorAction SilentlyContinue"
+        "Remove-Item -LiteralPath '$uninstallRegKeyEsc' -Recurse -Force -ErrorAction SilentlyContinue"
+        "Remove-Item -LiteralPath '$progDirEscaped' -Recurse -Force -ErrorAction SilentlyContinue"
     ) -join '; '
     $uninstallCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command `"$inlineUninstall`""
 

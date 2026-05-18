@@ -1,14 +1,20 @@
 ﻿#region ===== HYPER-V REPLICA MANAGEMENT =====
 # Functions for managing Hyper-V Replica — replication configuration, failover, and monitoring
 
-# Check if current host is configured as a Hyper-V Replica server
+# Check if current host is configured as a Hyper-V Replica server. Returns:
+#   $true  — server is configured AND replication is enabled
+#   $false — server is configured but replication is disabled
+#   $null  — could not determine (Hyper-V WMI provider crashed, module mismatch after in-place upgrade)
+# The previous swallow-and-return-$false hid probe failure from the caller; menus then reported
+# "Not configured", the operator re-ran Set-VMReplicationServer, and overwrote the existing
+# certificate / allow-list / storage path with defaults.
 function Test-HyperVReplicaEnabled {
     try {
-        $replicaConfig = Get-VMReplicationServer -ErrorAction SilentlyContinue
+        $replicaConfig = Get-VMReplicationServer -ErrorAction Stop
         return ($null -ne $replicaConfig -and $replicaConfig.ReplicationEnabled)
     }
     catch {
-        return $false
+        return $null
     }
 }
 
@@ -103,12 +109,17 @@ function Show-HyperVReplicaMenu {
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        # Show current replica status
+        # Show current replica status. Test-HyperVReplicaEnabled returns $null on probe failure
+        # (vs $false for "not configured"), so distinguish the two — surfacing probe failure
+        # explicitly prevents the operator from re-enabling and overwriting existing config.
         $replicaEnabled = Test-HyperVReplicaEnabled
-        if ($replicaEnabled) {
+        if ($replicaEnabled -eq $true) {
             $replicaConfig = Get-VMReplicationServer -ErrorAction SilentlyContinue
             $authType = if ($null -ne $replicaConfig) { $replicaConfig.AllowedAuthenticationType } else { "Unknown" }
             Write-OutputColor "  Replica Server: Enabled ($authType)" -color "Success"
+        }
+        elseif ($null -eq $replicaEnabled) {
+            Write-OutputColor "  Replica Server: Probe failed (Hyper-V WMI provider unavailable — re-running setup would overwrite existing config)" -color "Error"
         }
         else {
             Write-OutputColor "  Replica Server: Not configured" -color "Warning"
@@ -321,10 +332,41 @@ function Enable-ReplicaServer {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Configuring Hyper-V Replica Server..." -color "Info"
 
+        # Wire the allow-list into Set-VMReplicationServer. The old code silently dropped
+        # $script:ReplicaAllowedServers — calling Set-VMReplicationServer without
+        # -ReplicationAllowedFromAnyServer left the server in the previous state (typically
+        # trust-any-authenticated). When the user picked "Allow from specific servers only"
+        # they got the EXACT OPPOSITE: an open replica receiver. Now: the per-server allow
+        # list is honored by toggling -ReplicationAllowedFromAnyServer based on it AND
+        # registering New-VMReplicationAuthorizationEntry rows for each allowed primary.
+        $allowAny = ($script:ReplicaAllowedServers.Count -eq 0)
         Set-VMReplicationServer -ReplicationEnabled $true `
             -AllowedAuthenticationType $authType `
             -DefaultStorageLocation $storagePath `
+            -ReplicationAllowedFromAnyServer $allowAny `
             -ErrorAction Stop
+
+        if (-not $allowAny) {
+            $trustGroup = "RackStackReplicaTrust"
+            $authEntries = 0
+            foreach ($svr in $script:ReplicaAllowedServers) {
+                try {
+                    # Remove any existing entry for this server first so re-running the wizard
+                    # doesn't fail with "entry already exists".
+                    Get-VMReplicationAuthorizationEntry -ErrorAction SilentlyContinue |
+                        Where-Object { $_.AllowedPrimaryServer -eq $svr } |
+                        ForEach-Object { Remove-VMReplicationAuthorizationEntry -AllowedPrimaryServer $svr -Confirm:$false -ErrorAction SilentlyContinue }
+                    New-VMReplicationAuthorizationEntry -AllowedPrimaryServer $svr `
+                        -ReplicaStorageLocation $storagePath `
+                        -TrustGroup $trustGroup `
+                        -ErrorAction Stop | Out-Null
+                    $authEntries++
+                } catch {
+                    Write-OutputColor "  Warning: Could not register allow-list entry for '$svr': $($_.Exception.Message)" -color "Warning"
+                }
+            }
+            Write-OutputColor "  Registered $authEntries allow-list entries (trust group: $trustGroup)." -color "Info"
+        }
 
         # Configure firewall rules
         $fwErrors = 0
@@ -344,7 +386,8 @@ function Enable-ReplicaServer {
         } else {
             Write-OutputColor "  Firewall rules partially enabled ($fwErrors group(s) unavailable)." -color "Warning"
         }
-        Add-SessionChange -Category "Hyper-V" -Description "Enabled Hyper-V Replica Server ($authType, storage: $storagePath)"
+        $allowDesc = if ($allowAny) { "any authenticated server" } else { "$($script:ReplicaAllowedServers.Count) allowed primary server(s)" }
+        Add-SessionChange -Category "Hyper-V" -Description "Enabled Hyper-V Replica Server ($authType, storage: $storagePath, $allowDesc)"
         Clear-MenuCache
     }
     catch {
@@ -556,11 +599,24 @@ function Enable-VMReplicationWizard {
         }
         if ($authType -eq "Certificate") {
             Write-OutputColor "  Select a certificate for authentication:" -color "Info"
+            # Hyper-V Replica terminates TLS in both directions during replication — the
+            # certificate MUST advertise both Server Authentication (1.3.6.1.5.5.7.3.1) and
+            # Client Authentication (1.3.6.1.5.5.7.3.2) EKUs, plus a private key, plus a
+            # non-expired NotAfter. The prior filter (Server EKU + HasPrivateKey only) let
+            # Server-only and already-expired certs through; Enable-VMReplication accepted
+            # those at config time but Start-VMInitialReplication then rejected at runtime,
+            # leaving VMs replication-enabled-but-never-replicating.
+            $now = Get-Date
             $certs = @(Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
-                Where-Object { $_.HasPrivateKey -and $_.EnhancedKeyUsageList.ObjectId -contains '1.3.6.1.5.5.7.3.1' })
+                Where-Object {
+                    $_.HasPrivateKey -and
+                    $_.NotAfter -gt $now -and
+                    ($_.EnhancedKeyUsageList.ObjectId -contains '1.3.6.1.5.5.7.3.1') -and
+                    ($_.EnhancedKeyUsageList.ObjectId -contains '1.3.6.1.5.5.7.3.2')
+                })
             if ($certs.Count -eq 0) {
                 Write-OutputColor "  No suitable certificates found in Local Machine\Personal store." -color "Error"
-                Write-OutputColor "  Certificate must have a private key and Server Authentication EKU." -color "Info"
+                Write-OutputColor "  Certificate must have a private key, both Server AND Client Authentication EKUs, and a future NotAfter." -color "Info"
                 return
             }
             for ($ci = 0; $ci -lt $certs.Count; $ci++) {
@@ -627,10 +683,13 @@ function Show-ReplicationStatus {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Check replica server status
+    # Check replica server status (tri-state — see Test-HyperVReplicaEnabled docstring)
     $replicaEnabled = Test-HyperVReplicaEnabled
-    if ($replicaEnabled) {
+    if ($replicaEnabled -eq $true) {
         Write-OutputColor "  Replica Server: Enabled" -color "Success"
+    }
+    elseif ($null -eq $replicaEnabled) {
+        Write-OutputColor "  Replica Server: Probe failed (Hyper-V WMI provider unavailable)" -color "Error"
     }
     else {
         Write-OutputColor "  Replica Server: Not configured on this host" -color "Warning"
@@ -1044,9 +1103,35 @@ function Start-PlannedFailover {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  VM '$vmName' is currently running." -color "Warning"
             if (Confirm-UserAction -Message "Shut down VM '$vmName' for failover?") {
-                Write-OutputColor "  Shutting down VM..." -color "Info"
-                Stop-VM -Name $vmName -Force -ErrorAction Stop
-                Write-OutputColor "  VM shut down successfully." -color "Success"
+                # Planned failover is a "no data loss" operation, but `Stop-VM -Force` does a hard
+                # turn-off (power cut) — dirty pages and pending I/O are lost. Attempt a graceful
+                # guest-OS shutdown first with a 5-minute bound; only fall through to hard-stop if
+                # the operator opts in after the timeout.
+                Write-OutputColor "  Initiating graceful shutdown (up to 5 minutes)..." -color "Info"
+                $gracefulSucceeded = $false
+                try {
+                    Stop-VM -Name $vmName -ErrorAction Stop
+                    $deadline = (Get-Date).AddMinutes(5)
+                    while ((Get-Date) -lt $deadline) {
+                        Start-Sleep -Seconds 5
+                        $vmState = (Get-VM -Name $vmName -ErrorAction SilentlyContinue).State
+                        if ($vmState -eq 'Off') { $gracefulSucceeded = $true; break }
+                    }
+                } catch {
+                    Write-OutputColor "  Graceful shutdown command failed: $($_.Exception.Message)" -color "Warning"
+                }
+                if (-not $gracefulSucceeded) {
+                    Write-OutputColor "  Graceful shutdown did not complete within 5 minutes." -color "Warning"
+                    if (Confirm-UserAction -Message "Force power-off VM (data loss risk)?") {
+                        Stop-VM -Name $vmName -Force -ErrorAction Stop
+                        Write-OutputColor "  VM force-stopped — uncommitted writes may be lost on the replica side." -color "Warning"
+                    } else {
+                        Write-OutputColor "  Cancelled. Resolve the shutdown issue and retry." -color "Info"
+                        return
+                    }
+                } else {
+                    Write-OutputColor "  VM shut down gracefully." -color "Success"
+                }
             }
             else {
                 Write-OutputColor "  Cannot proceed with planned failover while VM is running." -color "Error"
