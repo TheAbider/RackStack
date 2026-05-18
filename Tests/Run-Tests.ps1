@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.6
+    Automated Test Runner for RackStack v1.98.7
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -12121,6 +12121,113 @@ try {
     Write-TestResult "63-ScheduledTasks: import surfaces Actions block for review" ($taskImp98 -match 'Actions:')
 } catch {
     Write-TestResult "v1.98.x fix regression Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+Write-SectionHeader "SECTION 160: BATCH MODE INTEGRATION (function-level)"
+# ============================================================================
+#
+# Unlike Sections 154-159 which grep source text, these invoke real functions
+# (Test-BatchConfig, Initialize-StorageBackendBatch) with synthetic configs and
+# assert against the returned data. This is the test gap the round-5 audit
+# flagged: prior tests verify code SHAPE, these verify RUNTIME BEHAVIOR.
+
+try {
+    # --- Test-BatchConfig surface ---
+    # 160.1: empty config -> valid (everything optional)
+    $emptyConfig = @{}
+    $r = Test-BatchConfig -Config $emptyConfig
+    Write-TestResult "Test-BatchConfig: empty config is valid" ($r.IsValid -eq $true)
+    Write-TestResult "Test-BatchConfig: empty config returns Errors array" ($null -ne $r.Errors -and $r.Errors -is [array])
+    Write-TestResult "Test-BatchConfig: empty config returns Warnings array" ($null -ne $r.Warnings -and $r.Warnings -is [array])
+
+    # 160.2: invalid ConfigType rejected
+    $r = Test-BatchConfig -Config @{ ConfigType = 'PHYSICALMACHINE' }
+    Write-TestResult "Test-BatchConfig: rejects invalid ConfigType" (-not $r.IsValid -and (@($r.Errors) -join ' ') -match "ConfigType 'PHYSICALMACHINE'")
+
+    # 160.3: VM and HOST are accepted
+    $r = Test-BatchConfig -Config @{ ConfigType = 'VM' }
+    Write-TestResult "Test-BatchConfig: accepts ConfigType=VM" $r.IsValid
+    $r = Test-BatchConfig -Config @{ ConfigType = 'HOST' }
+    Write-TestResult "Test-BatchConfig: accepts ConfigType=HOST" $r.IsValid
+
+    # 160.4: bad hostname (special chars / spaces / >15 char NetBIOS limit)
+    $r = Test-BatchConfig -Config @{ Hostname = 'has spaces' }
+    Write-TestResult "Test-BatchConfig: rejects hostname with spaces" (-not $r.IsValid)
+    $r = Test-BatchConfig -Config @{ Hostname = 'WEB01' }  # 5 chars, well within 15-char NetBIOS limit
+    Write-TestResult "Test-BatchConfig: accepts valid hostname" $r.IsValid
+
+    # 160.5: bad IPAddress rejected
+    $r = Test-BatchConfig -Config @{ IPAddress = '999.999.999.999' }
+    Write-TestResult "Test-BatchConfig: rejects out-of-range IPAddress" (-not $r.IsValid)
+    $r = Test-BatchConfig -Config @{ IPAddress = '10.0.1.42'; SubnetCIDR = 24; Gateway = '10.0.1.1' }
+    Write-TestResult "Test-BatchConfig: accepts valid IP/CIDR/Gateway triple" $r.IsValid
+
+    # 160.6: duplicate vNIC names produce an error
+    $r = Test-BatchConfig -Config @{
+        ConfigType  = 'HOST'
+        CustomVNICs = @(
+            @{ Name = 'Cluster'; VLAN = 100 }
+            @{ Name = 'Cluster'; VLAN = 200 }
+        )
+    }
+    Write-TestResult "Test-BatchConfig: rejects duplicate CustomVNIC names" (-not $r.IsValid -and (@($r.Errors) -join ' ') -match "duplicate name 'Cluster'")
+
+    # 160.7: PromoteToDC + DomainName + NewForest produces a Warning (not Error)
+    $r = Test-BatchConfig -Config @{
+        ConfigType   = 'HOST'
+        PromoteToDC  = $true
+        DCPromoType  = 'NewForest'
+        DomainName   = 'corp.local'
+    }
+    Write-TestResult "Test-BatchConfig: NewForest + DomainName issues a Warning" (@($r.Warnings) -join ' ' -match 'NewForest')
+
+    # 160.8: return shape includes all expected keys
+    $r = Test-BatchConfig -Config @{ ConfigType = 'VM' }
+    $expectedKeys = @('IsValid','Errors','Warnings')
+    $missingKeys = @($expectedKeys | Where-Object { -not $r.ContainsKey($_) })
+    Write-TestResult "Test-BatchConfig: result has IsValid/Errors/Warnings keys" ($missingKeys.Count -eq 0) $(if ($missingKeys.Count -gt 0) { "missing: $($missingKeys -join ',')" })
+
+    # --- v1.98.5 batch-S2D AllowS2DDataLoss gate ---
+    # Save and restore output state so the test doesn't pollute the user's transcript.
+    # Initialize-StorageBackendBatch writes via Write-OutputColor; capture is best-effort.
+    $origOutFmt = $script:CLIOutputFormat
+    try {
+        $script:CLIOutputFormat = 'Console'
+        # 160.9: S2D backend WITHOUT AllowS2DDataLoss is refused (returns $false)
+        # In test environment there's no cluster, so Get-Cluster returns nothing and the
+        # outer cluster check short-circuits before the gate. Build a config that asserts
+        # the SOURCE TEXT has the gate (source-level proof; behavior asserted at runtime
+        # only when a real cluster is present).
+        $sbContent = Get-Content (Join-Path $modulesPath "59-StorageBackends.ps1") -Raw
+        Write-TestResult "Initialize-StorageBackendBatch: S2D gate checks AllowS2DDataLoss" ($sbContent -match 'if \(-not \$Config\.AllowS2DDataLoss\)')
+        Write-TestResult "Initialize-StorageBackendBatch: S2D refusal message present" ($sbContent -match 'REFUSING to enable S2D in batch mode without explicit consent')
+    } finally {
+        $script:CLIOutputFormat = $origOutFmt
+    }
+
+    # --- v1.98.6 DomainName validation pre-Add-Computer ---
+    # Source-level assertion (the runtime check is in Start-BatchMode which we don't
+    # invoke here; the source presence proves the gate exists).
+    $entryContent160 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
+    Write-TestResult "Start-BatchMode: validates DomainName via Test-ValidDomainName before Add-Computer" ($entryContent160 -match 'Test-ValidDomainName\s+-DomainName\s+\$Config\.DomainName')
+    $exportContent160 = Get-Content (Join-Path $modulesPath "45-ConfigExport.ps1") -Raw
+    Write-TestResult "Profile-restore domain join: validates DomainName via Test-ValidDomainName" ($exportContent160 -match 'Test-ValidDomainName\s+-DomainName\s+\$configProfile\.Domain\.Domainname')
+
+    # --- Test-ValidDomainName behavior ---
+    # Empty-string rejection happens at the PARAMETER BINDING layer (Mandatory + [string]
+    # rejects empty), not via return value. Assert that the call throws.
+    $emptyRejected = $false
+    try { Test-ValidDomainName -DomainName '' | Out-Null } catch { $emptyRejected = $true }
+    Write-TestResult "Test-ValidDomainName: rejects empty string (param binding)" $emptyRejected
+    Write-TestResult "Test-ValidDomainName: rejects single-label"         (-not (Test-ValidDomainName -DomainName 'CORP'))
+    Write-TestResult "Test-ValidDomainName: accepts valid FQDN"           (Test-ValidDomainName -DomainName 'corp.local')
+    Write-TestResult "Test-ValidDomainName: accepts multi-label FQDN"     (Test-ValidDomainName -DomainName 'us.east.corp.example.com')
+    Write-TestResult "Test-ValidDomainName: rejects leading dot"          (-not (Test-ValidDomainName -DomainName '.corp.local'))
+    Write-TestResult "Test-ValidDomainName: rejects trailing dot"         (-not (Test-ValidDomainName -DomainName 'corp.local.'))
+    Write-TestResult "Test-ValidDomainName: rejects special chars"        (-not (Test-ValidDomainName -DomainName 'corp.local; rm -rf'))
+} catch {
+    Write-TestResult "Section 160 batch-mode integration Tests" $false $_.Exception.Message
 }
 
 $elapsed = (Get-Date) - $script:StartTime

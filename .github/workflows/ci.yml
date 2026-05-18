@@ -5,6 +5,9 @@ on:
   pull_request:
     branches: [master]
 
+permissions:
+  contents: write  # needed for the auto-release step below
+
 jobs:
   test:
     # Push = self-hosted (fast, only repo owner can push). PR = GitHub-hosted (safe from fork attacks).
@@ -17,6 +20,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Need at least 2 commits so the version-bump detection can diff Header.ps1
+          # against the previous commit. Default fetch-depth is 1 which makes git show HEAD~1 fail.
+          fetch-depth: 2
 
       - name: Install PSScriptAnalyzer
         run: |
@@ -50,3 +57,135 @@ jobs:
             builds/RackStack v*.ps1
             Tests/*.log
           retention-days: 7
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Auto-release on version bump (push to master only). Detects whether
+      # Header.ps1 .VERSION changed since the previous commit; if so, compiles
+      # the EXE, generates SHA256 hashes, and publishes a GitHub Release with
+      # this version's changelog entry. Closes the gap that made v1.98.1-v1.98.5
+      # commits without releases.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Detect version bump
+        id: vercheck
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          $cur = (Select-String -Path Header.ps1 -Pattern '^\s+(\d+\.\d+\.\d+)\s*$' | Select-Object -First 1).Matches.Groups[1].Value
+          $prevContent = git show HEAD~1:Header.ps1 2>$null
+          $prev = if ($prevContent) {
+            $match = ($prevContent | Select-String -Pattern '^\s+(\d+\.\d+\.\d+)\s*$' | Select-Object -First 1)
+            if ($match) { $match.Matches.Groups[1].Value } else { '' }
+          } else { '' }
+          $bumped = ($cur -and $cur -ne $prev)
+          Write-Host "Previous version: $prev"
+          Write-Host "Current version:  $cur"
+          Write-Host "Bumped:           $bumped"
+          "version=$cur"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "prev=$prev"       | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "bumped=$bumped"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Check release does not already exist
+        id: releasecheck
+        if: steps.vercheck.outputs.bumped == 'True'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          $existing = gh release view "v$ver" --json tagName 2>$null
+          $exists = -not [string]::IsNullOrWhiteSpace($existing)
+          Write-Host "Release v$ver already exists: $exists"
+          "exists=$exists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install ps2exe
+        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        run: |
+          if (-not (Get-Module ps2exe -ListAvailable)) {
+            Install-Module ps2exe -Force -Scope CurrentUser -AllowClobber
+          }
+
+      - name: Compile RackStack.exe
+        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          $mono = "builds\RackStack v$ver.ps1"
+          if (-not (Test-Path $mono)) { throw "Monolithic not found at $mono" }
+          if (-not (Test-Path 'RackStack.ico')) { throw "RackStack.ico missing — required for compile" }
+          Invoke-PS2EXE -InputFile $mono -OutputFile 'builds\RackStack.exe' -Version $ver -RequireAdmin -IconFile 'RackStack.ico'
+          $info = Get-Item 'builds\RackStack.exe'
+          Write-Host "Compiled: $($info.FullName) ($([math]::Round($info.Length / 1MB, 2)) MB)"
+
+      - name: Generate SHA256 hashes
+        id: hashes
+        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          $assets = @(
+            @{ Name = 'RackStack.exe';          Path = 'builds\RackStack.exe' }
+            @{ Name = "RackStack v$ver.ps1";    Path = "builds\RackStack v$ver.ps1" }
+            @{ Name = 'defaults.example.json';  Path = 'defaults.example.json' }
+          )
+          $lines = foreach ($a in $assets) {
+            $h = (Get-FileHash -LiteralPath $a.Path -Algorithm SHA256).Hash.ToLower()
+            "{0}  {1}" -f $h, $a.Name
+          }
+          $lines | Set-Content 'release-hashes.txt' -Encoding utf8
+          Get-Content 'release-hashes.txt'
+
+      - name: Build release notes
+        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          # Extract this version's section from Changelog.md (## vX.Y.Z ... next ## or EOF)
+          $changelogRaw = Get-Content 'Changelog.md' -Raw
+          $pat = "(?ms)^## v$([regex]::Escape($ver))\s*\r?\n(.+?)(?=^## v|\z)"
+          $entry = if ($changelogRaw -match $pat) { $matches[1].Trim() } else { "Auto-generated release for v$ver." }
+          $hashes = Get-Content 'release-hashes.txt' -Raw
+          $body = @"
+          # RackStack v$ver
+
+          Auto-released by CI on version bump in ``Header.ps1``.
+
+          ## SHA256 verification
+
+          ``````
+          $($hashes.TrimEnd())
+          ``````
+
+          Verify with ``(Get-FileHash RackStack.exe -Algorithm SHA256).Hash.ToLower()``.
+
+          ## Changes
+
+          $entry
+          "@
+          $body | Set-Content 'release-body.md' -Encoding utf8
+
+      - name: Create GitHub Release
+        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          gh release create "v$ver" `
+            --title "RackStack v$ver" `
+            --notes-file 'release-body.md' `
+            "builds\RackStack.exe" `
+            "builds\RackStack v$ver.ps1" `
+            "defaults.example.json"
+          Write-Host "Release v$ver published."
+
+      - name: Apply retention rule (z bump deletes prior z in same minor)
+        if: steps.vercheck.outputs.bumped == 'True' && steps.releasecheck.outputs.exists == 'False'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver  = '${{ steps.vercheck.outputs.version }}'
+          $prev = '${{ steps.vercheck.outputs.prev }}'
+          $vParts = $ver -split '\.'
+          $pParts = $prev -split '\.'
+          # Only z bumps (same x.y) delete the prior z. y/x bumps start a new chain.
+          if ($pParts.Length -eq 3 -and $vParts[0] -eq $pParts[0] -and $vParts[1] -eq $pParts[1] -and $vParts[2] -ne $pParts[2]) {
+            Write-Host "Z bump $prev -> $ver — deleting prior release v$prev per retention rule"
+            gh release delete "v$prev" --yes --cleanup-tag 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Host "  (prior release v$prev did not exist or was already deleted)" }
+          } else {
+            Write-Host "Not a z bump within the same minor — keeping prior release lineup intact"
+          }

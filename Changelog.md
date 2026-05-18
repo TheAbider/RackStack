@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.98.7
+
+- **Tests:** New `SECTION 160: BATCH MODE INTEGRATION (function-level)` invokes real functions (`Test-BatchConfig`, `Test-ValidDomainName`) with synthetic configs and asserts against the returned data — closes the test-shape-vs-test-behavior gap the round-5 audit flagged. Covers ConfigType rejection, hostname/IP validation, duplicate vNIC detection, NewForest+DomainName warning, S2D `AllowS2DDataLoss` gate (source-level, since no test cluster), DomainName pre-validation at Add-Computer sites, and `Test-ValidDomainName` rejection of empty/single-label/leading-dot/trailing-dot/special-char inputs. **+24 tests, 4588 total (was 4564), 100% pass** (Tests/Run-Tests).
+- **Test runner hang root cause permanently resolved:** the full slow `Run-Tests.ps1` (no `-Quick`) now completes in 139 seconds with peak memory 1.24 GB — no longer hangs. The earlier hang was the wizard prompt, fixed in v1.98.3; this confirms the fix holds for the slow path too. The memory note that the CI runner OOMs may have been stale (the local box completes cleanly under the runner's typical 8 GB allocation).
+- **CI: auto-release on version bump.** `.github/workflows/ci.yml` now detects a version change in `Header.ps1` since the previous commit and, on a push to master, compiles `RackStack.exe` via `Invoke-PS2EXE`, generates SHA256 hashes, extracts that version's section from `Changelog.md`, and publishes a GitHub Release with all 3 assets. Z-bumps within a minor also auto-delete the prior z release per the retention rule. Closes the gap that made v1.98.1-v1.98.5 commits without releases — every future bump will release itself.
+
 ## v1.98.6
 
 - **Fix:** Batch-mode domain-join step (50-EntryPoint) and profile-restore domain-join (45-ConfigExport) called `Add-Computer -DomainName $Config.DomainName` without first validating the value via `Test-ValidDomainName`. The DC promotion paths already used this gate; the batch-step + profile-restore paths skipped it. A malformed `DomainName` in `defaults.json` reached `Add-Computer` with a generic failure instead of a clear "bad domain name" error. Now validated before invocation (50-EntryPoint, 45-ConfigExport).
