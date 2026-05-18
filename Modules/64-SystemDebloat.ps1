@@ -1026,6 +1026,16 @@ function Invoke-ServerDebloat {
         "Microsoft.Xbox.TCUI"
     )
 
+    # Short-circuit on Server Core — Get-AppxPackage / Get-AppxProvisionedPackage aren't
+    # registered, so without this skip the transcript fills with "term is not recognized"
+    # errors for every package candidate. Matches the Workstation flow gate at line 463.
+    $debloatInfo = Get-WindowsDebloatInfo
+    if ($null -ne $debloatInfo -and $debloatInfo.IsServerCore) {
+        Write-OutputColor "  [SKIP] AppX phase — Server Core has no Appx subsystem" -color "Debug"
+        $skippedCount += $serverPackages.Count
+        $serverPackages = @()
+    }
+
     foreach ($pkgName in $serverPackages) {
         $installed = Get-AppxPackage -Name "*$pkgName*" -AllUsers -ErrorAction SilentlyContinue
         $provisioned = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "*$pkgName*" }
@@ -1362,9 +1372,10 @@ function Show-DebloatAnalysis {
     Write-OutputColor "  Scanning system..." -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Detect OS type
-    $osCaption = (Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
-    $isServer = ($null -ne $osCaption) -and ($osCaption -match "Server")
+    # Detect OS type via the canonical helper (ProductType) rather than the Caption string,
+    # which is partially localized on non-EN MUI and can mis-classify future SKUs.
+    $analysisInfo = Get-WindowsDebloatInfo
+    $isServer = $analysisInfo.IsServer
 
     # ── Removable AppxPackages ────────────────────────────────────────
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -1683,8 +1694,12 @@ function Invoke-CustomDebloatExecution {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    $osCaption = (Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
-    $isServer = ($null -ne $osCaption) -and ($osCaption -match "Server")
+    # Use Get-WindowsDebloatInfo for SKU detection (mirrors the rest of the module). The
+    # prior `$osCaption -match "Server"` bypassed the canonical detection and would silently
+    # mis-classify on a future SKU where the Caption text changes or gets localized.
+    $debloatInfo = Get-WindowsDebloatInfo
+    $isServer = $debloatInfo.IsServer
+    $isServerCore = $debloatInfo.IsServerCore
     $svcType = if ($isServer) { "Server" } else { "Workstation" }
 
     $totalChanged = 0
@@ -1692,9 +1707,25 @@ function Invoke-CustomDebloatExecution {
     $totalFailed = 0
 
     # ── AppxPackage Removal ───────────────────────────────────────────
-    if ($Selected.AppxPackages) {
+    if ($Selected.AppxPackages -and -not $isServerCore) {
         Write-OutputColor "  ── AppxPackage Removal ────────────────────────────────────────────" -color "Info"
         $packages = Get-RemovableAppxPackages -DebloatProfile $DebloatProfile
+
+        # Custom Aggressive used to silently remove Edge / OneDrive / Teams without the extra
+        # confirmation that the Workstation flow has — operators picking "Custom + Aggressive"
+        # didn't get the chance to opt out. Mirror that gate here.
+        if ($DebloatProfile -eq 'Aggressive') {
+            $aggressivePkgs = @($packages | Where-Object { $_ -match 'MicrosoftEdge\.Stable|OneDriveSync|MicrosoftTeams|549981C3F5F10' })
+            if ($aggressivePkgs.Count -gt 0) {
+                Write-OutputColor "  Aggressive Custom Debloat will attempt to remove:" -color "Warning"
+                foreach ($p in $aggressivePkgs) { Write-OutputColor "    - $p" -color "Warning" }
+                Write-OutputColor "  These are user-facing and may be re-needed after debloat." -color "Warning"
+                if (-not (Confirm-UserAction -Message "Continue removing these packages?")) {
+                    $packages = @($packages | Where-Object { $_ -notin $aggressivePkgs })
+                    Write-OutputColor "  Skipped Edge/OneDrive/Teams/Cortana per operator choice." -color "Info"
+                }
+            }
+        }
 
         foreach ($pkgName in $packages) {
             $installed = Get-AppxPackage -Name "*$pkgName*" -AllUsers -ErrorAction SilentlyContinue
@@ -2304,11 +2335,23 @@ function Invoke-Win11UICleanup {
         }
     }
 
-    # Reset folder grouping (nuke saved folder views)
+    # Reset folder grouping. The prior implementation recursively removed the entire
+    # FolderTypes / Streams subkeys — that nukes the user's saved per-folder view
+    # preferences (custom column widths, sort orders, group-by) on top of the date-grouping
+    # tweak it was supposed to deliver. Instead, target only the date-grouping property
+    # (GroupView under FolderTypes\GroupBy nodes) and document that wholesale reset requires
+    # an explicit opt-in. Operators who want the full nuke can do it manually via reg.exe.
     try {
-        Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FolderTypes" -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Streams" -Recurse -Force -ErrorAction SilentlyContinue
-        $line = "  [OK] Reset folder view settings (removes date grouping)"
+        $folderTypesPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FolderTypes"
+        if (Test-Path -LiteralPath $folderTypesPath) {
+            # Reset only the GroupView property under each folder-type subkey rather than wholesale deleting.
+            Get-ChildItem -LiteralPath $folderTypesPath -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.PSChildName -eq 'TopViews' -or $_.Property -contains 'GroupView' } |
+                ForEach-Object {
+                    Remove-ItemProperty -LiteralPath $_.PSPath -Name 'GroupView' -Force -ErrorAction SilentlyContinue
+                }
+        }
+        $line = "  [OK] Reset folder grouping (preserved column widths / sort orders)"
         Write-OutputColor "  │$($line.PadRight(72))│" -color "Success"
         $applied++
     }

@@ -10,17 +10,31 @@ function Set-NTPConfiguration {
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        # Get current NTP configuration (safely handle w32tm failures)
+        # Get current NTP configuration (safely handle w32tm failures). `w32tm /query /status`
+        # localizes the "Source:" label on non-English Windows MUI (e.g. "Quelle:" on de-DE),
+        # so the English-only Select-String would render "Unknown" on non-EN hosts. Pull from
+        # the W32Time registry (NtpServer value) as the language-neutral primary source, then
+        # fall back to the w32tm string for environments where the registry lookup fails.
         $currentSource = "Unknown"
         try {
-            $w32tmQuery = w32tm /query /status 2>&1
-            $sourceLine = $w32tmQuery | Select-String "Source:"
-            if ($null -ne $sourceLine) {
-                $splitParts = $sourceLine.ToString().Split(":", 2)
-                if ($splitParts.Count -ge 2) { $currentSource = $splitParts[1].Trim() }
+            $w32cfg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'NtpServer','Type' -ErrorAction Stop
+            if ($w32cfg.Type -eq 'NoSync') {
+                $currentSource = "Local clock (NoSync — no external sync configured)"
+            } elseif ($w32cfg.NtpServer) {
+                # NtpServer is space-separated peers, often with ',0x9' suffix flags
+                $currentSource = ($w32cfg.NtpServer -split '\s+' | ForEach-Object { ($_ -split ',')[0] } | Where-Object { $_ }) -join ', '
             }
         } catch {
-            $currentSource = "Unable to query (Windows Time service may not be running)"
+            try {
+                $w32tmQuery = w32tm /query /status 2>&1
+                $sourceLine = $w32tmQuery | Select-String "Source:"
+                if ($null -ne $sourceLine) {
+                    $splitParts = $sourceLine.ToString().Split(":", 2)
+                    if ($splitParts.Count -ge 2) { $currentSource = $splitParts[1].Trim() }
+                }
+            } catch {
+                $currentSource = "Unable to query (Windows Time service may not be running)"
+            }
         }
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"

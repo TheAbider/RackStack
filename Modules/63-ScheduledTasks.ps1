@@ -598,7 +598,17 @@ function Export-ScheduledTaskXML {
 
     try {
         $xml = Export-ScheduledTask -TaskName $selected.TaskName -TaskPath $selected.TaskPath -ErrorAction Stop
-        [System.IO.File]::WriteAllText($exportPath, $xml, [System.Text.UTF8Encoding]::new($true))
+        # Atomic write-then-rename. A direct WriteAllText could leave a partial XML if the
+        # process was killed mid-write; the operator might then re-import the corrupt file
+        # and register a half-defined scheduled task (or fail with a cryptic XML parse error).
+        $tmpExport = "$exportPath.tmp"
+        try {
+            [System.IO.File]::WriteAllText($tmpExport, $xml, [System.Text.UTF8Encoding]::new($true))
+            Move-Item -LiteralPath $tmpExport -Destination $exportPath -Force -ErrorAction Stop
+        } catch {
+            if (Test-Path -LiteralPath $tmpExport) { Remove-Item -LiteralPath $tmpExport -Force -ErrorAction SilentlyContinue }
+            throw
+        }
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Task exported successfully!" -color "Success"
         Write-OutputColor "  File: $exportPath" -color "Info"

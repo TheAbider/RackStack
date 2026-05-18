@@ -90,7 +90,12 @@ function Invoke-PingHost {
     Write-OutputColor "" -color "Info"
 
     try {
-        $results = @(Test-Connection -ComputerName $target -Count 20 -ErrorAction Stop)
+        # `-ErrorAction Stop` used to promote per-packet "Request timed out" non-terminating
+        # errors to terminating throws — so a single lost packet aborted the entire
+        # measurement and the function returned "Ping failed" with zero statistics. The
+        # whole point of the call is to measure loss% / jitter / p95 for live-migration
+        # readiness, which is meaningless if any actual loss kills the run.
+        $results = @(Test-Connection -ComputerName $target -Count 20 -ErrorAction SilentlyContinue)
         $sent = 20
         $received = $results.Count
         $lost = $sent - $received
@@ -416,7 +421,10 @@ function Invoke-DnsLookup {
     Write-OutputColor "" -color "Info"
 
     try {
-        $results = Resolve-DnsName -Name $target -ErrorAction Stop
+        # -QuickTimeout caps each configured DNS server at 1s; default behaviour waits
+        # ~15s per server in sequence (so 3 misconfigured DNS = 45s blocking). -DnsOnly
+        # skips NetBIOS / LLMNR fallback which adds another tier of waits.
+        $results = Resolve-DnsName -Name $target -QuickTimeout -DnsOnly -ErrorAction Stop
 
         $lineStr = "  DNS RESULTS: $target"
         if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
@@ -664,20 +672,39 @@ function Test-PathMTU {
 
     Write-OutputColor "  Testing path MTU to $TargetHost..." -color "Info"
 
-    while ($low -le $high) {
-        $mid = [math]::Floor(($low + $high) / 2)
-        # ping with don't-fragment flag and specific size
-        # Subtract 28 bytes for IP+ICMP headers
-        $pingSize = $mid - 28
-        if ($pingSize -lt 0) { $pingSize = 0 }
-
-        $result = ping.exe -n 1 -f -l $pingSize -w 1000 $TargetHost 2>&1
-        if ($result -match 'Reply from') {
-            $bestMTU = $mid
-            $low = $mid + 1
-        } else {
-            $high = $mid - 1
+    # Use System.Net.NetworkInformation.Ping with PingOptions(DontFragment=$true).
+    # The prior `ping.exe ... -match 'Reply from'` parsed English-only output — on
+    # non-English MUI ('Réponse de', 'Antwort von', 'Respuesta desde', 'Σε αναμονή',
+    # Japanese / Chinese localized output) the regex never matched, every probe was
+    # treated as fragmented, and the binary search converged on MTU=68. Locale-neutral
+    # via the .NET enum.
+    $pinger = $null
+    try {
+        $pinger = [System.Net.NetworkInformation.Ping]::new()
+        $pingOpts = [System.Net.NetworkInformation.PingOptions]::new()
+        $pingOpts.DontFragment = $true
+        $pingOpts.Ttl = 128
+        while ($low -le $high) {
+            $mid = [math]::Floor(($low + $high) / 2)
+            # Subtract 28 bytes for IP+ICMP headers
+            $pingSize = $mid - 28
+            if ($pingSize -lt 0) { $pingSize = 0 }
+            $buffer = New-Object byte[] $pingSize
+            try {
+                $reply = $pinger.Send($TargetHost, 1000, $buffer, $pingOpts)
+                if ($reply.Status -eq 'Success') {
+                    $bestMTU = $mid
+                    $low = $mid + 1
+                } else {
+                    $high = $mid - 1
+                }
+            } catch {
+                # SocketException → treat as fragmentation-needed
+                $high = $mid - 1
+            }
         }
+    } finally {
+        if ($null -ne $pinger) { $pinger.Dispose() }
     }
 
     Write-OutputColor "  Path MTU to ${TargetHost}: $bestMTU bytes" -color "Success"
@@ -889,7 +916,17 @@ function Test-GatewayConnectivity {
             if ($ping) {
                 $latency = Test-Connection -ComputerName $gwIp -Count 3 -ErrorAction SilentlyContinue
                 if ($null -ne $latency) {
-                    $avgMs = [math]::Round(($latency | Measure-Object -Property ResponseTime -Average).Average)
+                    # PS 5.1 returns objects with .ResponseTime; PS 7 returns PingStatus
+                    # with .Latency. Without this extraction, on PS 7 Measure-Object
+                    # against ResponseTime returns Average=$null and the operator sees
+                    # "Avg latency: 0ms" on a healthy gateway.
+                    $latencyMs = @($latency | ForEach-Object {
+                        if ($null -ne $_.ResponseTime) { [double]$_.ResponseTime }
+                        elseif ($null -ne $_.Latency)  { [double]$_.Latency }
+                    } | Where-Object { $null -ne $_ })
+                    $avgMs = if ($latencyMs.Count -gt 0) {
+                        [math]::Round(($latencyMs | Measure-Object -Average).Average)
+                    } else { 0 }
                     $latLine = "    Avg latency: ${avgMs}ms"
                     Write-OutputColor "  │$($latLine.PadRight(72))│" -color "Info"
                 }

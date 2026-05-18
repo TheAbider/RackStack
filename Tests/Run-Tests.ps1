@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.12
+    Automated Test Runner for RackStack v1.98.13
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9977,7 +9977,7 @@ try {
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles Timezone" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Set-TimeZone")
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles RDP" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,6000}fDenyTSConnections")
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles DNS" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,8000}Set-DnsClientServerAddress")
-    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Hostname" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,13000}Rename-Computer")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Hostname" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,14000}Rename-Computer")
     Write-TestResult "45-ConfigExport: Invoke-Remediation tracks reboot" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,3000}RebootRequired")
     Write-TestResult "45-ConfigExport: Invoke-Remediation calls Add-SessionChange" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Add-SessionChange.*Remediation")
     Write-TestResult "45-ConfigExport: Show-RemediationReport function exists" ($ceContentCLI -match "function Show-RemediationReport")
@@ -12109,7 +12109,7 @@ try {
 
     # v1.98.3 — 57-AgentInstaller args normalized to array
     $agentInst98 = Get-Content (Join-Path $modulesPath "57-AgentInstaller.ps1") -Raw
-    Write-TestResult "57-AgentInstaller: InstallArgs split to array before Start-Process" ($agentInst98 -match 'InstallArgs\s+-split\s+''\\s\+''')
+    Write-TestResult "57-AgentInstaller: InstallArgs tokenized to array before Start-Process" ($agentInst98 -match '\[regex\]::Matches\(\$rawArgs,\s*''"\(\[\^"\]\*\)"')
 
     # v1.98.3 — 62-HyperVReplica export path collected before Enable-VMReplication
     $repl98 = Get-Content (Join-Path $modulesPath "62-HyperVReplica.ps1") -Raw

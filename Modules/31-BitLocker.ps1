@@ -353,7 +353,19 @@ function Show-BitLockerManagement {
                                     $output += "Recovery Password: $($key.RecoveryPassword)"
                                     $output += ""
                                 }
-                                $output | Out-File -LiteralPath $savePath -Encoding UTF8 -ErrorAction Stop
+                                # Atomic write-then-rename. Without this, a process kill (Ctrl+C,
+                                # power loss, AV quarantine) mid-Out-File could truncate the
+                                # recovery-key file to 0 bytes. BitLocker recovery keys are
+                                # disaster-recovery-only; an empty file means the operator can't
+                                # unlock the drive when BitLocker enters recovery mode.
+                                $tmpSavePath = "$savePath.tmp"
+                                try {
+                                    $output | Out-File -LiteralPath $tmpSavePath -Encoding UTF8 -ErrorAction Stop
+                                    Move-Item -LiteralPath $tmpSavePath -Destination $savePath -Force -ErrorAction Stop
+                                } catch {
+                                    if (Test-Path -LiteralPath $tmpSavePath) { Remove-Item -LiteralPath $tmpSavePath -Force -ErrorAction SilentlyContinue }
+                                    throw
+                                }
                                 Write-OutputColor "  Recovery key saved to: $savePath" -color "Success"
                                 Write-OutputColor "  IMPORTANT: Store this file in a secure location!" -color "Warning"
                             } else {

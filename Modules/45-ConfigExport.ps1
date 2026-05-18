@@ -1395,7 +1395,14 @@ function Invoke-Remediation {
                 'PowerPlan' {
                     Write-OutputColor "  [FIX] PowerPlan: $current → $expected" -color "Info"
                     if ($script:PowerPlanGUID.ContainsKey($expected)) {
+                        # Check $LASTEXITCODE — without this, powercfg failures (invalid GUID,
+                        # locked-down power policy, missing scheme on this SKU) silently
+                        # reached the success branch and the remediation report recorded "Fixed".
+                        $global:LASTEXITCODE = 0
                         $ppOutput = powercfg /setactive $script:PowerPlanGUID[$expected] 2>&1
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "powercfg /setactive exited ${LASTEXITCODE}: $($ppOutput -join '; ')"
+                        }
                         $detail = "Set power plan to $expected"
                     } else {
                         throw "Unknown power plan: $expected"
@@ -1442,8 +1449,20 @@ function Invoke-Remediation {
                     $newGW = $savedProfile.network.Gateway
                     $cidr = if ($savedProfile.network.SubnetCIDR) { [int]$savedProfile.network.SubnetCIDR } else { 24 }
                     Write-OutputColor "  [FIX] IPAddress: $current → $newIP (/$cidr, GW: $newGW)" -color "Info"
-                    Remove-netIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                    Remove-netRoute -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+
+                    # SCOPED removal — the prior `Remove-NetIPAddress` / `Remove-NetRoute` with
+                    # no filter wiped EVERY IPv4 address and EVERY route on the adapter. On a
+                    # multi-IP / custom-routed host (secondary IPs for services, virtual IPs,
+                    # static routes to other subnets) this was severely destructive. Now we
+                    # only remove the SPECIFIC drifted IP and the DEFAULT route, leaving any
+                    # other addresses / routes the operator added intact.
+                    $currentIPObj = Get-NetIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                        Where-Object { $_.IPAddress -eq $current -or $_.PrefixOrigin -ne 'Dhcp' } |
+                        Select-Object -First 1
+                    if ($currentIPObj) {
+                        Remove-NetIPAddress -InterfaceAlias $adaptername -IPAddress $currentIPObj.IPAddress -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                    }
+                    Remove-NetRoute -InterfaceAlias $adaptername -DestinationPrefix "0.0.0.0/0" -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
                     if ($newGW) {
                         new-netIPAddress -InterfaceAlias $adaptername -IPAddress $newIP -PrefixLength $cidr -DefaultGateway $newGW -ErrorAction Stop | Out-null
                     } else {
@@ -1820,7 +1839,17 @@ function Save-DriftBaseline {
             TimeSync = $timeSync
         }
 
-        $baseline | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $baselinePath -Encoding UTF8 -Force
+        # Atomic write-then-rename — a kill mid-Out-File on the baseline leaves a 0-byte file
+        # that subsequent ConvertFrom-Json calls fail on with no recovery path. Mirrors the
+        # pattern already used by Save-ConfigurationProfile at line 587.
+        $tmpBaseline = "$baselinePath.tmp"
+        try {
+            $baseline | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $tmpBaseline -Encoding UTF8 -Force -ErrorAction Stop
+            Move-Item -LiteralPath $tmpBaseline -Destination $baselinePath -Force -ErrorAction Stop
+        } catch {
+            if (Test-Path -LiteralPath $tmpBaseline) { Remove-Item -LiteralPath $tmpBaseline -Force -ErrorAction SilentlyContinue }
+            throw
+        }
         Add-SessionChange -Category "Drift" -Description "Saved drift baseline to $baselinePath"
         return $baselinePath
     }
@@ -2702,9 +2731,14 @@ function Save-ExportBaseline {
     $ExportData['BaselineTimestamp'] = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 
     try {
-        $ExportData | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $filePath -Encoding UTF8 -Force
+        # Atomic write-then-rename (same rationale as Save-DriftBaseline / Save-ConfigurationProfile)
+        $tmpExport = "$filePath.tmp"
+        $ExportData | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $tmpExport -Encoding UTF8 -Force -ErrorAction Stop
+        Move-Item -LiteralPath $tmpExport -Destination $filePath -Force -ErrorAction Stop
         return $filePath
     } catch {
+        $tmpExport = "$filePath.tmp"
+        if (Test-Path -LiteralPath $tmpExport) { Remove-Item -LiteralPath $tmpExport -Force -ErrorAction SilentlyContinue }
         Write-OutputColor "  ERROR: Failed to save baseline: $($_.Exception.Message)" -color "Error"
         return $null
     }

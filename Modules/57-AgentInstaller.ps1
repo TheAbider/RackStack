@@ -191,8 +191,13 @@ function ConvertFrom-AgentFilename {
         return $result
     }
 
-    # Remove any suffix like .staging, .workstations before .exe
-    $cleanName = $FileName -replace '\.(staging|workstations|linac-workstations)\.exe$', '.exe'
+    # Remove any environment / tier suffix (e.g. `name.staging.exe`, `name.workstations.exe`)
+    # before the .exe extension so the site-number regex below sees the canonical filename.
+    # The accepted suffixes can be overridden via defaults.json AgentInstaller.SuffixesToStrip;
+    # if unset, fall back to the two generic tokens. Site-specific suffixes do not belong here.
+    $stripSuffixes = if ($script:AgentInstallerSuffixesToStrip) { $script:AgentInstallerSuffixesToStrip } else { @('staging', 'workstations') }
+    $suffixPattern = '\.(' + (($stripSuffixes | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\.exe$'
+    $cleanName = $FileName -replace $suffixPattern, '.exe'
 
     # Primary pattern: anything.{numbers}[-{name}].exe
     # The dot-then-digit anchor finds the site number section regardless of prefix format
@@ -493,11 +498,13 @@ function Install-SelectedAgent {
         return
     }
 
-    # Download using Get-FileServerFile (from FILESERVER DOWNLOAD region)
+    # Download using Get-FileServerFile (from FILESERVER DOWNLOAD region).
     # Pass ExpectedHash through if the agent entry supplies one — defense-in-depth
-    # against FileServer tampering. Get-FileServerFile skips verification if empty.
+    # against FileServer tampering. -StrictVerify forces the integrity gate to refuse
+    # size-only verification (size match alone would let a forged Content-Length pass
+    # a tampered EXE through to Start-Process running as SYSTEM).
     $expectedHash = if ($Agent.ContainsKey('ExpectedHash')) { [string]$Agent.ExpectedHash } else { '' }
-    $dlResult = Get-FileServerFile -FilePath $Agent.FilePath -DestinationPath $env:TEMP -FileName $Agent.FileName -ExpectedHash $expectedHash
+    $dlResult = Get-FileServerFile -FilePath $Agent.FilePath -DestinationPath $env:TEMP -FileName $Agent.FileName -ExpectedHash $expectedHash -StrictVerify
 
     if (-not $dlResult.Success -or -not (Test-Path -LiteralPath $tempPath)) {
         Write-OutputColor "  Failed to download installer. $($dlResult.Error)" -color "Error"
@@ -521,10 +528,20 @@ function Install-SelectedAgent {
         # single concatenated string as one literal token and silently ignore the
         # rest of the flags (e.g., would see "/s /norestart" as one switch and skip
         # the silent-mode parse).
+        # When InstallArgs is a STRING, use a quoted-aware tokenizer: bare `-split '\s+'`
+        # shreds quoted whitespace-containing args (token-style installers like Datto/Ninja
+        # use `/token "GUID-with-spaces"` — the prior split produced
+        # ['/token', '"GUID-with-spaces"'] split into ['/token', '"GUID', 'with-spaces"']
+        # and the install silently registered with the wrong / no tenant).
         $argArray = if ($script:AgentInstaller.InstallArgs -is [System.Array]) {
             @($script:AgentInstaller.InstallArgs)
         } else {
-            @(($script:AgentInstaller.InstallArgs -split '\s+') | Where-Object { $_ })
+            $rawArgs = [string]$script:AgentInstaller.InstallArgs
+            # Match either a quoted segment (quotes stripped) or a non-whitespace run.
+            $tokenMatches = [regex]::Matches($rawArgs, '"([^"]*)"|(\S+)')
+            @($tokenMatches | ForEach-Object {
+                if ($_.Groups[1].Success) { $_.Groups[1].Value } else { $_.Groups[2].Value }
+            } | Where-Object { $_ -ne "" -and $null -ne $_ })
         }
         if ($argArray.Count -gt 0) {
             $installProcess = Start-Process -FilePath $tempPath -ArgumentList $argArray -PassThru -WindowStyle Hidden -ErrorAction Stop
@@ -538,12 +555,24 @@ function Install-SelectedAgent {
             Start-Sleep -Seconds 1
             $elapsed++
 
-            # Check for Escape keypress to skip waiting
-            if ([Console]::KeyAvailable) {
-                $key = [Console]::ReadKey($true)
-                if ($key.Key -eq 'Escape') {
-                    $userSkipped = $true
-                    break
+            # Check for Escape keypress to skip waiting. [Console]::KeyAvailable throws
+            # InvalidOperationException when stdin is redirected (scheduled task host,
+            # piped batch wrapper) — without the guard, the throw would propagate to the
+            # outer finally and kill the running installer mid-stream, leaving a partial
+            # install on disk.
+            if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+                try {
+                    if ([Console]::KeyAvailable) {
+                        $key = [Console]::ReadKey($true)
+                        if ($key.Key -eq 'Escape') {
+                            $userSkipped = $true
+                            break
+                        }
+                    }
+                } catch {
+                    # Some hosts (PSRemoting peers, certain Windows Terminal modes) still
+                    # report UserInteractive=$true but throw on KeyAvailable — swallow rather
+                    # than kill the install.
                 }
             }
 

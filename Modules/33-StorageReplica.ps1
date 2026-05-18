@@ -210,6 +210,24 @@ function Show-StorageReplicaManagement {
                 }
                 if (-not $validVolumes) { continue }
 
+                # Catch obvious operator typos up-front rather than after the DESTROY-gate confirmation:
+                # Storage Replica requires the data volume and log volume to be DIFFERENT (per-side),
+                # and the source/destination servers to be different (cross-server replication only).
+                if ($srcVol -ieq $srcLog) {
+                    Write-OutputColor "  Source data volume ($srcVol) cannot be the same as source log volume." -color "Error"
+                    Write-OutputColor "  Storage Replica requires a separate log volume on each side." -color "Info"
+                    continue
+                }
+                if ($destVol -ieq $destLog) {
+                    Write-OutputColor "  Destination data volume ($destVol) cannot be the same as destination log volume." -color "Error"
+                    continue
+                }
+                if ($srcServer -ieq $destServer) {
+                    Write-OutputColor "  Source and destination servers cannot be the same machine." -color "Error"
+                    Write-OutputColor "  Storage Replica replicates between hosts — use a second server as the destination." -color "Info"
+                    continue
+                }
+
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  [1] Synchronous (zero data loss)" -color "Info"
                 Write-OutputColor "  [2] Asynchronous (better performance)" -color "Info"

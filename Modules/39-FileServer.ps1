@@ -263,7 +263,13 @@ function Get-FileServerFile {
 
         [int]$TimeoutSeconds = 0,  # 0 = use $script:DefaultDownloadTimeoutSeconds
 
-        [string]$ExpectedHash = ""  # Optional SHA256 hash to verify after download
+        [string]$ExpectedHash = "",  # Optional SHA256 hash to verify after download
+
+        # Callers that will EXECUTE the downloaded file (agent installer) should pass
+        # -StrictVerify so the integrity gate refuses size-only verification — a forged
+        # Content-Length must not be enough to reach Start-Process. ISOs / VHDs that
+        # only need cache-validity can leave this off (size-from-HEAD is sufficient).
+        [switch]$StrictVerify
     )
 
     # Apply default timeout if not specified
@@ -545,8 +551,9 @@ function Get-FileServerFile {
 
         $fileSize = (Get-Item -LiteralPath $destFile -ErrorAction SilentlyContinue).Length
 
-        # SHA256 integrity verification
-        $integrity = Test-FileIntegrity -FilePath $destFile -ExpectedSize $expectedSize -RemoteFilePath $FilePath
+        # SHA256 integrity verification. Pass StrictVerify through so executor callers
+        # (agent installer) refuse size-only verification.
+        $integrity = Test-FileIntegrity -FilePath $destFile -ExpectedSize $expectedSize -RemoteFilePath $FilePath -StrictVerify:$StrictVerify
 
         if (-not $integrity.Valid) {
             Write-OutputColor "  Integrity check failed: $($integrity.Error)" -color "Error"
@@ -681,11 +688,16 @@ function Test-FileIntegrity {
 
         [long]$ExpectedSize = 0,
 
-        [string]$RemoteFilePath = ""
+        [string]$RemoteFilePath = "",
+
+        # When $true, REQUIRES a verified SHA256 hash match (size match alone is insufficient).
+        # Callers that execute the file as SYSTEM (agent installer) should pass -StrictVerify
+        # so a forged Content-Length can't pass a tampered EXE through to Start-Process.
+        [switch]$StrictVerify
     )
 
     $result = @{
-        Valid     = $true
+        Valid     = $false   # Default to fail-closed; require explicit positive verification.
         Hash      = $null
         RemoteHash = $null
         HashMatch = $null
@@ -695,7 +707,6 @@ function Test-FileIntegrity {
 
     $localFile = Get-Item -LiteralPath $FilePath -ErrorAction SilentlyContinue
     if (-not $localFile) {
-        $result.Valid = $false
         $result.Error = "File not found"
         return $result
     }
@@ -703,7 +714,6 @@ function Test-FileIntegrity {
     # Size check
     if ($ExpectedSize -gt 0) {
         if ($localFile.Length -ne $ExpectedSize) {
-            $result.Valid = $false
             $result.SizeMatch = $false
             $result.Error = "Size mismatch (local: $($localFile.Length), expected: $ExpectedSize)"
             return $result
@@ -722,18 +732,33 @@ function Test-FileIntegrity {
 
     # Compare hashes if remote hash was found
     if (-not $result.Hash) {
-        $result.Valid = $false
         $result.Error = "Failed to compute local SHA256 hash"
     } elseif ($result.RemoteHash) {
         if ($result.Hash -eq $result.RemoteHash) {
             $result.HashMatch = $true
+            $result.Valid = $true
         } else {
             $result.HashMatch = $false
-            $result.Valid = $false
             $localHashShort = if ($result.Hash.Length -ge 16) { $result.Hash.Substring(0,16) } else { $result.Hash }
             $remoteHashShort = if ($result.RemoteHash.Length -ge 16) { $result.RemoteHash.Substring(0,16) } else { $result.RemoteHash }
             $result.Error = "SHA256 mismatch (local: $localHashShort..., remote: $remoteHashShort...)"
         }
+    } elseif ($result.SizeMatch -eq $true) {
+        # Size verified, no hash sidecar. Size-from-HEAD is a positive (though weak) signal —
+        # the FileServer did publish a Content-Length and the local file matched it. Accept
+        # in non-strict mode (ISOs, VHDs, generic file fetches). Executor callers should pass
+        # -StrictVerify so a forged Content-Length on a tampered file still has to forge a
+        # matching .sha256 sidecar to pass.
+        if ($StrictVerify) {
+            $result.Error = "No .sha256 sidecar published; -StrictVerify requires hash match"
+        } else {
+            $result.Valid = $true
+        }
+    } else {
+        # Neither size nor hash was verified. This is the agent's flagged failure mode:
+        # HEAD returned 0 Content-Length AND no .sha256 sidecar = zero signals. Fail-closed
+        # regardless of StrictVerify so an unverifiable file never reaches an executor.
+        $result.Error = "No verifiable signal (no Content-Length from HEAD, no .sha256 sidecar) — refusing to mark Valid"
     }
 
     # Save local .sha256 file for future re-verification
