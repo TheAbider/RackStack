@@ -35,7 +35,6 @@ jobs:
           # silently fails (returning '') in the version-bump detection step, and
           # `gh release create` errors when it tries to invoke git internally.
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
-          git config --global --add safe.directory '*'
 
       - name: Install PSScriptAnalyzer
         run: |

@@ -956,6 +956,24 @@ function Import-Defaults {
         }
     }
 
+    # Unpack MonitoredServices into $script:MonitoredServices for the service-audit
+    # consumers (30-ServiceManager, 50-EntryPoint health/export). Previously consumers
+    # read `$script:Defaults.MonitoredServices` but $script:Defaults was never set, so
+    # operator customization in defaults.json silently did nothing.
+    if ($merged.MonitoredServices) {
+        $msList = @()
+        foreach ($svc in $merged.MonitoredServices) {
+            if ($svc -is [PSCustomObject]) {
+                $entry = @{}
+                foreach ($p in $svc.PSObject.Properties) { $entry[$p.Name] = $p.Value }
+                $msList += $entry
+            } elseif ($svc -is [hashtable]) {
+                $msList += $svc
+            }
+        }
+        if ($msList.Count -gt 0) { $script:MonitoredServices = $msList }
+    }
+
     # Merge custom DNS presets into the built-in presets
     $customDNS = $merged.DNSPresets
     if ($customDNS) {

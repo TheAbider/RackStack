@@ -2344,7 +2344,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 $stepNum++
                 Write-OutputColor "  [$stepNum/$totalSteps] Auditing services..." -color "Info"
                 $exportSvcList = [System.Collections.Generic.List[object]]::new()
-                $svcMonitored = if ($script:Defaults.MonitoredServices) { $script:Defaults.MonitoredServices } else {
+                $svcMonitored = if ($script:MonitoredServices) { $script:MonitoredServices } else {
                     @(
                         @{ Name = "vmms"; DisplayName = "Hyper-V Virtual Machine Management" }
                         @{ Name = "vmcompute"; DisplayName = "Hyper-V Host Compute Service" }
@@ -2922,9 +2922,10 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  Auditing key service status..." -color "Info"
             Write-OutputColor "" -color "Info"
 
-            # Configurable service list (from defaults.json MonitoredServices or built-in fallback)
-            $auditServices = if ($script:Defaults.MonitoredServices) {
-                $script:Defaults.MonitoredServices
+            # Configurable service list (from defaults.json MonitoredServices, unpacked
+            # by Import-Defaults into $script:MonitoredServices) or built-in fallback.
+            $auditServices = if ($script:MonitoredServices) {
+                $script:MonitoredServices
             } else {
                 @(
                     @{ Name = "vmms"; DisplayName = "Hyper-V Virtual Machine Management" }

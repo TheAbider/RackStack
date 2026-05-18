@@ -60,9 +60,10 @@ function Show-ServiceManager {
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        # Key services to monitor (configurable via defaults.json)
-        $keyServices = if ($script:Defaults.MonitoredServices) {
-            $script:Defaults.MonitoredServices
+        # Key services to monitor (configurable via defaults.json MonitoredServices,
+        # unpacked by Import-Defaults into $script:MonitoredServices).
+        $keyServices = if ($script:MonitoredServices) {
+            $script:MonitoredServices
         } else {
             @(
                 @{ Name = "vmms"; DisplayName = "Hyper-V Virtual Machine Management" }

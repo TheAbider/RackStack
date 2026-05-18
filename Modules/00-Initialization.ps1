@@ -112,6 +112,14 @@ $script:DefenderExclusionPaths = @(
 )
 $script:DefenderCommonVMPaths = @()  # Populated dynamically by Update-DefenderVMPaths or Import-Defaults
 
+# Operator-configurable list of services to surface in service-audit views. Set to $null
+# at init so callers can detect "not configured" and fall back to the built-in list (vmms,
+# vmcompute, ClusSvc, MSiSCSI, etc.). Populated by Import-Defaults when defaults.json
+# contains a `MonitoredServices` array. Prior to v1.98.8 callers read `$script:Defaults.
+# MonitoredServices` but $script:Defaults was never assigned, so the documented field
+# was dead code.
+$script:MonitoredServices = $null
+
 # Windows Software Licensing application ID (centralized - used by HealthCheck, MenuDisplay, ConfigExport, HTMLReports)
 $script:WindowsLicensingAppId = "55c92734-d682-4d71-983e-d6ec3f16059f"
 
@@ -164,7 +172,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.7"
+$script:ScriptVersion = "1.98.8"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

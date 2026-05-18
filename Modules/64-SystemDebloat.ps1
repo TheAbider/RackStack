@@ -909,10 +909,18 @@ function Invoke-WorkstationDebloat {
                         } else {
                             try {
                                 $prevValue = $prop.Value
+                                $prevName  = $prop.Name
+                                $prevKey   = $runKey
                                 Remove-ItemProperty -LiteralPath $runKey -Name $prop.Name -Force -ErrorAction Stop
                                 Write-OutputColor "  [REMOVED] $($bloat.Desc): $($prop.Name)" -color "Success"
                                 $removed++
                                 Add-SessionChange -Category "Debloat" -Description "Removed startup item: $($prop.Name)"
+                                # Register undo. Prior to v1.98.8 $prevValue was captured but no
+                                # Add-UndoAction was emitted — startup items were silently un-recoverable.
+                                Add-UndoAction -Category "Debloat" -Description "Removed startup entry $($prop.Name)" -UndoScript {
+                                    param($RegKey, $EntryName, $EntryValue)
+                                    New-ItemProperty -LiteralPath $RegKey -Name $EntryName -Value $EntryValue -Force -ErrorAction SilentlyContinue | Out-Null
+                                } -UndoParams @{ RegKey = $prevKey; EntryName = $prevName; EntryValue = $prevValue }
                             }
                             catch {
                                 Write-OutputColor "  [FAILED] $($bloat.Desc): $_" -color "Error"
