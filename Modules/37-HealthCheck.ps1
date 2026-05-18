@@ -564,8 +564,15 @@ function Get-SecurityHardeningChecks {
             $exclTotal = $exclPaths + $exclProcs
             $exclStatus = if ($exclTotal -eq 0) { "Pass" } elseif ($exclTotal -le 10) { "Pass" } else { "Warn" }
             $checks.Add(@{ Category = "Endpoint"; Name = "Defender Exclusions"; Value = "$exclPaths path(s), $exclProcs process(es)"; Status = $exclStatus })
+        } else {
+            # Get-MpPreference returned null without throwing — Defender service is present but
+            # the policy snapshot is empty (Server Core without Defender feature, or 3rd-party AV
+            # has displaced the Defender provider). Surface as Info, not silently absent.
+            $checks.Add(@{ Category = "Endpoint"; Name = "Defender Exclusions"; Value = "Not available (no Defender policy)"; Status = "Info" })
         }
-    } catch { }
+    } catch {
+        $checks.Add(@{ Category = "Endpoint"; Name = "Defender Exclusions"; Value = "Probe failed: $($_.Exception.Message)"; Status = "Warn" })
+    }
 
     # BitLocker Status (C: drive)
     try {

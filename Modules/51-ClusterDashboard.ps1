@@ -60,8 +60,20 @@ function Show-ClusterDashboard {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # CSV STATUS section
-    $csvs = Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+    # CSV STATUS section. Distinguish "no CSVs configured" (legitimate clean state) from
+    # "Get-ClusterSharedVolume threw / returned nothing" (probe failure) — both used to render
+    # as a silently-omitted panel, looking identical to an operator.
+    $csvProbeError = $null
+    $csvs = $null
+    try { $csvs = Get-ClusterSharedVolume -ErrorAction Stop } catch { $csvProbeError = $_.Exception.Message }
+    if ($csvProbeError) {
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$("  CLUSTER SHARED VOLUMES (CSV)".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Unable to query CSVs: $csvProbeError".PadRight(72))│" -color "Warning"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+        Write-OutputColor "" -color "Info"
+    }
     if ($csvs) {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  CLUSTER SHARED VOLUMES (CSV)".PadRight(72))│" -color "Info"
@@ -114,8 +126,12 @@ function Show-ClusterDashboard {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # LIVE MIGRATION section
-    $migrationSettings = Get-VMHost -ErrorAction SilentlyContinue | Select-Object MaximumVirtualMachineMigrations, VirtualMachineMigrationEnabled
+    # LIVE MIGRATION section. The cluster dashboard ships on non-Hyper-V cluster nodes
+    # (SQL FCI, file-server cluster, scale-out file server etc.) where Get-VMHost isn't
+    # registered — silent "command not found" used to clutter the transcript with errors.
+    $migrationSettings = if (Get-Command Get-VMHost -ErrorAction SilentlyContinue) {
+        Get-VMHost -ErrorAction SilentlyContinue | Select-Object MaximumVirtualMachineMigrations, VirtualMachineMigrationEnabled
+    } else { $null }
     if ($migrationSettings) {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
         Write-OutputColor "  │$("  LIVE MIGRATION".PadRight(72))│" -color "Info"
@@ -441,9 +457,20 @@ function Test-ClusterNetworkLatency {
             }
 
             try {
-                $pingResults = Test-Connection -ComputerName $node.Name -Count 4 -ErrorAction Stop
-                $avg = [math]::Round(($pingResults | Measure-Object -Property ResponseTime -Average).Average, 1)
-                $max = ($pingResults | Measure-Object -Property ResponseTime -Maximum).Maximum
+                # Test-Connection in PS 5.1 has no per-ping timeout; a node that's UP on cluster
+                # heartbeat but firewalled / mis-routed on its management IP can hang ~5s × 4
+                # pings = 20s per node, with no way to abort. Use System.Net.NetworkInformation.Ping
+                # with an explicit 2s timeout each.
+                $pinger = [System.Net.NetworkInformation.Ping]::new()
+                $responses = @()
+                for ($i = 0; $i -lt 4; $i++) {
+                    $reply = $pinger.Send($node.Name, 2000)
+                    if ($reply.Status -ne 'Success') { throw "ping $($i+1) returned $($reply.Status)" }
+                    $responses += $reply.RoundtripTime
+                }
+                $pinger.Dispose()
+                $avg = [math]::Round(($responses | Measure-Object -Average).Average, 1)
+                $max = ($responses | Measure-Object -Maximum).Maximum
 
                 $color = "Success"
                 if ($avg -gt 5) { $color = "Warning" }
@@ -619,12 +646,15 @@ function Initialize-ClusterCSV {
         Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-        # State
-        $stateColor = if ($csv.State -eq "Online") { "Success" } else { "Error"; $issues++ }
+        # State. PowerShell `if/else` blocks return the LAST expression of the chosen branch —
+        # the prior `{ "Error"; $issues++ }` swallowed "Error" and assigned the integer 1 to
+        # $stateColor, so Write-OutputColor got a bogus -color and offline CSVs never rendered red.
+        # Put the side-effect first, the color last.
+        $stateColor = if ($csv.State -eq "Online") { "Success" } else { $issues++; "Error" }
         Write-OutputColor "  │$("  State: $($csv.State)  |  Owner: $($csv.OwnerNode)".PadRight(72))│" -color $stateColor
 
-        # Space
-        $spaceColor = if ($usedPct -lt 70) { "Success" } elseif ($usedPct -lt 90) { "Warning" } else { "Error"; $issues++ }
+        # Space (same bug as above — increment first, color last).
+        $spaceColor = if ($usedPct -lt 70) { "Success" } elseif ($usedPct -lt 90) { "Warning" } else { $issues++; "Error" }
         Write-OutputColor "  │$("  Size: ${totalGB}GB  |  Free: ${freeGB}GB  |  Used: ${usedPct}%  |  FS: $fs".PadRight(72))│" -color $spaceColor
 
         # Redirected I/O

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.9
+    Automated Test Runner for RackStack v1.98.10
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9949,7 +9949,7 @@ try {
     Write-TestResult "37-HealthCheck: Hardening checks UAC" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,9000}UAC")
     Write-TestResult "37-HealthCheck: Hardening checks RDP NLA" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,8000}RDP NLA")
     Write-TestResult "37-HealthCheck: Hardening checks TLS" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,3500}TLS 1\.")
-    Write-TestResult "37-HealthCheck: Hardening checks BitLocker" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,15000}BitLocker")
+    Write-TestResult "37-HealthCheck: Hardening checks BitLocker" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,16000}BitLocker")
     Write-TestResult "37-HealthCheck: Hardening checks Script Block Logging" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,12000}ScriptBlockLogging")
     Write-TestResult "37-HealthCheck: Hardening checks antivirus" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,14000}MpComputerStatus")
     Write-TestResult "37-HealthCheck: Hardening checks WinRM" ($mod37 -match "Get-SecurityHardeningChecks[\s\S]{0,7000}WinRM Encryption")

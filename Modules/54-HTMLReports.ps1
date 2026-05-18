@@ -105,11 +105,15 @@ function Export-HTMLHealthReport {
     $memPercent = if ($totalMemGB -gt 0) { [math]::Round(($usedMemGB / $totalMemGB) * 100, 1) } else { 0 }
     $memStatus = if ($memPercent -gt 90) { "bad" } elseif ($memPercent -gt 75) { "warn" } else { "good" }
 
-    # Disks (always query for issues summary; HTML only if section selected)
+    # Disks (always query for issues summary; HTML only if section selected). Track
+    # probe failure separately — without it the report renders "HEALTHY" overall even
+    # though the disk panel says "unavailable" (issues summary loops over $null with
+    # zero iterations and never bumps the issue count).
     $diskResult = Invoke-WithTimeout -ScriptBlock {
         Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
     } -TimeoutSeconds 10 -Activity "Querying disk info"
     $disks = if ($diskResult.TimedOut) { $null } else { $diskResult.Result }
+    $diskProbeFailed = ($diskResult.TimedOut -or ($null -eq $disks))
     $diskHtml = ""
     if ($includeStorage) {
         if (-not $disks) {
@@ -296,6 +300,13 @@ function Export-HTMLHealthReport {
                 }
             }
             if ($timeSyncSource -match 'Free-Running|Local CMOS') { $timeSyncStat = "warn" }
+            # The "Free-Running|Local CMOS" string match is English-only and silently passes
+            # on non-English Windows MUI. Cross-check the W32Time service Type registry value
+            # (NoSync / NTP / NT5DS / AllSync) which is language-neutral.
+            try {
+                $w32type = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'Type' -ErrorAction Stop).Type
+                if ($w32type -eq 'NoSync') { $timeSyncStat = "warn" }
+            } catch { }
             $offsetStr = if ($null -ne $timeSyncOffset) { "$([math]::Round($timeSyncOffset, 3))s" } else { "N/A" }
             $offsetStat = "good"
             if ($null -ne $timeSyncOffset) {
@@ -329,8 +340,15 @@ function Export-HTMLHealthReport {
         $firewallHtml += "</table>"
     }
 
-    # Always query critical events for issues summary
-    $critEvents = @(try { Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction SilentlyContinue } catch { })
+    # Always query critical events for issues summary. Track probe failure so a Security
+    # event-log access-denied (common when not elevated) doesn't silently render as
+    # "zero critical events / green checkmark".
+    $critEventsProbeFailed = $false
+    $critEvents = @(try {
+        Get-WinEvent -FilterHashtable @{LogName='System','Application'; Level=1,2; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 10 -ErrorAction Stop
+    } catch {
+        $critEventsProbeFailed = $true
+    })
     $critEventsHtml = ""
     if ($includeSecurity) {
         $critEventsHtml = "<table><tr><th>Time</th><th>Source</th><th>ID</th><th>Message</th></tr>"
@@ -360,7 +378,14 @@ function Export-HTMLHealthReport {
     }
     if (Test-RebootPending) { $issues += "Reboot pending" }
     if ($null -ne $timeSyncOffset -and [math]::Abs($timeSyncOffset) -gt 30) { $issues += "Time sync offset > 30s" }
-    if ($timeSyncSource -match 'Free-Running|Local CMOS') { $issues += "No external time source configured" }
+    # English-only string match — supplement with language-neutral registry check.
+    $noExternalTimeSource = $false
+    if ($timeSyncSource -match 'Free-Running|Local CMOS') { $noExternalTimeSource = $true }
+    try {
+        $w32type = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'Type' -ErrorAction Stop).Type
+        if ($w32type -eq 'NoSync') { $noExternalTimeSource = $true }
+    } catch { }
+    if ($noExternalTimeSource) { $issues += "No external time source configured" }
     # Event log capacity check
     try {
         foreach ($logName in @('Application', 'System', 'Security')) {
@@ -380,6 +405,8 @@ function Export-HTMLHealthReport {
         }
     } catch { }
     if ($critEvents.Count -ge 5) { $issues += "$($critEvents.Count) critical/error events in last 24h" }
+    if ($critEventsProbeFailed) { $issues += "Critical event probe failed (insufficient privileges or service unavailable)" }
+    if ($diskProbeFailed) { $issues += "Disk probe failed or timed out (utilization status unknown)" }
 
     $overallStatus = if ($issues.Count -eq 0) { "good" } elseif ($issues.Count -le 2) { "warn" } else { "bad" }
     $overallText = if ($issues.Count -eq 0) { "HEALTHY" } else { "ATTENTION NEEDED" }
@@ -955,7 +982,9 @@ function Get-ReadinessChecks {
         $checks.Add(@{ Category = "Network"; Name = "DNS Resolution"; Value = "No response"; Status = "Warn" })
     }
 
-    # Time Sync
+    # Time Sync. The English-only "Free-Running|Local CMOS" string match silently passes
+    # on non-English Windows MUI — supplement with the W32Time Type registry value
+    # (NoSync / NTP / NT5DS / AllSync), which is language-neutral.
     try {
         $w32tmOut = w32tm /query /status 2>&1
         $tsSource = "Unknown"
@@ -963,7 +992,13 @@ function Get-ReadinessChecks {
             $tsText = $tsLine.ToString()
             if ($tsText -match 'Source:\s*(.+)') { $regexMatches = $matches; $tsSource = $regexMatches[1].Trim() }
         }
-        if ($tsSource -match 'Free-Running|Local CMOS') {
+        $tsNoExternal = $false
+        if ($tsSource -match 'Free-Running|Local CMOS') { $tsNoExternal = $true }
+        try {
+            $w32type = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'Type' -ErrorAction Stop).Type
+            if ($w32type -eq 'NoSync') { $tsNoExternal = $true }
+        } catch { }
+        if ($tsNoExternal) {
             $checks.Add(@{ Category = "System"; Name = "Time Sync"; Value = "No external source ($tsSource)"; Status = "Warn" })
         } else {
             $checks.Add(@{ Category = "System"; Name = "Time Sync"; Value = "Source: $tsSource"; Status = "OK" })
@@ -1256,7 +1291,18 @@ function Save-PerformanceSnapshot {
             Network = $netInfo
         }
 
-        $snapshot | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $snapshotPath -Encoding UTF8 -Force
+        # Atomic write-then-rename. A process kill mid-Out-File would truncate the snapshot
+        # to 0 bytes — and `Export-HTMLTrendReport` silently skips corrupt JSON in its
+        # `try {} catch { $failedFiles++ }`, so a single bad write quietly drops a data point
+        # from every future trend report.
+        $tmpPath = "$snapshotPath.tmp"
+        try {
+            $snapshot | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $tmpPath -Encoding UTF8 -Force
+            Move-Item -LiteralPath $tmpPath -Destination $snapshotPath -Force -ErrorAction Stop
+        } catch {
+            if (Test-Path -LiteralPath $tmpPath) { Remove-Item -LiteralPath $tmpPath -Force -ErrorAction SilentlyContinue }
+            throw
+        }
         Add-SessionChange -Category "Metrics" -Description "Saved performance snapshot"
         return $snapshotPath
     }
@@ -1490,7 +1536,13 @@ function Start-MetricCollection {
         }
 
         if ((Get-Date).AddMinutes($IntervalMinutes) -lt $endTime) {
-            Start-Sleep -Seconds ($IntervalMinutes * 60)
+            # Sleep in 1-second slices so the operator can abort via the main-menu return flag
+            # without waiting up to IntervalMinutes for the loop to wake.
+            $wakeTime = (Get-Date).AddMinutes($IntervalMinutes)
+            while ((Get-Date) -lt $wakeTime) {
+                if ($global:ReturnToMainMenu) { break }
+                Start-Sleep -Seconds 1
+            }
         }
         else {
             break
@@ -2107,7 +2159,11 @@ function Invoke-FleetTrend {
     foreach ($file in $jsonFiles) {
         try {
             $data = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
-            if ($null -ne $data.Timestamp) {
+            # Reject empty / whitespace Timestamp explicitly — `$null -ne ""` is true, so the
+            # earlier check let through empty-string timestamps which then crashed the
+            # `[datetime]::Parse` inside the Sort-Object scriptblock below and aborted the
+            # entire trend report.
+            if (-not [string]::IsNullOrWhiteSpace($data.Timestamp)) {
                 $snapshots.Add($data)
             } else {
                 $failedFiles++

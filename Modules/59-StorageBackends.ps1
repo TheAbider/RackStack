@@ -450,7 +450,9 @@ function Enable-S2DOnCluster {
         return
     }
 
-    # Check if already enabled
+    # Check if already enabled. A probe failure here is treated as fail-safe: if we
+    # cannot verify whether S2D is already on, we refuse the operation rather than
+    # blunder into Enable-ClusterS2D and produce a cryptic downstream error.
     try {
         $s2d = Get-ClusterS2D -ErrorAction Stop
         if ($s2d -and $s2d.State -eq "Enabled") {
@@ -459,7 +461,12 @@ function Enable-S2DOnCluster {
             return
         }
     }
-    catch { }
+    catch {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Cannot verify S2D state on cluster $($cluster.Name): $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  Refusing to proceed — re-run after the cluster service is healthy." -color "Warning"
+        return
+    }
 
     # Check eligible disks
     $eligibleDisks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.CanPool -eq $true })

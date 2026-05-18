@@ -342,14 +342,14 @@ function Invoke-RemoteHealthCheck {
 
     try {
         $health = Invoke-Command -ComputerName $target -ScriptBlock {
-            $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-            $cpu = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
+            $os = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue
+            $cpu = (Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
             $totalMem = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
             $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
             $usedMem = $totalMem - $freeMem
             $memPct = if ($totalMem -gt 0) { [math]::Round(($usedMem / $totalMem) * 100, 1) } else { 0 }
             $uptime = if ($os -and $os.LastBootUpTime) { (Get-Date) - $os.LastBootUpTime } else { [timespan]::Zero }
-            $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object {
+            $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -OperationTimeoutSec 8 -ErrorAction SilentlyContinue | ForEach-Object {
                 @{
                     Drive = $_.DeviceID
                     SizeGB = [math]::Round($_.Size / 1GB, 1)
@@ -2093,10 +2093,11 @@ function Test-VMMigrationReadiness {
         return
     }
 
-    # Check processor compatibility
+    # Check processor compatibility. Remote CIM with no timeout hangs minutes when the
+    # target's WMI repo is cold or RPC is silently failing — bound it to 10s.
     try {
-        $localProc = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
-        $remoteProc = Get-CimInstance -ClassName Win32_Processor -ComputerName $targetHost -ErrorAction Stop | Select-Object -First 1
+        $localProc = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 8 -ErrorAction Stop | Select-Object -First 1
+        $remoteProc = Get-CimInstance -ClassName Win32_Processor -ComputerName $targetHost -OperationTimeoutSec 10 -ErrorAction Stop | Select-Object -First 1
         if ($localProc.Manufacturer -eq $remoteProc.Manufacturer) {
             Write-OutputColor "  CPU Manufacturer match: OK ($($localProc.Manufacturer))" -color "Success"
         } else {
@@ -2109,7 +2110,7 @@ function Test-VMMigrationReadiness {
 
     # Check available memory on target
     try {
-        $targetMem = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $targetHost -ErrorAction Stop
+        $targetMem = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $targetHost -OperationTimeoutSec 10 -ErrorAction Stop
         $freeMB = [math]::Round($targetMem.FreePhysicalMemory / 1024)
         Write-OutputColor "  Available memory on ${targetHost}: ${freeMB} MB" -color "Info"
     } catch {

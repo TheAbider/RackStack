@@ -740,6 +740,11 @@ function Clear-DiskData {
     # is a CSV member. The operator may not realize the cluster still considers the disk
     # online, and `Clear-Disk -RemoveData` against such a disk produces a broken state
     # the rest of the cluster has to reconcile.
+    #
+    # Fail-safe: if either probe throws (Storage module missing, FailoverClusters cmdlet
+    # not installed, cluster service degraded), we refuse the clear rather than fall
+    # through. A bare `catch { }` here would defeat the v1.98.4 destructive-op gate on
+    # exactly the hosts where verification is least reliable.
     $blockReason = $null
     try {
         $poolPhys = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DeviceId -eq [string]$disk.Number -and $_.CanPool -eq $false }
@@ -747,12 +752,21 @@ function Clear-DiskData {
             $pool = Get-StoragePool -PhysicalDisks $poolPhys -ErrorAction SilentlyContinue | Where-Object { $_.IsPrimordial -eq $false } | Select-Object -First 1
             if ($pool) { $blockReason = "disk is a member of Storage Pool '$($pool.FriendlyName)'" }
         }
-    } catch { }
+    } catch {
+        $blockReason = "could not verify Storage Pool membership ($($_.Exception.Message)); refusing as fail-safe"
+    }
     if (-not $blockReason) {
         try {
-            $csv = Get-ClusterSharedVolume -ErrorAction SilentlyContinue | Where-Object { $_.SharedVolumeInfo.Partition.DiskNumber -eq $disk.Number }
-            if ($csv) { $blockReason = "disk hosts Cluster Shared Volume '$($csv.Name)'" }
-        } catch { }
+            $csvCmd = Get-Command Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+            if ($csvCmd) {
+                $csv = Get-ClusterSharedVolume -ErrorAction Stop | Where-Object { $_.SharedVolumeInfo.Partition.DiskNumber -eq $disk.Number }
+                if ($csv) { $blockReason = "disk hosts Cluster Shared Volume '$($csv.Name)'" }
+            }
+            # If FailoverClusters module isn't installed at all, this host can't have CSVs — proceeding is safe.
+        } catch {
+            # Cmdlet exists but threw (cluster service down, RPC failure, partial enumeration) — refuse.
+            $blockReason = "could not verify Cluster Shared Volume membership ($($_.Exception.Message)); refusing as fail-safe"
+        }
     }
     if ($blockReason) {
         Write-OutputColor "" -color "Info"
