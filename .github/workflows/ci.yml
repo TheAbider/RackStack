@@ -25,6 +25,18 @@ jobs:
           # against the previous commit. Default fetch-depth is 1 which makes git show HEAD~1 fail.
           fetch-depth: 2
 
+      - name: Configure git safe.directory (self-hosted runner runs as SYSTEM)
+        if: runner.os == 'Windows' && runner.environment != 'github-hosted'
+        run: |
+          # The self-hosted runner service runs as NT AUTHORITY/SYSTEM but the repo
+          # is owned by the interactive user (ABIDER-LAPTOP\Abider). Git's
+          # safe.directory check refuses to operate on a repo with mismatched ownership
+          # unless explicitly allowed. Without this, `git show HEAD~1:Header.ps1`
+          # silently fails (returning '') in the version-bump detection step, and
+          # `gh release create` errors when it tries to invoke git internally.
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global --add safe.directory '*'
+
       - name: Install PSScriptAnalyzer
         run: |
           if (-not (Get-Module PSScriptAnalyzer -ListAvailable)) {
