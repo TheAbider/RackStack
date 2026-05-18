@@ -7,14 +7,19 @@ function Set-HostName {
     $currentHostname = $env:COMPUTERNAME
     Write-OutputColor "  Current hostname: $currentHostname" -color "Info"
 
-    # Check for pending hostname change
+    # Check for pending hostname change. A bare swallow of the error masked real
+    # registry-access failures on locked-down GPO hives — surface them at Debug
+    # so the user can see "why is my pending-rename hint not showing?" without
+    # bothering operators in the common case.
     try {
         $pendingName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName" -ErrorAction SilentlyContinue).ComputerName
         $activeName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName" -ErrorAction SilentlyContinue).ComputerName
         if ($pendingName -and $activeName -and $pendingName -ne $activeName) {
             Write-OutputColor "  Pending rename: $activeName -> $pendingName (reboot required)" -color "Warning"
         }
-    } catch { }
+    } catch {
+        Write-OutputColor "  (pending-rename probe failed: $($_.Exception.Message))" -color "Debug"
+    }
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  Hostname requirements:" -color "Info"

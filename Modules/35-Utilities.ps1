@@ -2322,7 +2322,7 @@ function Show-MemoryDiagnostics {
     $memColor = if ($usedPct -gt 90) { "Error" } elseif ($usedPct -gt 75) { "Warning" } else { "Success" }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  PHYSICAL MEMORY").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  PHYSICAL MEMORY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Total:  $totalGB GB".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  Used:   $usedGB GB ($usedPct%)".PadRight(72))│" -color $memColor
@@ -2334,7 +2334,7 @@ function Show-MemoryDiagnostics {
     $pageFiles = $memCim.Result.PF
     if ($pageFiles) {
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  PAGE FILE").PadRight(72)│" -color "Info"
+        Write-OutputColor "  │$("  PAGE FILE".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         foreach ($pf in $pageFiles) {
             $pfTotal = [math]::Round($pf.AllocatedBaseSize / 1024, 1)
@@ -2356,7 +2356,7 @@ function Show-MemoryDiagnostics {
         $commitColor = if ($commitPct -gt 90) { "Error" } elseif ($commitPct -gt 75) { "Warning" } else { "Info" }
 
         Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-        Write-OutputColor "  │$("  COMMITTED MEMORY").PadRight(72)│" -color "Info"
+        Write-OutputColor "  │$("  COMMITTED MEMORY".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-OutputColor "  │$("  Committed: $committedGB GB / $commitLimitGB GB ($commitPct%)".PadRight(72))│" -color $commitColor
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -2365,10 +2365,10 @@ function Show-MemoryDiagnostics {
 
     # Top processes by memory
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  TOP 15 PROCESSES BY MEMORY").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  TOP 15 PROCESSES BY MEMORY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  PROCESS NAME                        WORKING SET   PRIVATE (MB)").PadRight(72)│" -color "Warning"
-    Write-OutputColor "  │$("  $('─' * 70)").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  PROCESS NAME                        WORKING SET   PRIVATE (MB)".PadRight(72))│" -color "Warning"
+    Write-OutputColor "  │$("  $('─' * 70)".PadRight(72))│" -color "Info"
 
     $procs = Get-Process -ErrorAction SilentlyContinue | Sort-Object WorkingSet64 -Descending | Select-Object -First 15
     foreach ($proc in $procs) {
@@ -2388,10 +2388,10 @@ function Show-MemoryDiagnostics {
         if ($vms) {
             $totalVMMemGB = [math]::Round(($vms | Measure-Object -Property MemoryAssigned -Sum).Sum / 1GB, 1)
             Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-            Write-OutputColor "  │$("  HYPER-V VM MEMORY (Running VMs: $(@($vms).Count), Total: $totalVMMemGB GB)").PadRight(72)│" -color "Info"
+            Write-OutputColor "  │$("  HYPER-V VM MEMORY (Running VMs: $(@($vms).Count), Total: $totalVMMemGB GB)".PadRight(72))│" -color "Info"
             Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-            Write-OutputColor "  │$("  VM NAME                         ASSIGNED    DEMAND     DYNAMIC").PadRight(72)│" -color "Warning"
-            Write-OutputColor "  │$("  $('─' * 70)").PadRight(72)│" -color "Info"
+            Write-OutputColor "  │$("  VM NAME                         ASSIGNED    DEMAND     DYNAMIC".PadRight(72))│" -color "Warning"
+            Write-OutputColor "  │$("  $('─' * 70)".PadRight(72))│" -color "Info"
 
             foreach ($vm in ($vms | Select-Object -First 20)) {
                 $vmName = if ($vm.Name.Length -gt 30) { $vm.Name.Substring(0, 27) + "..." } else { $vm.Name.PadRight(30) }

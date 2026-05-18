@@ -171,7 +171,10 @@ function Set-NTPServer {
         if ($prevSource -and -not $IsDomainType) {
             Add-UndoAction -Category "System" -Description "Configured NTP server: $Server" -UndoScript {
                 param($OldServer)
-                w32tm /config /manualpeerlist:$OldServer /syncfromflags:manual /reliable:yes /update 2>&1
+                # Quote the peer list — multi-peer values like "time.windows.com time.nist.gov"
+                # contain a space and were previously split into multiple args, so undo
+                # silently restored only the first peer (or no peer at all).
+                w32tm /config "/manualpeerlist:$OldServer" /syncfromflags:manual /reliable:yes /update 2>&1
                 Restart-Service w32time -Force -ErrorAction SilentlyContinue
             }.GetNewClosure() -UndoParams @{ OldServer = $prevSource }
         }

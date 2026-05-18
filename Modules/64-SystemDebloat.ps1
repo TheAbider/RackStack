@@ -323,10 +323,13 @@ function Select-DebloatProfile {
 # ────────────────────────────────────────────────────────────────────────
 function New-DebloatRestorePoint {
     try {
-        # System Restore is only available on workstation SKUs
+        # System Restore is only available on workstation SKUs. The first probe was
+        # comparing `$null -ne (...)` (always a [bool]) and then checking
+        # `if ($null -eq $srEnabled)` which is unreachable — the srservice fallback
+        # never ran. Treat $false as "not detected via cmdlet" and try the service
+        # probe before giving up.
         $srEnabled = $null -ne (Get-ComputerRestorePoint -ErrorAction SilentlyContinue)
-        if ($null -eq $srEnabled) {
-            # Check if SR service is enabled
+        if (-not $srEnabled) {
             $srSvc = Get-Service -Name srservice -ErrorAction SilentlyContinue
             if ($null -eq $srSvc -or $srSvc.StartType -eq 'Disabled') { return }
         }
@@ -451,6 +454,17 @@ function Invoke-WorkstationDebloat {
     Write-OutputColor "  ║$(("                      WORKSTATION DEBLOAT [$DebloatProfile]").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
+
+    # Short-circuit on Server Core. Get-AppxPackage / Get-AppxProvisionedPackage are
+    # not present on Server Core SKUs; running this path floods the transcript with
+    # "term is not recognized" errors for every package candidate. Server Core
+    # operators should pick the Server Debloat path instead.
+    $debloatInfo = Get-WindowsDebloatInfo
+    if ($null -ne $debloatInfo -and $debloatInfo.IsServerCore) {
+        Write-OutputColor "  Server Core detected — Workstation Debloat is not applicable here." -color "Warning"
+        Write-OutputColor "  Use 'Server Debloat' from the Debloat menu instead." -color "Info"
+        return
+    }
 
     if ($PreviewOnly) {
         Write-OutputColor "  *** PREVIEW MODE — No changes will be made ***" -color "Warning"

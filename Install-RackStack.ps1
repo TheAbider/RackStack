@@ -117,6 +117,28 @@ if (-not $isAdmin) {
     exit 1
 }
 
+# Refuse to run two installer instances simultaneously. The Install / Update path
+# renames RackStack.exe → .old to make room for the new binary; two concurrent
+# runs both performing that rename would have the second clobber the first's
+# backup (demoting it to .pending-delete via a re-rename) and leave the on-disk
+# state in a half-updated condition that's hard to recover from automatically.
+# Held only while THIS process runs; releases on exit or kill.
+$installerMutex = $null
+$installerMutexAcquired = $false
+try {
+    $installerMutex = New-Object System.Threading.Mutex($false, 'Global\TheAbider.RackStack.Installer')
+    $installerMutexAcquired = $installerMutex.WaitOne([TimeSpan]::FromSeconds(2))
+} catch {
+    # If the mutex itself can't be created (e.g., unusual ACL), continue without
+    # the guard rather than blocking install entirely. The user is still admin.
+    $installerMutex = $null
+}
+if ($null -ne $installerMutex -and -not $installerMutexAcquired) {
+    Write-Host "  ERROR: Another RackStack installer instance is already running." -ForegroundColor Red
+    Write-Host "  Wait for it to finish before starting another -Install / -Update / -Uninstall." -ForegroundColor Yellow
+    exit 1
+}
+
 # Shared paths for -Install / -Uninstall modes
 $programDir       = Join-Path $env:ProgramFiles 'RackStack'
 $programExe       = Join-Path $programDir 'RackStack.exe'
@@ -162,14 +184,32 @@ if ($Rollback) {
 if ($Uninstall) {
     Write-Host "  Uninstalling RackStack..." -ForegroundColor Cyan
     $removed = 0
+
+    # Stop any running RackStack process first so the Program Files directory removal
+    # below isn't silently blocked by file locks (Remove-Item -SilentlyContinue would
+    # otherwise report "removed" while leaving the EXE on disk).
+    try {
+        $running = @(Get-Process -Name 'RackStack' -ErrorAction SilentlyContinue)
+        if ($running.Count -gt 0) {
+            Write-Host "  [.] Stopping $($running.Count) running RackStack process(es)..." -ForegroundColor Gray
+            $running | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 500
+        }
+    } catch { }
+
     if (Test-Path -LiteralPath $startMenuLnk) {
         Remove-Item -LiteralPath $startMenuLnk -Force -ErrorAction SilentlyContinue
         Write-Host "  [x] Start Menu shortcut removed" -ForegroundColor Gray; $removed++
     }
+    # Case-insensitive PATH compare with trailing-slash + whitespace normalization
+    # so a duplicate that drifted (`...\RackStack\` vs `...\RackStack`) still strips cleanly.
     $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    if (($machinePath -split ';' | Where-Object { $_ -eq $programDir }).Count -gt 0) {
-        $newPath = ($machinePath -split ';' | Where-Object { $_ -and $_ -ne $programDir }) -join ';'
-        [Environment]::SetEnvironmentVariable('Path', $newPath, 'Machine')
+    $normalize = { param($p) ($p -as [string]).Trim().TrimEnd('\','/').ToLowerInvariant() }
+    $programDirNorm = & $normalize $programDir
+    $pathEntries = @($machinePath -split ';')
+    $kept = @($pathEntries | Where-Object { $_ -and ((& $normalize $_) -ne $programDirNorm) })
+    if ($kept.Count -lt @($pathEntries | Where-Object { $_ }).Count) {
+        [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'Machine')
         Write-Host "  [x] Removed from system PATH" -ForegroundColor Gray; $removed++
     }
     if (Test-Path -LiteralPath $uninstallRegKey) {
@@ -178,7 +218,11 @@ if ($Uninstall) {
     }
     if (Test-Path -LiteralPath $programDir) {
         Remove-Item -LiteralPath $programDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Host "  [x] $programDir removed" -ForegroundColor Gray; $removed++
+        if (Test-Path -LiteralPath $programDir) {
+            Write-Host "  [!] $programDir could not be fully removed (files may still be in use)" -ForegroundColor Yellow
+        } else {
+            Write-Host "  [x] $programDir removed" -ForegroundColor Gray; $removed++
+        }
     }
     Write-Host ""
     if ($removed -eq 0) {

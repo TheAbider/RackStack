@@ -13,9 +13,17 @@
     Run as Administrator:
     powershell -ExecutionPolicy Bypass -File Install-Prerequisites.ps1
 
+    Pass -Force to skip the "type INSTALL" prompt for fully-automated invocations.
+    The script still requires Administrator and still triggers a reboot — -Force
+    just removes the interactive gate.
+
     Supported OS: Windows Server 2008 R2 SP1, 2012, 2012 R2
     Server 2016+ ships with PowerShell 5.1 and does not need this script.
 #>
+
+param(
+    [switch]$Force
+)
 
 # Require elevation
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -124,15 +132,19 @@ if ($netRelease -lt 379893) {
 
 Write-Host "  .NET Framework OK" -ForegroundColor Green
 
-# Confirm installation
+# Confirm installation. Default to abort: WMF install triggers a reboot, so a casual
+# operator who just hits Enter shouldn't be enrolled into one accidentally. Pass
+# `-Force` to bypass the prompt (e.g. in automation scripts that own the timing).
 Write-Host ""
 Write-Host "  WMF 5.1 will be downloaded and installed." -ForegroundColor White
 Write-Host "  A REBOOT IS REQUIRED after installation." -ForegroundColor Yellow
 Write-Host ""
-$confirm = Read-Host "  Continue? [Y/n]"
-if ($confirm -match '^[Nn]') {
-    Write-Host "  Cancelled." -ForegroundColor Yellow
-    exit 0
+if (-not $Force) {
+    $confirm = Read-Host "  Type 'INSTALL' (uppercase) to proceed"
+    if ($confirm -ne 'INSTALL') {
+        Write-Host "  Cancelled (input did not match 'INSTALL')." -ForegroundColor Yellow
+        exit 0
+    }
 }
 
 # Download

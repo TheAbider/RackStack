@@ -56,7 +56,7 @@ function Show-VMCheckpointList {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  VM NAME               CHECKPOINT NAME           CREATED        SIZE").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  VM NAME               CHECKPOINT NAME           CREATED        SIZE".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     foreach ($cp in $result.Checkpoints) {
@@ -109,7 +109,7 @@ function New-VMCheckpointWizard {
 
     # Display VMs
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  SELECT VM").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  SELECT VM".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $vmIndex = 1
@@ -146,7 +146,7 @@ function New-VMCheckpointWizard {
     # Choose checkpoint type
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  CHECKPOINT TYPE").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  CHECKPOINT TYPE".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  [1]  Production (Recommended) - Uses VSS for app-consistent state".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [2]  Standard - Saves current memory state (faster)".PadRight(72))│" -color "Info"
@@ -247,7 +247,7 @@ function Restore-VMCheckpointWizard {
     }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  SELECT CHECKPOINT TO RESTORE").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  SELECT CHECKPOINT TO RESTORE".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $cpIndex = 1
@@ -327,7 +327,7 @@ function Remove-VMCheckpointWizard {
     }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  SELECT CHECKPOINT TO DELETE").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  SELECT CHECKPOINT TO DELETE".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $cpIndex = 1

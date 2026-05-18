@@ -299,7 +299,11 @@ function Start-ISODownload {
 
 # Function to show all downloaded ISOs with details
 function Show-ISOInventory {
-    $isoPath = $script:HostISOPath
+    # Use Get-ISOStoragePath so the inventory correctly resolves to the cluster ISO
+    # path when running on a clustered host. The previous direct read of
+    # $script:HostISOPath ignored cluster mode and reported "no ISOs" even when ISOs
+    # were sitting on the cluster shared volume.
+    $isoPath = Get-ISOStoragePath
     if ([string]::IsNullOrWhiteSpace($isoPath) -or -not (Test-Path -LiteralPath $isoPath)) {
         Write-OutputColor "  ISO directory not configured or doesn't exist" -color "Warning"
         return

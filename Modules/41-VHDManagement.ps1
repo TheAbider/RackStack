@@ -269,6 +269,11 @@ function Copy-VHDForVM {
     Write-OutputColor "  Dest:   $destPath" -color "Info"
     Write-OutputColor "" -color "Info"
 
+    # Pre-declare so the finally block's `if ($copyJob)` / `if ($convertJob)` can
+    # reference them safely under StrictMode even if the try throws before they're
+    # assigned (e.g., a failure inside Start-Job's parameter validation).
+    $copyJob = $null
+    $convertJob = $null
     try {
         # Copy the file first
         $copyJob = Start-Job -ScriptBlock {

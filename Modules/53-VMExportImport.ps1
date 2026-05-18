@@ -33,14 +33,20 @@ function Export-VMWizard {
 
     # Display VMs
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  SELECT VM TO EXPORT").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  SELECT VM TO EXPORT".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $vmIndex = 1
     $vmMap = @{}
     foreach ($vm in $vms) {
         $stateColor = if ($vm.State -eq 'Running') { "Success" } elseif ($vm.State -eq 'Off') { "Warning" } else { "Info" }
-        $vhdSizes = ($vm.HardDrives | ForEach-Object { (Get-VHD $_.Path @vmParams -ErrorAction SilentlyContinue).FileSize } | Measure-Object -Sum)
+        # Get-VHD accepts -ComputerName but NOT -Credential — splatting $vmParams as-is
+        # (which carries Credential) caused a silent parameter-binding failure on every
+        # iteration when a remote credential was set, so size always rendered as "N/A".
+        # Build a Get-VHD-safe splat that only includes ComputerName.
+        $vhdParams = @{}
+        if ($vmParams.ContainsKey('ComputerName')) { $vhdParams['ComputerName'] = $vmParams['ComputerName'] }
+        $vhdSizes = ($vm.HardDrives | ForEach-Object { (Get-VHD $_.Path @vhdParams -ErrorAction SilentlyContinue).FileSize } | Measure-Object -Sum)
         $sizeStr = if ($null -ne $vhdSizes.Sum -and $vhdSizes.Sum -gt 0) { "{0:N0}GB" -f ($vhdSizes.Sum / 1GB) } else { "N/A" }
         $vmDisplay = "[$vmIndex]  $($vm.Name.PadRight(35)) $($vm.State.ToString().PadRight(10)) $sizeStr"
         Write-OutputColor "  │  $($vmDisplay.PadRight(70))│" -color $stateColor
@@ -296,7 +302,7 @@ function Import-VMWizard {
 
     # Import mode
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  IMPORT MODE").PadRight(72)│" -color "Info"
+    Write-OutputColor "  │$("  IMPORT MODE".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  [1]  Copy - Create new VM with new unique ID (recommended)".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [2]  Register - Use existing files in place".PadRight(72))│" -color "Info"

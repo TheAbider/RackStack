@@ -338,13 +338,25 @@ function New-StrongPassword {
     $digits = "23456789"                     # No 0, 1 (ambiguous)
     $special = "!@#%^&*-_=+"                 # Safe special chars
 
-    # Use cryptographic RNG for secure index generation
+    # Use cryptographic RNG for secure index generation. Use rejection sampling
+    # against an unbiased-modulo cap so we don't introduce modulo bias on non-
+    # power-of-2 alphabets (24/22/8/11 chars). Also use UInt32 to avoid the
+    # 1-in-4-billion Int32.MinValue overflow that [math]::Abs would throw on.
     $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
     $cryptoRandom = {
         param([int]$Max)
+        if ($Max -le 0) { throw "cryptoRandom: Max must be > 0" }
         $bytes = New-Object byte[] 4
-        $rng.GetBytes($bytes)
-        [math]::Abs([BitConverter]::ToInt32($bytes, 0)) % $Max
+        $limit = [uint32]([uint32]::MaxValue - ([uint32]::MaxValue % [uint32]$Max))
+        # Bounded loop instead of while($true) so a degenerate RNG can't hang
+        # indefinitely. Expected iterations for rejection sampling: ~2 for typical
+        # alphabet sizes (24/22/8/11). 100 is a generous ceiling.
+        for ($attempt = 0; $attempt -lt 100; $attempt++) {
+            $rng.GetBytes($bytes)
+            $val = [BitConverter]::ToUInt32($bytes, 0)
+            if ($val -lt $limit) { return [int]($val % [uint32]$Max) }
+        }
+        throw "cryptoRandom: rejection sampling failed after 100 attempts (RNG returning out-of-range values)"
     }
 
     # Ensure at least one of each type
@@ -376,22 +388,27 @@ function New-StrongPassword {
     Write-OutputColor "  │$("  Length: $Length | Complexity: Upper+Lower+Digit+Special".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
-    # Copy to clipboard with auto-clear timer — fire-and-forget background job.
-    # Only clears if clipboard still holds the same value (user may have copied something else).
-    # If this shell exits before the TTL elapses the job dies with it — clipboard is then no worse than before.
+    # Copy to clipboard with auto-clear timer. Uses [Threading.Timer] in the same
+    # runspace rather than Start-Job, because Start-Job's -ArgumentList holds the
+    # plaintext password in job metadata until the host exits (the previous
+    # implementation also never cleaned the job up). Threading.Timer captures via
+    # closure inside this process only.
     try {
         Set-Clipboard -Value $password -ErrorAction Stop
         $clipTTL = 60
-        Start-Job -ScriptBlock {
-            param($ttl, $expected)
-            Start-Sleep -Seconds $ttl
+        $expectedClip = $password
+        $timerCallback = [System.Threading.TimerCallback]{
+            param($state)
             try {
                 $current = Get-Clipboard -Raw -ErrorAction Stop
-                if ($current -eq $expected) {
+                if ($current -eq $state) {
                     Set-Clipboard -Value '' -ErrorAction Stop
                 }
             } catch { }
-        } -ArgumentList $clipTTL, $password | Out-Null
+        }
+        # Timer is fire-once (period = -1). Reference is intentionally not held;
+        # GC will reclaim after the callback fires.
+        $null = New-Object System.Threading.Timer($timerCallback, $expectedClip, ($clipTTL * 1000), [System.Threading.Timeout]::Infinite)
         Write-OutputColor "  Copied to clipboard (auto-clears in ${clipTTL}s while this window is open)." -color "Success"
     }
     catch {

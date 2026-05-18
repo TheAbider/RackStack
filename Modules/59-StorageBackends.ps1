@@ -1150,13 +1150,23 @@ function Initialize-StorageBackendBatch {
             return $true
         }
         "S2D" {
-            # S2D batch: enable S2D if cluster exists
+            # S2D batch: enable S2D if cluster exists. Enable-ClusterS2D claims and
+            # POOLS every eligible disk across every cluster node — any existing data
+            # on those disks is destroyed. Batch mode runs non-interactively, so the
+            # operator MUST opt in via an explicit `AllowS2DDataLoss` flag in the
+            # batch config to acknowledge they understand the destructive effect.
             $cluster = Get-Cluster -ErrorAction SilentlyContinue
             if ($cluster) {
                 try {
                     $s2d = Get-ClusterS2D -ErrorAction SilentlyContinue
                     if (-not $s2d -or $s2d.State -ne "Enabled") {
-                        Write-OutputColor "           Enabling Storage Spaces Direct..." -color "Info"
+                        if (-not $Config.AllowS2DDataLoss) {
+                            Write-OutputColor "           REFUSING to enable S2D in batch mode without explicit consent." -color "Error"
+                            Write-OutputColor "           Enable-ClusterS2D claims every eligible disk on every node and DESTROYS existing data." -color "Warning"
+                            Write-OutputColor "           Set `"AllowS2DDataLoss`": true in the batch config to opt in." -color "Warning"
+                            return $false
+                        }
+                        Write-OutputColor "           Enabling Storage Spaces Direct (AllowS2DDataLoss=true)..." -color "Info"
                         Enable-ClusterS2D -Confirm:$false -ErrorAction Stop
                         Write-OutputColor "           S2D enabled." -color "Success"
                     }

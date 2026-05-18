@@ -943,11 +943,11 @@ function Invoke-FlushDnsCache {
 function Invoke-NetworkStackReset {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Warning"
-    Write-OutputColor "  │$("  WARNING: Network Stack Reset").PadRight(72)│" -color "Warning"
+    Write-OutputColor "  │$("  WARNING: Network Stack Reset".PadRight(72))│" -color "Warning"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Warning"
-    Write-OutputColor "  │$("  This will reset Winsock catalog, TCP/IP stack, and firewall rules.").PadRight(72)│" -color "Warning"
-    Write-OutputColor "  │$("  A REBOOT IS REQUIRED after this operation.").PadRight(72)│" -color "Warning"
-    Write-OutputColor "  │$("  Custom firewall rules may need to be re-applied.").PadRight(72)│" -color "Warning"
+    Write-OutputColor "  │$("  This will reset Winsock catalog, TCP/IP stack, and firewall rules.".PadRight(72))│" -color "Warning"
+    Write-OutputColor "  │$("  A REBOOT IS REQUIRED after this operation.".PadRight(72))│" -color "Warning"
+    Write-OutputColor "  │$("  Custom firewall rules may need to be re-applied.".PadRight(72))│" -color "Warning"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Warning"
     Write-OutputColor "" -color "Info"
 

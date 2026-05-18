@@ -225,6 +225,26 @@ function Show-StorageReplicaManagement {
                     continue
                 }
 
+                # Stronger gate: New-SRPartnership immediately starts initial-sync from
+                # the source, which BLOCK-LEVEL OVERWRITES the destination volume. The
+                # destination's existing contents are lost. Require the operator to type
+                # the volume label (or "DESTROY") to confirm — generic yes/no isn't enough.
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Error"
+                Write-OutputColor "  ║$("  DATA-LOSS WARNING".PadRight(72))║" -color "Error"
+                Write-OutputColor "  ╠════════════════════════════════════════════════════════════════════════╣" -color "Error"
+                Write-OutputColor "  ║$("  Initial seed will OVERWRITE all existing data on:".PadRight(72))║" -color "Error"
+                Write-OutputColor "  ║$("    Destination volume: $destVol".PadRight(72))║" -color "Error"
+                Write-OutputColor "  ║$("    Destination server: $destServer".PadRight(72))║" -color "Error"
+                Write-OutputColor "  ║$("  Anything currently on $destVol will be PERMANENTLY LOST.".PadRight(72))║" -color "Error"
+                Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Error"
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Type 'DESTROY $destVol' (exact, case-sensitive) to confirm:" -color "Error"
+                $srConfirm = (Read-Host).Trim()
+                if ($srConfirm -cne "DESTROY $destVol") {
+                    Write-OutputColor "  Operation cancelled (confirmation did not match)." -color "Info"
+                    continue
+                }
                 if (Confirm-UserAction -Message "Create Storage Replica partnership?") {
                     try {
                         New-SRPartnership -SourceComputerName $srcServer -SourceRGName $rgName `

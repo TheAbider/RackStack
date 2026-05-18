@@ -71,15 +71,30 @@ function Disable-BuiltInAdminAccount {
             return
         }
 
-        # Verify alternate admin access exists before allowing disable
+        # Verify alternate admin access exists before allowing disable. Filter on
+        # PrincipalSource = 'Local' so Microsoft Account-backed admins
+        # (e.g. 'MicrosoftAccount\alice@outlook.com') and AzureAD-joined accounts
+        # ARE counted as alternate logon paths and not silently regex-stripped to
+        # a username that then fails Get-LocalUser. The previous filter could falsely
+        # report "no alternate admin" on an MSA-only home/workgroup host.
         $adminMembers = @(Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue)
-        # Filter to local users via Get-LocalUser (PrincipalSource can be null on some OS versions)
         $enabledLocalAdmins = @($adminMembers | Where-Object {
             $_.ObjectClass -eq 'User'
         } | ForEach-Object {
-            $userName = $_.Name -replace '^.*\\', ''
-            $localUser = Get-LocalUser -Name $userName -ErrorAction SilentlyContinue
-            if ($null -ne $localUser -and $localUser.Enabled -and $userName -ne 'Administrator') { $localUser }
+            $rawName = [string]$_.Name
+            $shortName = $rawName -replace '^.*\\', ''
+            $source = $_.PrincipalSource
+            # MSA / AzureAD principals count as alternate admins as long as they're
+            # not the built-in 'Administrator'. Local accounts re-verified via
+            # Get-LocalUser so we know they're actually enabled.
+            if ($source -eq 'MicrosoftAccount' -or $source -eq 'AzureAD') {
+                if ($shortName -ne 'Administrator') {
+                    [PSCustomObject]@{ Name = $rawName; Enabled = $true; Source = $source }
+                }
+                return
+            }
+            $localUser = Get-LocalUser -Name $shortName -ErrorAction SilentlyContinue
+            if ($null -ne $localUser -and $localUser.Enabled -and $shortName -ne 'Administrator') { $localUser }
         })
 
         $daCim = Invoke-WithTimeout -ScriptBlock {

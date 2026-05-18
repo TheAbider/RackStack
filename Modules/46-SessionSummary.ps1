@@ -194,7 +194,11 @@ function Show-SessionSummary {
     if ($script:SessionChanges.Count -gt 0) {
         Write-OutputColor "" -color "Info"
         if (Confirm-UserAction -Message "Export session summary to Desktop?") {
-            $summaryPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+            # Compute once so the txt and json export filenames share the same timestamp
+            # suffix. The previous two separate Get-Date calls drifted by 1+ seconds when
+            # the operator paused between prompts, producing unpaired filenames.
+            $exportTsSuffix = Get-Date -Format 'yyyyMMdd_HHmmss'
+            $summaryPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$exportTsSuffix.txt"
             try {
                 $summaryLines = @("Session Summary - $(Get-Date)", "Runtime: $runtimeStr ($durationStr)", "")
                 foreach ($change in $script:SessionChanges) {
@@ -214,9 +218,10 @@ function Show-SessionSummary {
                 Write-OutputColor "  Failed to export: $_" -color "Error"
             }
 
-            # Offer JSON export for automation
+            # Offer JSON export for automation. Reuse $exportTsSuffix from the txt export
+            # above so paired files have matching timestamps.
             if (Confirm-UserAction -Message "Also export as JSON (for automation)?") {
-                $jsonPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
+                $jsonPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$exportTsSuffix.json"
                 try {
                     @{
                         Hostname = $env:COMPUTERNAME
