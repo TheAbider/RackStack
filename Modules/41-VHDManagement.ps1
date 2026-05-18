@@ -92,9 +92,12 @@ function Get-SyspreppedVHD {
 
     $sizeMismatch = $false
     if ($cached.Exists) {
-        # Integrity check: size mismatch = corrupt or incomplete transfer
+        # Integrity check: size mismatch = corrupt or incomplete transfer.
+        # Use a 1 MB tolerance because some transfer paths (SMB sparse-copy, certain
+        # CDN edge nodes) introduce small alignment differences without actually
+        # corrupting the content. Anything bigger than 1 MB is a real discrepancy.
         $remoteSize = Get-FileServerFileSize -FilePath $driveFile.FilePath
-        if ($remoteSize -gt 0 -and $cached.Size -ne $remoteSize) {
+        if ($remoteSize -gt 0 -and [math]::Abs($cached.Size - $remoteSize) -gt 1MB) {
             Write-OutputColor "  Cached VHD size mismatch (local: $([math]::Round($cached.Size/1GB, 2))GB, remote: $([math]::Round($remoteSize/1GB, 2))GB)" -color "Warning"
             if (Confirm-UserAction -Message "Delete mismatched cache and re-download?") {
                 Remove-Item -LiteralPath $cached.Path -Force -ErrorAction SilentlyContinue

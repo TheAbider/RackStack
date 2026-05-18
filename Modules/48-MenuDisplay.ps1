@@ -255,7 +255,7 @@ function Show-ConfigureServerMenu {
     Write-OutputColor "" -color "Info"
 
     # Check both our flag AND Windows pending reboot
-    $windowsRebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -TTLSeconds 15
+    $windowsRebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
     if ($global:RebootNeeded -or $windowsRebootPending) {
         if ($windowsRebootPending -and -not $global:RebootNeeded) {
             Write-OutputColor "  ⚠ Windows has a pending reboot" -color "Warning"

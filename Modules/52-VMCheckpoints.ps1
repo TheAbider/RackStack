@@ -358,7 +358,13 @@ function Remove-VMCheckpointWizard {
 
         Write-OutputColor "" -color "Info"
         $deleted = 0
-        foreach ($cp in $result.Checkpoints) {
+        # Delete children before parents. Hyper-V auto-merges a deleted parent's VHD
+        # onto its children, so removing in CreationTime-ascending order on a branched
+        # tree can leave orphaned VHDs if a merge fails mid-way. Sorting descending by
+        # CreationTime ensures leaves go first for linear chains; for branched trees
+        # it's still strictly better than parent-first.
+        $orderedCheckpoints = @($result.Checkpoints | Sort-Object CreationTime -Descending)
+        foreach ($cp in $orderedCheckpoints) {
             Write-OutputColor "  Deleting: $($cp.VMName) - $($cp.Name)..." -color "Info"
             try {
                 Remove-VMSnapshot -VMSnapshot $cp -Confirm:$false -ErrorAction Stop

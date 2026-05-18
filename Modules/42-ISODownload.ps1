@@ -84,9 +84,11 @@ function Get-ServerISO {
     $cached = Test-CachedISO -OSVersion $OSVersion
 
     if ($cached.Exists) {
-        # Integrity check: size mismatch = corrupt, silently delete
+        # Integrity check: size mismatch = corrupt. Use a 1 MB tolerance because
+        # alignment differences from SMB/CDN copies aren't real corruption. Multi-GB
+        # ISO caches were being silently deleted on byte-level drift.
         $remoteSize = Get-FileServerFileSize -FilePath $driveFile.FilePath
-        if ($remoteSize -gt 0 -and $cached.Size -ne $remoteSize) {
+        if ($remoteSize -gt 0 -and [math]::Abs($cached.Size - $remoteSize) -gt 1MB) {
             Remove-Item -LiteralPath $cached.Path -Force -ErrorAction SilentlyContinue
             $cached = @{ Exists = $false; Path = $null; Size = 0 }
         }

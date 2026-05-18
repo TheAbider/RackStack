@@ -35,9 +35,11 @@ Write-Host ""
 $psVer = $PSVersionTable.PSVersion
 Write-Host "  PowerShell version: $($psVer.Major).$($psVer.Minor)" -ForegroundColor White
 
-if ($psVer.Major -ge 5 -and $psVer.Minor -ge 1) {
+# PowerShell 6+ (Core/7) is always above the 5.1 minimum — short-circuit that case
+# so we don't false-trigger the WMF installer on a Server 2019 box with PS 7 installed.
+if ($psVer.Major -gt 5 -or ($psVer.Major -eq 5 -and $psVer.Minor -ge 1)) {
     Write-Host ""
-    Write-Host "  PowerShell 5.1 is already installed. No action needed." -ForegroundColor Green
+    Write-Host "  PowerShell $($psVer.Major).$($psVer.Minor) meets the 5.1 minimum. No action needed." -ForegroundColor Green
     Write-Host "  You can run RackStack directly." -ForegroundColor Green
     Write-Host ""
     exit 0

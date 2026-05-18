@@ -301,12 +301,14 @@ function Export-FirewallRuleAudit {
             $portFilter = $rule | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
             $addrFilter = $rule | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue
 
+            # `Enabled` is a GpoBoolean enum; ToString() can yield "True"/"False"/"NotConfigured"
+            # which trips consumers parsing for boolean. Coerce to a real boolean so CSV is unambiguous.
             $null = $export.Add([PSCustomObject]@{
                 Name          = $rule.Name
                 DisplayName   = $rule.DisplayName
                 Direction     = $rule.Direction.ToString()
                 Action        = $rule.Action.ToString()
-                Enabled       = $rule.Enabled.ToString()
+                Enabled       = ($rule.Enabled -eq $true)
                 Profile       = $rule.Profile.ToString()
                 Protocol      = if ($null -ne $portFilter) { $portFilter.Protocol } else { 'Any' }
                 LocalPort     = if ($null -ne $portFilter) { $portFilter.LocalPort -join ',' } else { 'Any' }

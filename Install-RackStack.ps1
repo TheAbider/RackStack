@@ -91,7 +91,12 @@ param(
     # Restore the previous RackStack.exe from RackStack.exe.old. Use this if an UpdateSelf
     # (or a re-run of -Install) produced a broken binary. Works even when the installed EXE
     # is too broken to run — no dependency on the tool itself.
-    [switch]$Rollback
+    [switch]$Rollback,
+
+    # Bypass the SHA256 integrity gate. Without this switch the installer refuses to
+    # run RackStack.exe unless the release body publishes a hash AND the downloaded
+    # asset matches it. Only set this when you knowingly accept the network-path risk.
+    [switch]$AllowUnverified
 )
 
 $ErrorActionPreference = 'Stop'
@@ -291,7 +296,9 @@ if ($needsDownload) {
         exit 1
     }
 
-    # Verify SHA256 against the hash published in the release body (if available)
+    # Verify SHA256 against the hash published in the release body. Refusal is the default
+    # outcome of any verification failure: missing hash in release body, hash mismatch,
+    # or Get-FileHash exception. Pass -AllowUnverified to opt out (and own the risk).
     if ($expectedHash) {
         try {
             $actualHash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLower()
@@ -304,10 +311,22 @@ if ($needsDownload) {
             }
             Write-Host "  SHA256 verified against release body." -ForegroundColor Green
         } catch {
-            Write-Host "  WARNING: SHA256 verification failed to run: $_" -ForegroundColor Yellow
+            if ($AllowUnverified) {
+                Write-Host "  WARNING: SHA256 verification raised an error; -AllowUnverified set, continuing: $_" -ForegroundColor Yellow
+            } else {
+                Write-Host "  ERROR: SHA256 verification failed to run: $_" -ForegroundColor Red
+                Write-Host "    Pass -AllowUnverified to override (you own the risk)." -ForegroundColor Yellow
+                Remove-Item -LiteralPath $exePath -Force -ErrorAction SilentlyContinue
+                exit 1
+            }
         }
+    } elseif ($AllowUnverified) {
+        Write-Host "  NOTE: No SHA256 hash published in release body — proceeding under -AllowUnverified." -ForegroundColor Yellow
     } else {
-        Write-Host "  NOTE: No SHA256 hash published in release body — skipping integrity verification." -ForegroundColor Yellow
+        Write-Host "  ERROR: No SHA256 hash published in this release body — refusing to run unverified RackStack.exe." -ForegroundColor Red
+        Write-Host "    Re-run with -AllowUnverified to bypass (only do this if you trust your network path)." -ForegroundColor Yellow
+        Remove-Item -LiteralPath $exePath -Force -ErrorAction SilentlyContinue
+        exit 1
     }
 }
 

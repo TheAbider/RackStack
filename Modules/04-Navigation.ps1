@@ -92,7 +92,9 @@ function Add-SessionChange {
     $line = "$datestamp $timestamp [$Category] $Description"
     Add-Content -LiteralPath $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
 
-    # JSON audit log (one JSON object per line for easy parsing)
+    # JSON audit log (one JSON object per line for easy parsing). Explicit -Depth 5
+    # so a nested change description (passed by some callers as a sub-hashtable) doesn't
+    # truncate to "..." at the default depth-2 boundary.
     $auditFile = Join-Path $logDir "audit-log.jsonl"
     $auditEntry = @{
         ts       = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
@@ -100,7 +102,7 @@ function Add-SessionChange {
         user     = $env:USERNAME
         category = $Category
         action   = $Description
-    } | ConvertTo-Json -Compress
+    } | ConvertTo-Json -Compress -Depth 5
     Add-Content -LiteralPath $auditFile -Value $auditEntry -Encoding UTF8 -ErrorAction SilentlyContinue
 
     # Rotate audit log if over 10MB

@@ -1185,7 +1185,11 @@ function Show-SystemHealthCheck {
     }
     Write-OutputColor "" -color "Info"
 
-    # Firewall Status (uses registry-first approach via Get-FirewallState)
+    # Firewall Status (uses registry-first approach via Get-FirewallState). Default
+    # $fwState to Unknown for all three profiles BEFORE the try so a Get-FirewallState
+    # exception doesn't leave $fwState unset and trigger a null-index error on the
+    # subsequent $report.Sections['Firewall'] assignment.
+    $fwState = @{ Domain = 'Unknown'; Private = 'Unknown'; Public = 'Unknown' }
     Write-OutputColor "=== FIREWALL STATUS ===" -color "Success"
     try {
         $fwState = Get-FirewallState

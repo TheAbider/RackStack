@@ -1303,20 +1303,27 @@ function Export-HTMLTrendReport {
         return
     }
 
-    # Build CSS bar chart rows for CPU and memory
+    # Build CSS bar chart rows for CPU and memory. Snapshots are loaded from
+    # user-supplied JSON files, so every value lands in HTML attribute / text context
+    # gets either HTML-encoded (text) or numeric-coerced + clamped (style values) to
+    # block XSS / CSS injection via a tampered snapshot file.
     $cpuRows = ""
     $memRows = ""
     foreach ($snap in $snapshots) {
         $ts = if ($snap.Timestamp) { $snap.Timestamp } else { "?" }
-        $shortTs = $ts -replace 'T', ' '
+        $shortTs = ConvertTo-HtmlSafe ($ts -replace 'T', ' ')
 
-        $cpuPct = $snap.CPUPercent
-        $cpuColor = if ($cpuPct -gt 80) { "#dc3545" } elseif ($cpuPct -gt 50) { "#ffc107" } else { "#28a745" }
-        $cpuRows += "<tr><td style='width:160px;font-size:11px'>$shortTs</td><td><div style='background:$cpuColor;width:$($cpuPct)%;height:18px;border-radius:3px;min-width:2px'></div></td><td style='width:50px'>$cpuPct%</td></tr>`n"
+        # Coerce + clamp 0-100 so a string like "50%;background:url(evil)" can't break
+        # out of the inline style attribute or escape the width property.
+        $cpuPctNum = try { [double]$snap.CPUPercent } catch { 0 }
+        if ($cpuPctNum -lt 0) { $cpuPctNum = 0 }; if ($cpuPctNum -gt 100) { $cpuPctNum = 100 }
+        $cpuColor = if ($cpuPctNum -gt 80) { "#dc3545" } elseif ($cpuPctNum -gt 50) { "#ffc107" } else { "#28a745" }
+        $cpuRows += "<tr><td style='width:160px;font-size:11px'>$shortTs</td><td><div style='background:$cpuColor;width:$($cpuPctNum)%;height:18px;border-radius:3px;min-width:2px'></div></td><td style='width:50px'>$cpuPctNum%</td></tr>`n"
 
-        $memPct = $snap.MemoryUsedPercent
-        $memColor = if ($memPct -gt 90) { "#dc3545" } elseif ($memPct -gt 75) { "#ffc107" } else { "#28a745" }
-        $memRows += "<tr><td style='width:160px;font-size:11px'>$shortTs</td><td><div style='background:$memColor;width:$($memPct)%;height:18px;border-radius:3px;min-width:2px'></div></td><td style='width:50px'>$memPct%</td></tr>`n"
+        $memPctNum = try { [double]$snap.MemoryUsedPercent } catch { 0 }
+        if ($memPctNum -lt 0) { $memPctNum = 0 }; if ($memPctNum -gt 100) { $memPctNum = 100 }
+        $memColor = if ($memPctNum -gt 90) { "#dc3545" } elseif ($memPctNum -gt 75) { "#ffc107" } else { "#28a745" }
+        $memRows += "<tr><td style='width:160px;font-size:11px'>$shortTs</td><td><div style='background:$memColor;width:$($memPctNum)%;height:18px;border-radius:3px;min-width:2px'></div></td><td style='width:50px'>$memPctNum%</td></tr>`n"
     }
 
     # Disk trend — estimate days until full

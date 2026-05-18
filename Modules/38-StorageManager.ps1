@@ -736,6 +736,31 @@ function Clear-DiskData {
         return
     }
 
+    # Pre-clear safety: refuse to clear a disk that participates in a Storage Pool or
+    # is a CSV member. The operator may not realize the cluster still considers the disk
+    # online, and `Clear-Disk -RemoveData` against such a disk produces a broken state
+    # the rest of the cluster has to reconcile.
+    $blockReason = $null
+    try {
+        $poolPhys = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DeviceId -eq [string]$disk.Number -and $_.CanPool -eq $false }
+        if ($poolPhys) {
+            $pool = Get-StoragePool -PhysicalDisks $poolPhys -ErrorAction SilentlyContinue | Where-Object { $_.IsPrimordial -eq $false } | Select-Object -First 1
+            if ($pool) { $blockReason = "disk is a member of Storage Pool '$($pool.FriendlyName)'" }
+        }
+    } catch { }
+    if (-not $blockReason) {
+        try {
+            $csv = Get-ClusterSharedVolume -ErrorAction SilentlyContinue | Where-Object { $_.SharedVolumeInfo.Partition.DiskNumber -eq $disk.Number }
+            if ($csv) { $blockReason = "disk hosts Cluster Shared Volume '$($csv.Name)'" }
+        } catch { }
+    }
+    if ($blockReason) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  REFUSING to clear: $blockReason." -color "Error"
+        Write-OutputColor "  Remove the disk from the pool/cluster first, then retry." -color "Warning"
+        return
+    }
+
     try {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Clearing disk..." -color "Info"

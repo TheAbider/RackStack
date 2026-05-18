@@ -78,7 +78,11 @@ function Show-DeduplicationManagement {
         Write-OutputColor "  │$("  DEDUPLICATION STATUS BY VOLUME".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
-        $volumes = Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter -and $_.DriveType -eq "Fixed" }
+        # Exclude the system drive — Windows blocks Enable-DedupVolume on the OS volume
+        # and the cryptic error from the menu was confusing operators.
+        $volumes = Get-Volume -ErrorAction SilentlyContinue | Where-Object {
+            $_.DriveLetter -and $_.DriveType -eq "Fixed" -and "$($_.DriveLetter):" -ne $env:SystemDrive
+        }
         $idx = 1
         $volList = @()
         foreach ($vol in $volumes) {

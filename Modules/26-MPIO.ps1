@@ -62,11 +62,20 @@ function Show-MPIOStatusSummary {
                 }
             }
 
-            # Get load balance policy
+            # Get load balance policy. Returns a CIM object on some PS versions whose
+            # default ToString() yields the WMI class name (e.g. "MSFT_DSMLoadBalancePolicy")
+            # rather than the actual policy. Pull the .PolicyName / .Policy property explicitly.
             try {
                 $lbPolicy = Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue
-                if ($null -ne $lbPolicy) {
-                    Write-OutputColor "  │$("  Load Balance:     $lbPolicy".PadRight(72))│" -color "Info"
+                $lbPolicyText = if ($lbPolicy -is [string]) {
+                    $lbPolicy
+                } elseif ($null -ne $lbPolicy) {
+                    if ($lbPolicy.PSObject.Properties.Match('PolicyName').Count) { [string]$lbPolicy.PolicyName }
+                    elseif ($lbPolicy.PSObject.Properties.Match('Policy').Count) { [string]$lbPolicy.Policy }
+                    else { [string]$lbPolicy }
+                } else { $null }
+                if (-not [string]::IsNullOrWhiteSpace($lbPolicyText)) {
+                    Write-OutputColor "  │$("  Load Balance:     $lbPolicyText".PadRight(72))│" -color "Info"
                 }
             }
             catch { }

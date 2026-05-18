@@ -125,9 +125,16 @@ function Test-CustomRoleTemplate {
         $issues += "ServerOnly must be true or false (got: $($Template.ServerOnly))"
     }
 
-    # Validate PostInstall if provided (must be a string or null)
-    if ($null -ne $Template.PostInstall -and $Template.PostInstall -isnot [string]) {
-        $issues += "PostInstall must be a function name string or null (got: $($Template.PostInstall.GetType().Name))"
+    # Validate PostInstall. Must be a single token (no spaces / no args) that starts
+    # with an approved setup verb so a malicious defaults.json can't smuggle an
+    # arbitrary cmdlet through `& $template.PostInstall`.
+    if ($null -ne $Template.PostInstall) {
+        if ($Template.PostInstall -isnot [string]) {
+            $issues += "PostInstall must be a function name string or null (got: $($Template.PostInstall.GetType().Name))"
+        }
+        elseif ($Template.PostInstall -notmatch '^(Start|Invoke|Initialize|Configure)-[A-Za-z][A-Za-z0-9]+$') {
+            $issues += "PostInstall '$($Template.PostInstall)' rejected: must match ^(Start|Invoke|Initialize|Configure)-Verb pattern (single token, no arguments)"
+        }
     }
 
     if (@($issues).Count -gt 0) {
@@ -360,8 +367,14 @@ function Install-ServerRoleTemplate {
         Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
     }
 
-    # Handle post-install function
+    # Handle post-install function. Re-verify the allowed-verb pattern at invocation
+    # time too (defense-in-depth in case a future built-in template introduces an
+    # unexpected value that Test-CustomRoleTemplate didn't run against).
     if ($null -ne $template.PostInstall -and $successCount -gt 0) {
+        if ($template.PostInstall -notmatch '^(Start|Invoke|Initialize|Configure)-[A-Za-z][A-Za-z0-9]+$') {
+            Write-OutputColor "  Refusing to run post-install '$($template.PostInstall)': name doesn't match allowed verb pattern." -color "Error"
+            return
+        }
         # Validate function exists before attempting to call it
         $postInstallCmd = Get-Command $template.PostInstall -ErrorAction SilentlyContinue
         if ($null -eq $postInstallCmd) {

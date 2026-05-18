@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.3
+    Automated Test Runner for RackStack v1.98.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -3046,7 +3046,8 @@ try {
     $vhdMod2 = Get-Content (Join-Path $modulesPath "41-VHDManagement.ps1") -Raw
 
     # ISO: size mismatch silently deletes before "already downloaded" display
-    $isoPreUse = $isoMod2 -match 'Integrity check: size mismatch = corrupt, silently delete'
+    # v1.98.4: comment was updated to mention tolerance window; match the stable prefix.
+    $isoPreUse = $isoMod2 -match 'Integrity check: size mismatch = corrupt'
     Write-TestResult "Module 42-ISO: has pre-use size mismatch detection" $isoPreUse
 
     # ISO: filename mismatch shows update available
@@ -11982,7 +11983,9 @@ try {
     Write-TestResult "Install-RackStack: handles HTTP 429" ($bootstrapContent -match '429')
 
     $exitContent = Get-Content (Join-Path $modulesPath "47-ExitCleanup.ps1") -Raw
-    Write-TestResult "47-ExitCleanup: Exit-Script clears VMDeploymentCredential" ($exitContent -match 'VMDeploymentCredential[\s\S]{0,300}Dispose')
+    # v1.98.4: credential clear now iterates a credFields list and Dispose is ~400 chars
+    # past the first VMDeploymentCredential occurrence — widen the window.
+    Write-TestResult "47-ExitCleanup: Exit-Script clears VMDeploymentCredential" ($exitContent -match 'VMDeploymentCredential[\s\S]{0,600}Dispose')
 } catch {
     Write-TestResult "v1.94.4 Tests" $false $_.Exception.Message
 }

@@ -1,43 +1,65 @@
 ﻿#region ===== EXIT AND CLEANUP =====
 # Function to exit the script with optional reboot and file cleanup
 function Exit-Script {
-    # Save session state for potential resume (v2.8.0)
-    if ($script:VMDeploymentQueue -and $script:VMDeploymentQueue.Count -gt 0) {
-        Save-SessionState
-    }
+    # Wrap cleanup in try/finally so an exception in Show-SessionSummary or any
+    # interactive prompt doesn't bypass credential disposal and transcript-stop.
+    try {
+        # Save session state for potential resume (v2.8.0)
+        if ($script:VMDeploymentQueue -and $script:VMDeploymentQueue.Count -gt 0) {
+            Save-SessionState
+        }
+    } catch { }
 
-    # Defense-in-depth: release any SecureString credentials held in script scope
-    # so they don't linger in memory longer than necessary.
-    if ($null -ne $script:VMDeploymentCredential) {
-        try { $script:VMDeploymentCredential.Password.Dispose() } catch { }
-        $script:VMDeploymentCredential = $null
-    }
+    try {
+        # Defense-in-depth: release any SecureString credentials held in script scope
+        # so they don't linger in memory longer than necessary. Cover every credential
+        # field the tool is known to populate during a session.
+        $credFields = @('VMDeploymentCredential','DomainJoinCredential','LocalAdminCredential','AgentInstallCredential','DSRMCredential')
+        foreach ($field in $credFields) {
+            $val = Get-Variable -Scope Script -Name $field -ValueOnly -ErrorAction SilentlyContinue
+            if ($null -ne $val) {
+                try { if ($val.Password) { $val.Password.Dispose() } } catch { }
+                Set-Variable -Scope Script -Name $field -Value $null -ErrorAction SilentlyContinue
+            }
+        }
+    } catch { }
 
     # Clean up temporary session files
-    $stateFile = Join-Path $script:TempPath "session-state.json"
-    if (Test-Path -LiteralPath $stateFile) {
-        Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
-    }
+    try {
+        $stateFile = Join-Path $script:TempPath "session-state.json"
+        if (Test-Path -LiteralPath $stateFile) {
+            Remove-Item -LiteralPath $stateFile -Force -ErrorAction SilentlyContinue
+        }
 
-    $undoFile = Join-Path $script:TempPath "batch-undo.json"
-    if (Test-Path -LiteralPath $undoFile) {
-        Remove-Item -LiteralPath $undoFile -Force -ErrorAction SilentlyContinue
-    }
+        $undoFile = Join-Path $script:TempPath "batch-undo.json"
+        if (Test-Path -LiteralPath $undoFile) {
+            Remove-Item -LiteralPath $undoFile -Force -ErrorAction SilentlyContinue
+        }
+    } catch { }
 
-    # Show session summary first
-    Show-SessionSummary
+    # Show session summary first (wrapped so any rendering failure doesn't skip the rest)
+    try { Show-SessionSummary } catch { }
 
     # Notify about old transcript files
-    if ($null -ne $script:TempPath -and (Test-Path -LiteralPath $script:TempPath)) {
-        $oldTranscripts = @(Get-ChildItem -LiteralPath $script:TempPath -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) })
-        if ($oldTranscripts.Count -gt 0) {
-            Write-OutputColor "  Tip: $($oldTranscripts.Count) transcript(s) older than 30 days in $($script:TempPath)" -color "Info"
+    try {
+        if ($null -ne $script:TempPath -and (Test-Path -LiteralPath $script:TempPath)) {
+            $oldTranscripts = @(Get-ChildItem -LiteralPath $script:TempPath -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) })
+            if ($oldTranscripts.Count -gt 0) {
+                Write-OutputColor "  Tip: $($oldTranscripts.Count) transcript(s) older than 30 days in $($script:TempPath)" -color "Info"
+            }
         }
-    }
+    } catch { }
 
-    Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Press Enter to continue to exit..." -color "Info"
-    Read-Host
+    # Explicitly stop the transcript so a Restart-Computer doesn't truncate it.
+    try { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null } catch { }
+
+    # Skip the interactive "Press Enter" prompt under non-interactive callers
+    # (Silent / batch / headless / scripted / `irm | iex` pipelines).
+    if (-not $script:CLISilent -and -not $script:NonInteractive -and -not $script:CLIQuiet) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Press Enter to continue to exit..." -color "Info"
+        try { Read-Host | Out-Null } catch { }
+    }
 
     Clear-Host
     Write-CenteredOutput "Script Exiting" -color "Info"

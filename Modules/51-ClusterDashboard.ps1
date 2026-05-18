@@ -539,11 +539,17 @@ function Test-ClusterReadiness {
     $csvDetail = if (-not $csvs) { "No CSVs found" } elseif (-not $csvOnline) { "Some CSVs offline" } elseif ($csvRedirected) { "Redirected I/O detected" } else { "$($csvs.Count) CSV(s) online, no redirected I/O" }
     $checks += @{ Check = "CSVs Online"; Status = if ($csvOK) { "OK" } elseif ($csvRedirected) { "WARN" } else { "FAIL" }; Detail = $csvDetail }
 
-    # 4. Cluster networks up
+    # 4. Cluster networks up. Guard against the degraded case where Get-ClusterNetwork
+    # returns nothing (RPC failure / partial cluster outage): `0 -eq 0` previously reported
+    # OK and hid the broken network state behind a green checkmark.
     $networks = @(Get-ClusterNetwork -ErrorAction SilentlyContinue)
     $networksUp = @($networks | Where-Object { $_.State -eq "Up" })
-    $netOK = ($networksUp.Count -eq $networks.Count)
-    $checks += @{ Check = "Cluster Networks"; Status = if ($netOK) { "OK" } else { "WARN" }; Detail = "$($networksUp.Count)/$($networks.Count) networks up" }
+    $netStatus = if ($networks.Count -eq 0) { "WARN" }
+                 elseif ($networksUp.Count -eq $networks.Count) { "OK" }
+                 elseif ($networksUp.Count -gt 0) { "WARN" }
+                 else { "FAIL" }
+    $netDetail = if ($networks.Count -eq 0) { "no networks enumerated" } else { "$($networksUp.Count)/$($networks.Count) networks up" }
+    $checks += @{ Check = "Cluster Networks"; Status = $netStatus; Detail = $netDetail }
 
     # Display results
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
