@@ -171,7 +171,7 @@ function Exit-Script {
             if (Test-Path -LiteralPath $adjacentExample) { $pathsToDelete.Add($adjacentExample) }
         }
 
-        $uniquePaths = $pathsToDelete | Sort-Object -Unique
+        $uniquePaths = @($pathsToDelete | Sort-Object -Unique)
 
         # Write a manifest of what's about to be deleted — forensic recovery aid in case the
         # operator realizes mid-reboot they meant to disable on a different host. Also log to

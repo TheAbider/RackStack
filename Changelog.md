@@ -1,5 +1,31 @@
 ﻿# Changelog
 
+## v1.98.25
+
+Round 18 — unblock v1.98.24 CI + Import-Defaults audit (1 Tier-1 PRIVESC variant) + cross-module sweep partial.
+
+CI test fixes (the v1.98.24 grep-based tests broke against my refactored code):
+- Tests/Run-Tests.ps1: bumped `Set IP...Add-UndoAction...OldIP` window from 200 to 500 chars (the new comment block in 07-IPConfiguration pushed the existing pattern past the gap).
+- Tests/Run-Tests.ps1: `Sync-SystemTime` 13-Timezone tests bumped lookahead from 500-1000 to 3000 chars (PDC-emulator guard inserted before the original w32tm calls).
+- Tests/Run-Tests.ps1: `23-LocalAdmin adds to Administrators group` accepts `$adminGroupName` variant alongside literal "Administrators".
+- Tests/Run-Tests.ps1: `47-ExitCleanup uses ToolName` patterns accept `$toolName` local-variable form.
+- Tests/Run-Tests.ps1: `50-EntryPoint batch mode ensures TempPath exists` accepts new ProgramData state-dir pattern.
+- 14-WindowsUpdates: added `Test-NavigationCommand` after the install-choice `Read-Host "  Select"` to satisfy the codebase nav-check guard.
+- 47-ExitCleanup: wrapped `$pathsToDelete | Sort-Object -Unique` in `@()` to keep PS 5.1 array semantics intact.
+
+Tier-1 (PRIVESC variant):
+- **Fix:** 56-OperationsMenu `Import-Defaults` now strict-validates `ToolName` from defaults.json against a regex `^[A-Za-z][A-Za-z0-9_-]{2,32}$` AND rejects collision with Windows-reserved path tokens (`windows`, `system`, `system32`, `users`, `documents`, `desktop`, `temp`, `admin`, `administrator`, `config`, `program`, `programs`, `programfiles`, `programdata`, `appdata`, `roaming`, `local`, `public`). ToolName is the seed for `$script:ConfigDirName` and `$script:AppConfigDir` — AND is used as the safety check in 47-ExitCleanup's self-destruct path filter, meaning whoever controls ToolName controlled BOTH sides of that guard. A hostile defaults.json setting `"ToolName": "Documents"` would have made the self-destruct walker match every folder under `C:\Users\Administrator\Documents` (56-OperationsMenu).
+
+Cross-module sweep (Tier-1 partial — Pattern 3 + Pattern 9):
+- **Fix:** 45-ConfigExport Import path and 50-EntryPoint CLI admin-creation both resolve the Administrators group by SID `S-1-5-32-544` instead of hardcoded literal. Same locale-neutral fix as 23-LocalAdmin / 24-DisableAdmin in v1.98.24 — these two sites were the remaining un-fixed instances (45-ConfigExport, 50-EntryPoint).
+- **Fix:** 46-SessionSummary `.txt` and `.json` export paths and 35-Utilities Software-Inventory CSV path now sanitize `$env:COMPUTERNAME` via `-replace '[^\w\-]', '_'` before embedding in filenames. The env var is process-writable (a local admin can call `[Environment]::SetEnvironmentVariable("COMPUTERNAME", "..\..\evil", "Process")`) — without sanitization, `..\` characters in the value would escape Desktop / TempPath and overwrite arbitrary operator-writable files (46-SessionSummary, 35-Utilities).
+
+Remaining sweep backlog (deferred to future rounds; agent flagged ~60 additional instances):
+- Pattern 1 (unscoped Remove-NetIPAddress / Remove-NetRoute): 12 remaining sites in 10-iSCSI, 09-SET, 50-EntryPoint.
+- Pattern 4 (storage cmdlets without Start-Job timeout): 30+ sites in 38-StorageManager rest, 32-Deduplication, 40-HostStorage, 41-VHDManagement, 43-OfflineVHD, 59-StorageBackends, 37-HealthCheck, 20-DiskCleanup.
+- Pattern 5 (non-atomic Out-File): 11 sites in 35-Utilities, 29-EventLogViewer, 45-ConfigExport, 54-HTMLReports (×4), 47-ExitCleanup, 55-QoLFeatures.
+- Pattern 7 (English-only w32tm/slmgr/netsh output parsing): ~13 sites across 37-HealthCheck, 54-HTMLReports, 50-EntryPoint, 48-MenuDisplay, 13-Timezone, 45-ConfigExport, 61-ActiveDirectory.
+
 ## v1.98.24
 
 Round 17 audit — 17 Tier-1 destructive-op fixes across 11 modules (07/08/11/13/14/22/23/24/47/50/56/62). This round hit the previously un-audited surfaces and uncovered two **privilege-escalation** bugs plus multiple permanent-lockout, session-wipe, and credential-disclosure paths.

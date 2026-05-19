@@ -198,7 +198,11 @@ function Show-SessionSummary {
             # suffix. The previous two separate Get-Date calls drifted by 1+ seconds when
             # the operator paused between prompts, producing unpaired filenames.
             $exportTsSuffix = Get-Date -Format 'yyyyMMdd_HHmmss'
-            $summaryPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$exportTsSuffix.txt"
+            # Sanitize $env:COMPUTERNAME before embedding in a filename. The env var is
+            # user-writable on the calling process — `..\` in the filename would otherwise
+            # escape Desktop and could overwrite arbitrary operator-writable files.
+            $hostSlug = $env:COMPUTERNAME -replace '[^\w\-]', '_'
+            $summaryPath = "$env:USERPROFILE\Desktop\${hostSlug}_Session_$exportTsSuffix.txt"
             try {
                 $summaryLines = @("Session Summary - $(Get-Date)", "Runtime: $runtimeStr ($durationStr)", "")
                 foreach ($change in $script:SessionChanges) {
@@ -230,7 +234,7 @@ function Show-SessionSummary {
             # Offer JSON export for automation. Reuse $exportTsSuffix from the txt export
             # above so paired files have matching timestamps.
             if (Confirm-UserAction -Message "Also export as JSON (for automation)?") {
-                $jsonPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$exportTsSuffix.json"
+                $jsonPath = "$env:USERPROFILE\Desktop\${hostSlug}_Session_$exportTsSuffix.json"
                 try {
                     $tmpJson = "$jsonPath.tmp"
                     @{

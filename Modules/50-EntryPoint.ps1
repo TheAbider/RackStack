@@ -13344,7 +13344,8 @@ function Start-BatchMode {
                     $securePassword = Read-Host -Prompt "           Enter password for $adminName" -AsSecureString
                 }
                 New-LocalUser -Name $adminName -Password $securePassword -FullName $adminName -Description "Local Admin" -PasswordNeverExpires -ErrorAction Stop | Out-Null
-                Add-LocalGroupMember -Group "Administrators" -Member $adminName -ErrorAction Stop
+                $adminGroupNameLocal = try { (Get-LocalGroup -SID 'S-1-5-32-544' -ErrorAction Stop).Name } catch { 'Administrators' }
+                Add-LocalGroupMember -Group $adminGroupNameLocal -Member $adminName -ErrorAction Stop
                 Write-OutputColor "           Local admin '$adminName' created and added to Administrators." -color "Success"
                 $changesApplied++
                 Add-SessionChange -Category "Security" -Description "Created local admin account '$adminName'"

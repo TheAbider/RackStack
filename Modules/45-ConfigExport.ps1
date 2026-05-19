@@ -998,7 +998,9 @@ function Import-ConfigurationProfile {
                     $securePassword = Read-Host -Prompt "        Password" -AsSecureString
                     $fullname = if ($configProfile.LocalAdmin.Fullname) { $configProfile.LocalAdmin.Fullname } else { $adminname }
                     new-LocalUser -name $adminname -Password $securePassword -Fullname $fullname -Description "Local Admin" -PasswordneverExpires -ErrorAction Stop | Out-null
-                    Add-LocalGroupMember -Group "Administrators" -Member $adminname -ErrorAction Stop
+                    # Resolve Administrators by SID — non-EN locales use 'Administradores'/'Administratoren'/etc.
+                    $adminGroupNameLocal = try { (Get-LocalGroup -SID 'S-1-5-32-544' -ErrorAction Stop).Name } catch { 'Administrators' }
+                    Add-LocalGroupMember -Group $adminGroupNameLocal -Member $adminname -ErrorAction Stop
                     Write-OutputColor "        Local admin '$adminname' created." -color "Success"
                     $changesApplied++
                     Add-SessionChange -Category "Security" -Description "Created local admin account '$adminname'"

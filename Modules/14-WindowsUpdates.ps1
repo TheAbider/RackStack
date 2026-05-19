@@ -241,6 +241,8 @@ function Install-WindowsUpdates {
             Write-OutputColor "  [2] Install ALL updates ($updateCount, includes drivers/feature upgrades)" -color "Warning"
             Write-OutputColor "  [3] Cancel" -color "Info"
             $installChoice = Read-Host "  Select"
+            $navResult = Test-NavigationCommand -UserInput $installChoice
+            if ($navResult.ShouldReturn) { return }
             switch ($installChoice) {
                 "1" {
                     if ($qualityUpdates.Count -eq 0) {

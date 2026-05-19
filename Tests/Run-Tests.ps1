@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.24
+    Automated Test Runner for RackStack v1.98.25
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -5990,8 +5990,9 @@ try {
     # Checks for existing account before creating
     Write-TestResult "23-LocalAdmin: checks for existing user" ($laContent -match 'Get-LocalUser\s+-Name\s+\$accountName')
 
-    # Adds user to Administrators group
-    Write-TestResult "23-LocalAdmin: adds to Administrators group" ($laContent -match 'Add-LocalGroupMember\s+-Group\s+"Administrators"')
+    # Adds user to Administrators group. Accept either the literal English name or the
+    # SID-resolved $adminGroupName variant (locale-neutral fix from v1.98.24).
+    Write-TestResult "23-LocalAdmin: adds to Administrators group" ($laContent -match 'Add-LocalGroupMember\s+-Group\s+(?:"Administrators"|\$adminGroupName)')
 
     # Sets PasswordNeverExpires
     Write-TestResult "23-LocalAdmin: sets PasswordNeverExpires" ($laContent -match 'PasswordNeverExpires')
@@ -6111,9 +6112,11 @@ try {
     Write-TestResult "47-ExitCleanup: checks RebootNeeded flag" ($ecContent -match 'global:RebootNeeded')
     Write-TestResult "47-ExitCleanup: calls Test-RebootPending" ($ecContent -match 'Test-RebootPending')
 
-    # Cleanup targets use $script:ToolName (dynamic, not hardcoded)
-    Write-TestResult "47-ExitCleanup: uses ToolName for monolithic pattern" ($ecContent -match '\$\(\$script:ToolName\)\s*v\*\.ps1')
-    Write-TestResult "47-ExitCleanup: uses ToolName for exe pattern" ($ecContent -match '\$\(\$script:ToolName\)[\*]?\.exe')
+    # Cleanup targets use $script:ToolName (dynamic, not hardcoded). v1.98.24 introduced a
+    # local $toolName = $script:ToolName alias for readability inside the deletion block — accept
+    # both the `$($script:ToolName)` interpolation and the `$toolName` variable form.
+    Write-TestResult "47-ExitCleanup: uses ToolName for monolithic pattern" ($ecContent -match '(?:\$\(\$script:ToolName\)|\$toolName)\s*v\*\.ps1')
+    Write-TestResult "47-ExitCleanup: uses ToolName for exe pattern" ($ecContent -match '(?:\$\(\$script:ToolName\)|\$toolName)[\*]?\.exe')
     Write-TestResult "47-ExitCleanup: uses ToolName for cleanup task name" ($ecContent -match '\$\(\$script:ToolName\)Cleanup')
 
     # Cleanup targets config directory
@@ -8358,7 +8361,7 @@ Write-TestResult "19-NTP: NTP server change has undo" ($ntpContent -match 'Confi
 
 # Undo actions: IP, DNS DHCP, VLAN, disable admin, disk online/offline, scheduled task, color theme
 $ipContent = Get-Content -LiteralPath "$modulesPath\07-IPConfiguration.ps1" -Raw
-Write-TestResult "07-IP: IP change has undo" ($ipContent -match 'Set IP.*on[\s\S]{0,200}Add-UndoAction[\s\S]{0,200}OldIP')
+Write-TestResult "07-IP: IP change has undo" ($ipContent -match 'Set IP.*on[\s\S]{0,500}Add-UndoAction[\s\S]{0,500}OldIP')
 Write-TestResult "07-IP: DNS DHCP has undo" ($ipContent -match 'Set DNS on.*to DHCP[\s\S]{0,200}Add-UndoAction[\s\S]{0,200}OldDNS')
 Write-TestResult "24-DisableAdmin: disable admin has undo" ((Get-Content -LiteralPath "$modulesPath\24-DisableAdmin.ps1" -Raw) -match 'Disabled built-in Administrator[\s\S]{0,200}Add-UndoAction[\s\S]{0,200}Enable-LocalUser')
 $stContent = Get-Content -LiteralPath "$modulesPath\38-StorageManager.ps1" -Raw
@@ -9594,9 +9597,9 @@ try {
     Write-TestResult "13-Timezone: Show-TimezoneComparison calculates time difference" ($mod13 -match 'function Show-TimezoneComparison[\s\S]{0,3000}TotalMinutes')
     Write-TestResult "13-Timezone: Set-SelectedTimezone calls Show-TimezoneComparison" ($mod13 -match 'Set-SelectedTimezone[\s\S]{0,1000}Show-TimezoneComparison')
     Write-TestResult "13-Timezone: Sync-SystemTime function defined" ($mod13 -match 'function\s+Sync-SystemTime\b')
-    Write-TestResult "13-Timezone: Sync-SystemTime checks W32Time service" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,1000}W32Time')
+    Write-TestResult "13-Timezone: Sync-SystemTime checks W32Time service" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,3000}W32Time')
     Write-TestResult "13-Timezone: Sync-SystemTime calls w32tm /resync" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,2000}w32tm /resync')
-    Write-TestResult "13-Timezone: Sync-SystemTime queries NTP source" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,1000}w32tm /query /source')
+    Write-TestResult "13-Timezone: Sync-SystemTime queries NTP source" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,3000}w32tm /query /source')
     Write-TestResult "13-Timezone: Sync-SystemTime has Reason parameter" ($mod13 -match 'function Sync-SystemTime[\s\S]{0,200}\$Reason')
     Write-TestResult "13-Timezone: Set-SelectedTimezone calls Sync-SystemTime" ($mod13 -match 'Set-SelectedTimezone[\s\S]{0,3000}Sync-SystemTime')
 
@@ -11435,7 +11438,7 @@ try {
 
     # w32tm validation
     $tzContent = Get-Content (Join-Path $modulesPath "13-Timezone.ps1") -Raw
-    Write-TestResult "13-Timezone: Sync-SystemTime validates w32tm exists" ($tzContent -match 'function Sync-SystemTime[\s\S]{0,500}Get-Command w32tm')
+    Write-TestResult "13-Timezone: Sync-SystemTime validates w32tm exists" ($tzContent -match 'function Sync-SystemTime[\s\S]{0,3000}Get-Command w32tm')
 
     # netsh error handling
     $ndContent4 = Get-Content (Join-Path $modulesPath "58-NetworkDiagnostics.ps1") -Raw
@@ -11501,7 +11504,13 @@ try {
     Write-TestResult "50-EntryPoint: UAC failure exits with code 1" ($epContent2 -match 'elevationFailed.*=.*\$true')
     Write-TestResult "50-EntryPoint: batch config validates null JSON" ($epContent2 -match 'null -eq \$batchConfig')
     Write-TestResult "50-EntryPoint: batch config validates empty properties" ($epContent2 -match 'configHash\.Count -eq 0')
-    Write-TestResult "50-EntryPoint: batch mode ensures TempPath exists" ($epContent2 -match 'Ensure TempPath exists' -and $epContent2 -match 'New-Item.*TempPath.*Directory')
+    # v1.98.24 moved batch-undo state from $script:TempPath to %ProgramData%\<Tool>\state\ with
+    # admin-only DACLs (PRIVESC fix). Accept either the legacy TempPath-creation pattern or
+    # the new ProgramData state-dir creation as proof that state-dir setup happens before use.
+    Write-TestResult "50-EntryPoint: batch mode ensures TempPath exists" (
+        ($epContent2 -match 'Ensure TempPath exists' -and $epContent2 -match 'New-Item.*TempPath.*Directory') -or
+        ($epContent2 -match 'state' -and $epContent2 -match 'New-Item.*stateDir.*Directory')
+    )
 } catch {
     Write-TestResult "v1.89.0 Enhancement Tests" $false $_.Exception.Message
 }

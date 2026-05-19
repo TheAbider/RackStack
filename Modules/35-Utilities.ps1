@@ -1276,7 +1276,9 @@ function Show-InstalledSoftware {
         }
         "3" {
             $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-            $csvPath = "$script:TempPath\SoftwareInventory_${env:COMPUTERNAME}_$timestamp.csv"
+            # Sanitize $env:COMPUTERNAME for filename use (env var is process-writable).
+            $hostSlug = $env:COMPUTERNAME -replace '[^\w\-]', '_'
+            $csvPath = "$script:TempPath\SoftwareInventory_${hostSlug}_$timestamp.csv"
             try {
                 $software | Sort-Object Name |
                     Select-Object Name, Version, Publisher, InstallDate, @{N='SizeMB';E={$_.Size}} |

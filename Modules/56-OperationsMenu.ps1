@@ -799,9 +799,24 @@ function Import-Defaults {
         }
     }
 
-    # Apply tool identity from defaults
+    # Apply tool identity from defaults. ToolName is the seed for ConfigDirName and AppConfigDir
+    # below, AND is used as the safety check in 47-ExitCleanup's self-destruct path filter.
+    # Whoever controls ToolName controls both sides of that guard. Strict-validate it here so
+    # a hostile defaults.json can't set ToolName='Documents' and have the self-destruct walker
+    # match every folder under C:\Users\Administrator\Documents. Reject names that match
+    # Windows-reserved tokens or are too short/long.
+    $reservedToolNames = @('windows', 'system', 'system32', 'users', 'documents', 'desktop', 'temp', 'admin', 'administrator', 'config', 'program', 'programs', 'programfiles', 'programdata', 'appdata', 'roaming', 'local', 'public')
     if ($merged.ToolName) {
-        $script:ToolName = $merged.ToolName
+        $proposedName = "$($merged.ToolName)"
+        if ($proposedName -notmatch '^[A-Za-z][A-Za-z0-9_-]{2,32}$') {
+            Write-OutputColor "  defaults.json: rejecting ToolName '$proposedName' (must be 3-32 chars, letters/digits/underscore/hyphen, must start with a letter)." -color "Error"
+        }
+        elseif ($proposedName.ToLowerInvariant() -in $reservedToolNames) {
+            Write-OutputColor "  defaults.json: rejecting ToolName '$proposedName' (collides with a Windows-reserved path token)." -color "Error"
+        }
+        else {
+            $script:ToolName = $proposedName
+        }
     }
     if ($merged.ToolFullName) {
         $script:ToolFullName = $merged.ToolFullName
