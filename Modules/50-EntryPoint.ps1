@@ -1087,9 +1087,28 @@ function Invoke-CLIAction {
                 Write-OutputColor "  Installed EXE not found at $installedExe" -color "Error"
                 [Environment]::Exit(1)
             }
+            # Validate $installLoc against shell metacharacters before embedding in any command
+            # string. HKLM\...\Uninstall\RackStack\InstallLocation is admin-only by default DACL,
+            # but the scheduled task runs as SYSTEM weekly — any local admin who poisoned the
+            # registry value with `" & calc.exe &` would gain SYSTEM at schedule fire-time
+            # without re-prompting. Reject suspicious characters defensively.
+            if ($installLoc -match '["`&|<>^%]' -or $installLoc -match '\.\.[\\/]') {
+                Write-OutputColor "  ScheduleUpdateCheck: InstallLocation '$installLoc' contains unsafe characters." -color "Error"
+                Write-OutputColor "  Refusing to register scheduled task. Re-install via Install-RackStack to a clean path." -color "Warning"
+                [Environment]::Exit(1)
+            }
             $taskName = "$($script:ToolName)_UpdateCheck"
             $outputJsonPath = Join-Path $script:TempPath "$($script:ToolName)_UpdateCheck.json"
-            # We use cmd.exe redirection so the EXE's stdout JSON lands on disk
+            # Also validate $outputJsonPath — it's built from $script:TempPath which can be
+            # influenced via defaults.json (post-v1.98.25 we strict-validate ToolName but not
+            # TempPath; an attacker who's already an admin and can edit defaults.json could
+            # poison this path with quote characters to break out of the cmd arg).
+            if ($outputJsonPath -match '["`&|<>^%]') {
+                Write-OutputColor "  ScheduleUpdateCheck: output path '$outputJsonPath' contains unsafe characters." -color "Error"
+                [Environment]::Exit(1)
+            }
+            # Use cmd.exe redirection so the EXE's stdout JSON lands on disk. Both paths
+            # validated above; cmd embedding is safe with the guard.
             $cmdLine = "/c `"`"$installedExe`" -Action CheckForUpdate -OutputFormat JSON > `"$outputJsonPath`" 2>&1`""
             try {
                 # Remove any existing task with the same name so this is idempotent

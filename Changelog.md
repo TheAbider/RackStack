@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## v1.98.44
+
+Round 31 — info-disclosure + argument-injection sweep (1 Tier-1 + 1 Tier-2 latent-privesc applied).
+
+Tier-1 (defeats whole-disk encryption):
+- **Fix:** 31-BitLocker `Show-BitLockerKey` recovery-key display now pauses Start-Transcript around the key output and writes directly to the console via `[Console]::WriteLine` instead of `Write-OutputColor`. Prior code wrote the BitLocker recovery password verbatim to the active transcript log — the transcript persists in `$env:TEMP` for up to 30 days, and a recovery key in a plaintext log file defeats the entire point of whole-disk encryption. Same fix shape as 22-Password's generated-password display from v1.98.24 (31-BitLocker).
+
+Tier-2 (latent privesc primitive):
+- **Fix:** 50-EntryPoint `ScheduleUpdateCheck` CLI action now validates the `InstallLocation` registry value AND the derived `$outputJsonPath` against shell metacharacters (`"`, backtick, `&`, `|`, `<`, `>`, `^`, `%`, `..\`) before embedding them in the `cmd /c "..."` argument string. `HKLM\...\Uninstall\RackStack\InstallLocation` is admin-only by DACL but the scheduled task runs as SYSTEM weekly — any local admin who poisoned the registry value with `" & calc.exe &` would gain SYSTEM at schedule-fire-time without re-prompting. Refuses to register the task if either path contains unsafe characters (50-EntryPoint).
+
+Audit (CLEAN): Class C crypto / RNG — no `Get-Random` for security tokens, no MD5/SHA1, no predictable seeding, no hardcoded keys, no `String.Equals` for password comparison. Codebase uses `System.Security.Cryptography.RandomNumberGenerator` everywhere it matters.
+
 ## v1.98.43
 
 - **Fix (CI/test):** Menu-gated proximity regex relaxed from same-line (`[^\r\n]{0,200}`) to multi-line (`[\s\S]{0,400}`). The dispatcher pattern in `Start-DiskCleanup` is `if (Confirm-UserAction "Run X?") {NL Invoke-X NL}` — multi-line block, not same-line. Now correctly matches the actual code shape while staying tight enough to reject false positives from unrelated Confirm calls (Tests/Run-Tests.ps1).

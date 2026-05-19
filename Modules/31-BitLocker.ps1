@@ -392,11 +392,34 @@ function Show-BitLockerManagement {
                     if ($keys) {
                         Write-OutputColor "" -color "Info"
                         Write-OutputColor "  Recovery Key(s) for $($vol.MountPoint):" -color "Warning"
-                        Write-OutputColor "  NOTE: Keys will appear in the session transcript log." -color "Warning"
+                        # Pause transcript around the recovery-key display. Without this, the key
+                        # gets written verbatim to the session transcript log on disk — which lives
+                        # in $env:TEMP for up to 30 days. A BitLocker recovery key in a plaintext
+                        # log file defeats the entire point of whole-disk encryption: anyone who
+                        # reads the log can decrypt the drive. Same pattern as 22-Password's
+                        # generated-password display (v1.98.24 fix).
+                        $transcriptWasRunning = $false
+                        try {
+                            $existing = Stop-Transcript -ErrorAction Stop
+                            if ($existing) { $transcriptWasRunning = $true }
+                        } catch { }
                         foreach ($key in $keys) {
-                            Write-OutputColor "  ID: $($key.KeyProtectorId)" -color "Info"
-                            Write-OutputColor "  Key: $($key.RecoveryPassword)" -color "Success"
+                            # Write directly to console (bypasses Write-OutputColor's transcript-routing).
+                            [Console]::WriteLine()
+                            [Console]::WriteLine("  ID:  $($key.KeyProtectorId)")
+                            [Console]::WriteLine("  Key: $($key.RecoveryPassword)")
                         }
+                        [Console]::WriteLine()
+                        if ($transcriptWasRunning) {
+                            try {
+                                if ($script:TranscriptPath) {
+                                    Start-Transcript -Path $script:TranscriptPath -Append -ErrorAction SilentlyContinue | Out-Null
+                                } else {
+                                    Start-Transcript -ErrorAction SilentlyContinue | Out-Null
+                                }
+                            } catch { }
+                        }
+                        Write-OutputColor "  (Recovery key displayed above bypassed transcript logging.)" -color "Info"
                     }
                     else {
                         Write-OutputColor "  No recovery password found." -color "Warning"
