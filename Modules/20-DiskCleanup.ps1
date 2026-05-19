@@ -234,6 +234,26 @@ function Clear-WindowsUpdateCache {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Clearing Windows Update cache..." -color "Info"
 
+    # Check for running dependents of wuauserv / BITS before forcing them down.
+    # `Stop-Service -Force` cascade-stops dependents silently — on a WSUS host that's BITS
+    # plus IIS-attached upload tasks; on a host with backup software that pinned a BITS
+    # dependency, the backup mid-run dies. Skip the cache clear if dependents are running.
+    $depBlock = $null
+    foreach ($svcName in @('wuauserv', 'bits')) {
+        $depRunning = @(Get-Service -Name $svcName -DependentServices -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' })
+        if ($depRunning.Count -gt 0) {
+            $depBlock = "$svcName has $($depRunning.Count) running dependent(s): $(($depRunning | Select-Object -First 5 | ForEach-Object { $_.Name }) -join ', ')"
+            break
+        }
+    }
+    if ($depBlock) {
+        Write-OutputColor "" -color "Warning"
+        Write-OutputColor "  REFUSING to clear Windows Update cache:" -color "Warning"
+        Write-OutputColor "  $depBlock." -color "Warning"
+        Write-OutputColor "  Stopping these would cascade-kill backup / WSUS / IIS upload workloads." -color "Info"
+        return
+    }
+
     try {
         # Stop Windows Update service
         Stop-Service wuauserv -Force -ErrorAction SilentlyContinue

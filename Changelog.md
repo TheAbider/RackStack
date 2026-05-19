@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.98.33
+
+Round 24 — final Pattern 6 cleanup.
+
+- **Fix:** 20-DiskCleanup `Clear-WindowsUpdateCache` now pre-checks `Get-Service -DependentServices` for both `wuauserv` and `bits` before forcing them down. Prior `Stop-Service -Force` cascade-killed dependents silently — on a WSUS host that's the IIS upload tasks; on a host with backup software that pinned a BITS dependency, the backup mid-run died. Now refuses the cache clear with a clear message if any dependent is running (20-DiskCleanup).
+
+**Cross-module sweep status:** all four high-severity patterns from the round 17 sweep are addressed (Pattern 1 unscoped IP removal, Pattern 3 hardcoded Administrators, Pattern 5 non-atomic exports, Pattern 6 Stop-Service cascade, Pattern 7 English-only NTP/license parsing, Pattern 9 path-traversal via env vars, Pattern 10 locale-fragile enum). Pattern 4 (storage cmdlet timeouts ~30 sites) is deferred — those are defensive only against a wedged storage stack, which is rare in production; the highest-impact `Test-SystemDisk` was already fixed in v1.98.20 with the Start-Job outer-bound pattern. Remaining Pattern 7 netsh-output sites in 50-EntryPoint (~6) parse values that are themselves English-only — fixing would require migrating to Get-NetTCPSetting / Get-NetAdapterAdvancedProperty cmdlets.
+
 ## v1.98.32
 
 Round 23 — cross-module sweep continuation (Pattern 7 remaining time-sync sites).
