@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.42
+
+- **Fix (CI/test):** v1.98.41 still had `Invoke-FullEnhancedCleanup` in the body-gated list, but the function's internal Confirm prompts (Windows.old at line 1062, shadow copies at 1088) are sub-prompts for individual operations — the up-front "Run Full Enhanced Cleanup?" gate happens at the menu dispatcher (`Start-DiskCleanup` line 138). Moved to menu-gated list so the test correctly verifies the actual design pattern (Tests/Run-Tests.ps1).
+- **Includes v1.98.40 / v1.98.41 fixes** (neither tag was published due to the test-pattern misalignment; this version supersedes both under z-retention).
+
 ## v1.98.41
 
 - **Fix (CI/test):** v1.98.40's tightened `20-DiskCleanup destructive entry points gate on Confirm-UserAction` test correctly caught that the listed Invoke-*Clean functions don't gate inside their own body — but the design pattern uses the menu dispatcher (`Start-DiskCleanup`) to gate each call site BEFORE invoking the destructive function. Split the test into two assertions: (1) body-gated functions (`Clear-WindowsOld`, `Invoke-RecycleBinCleanup`, `Clear-UserProfileTemp`, `Clear-ShadowCopies`, `Invoke-FullEnhancedCleanup`) verified against function-body `Confirm-UserAction` within 3500 chars; (2) menu-gated functions (`Invoke-QuickClean`, `Invoke-StandardClean`, `Invoke-DeepClean`, `Clear-WindowsUpdateCache`) verified against same-line `Confirm-UserAction ... Invoke-X` proximity match. Both shapes now properly verified instead of trivially matching the word "Confirm" anywhere (Tests/Run-Tests.ps1).

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.41
+    Automated Test Runner for RackStack v1.98.42
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7215,8 +7215,7 @@ try {
         'Clear-WindowsOld',
         'Invoke-RecycleBinCleanup',
         'Clear-UserProfileTemp',
-        'Clear-ShadowCopies',
-        'Invoke-FullEnhancedCleanup'
+        'Clear-ShadowCopies'
     )
     $missingBodyGate = @()
     foreach ($fname in $bodyGatedFuncs) {
@@ -7232,7 +7231,8 @@ try {
         'Invoke-QuickClean',
         'Invoke-StandardClean',
         'Invoke-DeepClean',
-        'Clear-WindowsUpdateCache'
+        'Clear-WindowsUpdateCache',
+        'Invoke-FullEnhancedCleanup'
     )
     $missingMenuGate = @()
     foreach ($fname in $menuGatedFuncs) {
