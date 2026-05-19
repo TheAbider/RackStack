@@ -98,19 +98,30 @@ function Get-WindowsVersionInfo {
     }
 }
 
-# Function to check if server is activated
+# Function to check if server is activated. Uses CIM SoftwareLicensingProduct.LicenseStatus
+# (an integer enum) rather than parsing slmgr.vbs output — the English-only "License Status:
+# Licensed" string never matched on non-EN MUI builds, so non-EN servers were always reported
+# as unlicensed and would re-trigger licensing prompts every run.
 function Test-ServerActivated {
     try {
-        $result = cscript.exe //NoLogo "$env:SystemRoot\System32\slmgr.vbs" /dli 2>&1
-        $resultText = $result -join "`n"
+        $product = Get-CimInstance -ClassName SoftwareLicensingProduct -OperationTimeoutSec 10 -ErrorAction Stop |
+            Where-Object { $_.PartialProductKey -and $_.ApplicationId -eq '55c92734-d682-4d71-983e-d6ec3f16059f' } |
+            Select-Object -First 1
+        if ($null -eq $product) { return $false }
 
-        if ($resultText -match "License Status: Licensed") {
-            if ($resultText -match "TIMEBASED_EVAL|Evaluation") {
-                return $false  # Evaluation mode
-            }
-            return $true
-        }
-        return $false
+        # LicenseStatus: 0=Unlicensed, 1=Licensed, 2=OOB-Grace, 3=OOT-Grace, 4=Non-Genuine,
+        # 5=Notification, 6=Extended-Grace. Only 1 counts as truly activated.
+        if ($product.LicenseStatus -ne 1) { return $false }
+
+        # Evaluation-edition check — the Description string is also localized on some SKUs,
+        # so fall back to the slmgr output as a secondary signal but only to detect eval,
+        # not to determine activation. EditionID with "Eval" suffix is the most reliable hint.
+        try {
+            $edition = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name 'EditionID' -ErrorAction Stop).EditionID
+            if ($edition -match 'Eval$') { return $false }
+        } catch { }
+
+        return $true
     }
     catch {
         return $false

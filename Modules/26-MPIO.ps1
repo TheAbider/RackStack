@@ -41,8 +41,14 @@ function Show-MPIOStatusSummary {
         try {
             Import-Module MPIO -ErrorAction SilentlyContinue
 
-            # Get claimed hardware IDs (devices MPIO manages)
-            $claimedDevices = @(Get-MSDSMSupportedHW -ErrorAction SilentlyContinue)
+            # Get claimed hardware IDs. Storage cmdlets can hang for minutes on a host where
+            # MS DSM is wedged (common after a SAN path flap mid-claim cycle). Wrap each call
+            # in Start-Job + Wait-Job (same pattern as Test-SystemDisk after v1.98.20). The
+            # menu freezes silently otherwise — the only existing timeout was on MPIO_DISK_INFO.
+            $claimedJob = Start-Job -ScriptBlock { Get-MSDSMSupportedHW -ErrorAction SilentlyContinue }
+            $claimedDevices = if (Wait-Job -Job $claimedJob -Timeout 15) { @(Receive-Job -Job $claimedJob -ErrorAction SilentlyContinue) } else { @() }
+            Stop-Job -Job $claimedJob -ErrorAction SilentlyContinue
+            Remove-Job -Job $claimedJob -Force -ErrorAction SilentlyContinue
             Write-OutputColor "  │$("  Claimed Devices:  $($claimedDevices.Count) hardware ID(s)".PadRight(72))│" -color "Info"
 
             foreach ($device in $claimedDevices) {
@@ -53,8 +59,11 @@ function Show-MPIOStatusSummary {
                 Write-OutputColor "  │$("    $vendorProduct".PadRight(72))│" -color "Info"
             }
 
-            # Get MPIO-managed disks
-            $mpioDrives = @(Get-MSDSMAutomaticClaimSettings -ErrorAction SilentlyContinue)
+            # Get MPIO-managed disks (same Start-Job timeout)
+            $autoClaimJob = Start-Job -ScriptBlock { Get-MSDSMAutomaticClaimSettings -ErrorAction SilentlyContinue }
+            $mpioDrives = if (Wait-Job -Job $autoClaimJob -Timeout 15) { @(Receive-Job -Job $autoClaimJob -ErrorAction SilentlyContinue) } else { @() }
+            Stop-Job -Job $autoClaimJob -ErrorAction SilentlyContinue
+            Remove-Job -Job $autoClaimJob -Force -ErrorAction SilentlyContinue
             if ($mpioDrives.Count -gt 0) {
                 $autoKeys = @($mpioDrives | ForEach-Object { $_.Keys }) | Select-Object -Unique
                 foreach ($key in $autoKeys) {
@@ -66,7 +75,10 @@ function Show-MPIOStatusSummary {
             # default ToString() yields the WMI class name (e.g. "MSFT_DSMLoadBalancePolicy")
             # rather than the actual policy. Pull the .PolicyName / .Policy property explicitly.
             try {
-                $lbPolicy = Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue
+                $lbJob = Start-Job -ScriptBlock { Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue }
+                $lbPolicy = if (Wait-Job -Job $lbJob -Timeout 15) { Receive-Job -Job $lbJob -ErrorAction SilentlyContinue } else { $null }
+                Stop-Job -Job $lbJob -ErrorAction SilentlyContinue
+                Remove-Job -Job $lbJob -Force -ErrorAction SilentlyContinue
                 $lbPolicyText = if ($lbPolicy -is [string]) {
                     $lbPolicy
                 } elseif ($null -ne $lbPolicy) {

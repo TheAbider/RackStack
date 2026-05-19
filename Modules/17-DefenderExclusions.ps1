@@ -245,7 +245,19 @@ function Add-HyperVDefenderExclusions {
     # Get unique paths
     $pathsToExclude = $pathsToExclude | Select-Object -Unique
 
+    # Pre-query existing exclusions so we can skip duplicates without relying on the localized
+    # "already exists" error message — that string is English-only and non-EN Server SKUs
+    # would report "Failed to add" on every re-run. Pre-checking against $prefs is locale-neutral.
+    $prefs = Get-MpPreference -ErrorAction SilentlyContinue
+    $existingPaths = if ($prefs -and $prefs.ExclusionPath) { @($prefs.ExclusionPath) } else { @() }
+    $existingProcs = if ($prefs -and $prefs.ExclusionProcess) { @($prefs.ExclusionProcess) } else { @() }
+    $existingExts  = if ($prefs -and $prefs.ExclusionExtension) { @($prefs.ExclusionExtension) } else { @() }
+
     foreach ($path in $pathsToExclude) {
+        if ($existingPaths -contains $path) {
+            Write-OutputColor "  Already excluded: $path" -color "Info"
+            continue
+        }
         try {
             Add-MpPreference -ExclusionPath $path -ErrorAction Stop
             Write-OutputColor "  Added path: $path" -color "Success"
@@ -253,12 +265,8 @@ function Add-HyperVDefenderExclusions {
             $added++
         }
         catch {
-            if ($_.Exception.Message -notlike "*already exists*") {
-                Write-OutputColor "  Failed to add path $path : $_" -color "Error"
-                $errors++
-            } else {
-                Write-OutputColor "  Already excluded: $path" -color "Info"
-            }
+            Write-OutputColor "  Failed to add path $path : $_" -color "Error"
+            $errors++
         }
     }
 
@@ -271,6 +279,10 @@ function Add-HyperVDefenderExclusions {
     )
 
     foreach ($proc in $processesToExclude) {
+        if ($existingProcs -contains $proc) {
+            Write-OutputColor "  Already excluded: $proc" -color "Info"
+            continue
+        }
         try {
             Add-MpPreference -ExclusionProcess $proc -ErrorAction Stop
             Write-OutputColor "  Added process: $proc" -color "Success"
@@ -278,12 +290,8 @@ function Add-HyperVDefenderExclusions {
             $added++
         }
         catch {
-            if ($_.Exception.Message -notlike "*already exists*") {
-                Write-OutputColor "  Failed to add process $proc : $_" -color "Error"
-                $errors++
-            } else {
-                Write-OutputColor "  Already excluded: $proc" -color "Info"
-            }
+            Write-OutputColor "  Failed to add process $proc : $_" -color "Error"
+            $errors++
         }
     }
 
@@ -291,6 +299,10 @@ function Add-HyperVDefenderExclusions {
     $extensionsToExclude = @(".vhd", ".vhdx", ".avhd", ".avhdx", ".vsv", ".iso", ".vhds")
 
     foreach ($ext in $extensionsToExclude) {
+        if ($existingExts -contains $ext) {
+            Write-OutputColor "  Already excluded: $ext" -color "Info"
+            continue
+        }
         try {
             Add-MpPreference -ExclusionExtension $ext -ErrorAction Stop
             Write-OutputColor "  Added extension: $ext" -color "Success"
@@ -298,12 +310,8 @@ function Add-HyperVDefenderExclusions {
             $added++
         }
         catch {
-            if ($_.Exception.Message -notlike "*already exists*") {
-                Write-OutputColor "  Failed to add extension $ext : $_" -color "Error"
-                $errors++
-            } else {
-                Write-OutputColor "  Already excluded: $ext" -color "Info"
-            }
+            Write-OutputColor "  Failed to add extension $ext : $_" -color "Error"
+            $errors++
         }
     }
 

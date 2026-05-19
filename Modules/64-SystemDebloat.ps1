@@ -154,11 +154,16 @@ function Get-RemovableAppxPackages {
         "Microsoft.549981C3F5F10"                 # Cortana
     )
 
-    # Win11 aggressive: also remove Widgets backend and new Outlook
+    # Win11 aggressive: do NOT remove Microsoft.Windows.ContentDeliveryManager. It was previously
+    # added here on the assumption that it only installs sponsored apps, but on Win11 22H2+ it's
+    # an inbox component that the Start menu and Settings panes depend on for tile rendering and
+    # lock-screen image hosting. Removing it leaves Start with empty tile placeholders and breaks
+    # several Settings panes. The HKCU registry tweaks below (RotatingLockScreenOverlayEnabled,
+    # SubscribedContent-*Enabled) already disable the consumer-features behavior — the package
+    # itself should stay installed.
     if ($osInfo.IsWin11) {
-        $aggressivePackages += @(
-            "Microsoft.Windows.ContentDeliveryManager" # Silently installs sponsored apps
-        )
+        # (Reserved for future Win11-aggressive-only packages; ContentDeliveryManager removed
+        # from this list — see comment above.)
     }
 
     $result = [System.Collections.Generic.List[string]]::new()
@@ -256,7 +261,23 @@ function Get-TelemetryTasks {
             $found = Get-ScheduledTask -TaskPath $taskPath -ErrorAction SilentlyContinue
             if ($null -ne $found) {
                 foreach ($task in @($found)) {
-                    $tasks.Add($task)
+                    # Filter by Author. Third-party software (Dell OpenManage, Lenovo Vantage,
+                    # some EDR products, custom RMM scripts) does co-locate tasks under the
+                    # Microsoft\Windows\* hierarchy. Path-based disabling without an author
+                    # filter silently kills those — operator's monitoring breaks overnight.
+                    # We only target tasks authored by "Microsoft Corporation" or a Microsoft
+                    # subnamespace; everything else stays put.
+                    $author = $task.Author
+                    if ($null -ne $author -and ($author -like 'Microsoft*' -or $author -eq '' -or $author -like '$(@%SystemRoot%*')) {
+                        $tasks.Add($task)
+                    } elseif ($null -eq $author -or $author -eq '') {
+                        # Some inbox tasks have no Author populated; include only if URI matches
+                        # the well-known Microsoft prefix to be safe.
+                        if ($task.URI -like '\Microsoft\Windows\*') {
+                            $tasks.Add($task)
+                        }
+                    }
+                    # else: third-party task in a Microsoft path — leave alone.
                 }
             }
         }
@@ -550,11 +571,20 @@ function Invoke-WorkstationDebloat {
             }
         }
 
-        # Printer check for Print Spooler
+        # Printer check for Print Spooler. Past pattern: Get-Printer misses printers added via
+        # legacy port drivers (MFP scan-to-folder, ERP-vendor virtual queues), so also scan
+        # the printer registry hive — ANY entry means an installed printer that may depend on
+        # Spooler. We also widen the Get-Printer filter to ANY printer (not just shared) since
+        # local-only printers still need Spooler.
         if ($svcInfo.CheckPrinters) {
-            $printers = @(Get-Printer -ErrorAction SilentlyContinue | Where-Object { $_.Shared -eq $true -or $_.Name -notmatch "Microsoft|Fax|OneNote|PDF" })
-            if ($printers.Count -gt 0) {
-                Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — $($printers.Count) printer(s) detected" -color "Debug"
+            $printers = @(Get-Printer -ErrorAction SilentlyContinue)
+            $printerRegEntries = @()
+            try {
+                $printerRegEntries = @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Print\Printers' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.PSChildName -notmatch '^(Microsoft|Fax|OneNote|PDF)' })
+            } catch { }
+            if ($printers.Count -gt 0 -or $printerRegEntries.Count -gt 0) {
+                Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — $($printers.Count) Get-Printer + $($printerRegEntries.Count) reg-only printer(s) detected" -color "Debug"
                 $skippedCount++
                 continue
             }
@@ -563,6 +593,20 @@ function Invoke-WorkstationDebloat {
         $svc = Get-Service -Name $svcInfo.Name -ErrorAction SilentlyContinue
         if ($null -eq $svc) {
             Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — service not found" -color "Debug"
+            $skippedCount++
+            continue
+        }
+
+        # Dependent-service check. Stop-Service -Force will also stop dependents without warning;
+        # disabling Spooler/BITS/SysMain can cascade-break WSUS, scan-to-folder, ERP printing,
+        # and backup software that pinned a dependency. Refuse to disable if any non-Microsoft
+        # or critical service depends on this one, regardless of CheckPrinters/CheckSSD results.
+        $runningDependents = @(Get-Service -Name $svcInfo.Name -DependentServices -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' })
+        if ($runningDependents.Count -gt 0) {
+            Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — $($runningDependents.Count) running dependent service(s):" -color "Debug"
+            foreach ($d in ($runningDependents | Select-Object -First 5)) {
+                Write-OutputColor "         - $($d.DisplayName) ($($d.Name))" -color "Debug"
+            }
             $skippedCount++
             continue
         }
@@ -1086,11 +1130,18 @@ function Invoke-ServerDebloat {
     }
 
     foreach ($svcInfo in $uniqueServices) {
-        # Print server check
+        # Print server check. The default Shared-only filter misses local-only print queues
+        # (MFP scan-to-folder workflows, ERP virtual printers). Widen to ANY printer + registry
+        # hive to be safe — false-positive skip is better than killing a vendor scanner pipeline.
         if ($svcInfo.CheckPrintServer) {
-            $sharedPrinters = @(Get-Printer -ErrorAction SilentlyContinue | Where-Object { $_.Shared -eq $true })
-            if ($sharedPrinters.Count -gt 0) {
-                Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — $($sharedPrinters.Count) shared printer(s) found" -color "Debug"
+            $anyPrinters = @(Get-Printer -ErrorAction SilentlyContinue)
+            $printerRegEntries = @()
+            try {
+                $printerRegEntries = @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Print\Printers' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.PSChildName -notmatch '^(Microsoft|Fax|OneNote|PDF)' })
+            } catch { }
+            if ($anyPrinters.Count -gt 0 -or $printerRegEntries.Count -gt 0) {
+                Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — $($anyPrinters.Count) printer(s) + $($printerRegEntries.Count) reg-only" -color "Debug"
                 $skippedCount++
                 continue
             }
@@ -1109,6 +1160,20 @@ function Invoke-ServerDebloat {
         $svc = Get-Service -Name $svcInfo.Name -ErrorAction SilentlyContinue
         if ($null -eq $svc) {
             Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — service not found" -color "Debug"
+            $skippedCount++
+            continue
+        }
+
+        # Dependent-service cascade check (same as workstation path). Disabling a service with
+        # running dependents triggers Stop-Service -Force to cascade-stop them; on a production
+        # server this can break WSUS (BITS), backup software (BITS/VSS), file-server tooling
+        # (LanmanServer dependents). Refuse if any running dependent exists.
+        $runningDependents = @(Get-Service -Name $svcInfo.Name -DependentServices -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' })
+        if ($runningDependents.Count -gt 0) {
+            Write-OutputColor "  [SKIP] $($svcInfo.DisplayName) — $($runningDependents.Count) running dependent service(s):" -color "Debug"
+            foreach ($d in ($runningDependents | Select-Object -First 5)) {
+                Write-OutputColor "         - $($d.DisplayName) ($($d.Name))" -color "Debug"
+            }
             $skippedCount++
             continue
         }

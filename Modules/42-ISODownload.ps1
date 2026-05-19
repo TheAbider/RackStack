@@ -139,8 +139,24 @@ function Get-ServerISO {
                 return $cached.Path
             }
             "2" {
-                Write-OutputColor "  Removing old ISO..." -color "Info"
-                Remove-Item -LiteralPath $cached.Path -Force -ErrorAction SilentlyContinue
+                # Keep the old ISO until the new one verifies. If we delete first and the
+                # re-download fails (network drop, FileServer outage, disk full mid-write),
+                # the operator has neither a working ISO nor a fallback. Rename to .old so
+                # the new download lands cleanly; remove .old only after success below.
+                $oldPath = $cached.Path
+                $oldRenamed = "$oldPath.old"
+                try {
+                    if (Test-Path -LiteralPath $oldRenamed) {
+                        Remove-Item -LiteralPath $oldRenamed -Force -ErrorAction SilentlyContinue
+                    }
+                    Move-Item -LiteralPath $oldPath -Destination $oldRenamed -Force -ErrorAction Stop
+                    Write-OutputColor "  Existing ISO renamed to '$([System.IO.Path]::GetFileName($oldRenamed))' as a fallback." -color "Info"
+                    $script:_isoRollbackPath = $oldRenamed
+                } catch {
+                    Write-OutputColor "  Could not rename existing ISO: $($_.Exception.Message)" -color "Warning"
+                    Write-OutputColor "  Re-downloading anyway — if download fails, the existing ISO remains in place." -color "Warning"
+                    $script:_isoRollbackPath = $null
+                }
             }
             default { return $null }
         }
@@ -173,12 +189,29 @@ function Get-ServerISO {
     if ($result.Success) {
         Write-OutputColor "  ISO downloaded and verified!" -color "Success"
         Write-OutputColor "  Path: $($result.FilePath)" -color "Info"
+        # Clean up the .old rollback file now that the new download verified
+        if ($script:_isoRollbackPath -and (Test-Path -LiteralPath $script:_isoRollbackPath)) {
+            Remove-Item -LiteralPath $script:_isoRollbackPath -Force -ErrorAction SilentlyContinue
+        }
+        $script:_isoRollbackPath = $null
         Add-SessionChange -Category "ISO Download" -Description "Downloaded Server $OSVersion ISO to $isoPath"
         Clear-MenuCache
         return $result.FilePath
     }
     else {
         Write-OutputColor "  Failed to download ISO: $($result.Error)" -color "Error"
+        # Roll back the rename if we have a saved .old to restore
+        if ($script:_isoRollbackPath -and (Test-Path -LiteralPath $script:_isoRollbackPath)) {
+            try {
+                $restorePath = $script:_isoRollbackPath -replace '\.old$', ''
+                Move-Item -LiteralPath $script:_isoRollbackPath -Destination $restorePath -Force -ErrorAction Stop
+                Write-OutputColor "  Restored previous ISO from rollback: $restorePath" -color "Info"
+            } catch {
+                Write-OutputColor "  Could not restore previous ISO: $($_.Exception.Message)" -color "Warning"
+                Write-OutputColor "  Fallback at: $script:_isoRollbackPath (rename manually to .iso)" -color "Info"
+            }
+        }
+        $script:_isoRollbackPath = $null
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Troubleshooting:" -color "Warning"
         Write-OutputColor "  - Ensure FileServer is accessible" -color "Info"

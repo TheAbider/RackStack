@@ -178,10 +178,11 @@ function Show-ServiceManager {
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
                     # Warn about critical services
-                    $criticalServices = @('NTDS', 'DNS', 'DFSR', 'LanmanServer', 'W32Time', 'ClusSvc', 'vmms', 'wuauserv')
-                    if ($svc.Name -in $criticalServices) {
+                    $criticalServices = @('NTDS', 'DNS', 'DFSR', 'LanmanServer', 'W32Time', 'ClusSvc', 'vmms', 'wuauserv', 'vmcompute', 'EventLog', 'Netlogon')
+                    $isCritical = $svc.Name -in $criticalServices
+                    if ($isCritical) {
                         Write-OutputColor "" -color "Info"
-                        Write-OutputColor "  *** CRITICAL SERVICE ***" -color "Error"
+                        Write-OutputColor "  *** CRITICAL SERVICE ***" -color "Critical"
                         Write-OutputColor "  '$($svc.DisplayName)' is a critical infrastructure service." -color "Error"
                         Write-OutputColor "  Stopping it may cause service outages or cluster failovers." -color "Error"
                     }
@@ -197,7 +198,20 @@ function Show-ServiceManager {
                         Write-OutputColor "  These will also be stopped." -color "Warning"
                         Write-OutputColor "" -color "Info"
                     }
-                    if (-not (Confirm-UserAction -Message "Stop service '$($svc.DisplayName)'?")) { continue }
+                    # Critical services need a typed-name confirmation. Past pattern (from round 14
+                    # cluster fixes): a single Y to stop NTDS on a DC, vmms on a Hyper-V host, or
+                    # ClusSvc on a cluster node has catastrophic blast radius. Require the operator
+                    # to type the service short name so a fat-finger Y can't take a server down.
+                    if ($isCritical) {
+                        Write-OutputColor "  Type the service name '$($svc.Name)' to confirm stop:" -color "Critical"
+                        $typed = Read-Host
+                        if ($typed -ne $svc.Name) {
+                            Write-OutputColor "  Cancelled (name did not match)." -color "Info"
+                            continue
+                        }
+                    } else {
+                        if (-not (Confirm-UserAction -Message "Stop service '$($svc.DisplayName)'?")) { continue }
+                    }
                     try {
                         Stop-Service -Name $svc.Name -Force -ErrorAction Stop
                         Write-OutputColor "  Stopped $($svc.DisplayName)" -color "Success"
@@ -222,6 +236,8 @@ function Show-ServiceManager {
                 if ($navResult.ShouldReturn) { return }
                 if ($num -match '^\d+$' -and [int]$num -ge 1 -and [int]$num -le $serviceList.Count) {
                     $svc = $serviceList[[int]$num - 1]
+                    $criticalServices = @('NTDS', 'DNS', 'DFSR', 'LanmanServer', 'W32Time', 'ClusSvc', 'vmms', 'wuauserv', 'vmcompute', 'EventLog', 'Netlogon')
+                    $isCritical = $svc.Name -in $criticalServices
                     # Warn about dependent services
                     $dependents = @(Get-Service -Name $svc.Name -DependentServices -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' })
                     if ($dependents.Count -gt 0) {
@@ -233,7 +249,17 @@ function Show-ServiceManager {
                         Write-OutputColor "  These will also be restarted." -color "Warning"
                         Write-OutputColor "" -color "Info"
                     }
-                    if (-not (Confirm-UserAction -Message "Restart service '$($svc.DisplayName)'?")) { continue }
+                    if ($isCritical) {
+                        Write-OutputColor "  *** CRITICAL SERVICE *** Restart includes a brief stop window." -color "Critical"
+                        Write-OutputColor "  Type the service name '$($svc.Name)' to confirm restart:" -color "Critical"
+                        $typed = Read-Host
+                        if ($typed -ne $svc.Name) {
+                            Write-OutputColor "  Cancelled (name did not match)." -color "Info"
+                            continue
+                        }
+                    } else {
+                        if (-not (Confirm-UserAction -Message "Restart service '$($svc.DisplayName)'?")) { continue }
+                    }
                     try {
                         Restart-Service -Name $svc.Name -Force -ErrorAction Stop
                         Write-OutputColor "  Restarted $($svc.DisplayName)" -color "Success"

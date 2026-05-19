@@ -1,5 +1,27 @@
 ﻿# Changelog
 
+## v1.98.23
+
+Round 16 audit — 7 Tier-1 destructive-op fixes + Tier-2 backlog cleanup across 34/40/45/64 and earlier modules.
+
+Tier-1:
+- **Fix (DESTRUCTIVE):** 64-SystemDebloat removed `Microsoft.Windows.ContentDeliveryManager` from the Win11 aggressive-removal list. CDM was added on the assumption it only installs sponsored apps, but it's an inbox component on Win11 22H2+ that Start menu tile rendering, lock-screen image hosting, and several Settings panes depend on. Removing it bricks Start menu rendering (empty tile placeholders) and breaks Settings → Personalization. The HKCU registry tweaks below already disable the consumer-features behavior — the package itself stays installed (64-SystemDebloat).
+- **Fix (DESTRUCTIVE):** 64-SystemDebloat workstation+server service-disable loops now add a `Get-Service -DependentServices | Where State -eq 'Running'` check before each `Stop-Service -Force` and SKIP services with running dependents. Past pattern: BITS or Spooler disable on a server cascade-stopped WSUS / scan-to-folder / vendor printing workflows. Also widened the CheckPrinters / CheckPrintServer filter to include the registry hive at `HKLM:\SYSTEM\CurrentControlSet\Control\Print\Printers` so legacy port drivers + MFP virtual queues that `Get-Printer` misses are detected (64-SystemDebloat).
+- **Fix (DESTRUCTIVE):** 64-SystemDebloat `Get-TelemetryTasks` now filters by Author. Path-based disable under `\Microsoft\Windows\Maps\`, `\Application Experience\`, etc. silently killed third-party tasks co-located there (Dell OpenManage, Lenovo Vantage, some EDR products). Only tasks authored by Microsoft (or with a Microsoft URI when Author is empty) are returned (64-SystemDebloat).
+- **Fix (DESTRUCTIVE):** 45-ConfigExport `Import-ConfigurationProfile` refuses `Rename-Computer` on a Failover Cluster member. Renaming a clustered node without the Remove-ClusterNode / re-add dance leaves the CNO out-of-sync and can drop quorum. Now pre-queries `Get-ClusterNode -Name $env:COMPUTERNAME` and aborts the hostname step with a clear remediation hint (45-ConfigExport).
+- **Fix (DESTRUCTIVE):** 45-ConfigExport `Import-ConfigurationProfile` network step now scopes `Remove-NetIPAddress` to Manual-origin addresses on the adapter (not every IPv4 address) and only removes the default route (not every route). Prior unscoped wipe was a regression vs the `Invoke-Remediation` fix and would kill the operator's RDP/WinRM session mid-apply on multi-IP hosts. Also warns + double-confirms when running over a remote session (45-ConfigExport).
+- **Fix (DESTRUCTIVE):** 40-HostStorage `Move-OpticalDriveFromD` fallback path now tries the new-letter mount FIRST, verifies with `Test-Path`, and only then runs `mountvol D: /D`. Prior code unmounted D: before verifying — a transient `mountvol newletter` failure left the volume stranded with only `\\?\Volume{guid}\` accessible (40-HostStorage).
+
+Tier-2 backlog cleanup:
+- **Fix:** 30-ServiceManager Stop/Restart on critical services (NTDS, DNS, DFSR, LanmanServer, W32Time, ClusSvc, vmms, wuauserv, vmcompute, EventLog, Netlogon) now requires typed service-short-name confirmation instead of single Y/N (same pattern as round 14 cluster fixes — a fat-fingered Y on NTDS or vmms has catastrophic blast radius) (30-ServiceManager).
+- **Fix:** 17-DefenderExclusions replaced English-only `*already exists*` exception-message matching with locale-neutral pre-check against `Get-MpPreference.ExclusionPath/Process/Extension`. Non-EN Server SKUs no longer report "Failed to add" on re-runs (17-DefenderExclusions).
+- **Fix:** 26-MPIO `Get-MSDSMSupportedHW`, `Get-MSDSMAutomaticClaimSettings`, and `Get-MSDSMGlobalDefaultLoadBalancePolicy` now wrapped in `Start-Job` + `Wait-Job -Timeout 15` (same pattern as `Test-SystemDisk` in v1.98.20). Status menu no longer hangs for minutes when MS DSM is wedged after a SAN path flap (26-MPIO).
+- **Fix:** 42-ISODownload safe re-download — renames existing ISO to `.old` before re-download, removes `.old` only after the new download verifies, restores from `.old` on failure. Prior code eagerly deleted the cached ISO before re-download; a network drop / disk full mid-write left the operator with no ISO at all (42-ISODownload).
+- **Fix:** 21-Licensing `Test-ServerActivated` now uses `Get-CimInstance SoftwareLicensingProduct.LicenseStatus` (integer enum) instead of parsing English-only "License Status: Licensed" from slmgr.vbs output. Non-EN servers were always reported as unlicensed (21-Licensing).
+- **Fix:** 18-FirewallTemplates `Enable-ICMPPingRules` undo now precise — tracks specific rule Names that transitioned disabled→enabled inside the function and disables only those. Prior `*Echo Request*ICMP*` wildcard match on undo disabled every Echo Request rule including GPO-enabled ones, breaking monitoring until next GPO refresh (18-FirewallTemplates).
+
+Audit (CLEAN): 34-Help — read-only display module, no destructive operations.
+
 ## v1.98.22
 
 Round 15 audit — 9 Tier-1 destructive-op fixes across storage, VM lifecycle, firewall, and pagefile surfaces.

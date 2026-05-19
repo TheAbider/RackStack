@@ -481,6 +481,7 @@ function Enable-ICMPPingRules {
 
     $enabledCount = 0
     $createdCount = 0
+    $enabledRuleNames = @()  # Track which specific rules we toggled so undo is precise
 
     # Try to enable built-in ICMPv4 Echo Request rules (Domain and Private profiles)
     $v4Rules = @(Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object {
@@ -492,6 +493,7 @@ function Enable-ICMPPingRules {
                 if ($rule.Enabled -ne $true) {
                     Enable-NetFirewallRule -Name $rule.Name -ErrorAction Stop
                     Write-OutputColor "  Enabled: $($rule.DisplayName)" -color "Success"
+                    $enabledRuleNames += $rule.Name
                 } else {
                     Write-OutputColor "  Already enabled: $($rule.DisplayName)" -color "Info"
                 }
@@ -513,6 +515,7 @@ function Enable-ICMPPingRules {
                 if ($rule.Enabled -ne $true) {
                     Enable-NetFirewallRule -Name $rule.Name -ErrorAction Stop
                     Write-OutputColor "  Enabled: $($rule.DisplayName)" -color "Success"
+                    $enabledRuleNames += $rule.Name
                 } else {
                     Write-OutputColor "  Already enabled: $($rule.DisplayName)" -color "Info"
                 }
@@ -575,15 +578,21 @@ function Enable-ICMPPingRules {
 
     Add-SessionChange -Category "Security" -Description "Enabled ICMP ping (Echo Request) inbound rules"
     Clear-MenuCache
+    # Same pattern as Live Migration undo (v1.98.22): track specific Names that transitioned
+    # disabled→enabled and only disable those. Prior code disabled every "Echo Request*ICMP*"
+    # rule including ones enabled by GPO before RackStack ran — breaking monitoring until GPO
+    # refresh. The two custom-named rules we may have created are also tracked separately.
     Add-UndoAction -Category "Security" -Description "Enabled ICMP ping rules" -UndoScript {
-        # Disable built-in echo request rules
-        Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object {
-            $_.DisplayName -like "*Echo Request*ICMP*" -and $_.Direction -eq "Inbound"
-        } | Disable-NetFirewallRule -ErrorAction SilentlyContinue
-        # Remove custom rules if we created them
+        param($EnabledRules)
+        if ($EnabledRules) {
+            foreach ($n in $EnabledRules) {
+                Disable-NetFirewallRule -Name $n -ErrorAction SilentlyContinue
+            }
+        }
+        # Remove custom rules only — by DisplayName since they're unique to this function
         Remove-NetFirewallRule -DisplayName "Allow ICMPv4 Ping Inbound" -ErrorAction SilentlyContinue
         Remove-NetFirewallRule -DisplayName "Allow ICMPv6 Ping Inbound" -ErrorAction SilentlyContinue
-    }
+    }.GetNewClosure() -UndoParams @{ EnabledRules = $enabledRuleNames }
 }
 
 # Function to compare current firewall rules against a template

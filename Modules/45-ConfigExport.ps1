@@ -733,37 +733,81 @@ function Import-ConfigurationProfile {
 
         Write-OutputColor "" -color "Info"
 
-        # Apply hostname
+        # Apply hostname. Refuse on cluster nodes — Rename-Computer on a clustered host without
+        # the proper Remove-ClusterNode / Add-ClusterNode dance breaks cluster membership,
+        # leaves the CNO out-of-sync, and can drop quorum. Past pattern: operator copies a
+        # baseline profile from HV1 → HV2 (both in same cluster), profile applies on HV2,
+        # cluster goes down after reboot.
         if ($configProfile.Hostname -and $configProfile.Hostname -ne $env:COMPUTERnAME) {
             Write-OutputColor "  [1/13] Setting hostname to '$($configProfile.Hostname)'..." -color "Info"
+            $isClusterNode = $false
             try {
-                if (Test-ValidHostname -Hostname $configProfile.Hostname) {
+                if (Get-Command Get-ClusterNode -ErrorAction SilentlyContinue) {
+                    $thisNode = Get-ClusterNode -Name $env:COMPUTERNAME -ErrorAction SilentlyContinue
+                    if ($null -ne $thisNode) { $isClusterNode = $true }
+                }
+            } catch { }
+            if ($isClusterNode) {
+                Write-OutputColor "        REFUSING: this host is a Failover Cluster member." -color "Error"
+                Write-OutputColor "        Renaming a clustered node breaks cluster membership and may drop quorum." -color "Error"
+                Write-OutputColor "        To rename: 1) evict from cluster, 2) rename + reboot, 3) re-add to cluster." -color "Warning"
+                $errors++
+            }
+            elseif (Test-ValidHostname -Hostname $configProfile.Hostname) {
+                try {
                     Rename-Computer -newname $configProfile.Hostname -Force -ErrorAction Stop
                     $global:Rebootneeded = $true
                     $changesApplied++
                     Write-OutputColor "        Hostname set. Reboot required." -color "Success"
                     Add-SessionChange -Category "System" -Description "Set hostname to $($configProfile.Hostname)"
                     Clear-MenuCache
-                } else {
-                    Write-OutputColor "        Invalid hostname format: $($configProfile.Hostname)" -color "Error"
+                }
+                catch {
+                    Write-OutputColor "        Failed: $_" -color "Error"
                     $errors++
                 }
-            }
-            catch {
-                Write-OutputColor "        Failed: $_" -color "Error"
+            } else {
+                Write-OutputColor "        Invalid hostname format: $($configProfile.Hostname)" -color "Error"
                 $errors++
             }
         } else {
             Write-OutputColor "  [1/13] Hostname: skipped" -color "Debug"
         }
 
-        # Apply network settings
+        # Apply network settings. Scope IP removal to the OLD IP only — the prior unscoped
+        # Remove-NetIPAddress wiped every IPv4 address on the adapter mid-session, killing the
+        # operator's RDP/WinRM session before the new IP could be applied. Same regression that
+        # was already fixed in Invoke-Remediation; this Import path inherited the original bug.
         if ($configProfile.network.IPAddress -and $configProfile.network.Gateway) {
             Write-OutputColor "  [2/13] Configuring network..." -color "Info"
             try {
                 $adaptername = $configProfile.network.Adaptername
-                Remove-netIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                Remove-netRoute -InterfaceAlias $adaptername -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+
+                # Warn if this would wipe the IP we're connected over.
+                $remoteSession = $false
+                try {
+                    if ($env:SESSIONNAME -and ($env:SESSIONNAME -like 'RDP-Tcp*' -or $env:SESSIONNAME -like 'WinRM-*')) {
+                        $remoteSession = $true
+                    }
+                } catch { }
+                if ($remoteSession) {
+                    Write-OutputColor "        WARNING: applying network changes over a remote session may disconnect you." -color "Warning"
+                    if (-not (Confirm-UserAction -Message "Continue with network reconfiguration?")) {
+                        Write-OutputColor "        Network step cancelled." -color "Info"
+                        $errors++
+                        return
+                    }
+                }
+
+                # Targeted removal: only delete the existing static IP that matches the saved
+                # adapter, not every IP on the NIC. Loop in case multiple primary IPs exist.
+                $existingIPs = @(Get-NetIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                    Where-Object { $_.PrefixOrigin -eq 'Manual' })
+                foreach ($ip in $existingIPs) {
+                    Remove-NetIPAddress -InterfaceAlias $adaptername -IPAddress $ip.IPAddress -Confirm:$false -ErrorAction SilentlyContinue
+                }
+                # Only remove the default route on this adapter (not every route)
+                Remove-NetRoute -InterfaceAlias $adaptername -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
 
                 new-netIPAddress -InterfaceAlias $adaptername -IPAddress $configProfile.network.IPAddress `
                     -PrefixLength $configProfile.network.SubnetCIDR -DefaultGateway $configProfile.network.Gateway -ErrorAction Stop

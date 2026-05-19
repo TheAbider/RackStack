@@ -141,14 +141,22 @@ function Move-OpticalDriveFromD {
             }
 
             if ($volGuid) {
-                # Remove D: mount point
-                mountvol D: /D 2>$null
-                # Mount at new letter
-                mountvol "${newLetter}:" $volGuid 2>$null
-
+                # Try the NEW-letter mount FIRST. If it fails, leave D: intact so the operator
+                # still has the optical drive accessible. The prior code did `mountvol D: /D`
+                # before verifying the new mount succeeded — on a transient failure the optical
+                # drive ended up unmounted with only the \\?\Volume{guid}\ path accessible, and
+                # a non-optical volume misdetected here could lose its D: mount entirely.
+                $newMount = mountvol "${newLetter}:" $volGuid 2>&1
+                Start-Sleep -Milliseconds 500
                 if (Test-Path "${newLetter}:\") {
+                    # New mount succeeded — safe to release D: now.
+                    mountvol D: /D 2>$null
                     Write-OutputColor "  Optical drive moved from D: to ${newLetter}: successfully!" -color "Success"
                     return $true
+                } else {
+                    Write-OutputColor "  Failed to mount at ${newLetter}: ($newMount)" -color "Warning"
+                    Write-OutputColor "  D: mount left intact (optical drive still accessible)." -color "Info"
+                    return $false
                 }
             }
 
