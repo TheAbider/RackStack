@@ -4965,10 +4965,20 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             $ntpSource = "Unknown"
             $lastSync = "Unknown"
             $ntpType = "Unknown"
+            # Source from registry first (locale-neutral). w32tm /query /status's "Source:" and
+            # "Last Successful Sync Time:" labels are both localized on non-EN MUI.
+            try {
+                $w32cfg3 = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'NtpServer','Type' -ErrorAction Stop
+                if ($w32cfg3.Type -eq 'NoSync') {
+                    $ntpSource = "Local clock (NoSync)"
+                } elseif ($w32cfg3.NtpServer) {
+                    $ntpSource = ($w32cfg3.NtpServer -split '\s+' | ForEach-Object { ($_ -split ',')[0] } | Where-Object { $_ }) -join ', '
+                }
+            } catch { }
             try {
                 $w32tmOutput = & w32tm /query /status 2>&1
                 $w32tmStr = $w32tmOutput -join "`n"
-                if ($w32tmStr -match 'Source:\s*(.+)') { $regexMatches = $matches; $ntpSource = $regexMatches[1].Trim() }
+                if (($ntpSource -eq "Unknown") -and ($w32tmStr -match 'Source:\s*(.+)')) { $regexMatches = $matches; $ntpSource = $regexMatches[1].Trim() }
                 if ($w32tmStr -match 'Last Successful Sync Time:\s*(.+)') { $regexMatches = $matches; $lastSync = $regexMatches[1].Trim() }
             } catch { }
 
@@ -7940,18 +7950,46 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             $licIssues = 0
             $licenseInfo = @{}
 
+            # Primary path: CIM SoftwareLicensingProduct. LicenseStatus is an enum integer
+            # (1=Licensed, 2=OOB-Grace, etc.) — locale-neutral. Description/Name come from CIM
+            # too. The previous slmgr.vbs /dli parsing was English-only and reported every non-EN
+            # host as "Unknown" / unlicensed. Same fix pattern as 21-Licensing Test-ServerActivated
+            # in v1.98.23; this CLI audit path had the duplicate bug.
             try {
-                $slmgr = & cscript //nologo "$env:SystemRoot\System32\slmgr.vbs" /dli 2>&1
-                $slmgrStr = $slmgr -join "`n"
-                if ($slmgrStr -match 'Name:\s*(.+)') { $regexMatches = $matches; $licenseInfo['ProductName'] = $regexMatches[1].Trim() }
-                if ($slmgrStr -match 'Description:\s*(.+)') { $regexMatches = $matches; $licenseInfo['Description'] = $regexMatches[1].Trim() }
-                if ($slmgrStr -match 'License Status:\s*(.+)') { $regexMatches = $matches; $licenseInfo['LicenseStatus'] = $regexMatches[1].Trim() }
-                if ($slmgrStr -match 'Product Key Channel:\s*(.+)') { $regexMatches = $matches; $licenseInfo['KeyChannel'] = $regexMatches[1].Trim() }
-
-                if ($licenseInfo.ContainsKey('LicenseStatus') -and $licenseInfo['LicenseStatus'] -ne 'Licensed') { $licIssues++ }
+                $slpAll = Get-CimInstance -ClassName SoftwareLicensingProduct -OperationTimeoutSec 10 -ErrorAction SilentlyContinue |
+                    Where-Object { $_.PartialProductKey -and $_.ApplicationId -eq '55c92734-d682-4d71-983e-d6ec3f16059f' } |
+                    Select-Object -First 1
+                if ($null -ne $slpAll) {
+                    $licenseInfo['ProductName'] = "$($slpAll.Name)"
+                    $licenseInfo['Description'] = "$($slpAll.Description)"
+                    $statusInt = [int]$slpAll.LicenseStatus
+                    $statusName = switch ($statusInt) {
+                        0 { 'Unlicensed' } 1 { 'Licensed' } 2 { 'Out-of-Box Grace' }
+                        3 { 'Out-of-Tolerance Grace' } 4 { 'Non-Genuine Grace' }
+                        5 { 'Notification' } 6 { 'Extended Grace' }
+                        default { "Unknown ($statusInt)" }
+                    }
+                    $licenseInfo['LicenseStatus'] = $statusName
+                    if ($statusInt -ne 1) { $licIssues++ }
+                }
             } catch { }
 
-            # Also check via CIM
+            # Fallback to slmgr only if CIM returned nothing — kept for environments where
+            # SoftwareLicensingProduct is unavailable. Parsing remains English-only here; the
+            # operator-visible report tags it as best-effort.
+            if (-not $licenseInfo.ContainsKey('ProductName')) {
+                try {
+                    $slmgr = & cscript //nologo "$env:SystemRoot\System32\slmgr.vbs" /dli 2>&1
+                    $slmgrStr = $slmgr -join "`n"
+                    if ($slmgrStr -match 'Name:\s*(.+)') { $regexMatches = $matches; $licenseInfo['ProductName'] = $regexMatches[1].Trim() }
+                    if ($slmgrStr -match 'Description:\s*(.+)') { $regexMatches = $matches; $licenseInfo['Description'] = $regexMatches[1].Trim() }
+                    if ($slmgrStr -match 'License Status:\s*(.+)') { $regexMatches = $matches; $licenseInfo['LicenseStatus'] = $regexMatches[1].Trim() }
+                    if ($slmgrStr -match 'Product Key Channel:\s*(.+)') { $regexMatches = $matches; $licenseInfo['KeyChannel'] = $regexMatches[1].Trim() }
+                    if ($licenseInfo.ContainsKey('LicenseStatus') -and $licenseInfo['LicenseStatus'] -ne 'Licensed') { $licIssues++ }
+                } catch { }
+            }
+
+            # Additional CIM details (PartialProductKey + GracePeriod)
             try {
                 $slp = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND LicenseStatus=1" -ErrorAction SilentlyContinue | Select-Object -First 1
                 if ($null -ne $slp) {

@@ -286,11 +286,23 @@ function Export-HTMLHealthReport {
     if ($includeSecurity) {
         $timeSyncHtml = "<table><tr><th>Property</th><th>Value</th><th>Status</th></tr>"
         try {
+            # Pull source from W32Time registry first (locale-neutral). w32tm /query /status's
+            # "Source:" label is localized on non-EN MUI; the regex below would not match.
+            $timeSyncSource = $null
+            try {
+                $w32cfg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'NtpServer','Type' -ErrorAction Stop
+                if ($w32cfg.Type -eq 'NoSync') {
+                    $timeSyncSource = "Local clock (NoSync)"
+                } elseif ($w32cfg.NtpServer) {
+                    $timeSyncSource = ($w32cfg.NtpServer -split '\s+' | ForEach-Object { ($_ -split ',')[0] } | Where-Object { $_ }) -join ', '
+                }
+            } catch { }
+
             $w32tmOut = w32tm /query /status 2>&1
             $timeSyncStat = "good"
             foreach ($tsLine in $w32tmOut) {
                 $tsText = $tsLine.ToString()
-                if ($tsText -match 'Source:\s*(.+)') {
+                if ((-not $timeSyncSource) -and ($tsText -match 'Source:\s*(.+)')) {
                     $regexMatches = $matches
                     $timeSyncSource = $regexMatches[1].Trim()
                 }
@@ -994,11 +1006,22 @@ function Get-ReadinessChecks {
     # on non-English Windows MUI — supplement with the W32Time Type registry value
     # (NoSync / NTP / NT5DS / AllSync), which is language-neutral.
     try {
+        # Pull source from W32Time registry first (locale-neutral).
+        $tsSource = $null
+        try {
+            $w32cfg2 = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'NtpServer','Type' -ErrorAction Stop
+            if ($w32cfg2.Type -eq 'NoSync') {
+                $tsSource = "Local clock (NoSync)"
+            } elseif ($w32cfg2.NtpServer) {
+                $tsSource = ($w32cfg2.NtpServer -split '\s+' | ForEach-Object { ($_ -split ',')[0] } | Where-Object { $_ }) -join ', '
+            }
+        } catch { }
+
         $w32tmOut = w32tm /query /status 2>&1
-        $tsSource = "Unknown"
+        if (-not $tsSource) { $tsSource = "Unknown" }
         foreach ($tsLine in $w32tmOut) {
             $tsText = $tsLine.ToString()
-            if ($tsText -match 'Source:\s*(.+)') { $regexMatches = $matches; $tsSource = $regexMatches[1].Trim() }
+            if (($tsSource -eq "Unknown") -and ($tsText -match 'Source:\s*(.+)')) { $regexMatches = $matches; $tsSource = $regexMatches[1].Trim() }
         }
         $tsNoExternal = $false
         if ($tsSource -match 'Free-Running|Local CMOS') { $tsNoExternal = $true }

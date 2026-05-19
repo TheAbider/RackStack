@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## v1.98.30
+
+Round 22 — cross-module sweep continuation (Pattern 7 English-only output parsing, broader subset).
+
+- **Fix:** 54-HTMLReports health-report `Time Sync` table + Health-Check `Time Sync` row now pull source from `HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters` registry first (locale-neutral). The English-only `Source:` label match formerly rendered as "Unknown" on non-EN MUI, and the "Free-Running|Local CMOS" warn-state match also silently passed. Reports now show the configured NTP server on non-EN hosts (54-HTMLReports × 2 sites).
+- **Fix:** 50-EntryPoint `LicenseAudit` CLI action now reads license details from CIM `SoftwareLicensingProduct` first (locale-neutral) — `LicenseStatus` is an enum integer mapped to the canonical English name internally. Prior slmgr.vbs `/dli` English-label parsing reported every non-EN host as "Unknown" / unlicensed. The slmgr path remains as a fallback only if CIM returns nothing. Same fix shape as the 21-Licensing `Test-ServerActivated` v1.98.23 fix — this CLI audit copy was the duplicate that the sweep flagged (50-EntryPoint).
+- **Fix:** 50-EntryPoint `TimeAudit` CLI action reads NTP source from W32Time registry first; falls back to localized w32tm regex only on registry failure (50-EntryPoint).
+
+Remaining sweep backlog: Pattern 4 (storage cmdlet timeouts ~30 sites), Pattern 7 (~9 remaining w32tm/netsh sites in 50-EntryPoint, 13-Timezone, 45-ConfigExport, 61-ActiveDirectory).
+
 ## v1.98.29
 
 Round 21 — cross-module sweep continuation (Pattern 7 English-only output parsing, time-sync subset).
