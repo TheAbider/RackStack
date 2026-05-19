@@ -275,9 +275,19 @@ function Test-PrePromotionReadiness {
 
     $warningCount = 0
 
-    # Check 1: NTP Sync — verify time service is running and synchronized
-    $w32timeStatus = try { w32tm /query /status 2>&1 } catch { $null }
-    if ($null -eq $w32timeStatus -or "$w32timeStatus" -match 'error|not found|stopped') {
+    # Check 1: NTP Sync — verify time service is running. The previous English-substring
+    # match against `error|not found|stopped` would silently pass on non-EN MUI (those words
+    # are localized in the w32tm output). Use the service state directly + w32tm exit code
+    # as the locale-neutral signal. AD time drift is a critical replication blocker; missing
+    # this check on non-EN Windows is a real bug.
+    $w32timeSvc = Get-Service -Name W32Time -ErrorAction SilentlyContinue
+    $w32timeRunning = ($null -ne $w32timeSvc -and $w32timeSvc.Status -eq 'Running')
+    $w32tmExit = 1
+    try {
+        $null = w32tm /query /status 2>&1
+        $w32tmExit = $LASTEXITCODE
+    } catch { }
+    if (-not $w32timeRunning -or $w32tmExit -ne 0) {
         Write-OutputColor "  │$("  [WARN] Windows Time Service may not be synchronized".PadRight(72))│" -color "Warning"
         Write-OutputColor "  │$("         Time drift can cause AD replication failures".PadRight(72))│" -color "Warning"
         $warningCount++

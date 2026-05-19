@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.98.32
+
+Round 23 — cross-module sweep continuation (Pattern 7 remaining time-sync sites).
+
+- **Fix:** 61-ActiveDirectory AD-readiness NTP check now uses W32Time service state + `w32tm` exit code as the signal instead of substring-matching `error|not found|stopped` against the w32tm output (those words are localized on non-EN MUI, so the warning never fired on non-EN domain controllers — AD time drift is a critical replication blocker, missing this check is a real bug) (61-ActiveDirectory).
+- **Fix:** 45-ConfigExport server-config export NTP-source line reads from `HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters` registry first (locale-neutral). Falls back to `w32tm /query /source` only if registry lookup fails. Exported config now carries the configured peer name on non-EN hosts instead of "Local CMOS Clock" (45-ConfigExport).
+
+Remaining sweep backlog: Pattern 4 (storage cmdlet timeouts ~30 sites — diminishing return since they only matter when the storage stack is wedged), Pattern 7 (~6 remaining netsh-output sites in 50-EntryPoint where the values themselves are English-only).
+
 ## v1.98.31
 
 - **Fix (CI/test):** Test pattern `54-HTMLReports: Readiness checks defender` regex window bumped from 10000 to 12000 chars. My v1.98.30 Pattern 7 fix in Get-ReadinessChecks (registry-first time-sync source) added ~500 chars between `Get-ReadinessChecks` and the first `Defender` mention, pushing it to 10525 (just past the prior window). Not a functional regression (Tests/Run-Tests.ps1).

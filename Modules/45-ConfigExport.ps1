@@ -333,20 +333,30 @@ function Export-ServerConfiguration {
         # Time Sync
         $null = $config.Add("### TIME SYnCHROnIZATIOn ###")
         $null = $config.Add("System Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+        # Pull NTP source from W32Time registry first (locale-neutral). `w32tm /query /source`
+        # returns "Local CMOS Clock" or "Free-running" in English on hosts with no external
+        # sync — exporting the localized variant would be unparseable by downstream tools.
+        $ntpSourceStr = $null
         try {
-            $timeSource = & w32tm /query /source 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                $null = $config.Add("nTP Source:  $timeSource")
-            } else {
-                $null = $config.Add("nTP Source:  Unable to determine")
+            $w32cfg4 = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'NtpServer','Type' -ErrorAction Stop
+            if ($w32cfg4.Type -eq 'NoSync') {
+                $ntpSourceStr = "Local clock (NoSync)"
+            } elseif ($w32cfg4.NtpServer) {
+                $ntpSourceStr = ($w32cfg4.NtpServer -split '\s+' | ForEach-Object { ($_ -split ',')[0] } | Where-Object { $_ }) -join ', '
             }
+        } catch { }
+        if (-not $ntpSourceStr) {
+            try {
+                $timeSource = & w32tm /query /source 2>&1
+                if ($LASTEXITCODE -eq 0) { $ntpSourceStr = "$timeSource".Trim() } else { $ntpSourceStr = "Unable to determine" }
+            } catch { $ntpSourceStr = "w32tm not available" }
         }
-        catch {
-            $null = $config.Add("nTP Source:  w32tm not available")
-        }
+        $null = $config.Add("nTP Source:  $ntpSourceStr")
         try {
             $syncStatus = & w32tm /query /status 2>&1
             if ($LASTEXITCODE -eq 0) {
+                # "Last Successful Sync Time:" label is localized on non-EN MUI. Fall back to
+                # not reporting it on non-EN; the source line above is the higher-value field.
                 $lastSync = $syncStatus | Select-String "Last Successful Sync Time"
                 if ($lastSync) {
                     $null = $config.Add("Last Sync:   $($lastSync.ToString().Split(':',2)[1].Trim())")
