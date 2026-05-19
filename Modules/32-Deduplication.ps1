@@ -85,9 +85,38 @@ function Show-DeduplicationManagement {
         }
         $idx = 1
         $volList = @()
+        # Cache all dedup status/config in a single batch call rather than per-volume —
+        # `Get-DedupStatus`/`Get-DedupVolume` with no `-Volume` filter returns everything in
+        # one round-trip. The per-volume loop was making N+1 CIM queries against a service
+        # that hangs for minutes on wedged dedup stacks; on a file server with 16 LUNs this
+        # froze the menu for 5+ minutes when one chunk store was corrupt. Wrap the batch in
+        # Start-Job + Wait-Job so a wedged service can't block the menu thread at all.
+        $dedupStatusAll = @{}
+        $dedupConfigAll = @{}
+        try {
+            $statusJob = Start-Job -ScriptBlock { Get-DedupStatus -ErrorAction SilentlyContinue }
+            if (Wait-Job -Job $statusJob -Timeout 15) {
+                foreach ($s in @(Receive-Job -Job $statusJob -ErrorAction SilentlyContinue)) {
+                    if ($s.Volume) { $dedupStatusAll[$s.Volume] = $s }
+                }
+            }
+            Stop-Job -Job $statusJob -ErrorAction SilentlyContinue
+            Remove-Job -Job $statusJob -Force -ErrorAction SilentlyContinue
+
+            $configJob = Start-Job -ScriptBlock { Get-DedupVolume -ErrorAction SilentlyContinue }
+            if (Wait-Job -Job $configJob -Timeout 15) {
+                foreach ($c in @(Receive-Job -Job $configJob -ErrorAction SilentlyContinue)) {
+                    if ($c.Volume) { $dedupConfigAll[$c.Volume] = $c }
+                }
+            }
+            Stop-Job -Job $configJob -ErrorAction SilentlyContinue
+            Remove-Job -Job $configJob -Force -ErrorAction SilentlyContinue
+        } catch { }
+
         foreach ($vol in $volumes) {
-            $dedupStatus = Get-DedupStatus -Volume "$($vol.DriveLetter):" -ErrorAction SilentlyContinue
-            $dedupConfig = Get-DedupVolume -Volume "$($vol.DriveLetter):" -ErrorAction SilentlyContinue
+            $volKey = "$($vol.DriveLetter):"
+            $dedupStatus = $dedupStatusAll[$volKey]
+            $dedupConfig = $dedupConfigAll[$volKey]
             if ($dedupConfig) {
                 $enabled = $dedupConfig.Enabled
                 $savedGB = if ($dedupStatus) { [math]::Round($dedupStatus.SavedSpace / 1GB, 2) } else { 0 }

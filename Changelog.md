@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## v1.98.34
+
+Round 25 — backlog cleanup (Pattern 4 highest-impact + remaining Pattern 7 netsh sites).
+
+Pattern 7 (netsh-output sites in 50-EntryPoint migrated to PowerShell cmdlets):
+- **Fix:** `TcpSettingsAudit` Auto-Tuning + Chimney + Congestion + ECN + Timestamps now read from `Get-NetTCPSetting -SettingName Internet` and `Get-NetOffloadGlobalSetting` (locale-neutral typed properties). Falls back to netsh only when the cmdlet isn't available (50-EntryPoint).
+- **Fix:** `TcpSettingsAudit` dynamic-port range now reads `DynamicPortRangeStartPort` / `DynamicPortRangeNumberOfPorts` properties on `Get-NetTCPSetting` (typed integers). Falls back to netsh parsing only on cmdlet-unavailable hosts (50-EntryPoint).
+- **Fix:** `ProxyAudit` WinHTTP proxy now reads directly from `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Connections\WinHttpSettings` binary blob and parses the well-known structure (flags + proxy-server + bypass-list). Bypasses the localized `netsh winhttp show proxy` labels ("Proxy Server" / "Bypass List" become "Proxyserver" / "Ausnahmen" on de-DE, etc.). Netsh fallback remains for hosts where the registry read fails (50-EntryPoint).
+
+Pattern 4 (storage cmdlet timeouts — highest-impact site):
+- **Fix:** 32-Deduplication status menu replaces the per-volume `Get-DedupStatus` + `Get-DedupVolume` loop with two batch CIM queries wrapped in `Start-Job + Wait-Job -Timeout 15` each, then indexes into the results by volume key. On a file server with 16 LUNs and one corrupt chunk store, the per-volume loop was making 32 sequential CIM calls against a wedged dedup service and froze the menu for 5+ minutes. Now bounded at 30s worst-case (15s × 2 batch calls) and a single chunk-store hang doesn't block the others (32-Deduplication).
+
 ## v1.98.33
 
 Round 24 — final Pattern 6 cleanup.

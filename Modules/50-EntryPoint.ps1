@@ -8609,12 +8609,49 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 $proxyConfig['IEAutoConfigURL'] = if ($null -ne $inetReg -and $null -ne $inetReg.AutoConfigURL) { "$($inetReg.AutoConfigURL)" } else { '' }
             } catch { }
 
-            # WinHTTP proxy
+            # WinHTTP proxy. The netsh winhttp show proxy output labels are localized on
+            # non-EN MUI ("Proxy Server" / "Bypass List" become "Proxyserver" / "Ausnahmen"),
+            # so the regex below silently reports "Direct" / "" on non-EN. Read directly from
+            # the WinHttp registry key instead — DefaultConnectionSettings is a binary blob
+            # but the simpler WinHttpSettings key reflects netsh's view.
             try {
-                $winhttp = & netsh winhttp show proxy 2>&1
-                $winhttpStr = $winhttp -join ' '
-                $proxyConfig['WinHTTPProxy'] = if ($winhttpStr -match 'Proxy Server.*:\s*(\S+)') { $regexMatches = $matches; $regexMatches[1] } else { 'Direct' }
-                $proxyConfig['WinHTTPBypass'] = if ($winhttpStr -match 'Bypass List.*:\s*(.+)') { $regexMatches = $matches; $regexMatches[1].Trim() } else { '' }
+                $winHttpReg = $null
+                try {
+                    $winHttpReg = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Connections' -Name 'WinHttpSettings' -ErrorAction Stop).WinHttpSettings
+                } catch { }
+                if ($winHttpReg -is [byte[]]) {
+                    # WinHttpSettings binary: first 4 bytes header, next 4 = config-version, next 4 = flags
+                    # (0x01 = manual proxy). After that: 4 bytes proxy-server length, proxy-server UTF-16LE,
+                    # 4 bytes bypass-list length, bypass-list UTF-16LE. Parse defensively.
+                    $proxyConfig['WinHTTPProxy'] = 'Direct'
+                    $proxyConfig['WinHTTPBypass'] = ''
+                    if ($winHttpReg.Length -ge 12) {
+                        $flags = [BitConverter]::ToInt32($winHttpReg, 8)
+                        if ($flags -band 2) {
+                            # Manual proxy configured
+                            $offset = 12
+                            $proxyLen = [BitConverter]::ToInt32($winHttpReg, $offset)
+                            $offset += 4
+                            if ($proxyLen -gt 0 -and ($offset + $proxyLen) -le $winHttpReg.Length) {
+                                $proxyConfig['WinHTTPProxy'] = [System.Text.Encoding]::ASCII.GetString($winHttpReg, $offset, $proxyLen)
+                                $offset += $proxyLen
+                                if (($offset + 4) -le $winHttpReg.Length) {
+                                    $bypassLen = [BitConverter]::ToInt32($winHttpReg, $offset)
+                                    $offset += 4
+                                    if ($bypassLen -gt 0 -and ($offset + $bypassLen) -le $winHttpReg.Length) {
+                                        $proxyConfig['WinHTTPBypass'] = [System.Text.Encoding]::ASCII.GetString($winHttpReg, $offset, $bypassLen)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    # Fall back to netsh (English-only — best-effort)
+                    $winhttp = & netsh winhttp show proxy 2>&1
+                    $winhttpStr = $winhttp -join ' '
+                    $proxyConfig['WinHTTPProxy'] = if ($winhttpStr -match 'Proxy Server.*:\s*(\S+)') { $regexMatches = $matches; $regexMatches[1] } else { 'Direct' }
+                    $proxyConfig['WinHTTPBypass'] = if ($winhttpStr -match 'Bypass List.*:\s*(.+)') { $regexMatches = $matches; $regexMatches[1].Trim() } else { '' }
+                }
             } catch { }
 
             # Environment proxy
@@ -10396,23 +10433,38 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  Auditing TCP/IP stack settings..." -color "Info"
             Write-OutputColor "" -color "Info"
             $tcpIssues = 0
-            # Auto-tuning level
+            # Auto-tuning + congestion + ECN + timestamps. Migrated from netsh output parsing
+            # to Get-NetTCPSetting cmdlet (locale-neutral; netsh labels and values like
+            # "normal"/"disabled" are localized on non-EN MUI). Falls back to netsh only if
+            # the cmdlet isn't available (PS 5.0 / pre-Server-2012 R2 hosts).
+            $tuningLevel = ''; $chimney = ''; $congestion = ''; $ecn = ''; $timestamps = ''
             try {
-                $autoTuning = netsh int tcp show global 2>&1
-                $tuningLevel = ($autoTuning | Where-Object { $_ -match 'Receive Window Auto-Tuning Level' }) -replace '.*:\s*', ''
-                Write-OutputColor "  Auto-Tuning Level: $($tuningLevel.Trim())" -color $(if ($tuningLevel -match 'normal') { "Success" } else { "Warning" })
-                # Chimney offload
-                $chimney = ($autoTuning | Where-Object { $_ -match 'Chimney Offload' }) -replace '.*:\s*', ''
-                if ($chimney) { Write-OutputColor "  Chimney Offload: $($chimney.Trim())" -color "Info" }
-                # Congestion provider
-                $congestion = ($autoTuning | Where-Object { $_ -match 'Congestion Control Provider|Add-On Congestion' }) -replace '.*:\s*', ''
-                if ($congestion) { Write-OutputColor "  Congestion Provider: $($congestion.Trim())" -color "Info" }
-                # ECN
-                $ecn = ($autoTuning | Where-Object { $_ -match 'ECN Capability' }) -replace '.*:\s*', ''
-                if ($ecn) { Write-OutputColor "  ECN Capability: $($ecn.Trim())" -color "Info" }
-                # Timestamps
-                $timestamps = ($autoTuning | Where-Object { $_ -match 'RFC 1323 Timestamps' }) -replace '.*:\s*', ''
-                if ($timestamps) { Write-OutputColor "  RFC 1323 Timestamps: $($timestamps.Trim())" -color "Info" }
+                if (Get-Command Get-NetTCPSetting -ErrorAction SilentlyContinue) {
+                    # Get-NetTCPSetting returns multiple templates; Internet is the operator-relevant one
+                    $tcpInternet = Get-NetTCPSetting -SettingName Internet -ErrorAction SilentlyContinue
+                    if ($tcpInternet) {
+                        $tuningLevel = "$($tcpInternet.AutoTuningLevelLocal)"
+                        $congestion = "$($tcpInternet.CongestionProvider)"
+                        $ecn = "$($tcpInternet.EcnCapability)"
+                        $timestamps = "$($tcpInternet.Timestamps)"
+                    }
+                    # Chimney is host-wide (Get-NetOffloadGlobalSetting)
+                    try { $chimney = "$((Get-NetOffloadGlobalSetting -ErrorAction Stop).Chimney)" } catch { }
+                } else {
+                    $autoTuning = netsh int tcp show global 2>&1
+                    $tuningLevel = (($autoTuning | Where-Object { $_ -match 'Receive Window Auto-Tuning Level' }) -replace '.*:\s*', '').Trim()
+                    $chimney = (($autoTuning | Where-Object { $_ -match 'Chimney Offload' }) -replace '.*:\s*', '').Trim()
+                    $congestion = (($autoTuning | Where-Object { $_ -match 'Congestion Control Provider|Add-On Congestion' }) -replace '.*:\s*', '').Trim()
+                    $ecn = (($autoTuning | Where-Object { $_ -match 'ECN Capability' }) -replace '.*:\s*', '').Trim()
+                    $timestamps = (($autoTuning | Where-Object { $_ -match 'RFC 1323 Timestamps' }) -replace '.*:\s*', '').Trim()
+                }
+                # "Normal" is the canonical AutoTuningLevel value; "normal" via netsh on EN is the same
+                # underlying setting. Cmdlet returns the canonical English enum name regardless of MUI.
+                Write-OutputColor "  Auto-Tuning Level: $tuningLevel" -color $(if ($tuningLevel -match '^(Normal|normal)$') { "Success" } else { "Warning" })
+                if ($chimney) { Write-OutputColor "  Chimney Offload: $chimney" -color "Info" }
+                if ($congestion) { Write-OutputColor "  Congestion Provider: $congestion" -color "Info" }
+                if ($ecn) { Write-OutputColor "  ECN Capability: $ecn" -color "Info" }
+                if ($timestamps) { Write-OutputColor "  RFC 1323 Timestamps: $timestamps" -color "Info" }
             } catch {
                 Write-OutputColor "  Failed to query TCP global: $($_.Exception.Message)" -color "Warning"
             }
@@ -10424,13 +10476,24 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 Write-OutputColor "  RSS-Enabled Adapters: $rssCount" -color $(if ($rssCount -gt 0) { "Success" } else { "Warning" })
                 if ($rssCount -eq 0) { $tcpIssues++ }
             } catch { }
-            # TCP port range
+            # TCP port range — Get-NetTCPSetting exposes DynamicPortRangeStartPort and
+            # DynamicPortRangeNumberOfPorts as typed integers. Falls back to netsh parsing if
+            # the cmdlet isn't available (the netsh labels are localized on non-EN).
+            $startPort = ''; $numPorts = ''
             try {
-                $dynPorts = netsh int ipv4 show dynamicport tcp 2>&1
-                $startPort = ($dynPorts | Where-Object { $_ -match 'Start Port' }) -replace '.*:\s*', ''
-                $numPorts = ($dynPorts | Where-Object { $_ -match 'Number of Ports' }) -replace '.*:\s*', ''
-                if ($startPort -and $numPorts) {
-                    Write-OutputColor "  Dynamic Port Range: $($startPort.Trim())-$([int]$startPort.Trim() + [int]$numPorts.Trim() - 1) ($($numPorts.Trim()) ports)" -color "Info"
+                if (Get-Command Get-NetTCPSetting -ErrorAction SilentlyContinue) {
+                    $tcpDyn = Get-NetTCPSetting -SettingName Internet -ErrorAction SilentlyContinue
+                    if ($tcpDyn) {
+                        $startPort = "$($tcpDyn.DynamicPortRangeStartPort)"
+                        $numPorts = "$($tcpDyn.DynamicPortRangeNumberOfPorts)"
+                    }
+                } else {
+                    $dynPorts = netsh int ipv4 show dynamicport tcp 2>&1
+                    $startPort = (($dynPorts | Where-Object { $_ -match 'Start Port' }) -replace '.*:\s*', '').Trim()
+                    $numPorts = (($dynPorts | Where-Object { $_ -match 'Number of Ports' }) -replace '.*:\s*', '').Trim()
+                }
+                if ($startPort -and $numPorts -and ($startPort -match '^\d+$') -and ($numPorts -match '^\d+$')) {
+                    Write-OutputColor "  Dynamic Port Range: $startPort-$([int]$startPort + [int]$numPorts - 1) ($numPorts ports)" -color "Info"
                 }
             } catch { }
             if ($tcpIssues -eq 0) {
