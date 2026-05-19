@@ -144,7 +144,28 @@ function Export-VMWizard {
     # configurations silently merge over the existing Virtual Hard Disks folder, producing a
     # Frankenstein export of mixed-timestamp VHDs. Past pattern: operator re-exports after a
     # config change; second attempt corrupts the first.
+    #
+    # CRITICAL: refuse if the VM name contains path-separator characters. Hyper-V allows
+    # backslash / forward-slash / `..\` in the VM .Name property — a maliciously-imported
+    # VM named `..\..\System32` would cause `Join-Path $exportPath $name` to resolve outside
+    # the export root, and the Remove-Item -Recurse -Force below would then nuke whatever
+    # lives at that resolved path. Validate before composing the path.
+    if ($selectedVM.Name -match '[\\/]' -or $selectedVM.Name -match '\.\.' -or $selectedVM.Name -match '[\x00-\x1f]') {
+        Write-OutputColor "" -color "Error"
+        Write-OutputColor "  REFUSING: VM name contains path-separator or unsafe characters: '$($selectedVM.Name)'" -color "Error"
+        Write-OutputColor "  This is a path-traversal guard. Rename the VM before exporting." -color "Warning"
+        return
+    }
     $targetFolder = Join-Path $exportPath $selectedVM.Name
+    # Defense-in-depth: verify the resolved targetFolder is actually under $exportPath.
+    try {
+        $exportRootResolved = (Resolve-Path -LiteralPath $exportPath -ErrorAction Stop).Path.TrimEnd('\') + '\'
+        $combinedFull = [System.IO.Path]::GetFullPath($targetFolder)
+        if (-not $combinedFull.StartsWith($exportRootResolved, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-OutputColor "  REFUSING: target folder '$combinedFull' escapes export root '$exportRootResolved'." -color "Error"
+            return
+        }
+    } catch { }
     if (Test-Path -LiteralPath $targetFolder) {
         Write-OutputColor "" -color "Warning"
         Write-OutputColor "  Export folder already exists: $targetFolder" -color "Warning"

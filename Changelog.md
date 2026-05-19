@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## v1.98.35
+
+Round 26 — VM-name path-traversal sweep + error-swallowing on destructive ops (agent findings from round 25 parallel sweep).
+
+Pattern A — VM-name / hostname path traversal in filename construction:
+- **Fix (DESTRUCTIVE):** 53-VMExportImport `Export-VMWizard` Remove-Item-Recurse-Force regression. My round 15 fix at line 162 deleted `$targetFolder = Join-Path $exportPath $selectedVM.Name` — but Hyper-V allows backslash / forward-slash / `..` in VM `.Name` property, so a maliciously-imported VM named `..\..\System32` would cause Remove-Item to nuke whatever lives at that resolved path. Now rejects VM names containing path separators or `..`, plus verifies the resolved $targetFolder is actually under $exportPath using `[System.IO.Path]::GetFullPath` (53-VMExportImport).
+- **Fix:** 44-VMDeployment `Get-VMStoragePaths` validates VMName up-front; both `Join-Path $vmPath $Config.VMName` and `Join-Path $vhdPath $Config.VMName` would escape via `..\` (44-VMDeployment).
+- **Fix:** 44-VMDeployment `New-VMDisk` validates VM.Name AND Disk.Name (Disk.Name is wizard-supplied per-disk and wasn't validated upstream) — `New-VHD -Path` at the resolved path would otherwise land outside VHDSpecificPath (44-VMDeployment).
+- **Fix:** 41-VHDManagement validates VMName + DiskLabel before composing `${VMName}_${DiskLabel}.vhdx` for Copy-Item / Move-Item destination (41-VHDManagement).
+- **Fix:** 45-ConfigExport `Save-ExportBaseline` slugs hostname before embedding in filename. `$ExportData.Hostname` can flow from cluster / remote-import contexts where a remote host's stored hostname may contain path separators (45-ConfigExport).
+
+Pattern B — error swallowing on destructive ops:
+- **Fix (DESTRUCTIVE):** 44-VMDeployment DC-mode time-sync disable was `-ErrorAction SilentlyContinue`. Silent failure left the time-sync integration service ENABLED on a DC VM, producing 5+ minute drifts that break Kerberos (and on a DC where the host syncs from AD, a loop). Now promotes to `-ErrorAction Stop`, catches, and surfaces a clear remediation message (44-VMDeployment).
+- **Fix (DESTRUCTIVE):** 44-VMDeployment `Add-ClusterVirtualMachineRole` silent failure left the operator believing the VM was clustered when it was actually a standalone VM on one node — next planned-migration / node-drain operation broke because the VM wasn't a cluster role. Now surfaces the failure with explicit remediation command (44-VMDeployment).
+- **Fix:** 44-VMDeployment all `Set-VM` (AutomaticStartAction / AutomaticStopAction / AutomaticCheckpointsEnabled / CheckpointType) and `Set-VMFirmware` (Secure Boot) silently-continue calls promoted to per-call try/catch with warning. AutomaticCheckpointsEnabled=false silent fail on a DC VM risks AD USN rollback if Hyper-V auto-checkpoints the running VM; CheckpointType=Production silent fail breaks application-consistent checkpoints (44-VMDeployment).
+
 ## v1.98.34
 
 Round 25 — backlog cleanup (Pattern 4 highest-impact + remaining Pattern 7 netsh sites).

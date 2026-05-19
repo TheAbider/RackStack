@@ -1710,6 +1710,12 @@ function Resolve-VMStoragePaths {
         $vhdPath = Join-Path $storagePaths.CSVPaths[0] "VHDs"
     }
 
+    # Path-traversal guard: refuse if VMName or any disk name contains separators or `..`.
+    # `Join-Path $vmPath '..\..\System32'` would resolve to a system folder, then VHD creation /
+    # directory creation lands outside the intended storage root. Reject before composing the path.
+    if ($Config.VMName -match '[\\/]' -or $Config.VMName -match '\.\.' -or $Config.VMName -match '[\x00-\x1f]') {
+        throw "VMName contains path-separator or unsafe characters: '$($Config.VMName)'. Rename before deploying."
+    }
     return @{
         VMPath = $vmPath
         VHDPath = $vhdPath
@@ -1806,6 +1812,16 @@ function New-VMDisk {
 
     Write-OutputColor "  Creating disk: $($Disk.Name) ($($Disk.SizeGB) GB, $($Disk.Type))..." -color "Info"
 
+    # Path-traversal guard on VM.Name and Disk.Name — both are operator-controlled and would
+    # escape $VHDSpecificPath via `..\` otherwise. The upstream Get-VMStoragePaths gate
+    # already validates VMName, but Disk.Name is set per-disk in the wizard and validated
+    # only by length, so re-check here.
+    if ($VM.Name -match '[\\/]' -or $VM.Name -match '\.\.' -or $VM.Name -match '[\x00-\x1f]') {
+        throw "VM.Name contains path-separator or unsafe characters: '$($VM.Name)'."
+    }
+    if ($Disk.Name -match '[\\/]' -or $Disk.Name -match '\.\.' -or $Disk.Name -match '[\x00-\x1f]') {
+        throw "Disk.Name contains path-separator or unsafe characters: '$($Disk.Name)'."
+    }
     $vhdFileName = "$($VM.Name)_$($Disk.Name).vhdx"
     $vhdFullPath = Join-Path $VHDSpecificPath $vhdFileName
 
@@ -1914,30 +1930,45 @@ function Set-VMAdvancedConfig {
         Enable-VMIntegrationService -VM $VM -Name "Guest Service Interface" -ErrorAction SilentlyContinue
     }
     if (-not $Config.TimeSyncWithHost) {
+        # DC-mode operators explicitly opt out of host time-sync to avoid AD drift. A silent
+        # failure here leaves the time-sync integration service ENABLED — the VM then drifts
+        # to the Hyper-V host's clock, which on a non-PDC host is itself synced to AD, but on
+        # a DC VM where the host is the AD master the loop produces 5+ minute drifts that
+        # break Kerberos. Promote to -ErrorAction Stop and surface the failure.
         Write-OutputColor "  Disabling time synchronization (DC mode)..." -color "Warning"
-        Disable-VMIntegrationService -VM $VM -Name "Time Synchronization" -ErrorAction SilentlyContinue
+        try {
+            Disable-VMIntegrationService -VM $VM -Name "Time Synchronization" -ErrorAction Stop
+        } catch {
+            Write-OutputColor "  ERROR: Could not disable time-sync integration service: $($_.Exception.Message)" -color "Error"
+            Write-OutputColor "  DC-mode VMs MUST have host time-sync OFF — Kerberos will fail if this stays on." -color "Error"
+            Write-OutputColor "  Disable manually after deployment via 'Disable-VMIntegrationService -VM $($VM.Name) -Name \"Time Synchronization\"'." -color "Warning"
+        }
     }
 
     if ($Config.Generation -eq 2) {
         if ($Config.SecureBoot) {
             if ($Config.OSType -eq "Linux") {
                 Write-OutputColor "  Configuring Secure Boot (UEFI CA template for Linux)..." -color "Info"
-                Set-VMFirmware -VM $VM -EnableSecureBoot On -SecureBootTemplate "MicrosoftUEFICertificateAuthority" -ErrorAction SilentlyContinue
+                try { Set-VMFirmware -VM $VM -EnableSecureBoot On -SecureBootTemplate "MicrosoftUEFICertificateAuthority" -ErrorAction Stop } catch { Write-OutputColor "  WARN: Secure Boot config failed: $($_.Exception.Message)" -color "Warning" }
             }
             else {
-                Set-VMFirmware -VM $VM -EnableSecureBoot On -SecureBootTemplate "MicrosoftWindows" -ErrorAction SilentlyContinue
+                try { Set-VMFirmware -VM $VM -EnableSecureBoot On -SecureBootTemplate "MicrosoftWindows" -ErrorAction Stop } catch { Write-OutputColor "  WARN: Secure Boot config failed: $($_.Exception.Message)" -color "Warning" }
             }
         }
         else {
-            Set-VMFirmware -VM $VM -EnableSecureBoot Off -ErrorAction SilentlyContinue
+            try { Set-VMFirmware -VM $VM -EnableSecureBoot Off -ErrorAction Stop } catch { Write-OutputColor "  WARN: Secure Boot disable failed: $($_.Exception.Message)" -color "Warning" }
         }
     }
 
     Write-OutputColor "  Configuring automatic start/stop actions..." -color "Info"
-    Set-VM -VM $VM -AutomaticStartAction StartIfRunning -AutomaticStartDelay 30 -ErrorAction SilentlyContinue
-    Set-VM -VM $VM -AutomaticStopAction ShutDown -ErrorAction SilentlyContinue
-    Set-VM -VM $VM -AutomaticCheckpointsEnabled $false -ErrorAction SilentlyContinue
-    Set-VM -VM $VM -CheckpointType Production -ErrorAction SilentlyContinue
+    # Promote each Set-VM to surface real failures — a silent fail means the deployed VM
+    # doesn't match the spec (e.g., AutomaticCheckpoints stays enabled, which on a DC VM
+    # can produce snapshot-based USN rollbacks). Aggregate warnings rather than abort the
+    # whole deployment.
+    try { Set-VM -VM $VM -AutomaticStartAction StartIfRunning -AutomaticStartDelay 30 -ErrorAction Stop } catch { Write-OutputColor "  WARN: AutomaticStartAction not applied: $($_.Exception.Message)" -color "Warning" }
+    try { Set-VM -VM $VM -AutomaticStopAction ShutDown -ErrorAction Stop } catch { Write-OutputColor "  WARN: AutomaticStopAction not applied: $($_.Exception.Message)" -color "Warning" }
+    try { Set-VM -VM $VM -AutomaticCheckpointsEnabled $false -ErrorAction Stop } catch { Write-OutputColor "  WARN: AutomaticCheckpointsEnabled=false not applied (DC VMs risk USN rollback): $($_.Exception.Message)" -color "Warning" }
+    try { Set-VM -VM $VM -CheckpointType Production -ErrorAction Stop } catch { Write-OutputColor "  WARN: CheckpointType=Production not applied: $($_.Exception.Message)" -color "Warning" }
 
     $notes = $Config.Notes
     if (-not $notes) { $notes = "" }
@@ -1945,13 +1976,23 @@ function Set-VMAdvancedConfig {
     Set-VM -VM $VM -Notes $notes -ErrorAction SilentlyContinue
 }
 
-# Register VM in failover cluster
+# Register VM in failover cluster. Silent failure here previously left the operator believing
+# the VM was clustered when it was actually a standalone VM on one node — next op (planned
+# migration, node drain, host patching) would then fail because the VM isn't a cluster role.
+# Promote to ErrorAction Stop and surface the failure clearly with remediation.
 function Register-VMInCluster {
     param([string]$VMName)
 
     if ($script:VMDeploymentMode -eq "Cluster") {
         Write-OutputColor "  Adding VM to cluster..." -color "Info"
-        Add-ClusterVirtualMachineRole -VMName $VMName -Cluster $script:VMDeploymentTarget -ErrorAction SilentlyContinue
+        try {
+            Add-ClusterVirtualMachineRole -VMName $VMName -Cluster $script:VMDeploymentTarget -ErrorAction Stop | Out-Null
+            Write-OutputColor "  VM '$VMName' added to cluster '$($script:VMDeploymentTarget)' as a clustered role." -color "Success"
+        } catch {
+            Write-OutputColor "  ERROR: VM '$VMName' is NOT clustered — Add-ClusterVirtualMachineRole failed: $($_.Exception.Message)" -color "Error"
+            Write-OutputColor "  Consequence: live migration / node drain / cluster failover will NOT work for this VM." -color "Error"
+            Write-OutputColor "  Remediate manually: Add-ClusterVirtualMachineRole -VMName '$VMName' -Cluster '$($script:VMDeploymentTarget)'" -color "Warning"
+        }
     }
 }
 

@@ -231,6 +231,15 @@ function Copy-VHDForVM {
         [string]$DiskLabel = "OS"
     )
 
+    # Path-traversal guard — VMName and DiskLabel are operator-supplied and would escape
+    # $DestinationFolder via `..\` otherwise. Copy-Item / Move-Item below land at the resolved
+    # path; without this guard a malicious VM name could trash arbitrary writable files.
+    if ($VMName -match '[\\/]' -or $VMName -match '\.\.' -or $VMName -match '[\x00-\x1f]') {
+        throw "VMName contains path-separator or unsafe characters: '$VMName'."
+    }
+    if ($DiskLabel -match '[\\/]' -or $DiskLabel -match '\.\.' -or $DiskLabel -match '[\x00-\x1f]') {
+        throw "DiskLabel contains path-separator or unsafe characters: '$DiskLabel'."
+    }
     $destFileName = "${VMName}_${DiskLabel}.vhdx"
     $destPath = Join-Path $DestinationFolder $destFileName
 

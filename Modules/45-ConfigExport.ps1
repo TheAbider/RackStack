@@ -2782,7 +2782,12 @@ function Save-ExportBaseline {
         }
     }
 
-    $hostname = if ($ExportData.Hostname) { $ExportData.Hostname } else { $env:COMPUTERnAME }
+    # Sanitize hostname for filename — $ExportData.Hostname can flow from cluster / remote
+    # import contexts where a remote host's stored hostname may contain `..\` or path separators
+    # (same threat model as the v1.98.28 fleet-export hostname fix at line 3178). $env:COMPUTERNAME
+    # is also process-writable. Slug both before composing the path.
+    $rawHost = if ($ExportData.Hostname) { $ExportData.Hostname } else { $env:COMPUTERnAME }
+    $hostname = $rawHost -replace '[^\w\-]', '_'
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $filename = "${hostname}_baseline_${timestamp}.json"
     $filePath = Join-Path $BaselineDir $filename
