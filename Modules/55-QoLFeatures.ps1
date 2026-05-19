@@ -456,7 +456,16 @@ function Restore-SessionState {
                 $script:ColorTheme = $sessionState.ColorTheme
             }
             if ($sessionState.SessionChanges -and $sessionState.SessionChanges.Count -gt 0) {
-                $script:SessionChanges = @($sessionState.SessionChanges)
+                # MUST stay a [List[object]] — Add-SessionChange in 04-Navigation calls
+                # `$script:SessionChanges.Add(...)`. Re-binding to `@(...)` produces a fixed-size
+                # Object[] whose .Add() either throws or no-ops, silently dropping every audit
+                # entry made AFTER a session resume. Rebuild a new list and copy in the restored
+                # entries so post-resume audit logging keeps working.
+                $restoredList = [System.Collections.Generic.List[object]]::new()
+                foreach ($entry in $sessionState.SessionChanges) {
+                    $null = $restoredList.Add($entry)
+                }
+                $script:SessionChanges = $restoredList
             }
 
             Write-OutputColor "  Session restored!" -color "Success"

@@ -541,18 +541,37 @@ function Get-FileHashBackground {
     $spinChars = @('|', '/', '-', '\')
     $spinIndex = 0
 
-    while ($hashJob.State -eq "Running") {
-        $spin = $spinChars[$spinIndex % 4]
-        $spinIndex++
-        Write-Host "`r  [$spin] Computing SHA256 hash...    " -NoNewline
-        Start-Sleep -Milliseconds 500
-    }
-    Write-Host ""
+    # Cap at 30 minutes wall-clock so a wedged storage path (network drive, AV scan blocking
+    # read, RAID rebuild stall) doesn't pin the menu indefinitely. SHA256 on a 60 GB VHDX over
+    # a healthy NVMe takes ~3-4 minutes; 30 min covers worst-case multi-TB exports on SATA.
+    # Operator can Ctrl-C earlier; this is the hard ceiling.
+    $maxHashSeconds = 1800
+    $hashElapsed = 0
+    try {
+        while ($hashJob.State -eq "Running" -and $hashElapsed -lt $maxHashSeconds) {
+            $spin = $spinChars[$spinIndex % 4]
+            $spinIndex++
+            Write-Host "`r  [$spin] Computing SHA256 hash...    " -NoNewline
+            Start-Sleep -Milliseconds 500
+            $hashElapsed += 0.5
+        }
+        Write-Host ""
 
-    $hash = Receive-Job $hashJob
-    Stop-Job $hashJob -ErrorAction SilentlyContinue
-    Remove-Job $hashJob -Force -ErrorAction SilentlyContinue
-    return $hash
+        if ($hashJob.State -eq "Running") {
+            Write-OutputColor "  Hash computation exceeded 30-minute cap. Aborting." -color "Warning"
+            return $null
+        }
+
+        $hash = Receive-Job $hashJob -ErrorAction SilentlyContinue
+        return $hash
+    }
+    finally {
+        # Always clean up the job, even if the loop exited via exception (e.g., Ctrl-C
+        # propagated as a PipelineStoppedException). Prior code only cleaned up on the
+        # success path — a Ctrl-C left the background runspace alive.
+        try { Stop-Job $hashJob -ErrorAction SilentlyContinue } catch { }
+        try { Remove-Job $hashJob -Force -ErrorAction SilentlyContinue } catch { }
+    }
 }
 
 # Run a scriptblock with a timeout using a background runspace (faster than Start-Job)

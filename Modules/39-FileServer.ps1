@@ -426,7 +426,13 @@ function Get-FileServerFile {
             }
 
             if (-not $resumed) {
-                # Background job using WebClient (closes connection immediately, no hang)
+                # Background job using WebClient (closes connection immediately, no hang).
+                # Wrapped in try/finally to GUARANTEE job cleanup even if an exception fires
+                # inside the progress-monitoring loop (Get-Item race, console KeyAvailable on
+                # a remote session, etc.). Without this, every exception path in the loop
+                # left the background runspace alive and accumulated across the retry loop.
+                $downloadJob = $null
+                try {
                 $downloadJob = Start-Job -ScriptBlock {
                     param($url, $headersJson, $destPath)
                     $webClient = New-Object System.Net.WebClient
@@ -514,13 +520,29 @@ function Get-FileServerFile {
                 }
                 Write-Host ""
                 $totalElapsed = [int][math]::Floor(((Get-Date) - $downloadStartTime).TotalSeconds)
+
+                # Capture result while job still exists. The finally below removes the job,
+                # so any Receive-Job after the finally would return nothing. Hang/timeout
+                # branches above already Remove-Job'd before reaching here, in which case
+                # Receive-Job returns nothing too — both fine.
+                try {
+                    $jobResult = Receive-Job -Job $downloadJob -ErrorAction SilentlyContinue
+                } catch { $jobResult = $null }
+                }
+                finally {
+                    # Guarantee job cleanup. Multiple early-exit paths above already Remove-Job,
+                    # but an exception thrown from inside the while loop (or Ctrl-C) would
+                    # otherwise leak the background runspace. Safe to call Stop/Remove on an
+                    # already-removed job — both cmdlets ignore missing jobs with SilentlyContinue.
+                    if ($null -ne $downloadJob) {
+                        try { Stop-Job -Job $downloadJob -ErrorAction SilentlyContinue } catch { }
+                        try { Remove-Job -Job $downloadJob -Force -ErrorAction SilentlyContinue } catch { }
+                    }
+                }
             }
 
-            # Check job result (if not force-stopped due to hang detection)
-            if (-not $resumed -and $downloadJob.Id) {
-                $jobResult = Receive-Job $downloadJob -ErrorAction SilentlyContinue
-                Remove-Job $downloadJob -Force -ErrorAction SilentlyContinue
-
+            # Check job result captured above
+            if (-not $resumed) {
                 if ($jobResult -and -not $jobResult.Success) {
                     if ($attempt -ge $maxAttempts) {
                         return @{ Success = $false; Error = "Download failed: $($jobResult.Error)"; FilePath = $null }

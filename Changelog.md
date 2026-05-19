@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.98.37
+
+Round 27 — resource-leak + shared-state sweep (1 Tier-1 + 2 Tier-2 applied).
+
+Tier-1 (operator-visible state corruption):
+- **Fix (DESTRUCTIVE):** 55-QoLFeatures `Restore-SessionState` re-bound `$script:SessionChanges` from `[System.Collections.Generic.List[object]]` (initialized in 00-Initialization) to a fixed-size `Object[]` via `@(...)`. Subsequent `Add-SessionChange` calls (`$script:SessionChanges.Add(...)` in 04-Navigation) silently no-op'd or threw on the fixed-size array — every audit entry made AFTER a session resume was lost. Both the Show-SessionSummary report and the persistent on-disk session log were missing post-resume entries. Now rebuilds a fresh `List[object]` and copies in the restored entries, preserving the type so post-resume audit logging keeps working (55-QoLFeatures).
+
+Tier-2 (resource leaks):
+- **Fix:** 04-Navigation `Get-FileHashBackground` adds a 30-minute wall-clock cap and wraps job lifetime in try/finally. Prior code had no timeout — a wedged storage path (network drive, AV scan blocking read, RAID rebuild stall) pinned the menu indefinitely. Ctrl-C during hash also left the background runspace alive; now finally always cleans up (04-Navigation).
+- **Fix:** 39-FileServer `Get-FileServerFile` wraps the download-job lifetime in try/finally with guaranteed Stop/Remove cleanup. Receive-Job moved inside the try so the result is captured before the finally tears the job down. Prior code cleaned up on hang/timeout/success paths individually but an unhandled exception inside the progress-monitoring loop (Get-Item race, console KeyAvailable on remote session) would leak the background runspace; in a deployment loop (every ISO + agent + VHD download), the leak accumulates (39-FileServer).
+
 ## v1.98.36
 
 - **Fix (CI/test):** `50-EntryPoint: TcpSettingsAudit JSON output` regex window bumped from 4000 to 5500 chars. The v1.98.34 netsh→Get-NetTCPSetting migration added ~700 chars between the `'TcpSettingsAudit'` label and the JSON-output marker, pushing it past the prior window. Not a functional regression (Tests/Run-Tests.ps1).
