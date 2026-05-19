@@ -801,11 +801,18 @@ function Test-FileIntegrity {
         $result.Error = "No verifiable signal (no Content-Length from HEAD, no .sha256 sidecar) — refusing to mark Valid"
     }
 
-    # Save local .sha256 file for future re-verification
+    # Save local .sha256 file for future re-verification. Write as UTF-8 WITHOUT BOM —
+    # PS 5.1's `-Encoding UTF8` emits a 3-byte BOM (EF BB BF) which the standard Unix
+    # `sha256sum -c file.sha256` verifier reads as part of the hash field, producing a
+    # false-negative "FAILED" even when the bytes match. The tool's own reader at line ~710
+    # splits on whitespace and tolerates the BOM, but hash sidecars are often handed to
+    # external verifiers (CI pipelines, agent installers on non-Windows hosts).
     if ($result.Hash) {
         $hashFilePath = "$FilePath.sha256"
         try {
-            "$($result.Hash)  $(Split-Path $FilePath -Leaf)" | Set-Content -LiteralPath $hashFilePath -Encoding UTF8 -Force -ErrorAction SilentlyContinue
+            $hashLine = "$($result.Hash)  $(Split-Path $FilePath -Leaf)`n"
+            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+            [System.IO.File]::WriteAllText($hashFilePath, $hashLine, $utf8NoBom)
         }
         catch {
             # Non-fatal: just skip saving hash file

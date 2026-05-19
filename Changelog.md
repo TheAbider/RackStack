@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## v1.98.38
+
+Round 28 — remaining Tier-2 job leaks from round 27 sweep.
+
+- **Fix:** 58-NetworkDiagnostics `Test-PingSweep` wraps the per-batch job creation + Wait/Receive in try/finally with guaranteed Stop/Remove. PingSweep on a /23 spawns up to 254 jobs per batch — an exception during interactive sweep (closed runspace, Ctrl-C, WinRM teardown) previously orphaned hundreds of background runspaces in one session (58-NetworkDiagnostics).
+- **Fix:** 58-NetworkDiagnostics `Test-PortScan` same try/finally pattern for the ~30 parallel TCP-probe jobs (58-NetworkDiagnostics).
+- **Fix:** 41-VHDManagement Convert-VHD retry-path wraps the retry-job lifecycle in try/finally. Convert-VHD jobs hold large memory-mapped IO; a leak here accumulates across multi-VM deployments. The outer function's finally only covered $copyJob / $convertJob — the retry job was unprotected (41-VHDManagement).
+
+Encoding fix:
+- **Fix:** 39-FileServer `Test-FileIntegrity` hash sidecar `.sha256` file now written as UTF-8 WITHOUT BOM via `System.Text.UTF8Encoding($false)` + `[System.IO.File]::WriteAllText`. PS 5.1's `-Encoding UTF8` emits a 3-byte BOM (`EF BB BF`); the standard Unix `sha256sum -c file.sha256` verifier reads those bytes as part of the hash field and reports the file as corrupt even when the bytes match. The tool's own reader tolerated the BOM, but sidecars are often handed to external CI / agent-installer pipelines on non-Windows hosts (39-FileServer).
+
+Audit (CLEAN, no Tier-1): console state — the codebase doesn't modify terminal mode (no CursorVisible toggle, no TreatControlCAsInput, no alt-screen escape sequences); abnormal exit cannot leave the terminal in a corrupt state.
+
 ## v1.98.37
 
 Round 27 — resource-leak + shared-state sweep (1 Tier-1 + 2 Tier-2 applied).

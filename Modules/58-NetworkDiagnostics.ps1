@@ -343,27 +343,37 @@ function Invoke-SubnetSweep {
     for ($batchStart = $start; $batchStart -le $end; $batchStart += $batchSize) {
         $batchEnd = [math]::Min($batchStart + $batchSize - 1, $end)
         $jobs = [System.Collections.Generic.List[object]]::new()
-        for ($i = $batchStart; $i -le $batchEnd; $i++) {
-            $ip = "$subnet.$i"
-            $jobs.Add((Start-Job -ScriptBlock {
-                param($IP)
-                $result = Test-Connection -ComputerName $IP -Count 1 -Quiet -ErrorAction SilentlyContinue
-                [PSCustomObject]@{ IP = $IP; Alive = $result }
-            } -ArgumentList $ip))
-        }
-        $completed = ($batchStart - $start)
-        Write-Host "`r  Scanning $completed/$total hosts..." -NoNewline
-        $null = $jobs | Wait-Job -Timeout 30
-        $timedOut = @($jobs | Where-Object { $_.State -eq 'Running' })
-        $timedOutCount += $timedOut.Count
-        foreach ($j in $jobs) {
-            if ($j.State -eq 'Completed') {
-                $r = Receive-Job -Job $j -ErrorAction SilentlyContinue
-                if ($r) { $allResults.Add($r) }
+        # try/finally guarantees the batch's runspaces are cleaned up even if Wait-Job /
+        # Receive-Job / Stop-Job throws mid-batch (closed runspace, WinRM teardown, Ctrl-C).
+        # PingSweep on a /23 spawns up to 254 jobs per batch — an exception during interactive
+        # sweep would otherwise orphan hundreds of background runspaces in one session.
+        try {
+            for ($i = $batchStart; $i -le $batchEnd; $i++) {
+                $ip = "$subnet.$i"
+                $jobs.Add((Start-Job -ScriptBlock {
+                    param($IP)
+                    $result = Test-Connection -ComputerName $IP -Count 1 -Quiet -ErrorAction SilentlyContinue
+                    [PSCustomObject]@{ IP = $IP; Alive = $result }
+                } -ArgumentList $ip))
+            }
+            $completed = ($batchStart - $start)
+            Write-Host "`r  Scanning $completed/$total hosts..." -NoNewline
+            $null = $jobs | Wait-Job -Timeout 30
+            $timedOut = @($jobs | Where-Object { $_.State -eq 'Running' })
+            $timedOutCount += $timedOut.Count
+            foreach ($j in $jobs) {
+                if ($j.State -eq 'Completed') {
+                    $r = Receive-Job -Job $j -ErrorAction SilentlyContinue
+                    if ($r) { $allResults.Add($r) }
+                }
             }
         }
-        $jobs | Stop-Job -ErrorAction SilentlyContinue
-        $jobs | Remove-Job -Force
+        finally {
+            foreach ($j in $jobs) {
+                try { Stop-Job -Job $j -ErrorAction SilentlyContinue } catch { }
+                try { Remove-Job -Job $j -Force -ErrorAction SilentlyContinue } catch { }
+            }
+        }
 
         # Progressive display: show discovered hosts after each batch
         $batchAlive = @($allResults | Where-Object { $_.Alive })
@@ -597,42 +607,49 @@ function Invoke-QuickPortScan {
     Write-OutputColor "  Scanning $($ports.Count) ports on $target (timeout: ${TimeoutMs}ms)..." -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Parallel port scan using jobs
+    # Parallel port scan using jobs. Wrap in try/finally so an exception during Wait-Job /
+    # Receive-Job (closed runspace, Ctrl-C) can't orphan the ~30 background runspaces.
     $jobs = [System.Collections.Generic.List[object]]::new()
-    foreach ($p in $ports) {
-        $jobs.Add((Start-Job -ScriptBlock {
-            param($IP, $Port, $Timeout)
-            $tcp = $null
-            try {
-                $tcp = New-Object System.Net.Sockets.TcpClient
-                $connect = $tcp.BeginConnect($IP, $Port, $null, $null)
-                $wait = $connect.AsyncWaitHandle.WaitOne($Timeout, $false)
-                if ($wait -and $tcp.Connected) {
-                    $tcp.EndConnect($connect)
-                    return "OPEN"
-                }
-                return "CLOSED"
-            }
-            catch { return "CLOSED" }
-            finally { if ($tcp) { $tcp.Close() } }
-        } -ArgumentList $target, $p.Port, $TimeoutMs))
-    }
-
-    $null = $jobs | Wait-Job -Timeout 15
-    $timedOutJobs = @($jobs | Where-Object { $_.State -eq 'Running' })
-    if ($timedOutJobs.Count -gt 0) {
-        Write-OutputColor "  Warning: $($timedOutJobs.Count) port scan(s) timed out" -color "Warning"
-    }
-
-    # Collect results per-job to maintain port alignment
     $jobResults = @{}
-    for ($i = 0; $i -lt $jobs.Count; $i++) {
-        if ($jobs[$i].State -eq 'Completed') {
-            $jobResults[$i] = Receive-Job -Job $jobs[$i] -ErrorAction SilentlyContinue
+    try {
+        foreach ($p in $ports) {
+            $jobs.Add((Start-Job -ScriptBlock {
+                param($IP, $Port, $Timeout)
+                $tcp = $null
+                try {
+                    $tcp = New-Object System.Net.Sockets.TcpClient
+                    $connect = $tcp.BeginConnect($IP, $Port, $null, $null)
+                    $wait = $connect.AsyncWaitHandle.WaitOne($Timeout, $false)
+                    if ($wait -and $tcp.Connected) {
+                        $tcp.EndConnect($connect)
+                        return "OPEN"
+                    }
+                    return "CLOSED"
+                }
+                catch { return "CLOSED" }
+                finally { if ($tcp) { $tcp.Close() } }
+            } -ArgumentList $target, $p.Port, $TimeoutMs))
+        }
+
+        $null = $jobs | Wait-Job -Timeout 15
+        $timedOutJobs = @($jobs | Where-Object { $_.State -eq 'Running' })
+        if ($timedOutJobs.Count -gt 0) {
+            Write-OutputColor "  Warning: $($timedOutJobs.Count) port scan(s) timed out" -color "Warning"
+        }
+
+        # Collect results per-job to maintain port alignment
+        for ($i = 0; $i -lt $jobs.Count; $i++) {
+            if ($jobs[$i].State -eq 'Completed') {
+                $jobResults[$i] = Receive-Job -Job $jobs[$i] -ErrorAction SilentlyContinue
+            }
         }
     }
-    $jobs | Stop-Job -ErrorAction SilentlyContinue
-    $jobs | Remove-Job -Force
+    finally {
+        foreach ($j in $jobs) {
+            try { Stop-Job -Job $j -ErrorAction SilentlyContinue } catch { }
+            try { Remove-Job -Job $j -Force -ErrorAction SilentlyContinue } catch { }
+        }
+    }
 
     # Display results
     $lineStr = "  PORT SCAN: $target"

@@ -456,6 +456,12 @@ function Copy-VHDForVM {
 
             if ($fallbackChoice -eq "2") {
                 Write-OutputColor "  Retrying conversion..." -color "Info"
+                # Wrap retry-job lifecycle in try/finally so a Wait-Job / Receive-Job
+                # exception (closed runspace, Ctrl-C) can't leave the Convert-VHD job alive.
+                # Convert-VHD jobs hold large memory-mapped IO and a leak accumulates across
+                # multi-VM deployments. The outer function's finally only covers $copyJob /
+                # $convertJob, not this retry job.
+                $retryJob = $null
                 try {
                     $retryJob = Start-Job -ScriptBlock {
                         param($src, $dst)
@@ -464,8 +470,6 @@ function Copy-VHDForVM {
                     $null = $retryJob | Wait-Job -Timeout 600
                     $null = Receive-Job $retryJob -ErrorAction SilentlyContinue
                     $retryState = $retryJob.State
-                    Stop-Job $retryJob -ErrorAction SilentlyContinue
-                    Remove-Job $retryJob -Force -ErrorAction SilentlyContinue
                     if ($retryState -ne "Failed" -and (Test-Path -LiteralPath $fixedPath)) {
                         Write-OutputColor "  Retry succeeded!" -color "Success"
                         # Fall through to the move logic below
@@ -479,6 +483,12 @@ function Copy-VHDForVM {
                     Write-OutputColor "  Retry failed: $_" -color "Error"
                     Add-SessionChange -Category "VM" -Description "VHD conversion failed for $VMName — using dynamic VHD (lower performance)"
                     return $destPath
+                }
+                finally {
+                    if ($null -ne $retryJob) {
+                        try { Stop-Job -Job $retryJob -ErrorAction SilentlyContinue } catch { }
+                        try { Remove-Job -Job $retryJob -Force -ErrorAction SilentlyContinue } catch { }
+                    }
                 }
             }
             elseif ($fallbackChoice -eq "3") {
