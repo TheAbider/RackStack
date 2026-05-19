@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.98.18
+
+- **Fix (CI/test):** 39-FileServer Content-Range resume validation (added in v1.98.17) used `$matches[1]` directly. RackStack codebase convention requires aliasing `$Matches` to `$regexMatches` first (some PowerShell hosts mutate `$Matches` mid-statement). Test `Codebase: no direct Matches[n] (use regexMatches)` flagged the violation and CI failed. Aliased to `$regexMatches` (39-FileServer).
+- **Fix (CI/test):** 38-StorageManager `Test-SystemDisk` timeout (added in v1.98.17) bumped from 8s to 30s per call. Self-hosted CI runner has known storage-stack latency under load; 8s wasn't enough for `Get-Partition -DriveLetter` to return, function fell through to `$false`, and the `disk 0 (system disk) -> true` test failed. Also swapped order so `Get-Disk -Number` runs first (typically faster than `Get-Partition`), and added a Win32_OperatingSystem.SystemDevice WMI fallback that parses the `\HarddiskN\` from `os.SystemDevice` — bypasses the Storage Management Provider entirely so the function returns a useful answer even when SMP is in a bad state (38-StorageManager).
+- **Includes all v1.98.17 / v1.98.16 fixes** (neither tag was published — v1.98.16 CI cancelled mid-test on Test-SystemDisk hang, v1.98.17 CI failed on the regex-convention + tightened-timeout regression).
+
 ## v1.98.17
 
 - **Fix (CI/test):** 38-StorageManager `Test-SystemDisk` called `Get-Partition -DriveLetter` and `Get-Disk -Number` with no timeout. On hosts where the storage stack is busy (slow CIM responses, hung MPIO claim cycles, paused tiering) the call never returned, and the test suite's Section 152 froze indefinitely. CI's "Run tests (core)" step hit the runner timeout and cancelled the v1.98.16 release pipeline. Both storage calls now wrapped in `Invoke-WithTimeout` (8s cap each) when the helper is loaded, with a try/catch fallback when running before module load. Includes all v1.98.16 fixes (38-StorageManager).

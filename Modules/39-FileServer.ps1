@@ -388,7 +388,8 @@ function Get-FileServerFile {
                         $contentRange = $resumeResponse.Headers['Content-Range']
                         $rangeOk = $false
                         if ($contentRange -and $contentRange -match '^bytes\s+(\d+)-\d+/') {
-                            if ([long]$matches[1] -eq $existingSize) { $rangeOk = $true }
+                            $regexMatches = $matches
+                            if ([long]$regexMatches[1] -eq $existingSize) { $rangeOk = $true }
                         }
                         if (-not $rangeOk) {
                             try { $resumeResponse.Close() } catch { }

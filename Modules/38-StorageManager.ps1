@@ -69,18 +69,35 @@ function Test-SystemDisk {
         }
     }
 
-    # Also check by OS partition location. Get-Partition can hang for minutes on systems
-    # where the storage stack is busy (CIM timeouts, slow disks, hung MPIO claim cycles).
-    # The test suite tripped on this — CI's "Run tests (core)" step hit the runner timeout
-    # because this call never returned. Wrap in Invoke-WithTimeout when available, otherwise
-    # use a job-based fallback so the function still has a hard ceiling.
+    # Get-Disk is normally faster than Get-Partition — try it first when caller passed an int.
+    # Storage cmdlets can hang for minutes when the storage stack is busy (slow CIM,
+    # MPIO claim cycles, paused tiering). Wrap each in Invoke-WithTimeout when the helper
+    # is loaded, with a try/catch fallback for early-boot callers (before module load).
+    if ($Disk -is [int]) {
+        $diskObj = $null
+        if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
+            $diskWrap = Invoke-WithTimeout -ScriptBlock {
+                param($n)
+                Get-Disk -Number $n -ErrorAction SilentlyContinue
+            } -ArgumentList @($diskNumber) -TimeoutSeconds 30 -Activity "Get-Disk"
+            if (-not $diskWrap.TimedOut -and -not $diskWrap.Failed) { $diskObj = $diskWrap.Result }
+        } else {
+            try { $diskObj = Get-Disk -Number $diskNumber -ErrorAction SilentlyContinue } catch { }
+        }
+        if ($null -ne $diskObj -and ($diskObj.IsBoot -eq $true -or $diskObj.IsSystem -eq $true)) {
+            return $true
+        }
+    }
+
+    # Fall back to OS-partition lookup. On a healthy system this returns in <1s; on a stuck
+    # storage stack it can hang indefinitely. Timeout-wrap to bound worst-case latency.
     $systemDrive = $env:SystemDrive.TrimEnd(':')
     $partResult = $null
     if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
         $partWrap = Invoke-WithTimeout -ScriptBlock {
             param($drv)
             Get-Partition -DriveLetter $drv -ErrorAction SilentlyContinue
-        } -ArgumentList @($systemDrive) -TimeoutSeconds 8 -Activity "Get-Partition"
+        } -ArgumentList @($systemDrive) -TimeoutSeconds 30 -Activity "Get-Partition"
         if (-not $partWrap.TimedOut -and -not $partWrap.Failed) { $partResult = $partWrap.Result }
     } else {
         try {
@@ -91,22 +108,17 @@ function Test-SystemDisk {
         return $true
     }
 
-    # Check via Get-Disk if we received an int (same timeout treatment).
-    if ($Disk -is [int]) {
-        $diskObj = $null
-        if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
-            $diskWrap = Invoke-WithTimeout -ScriptBlock {
-                param($n)
-                Get-Disk -Number $n -ErrorAction SilentlyContinue
-            } -ArgumentList @($diskNumber) -TimeoutSeconds 8 -Activity "Get-Disk"
-            if (-not $diskWrap.TimedOut -and -not $diskWrap.Failed) { $diskObj = $diskWrap.Result }
-        } else {
-            try { $diskObj = Get-Disk -Number $diskNumber -ErrorAction SilentlyContinue } catch { }
+    # Last-resort: WMI Win32_OperatingSystem.SystemDevice gives `\Device\HarddiskN\PartitionM`
+    # without going through the Storage Management Provider — useful on hosts where the SMP
+    # is in a bad state but raw WMI still answers. Extract N and compare.
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+        if ($null -ne $os -and $os.SystemDevice -match '\\Harddisk(\d+)\\') {
+            $regexMatches = $matches
+            $systemDiskNumber = [int]$regexMatches[1]
+            if ($systemDiskNumber -eq $diskNumber) { return $true }
         }
-        if ($null -ne $diskObj -and ($diskObj.IsBoot -eq $true -or $diskObj.IsSystem -eq $true)) {
-            return $true
-        }
-    }
+    } catch { }
 
     return $false
 }
