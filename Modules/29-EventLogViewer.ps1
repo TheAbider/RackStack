@@ -93,8 +93,12 @@ function Show-EventLogViewer {
                     New-Item -Path $script:TempPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
                 }
                 try {
+                    # Atomic write: a kill mid-Export-Csv leaves a truncated CSV that downstream
+                    # automation may consume as a complete export. Write to .tmp first, then rename.
+                    $tmpCsv = "$csvPath.tmp"
                     $lastEvents | Select-Object TimeCreated, LevelDisplayName, Id, ProviderName, Message |
-                        Export-Csv -LiteralPath $csvPath -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
+                        Export-Csv -LiteralPath $tmpCsv -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
+                    Move-Item -LiteralPath $tmpCsv -Destination $csvPath -Force -ErrorAction Stop
                     Write-OutputColor "  Exported $(@($lastEvents).Count) events to:" -color "Success"
                     Write-OutputColor "  $csvPath" -color "Info"
                 }

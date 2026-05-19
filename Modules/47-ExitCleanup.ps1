@@ -180,7 +180,10 @@ function Exit-Script {
             $manifestPath = Join-Path $env:TEMP "$toolName-cleanup-manifest.txt"
             $manifestLines = @("# $toolName self-destruct manifest", "# Host: $env:COMPUTERNAME", "# Scheduled at: $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')", "")
             $manifestLines += $uniquePaths
-            $manifestLines | Out-File -LiteralPath $manifestPath -Encoding UTF8 -Force
+            # Atomic write — this is forensic recovery data; a partial write defeats its purpose.
+            $tmpManifest = "$manifestPath.tmp"
+            $manifestLines | Out-File -LiteralPath $tmpManifest -Encoding UTF8 -Force
+            Move-Item -LiteralPath $tmpManifest -Destination $manifestPath -Force -ErrorAction Stop
             Write-OutputColor "  Deletion manifest saved to: $manifestPath" -color "Info"
         } catch {
             Write-OutputColor "  Could not write deletion manifest: $($_.Exception.Message)" -color "Warning"

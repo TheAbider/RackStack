@@ -652,7 +652,11 @@ function Invoke-RemoteProfileApply {
         Invoke-Command -Session $session -ScriptBlock {
             param($path, $content, $tempDir)
             if (-not (Test-Path $tempDir)) { New-Item -Path $tempDir -ItemType Directory -Force | Out-Null }
-            $content | Out-File -LiteralPath $path -Encoding UTF8 -Force
+            # Atomic write — Invoke-Command failure mid-transfer would leave the remote with a
+            # truncated profile that subsequent profile-load would reject (or worse, partially apply).
+            $tmpPath = "$path.tmp"
+            $content | Out-File -LiteralPath $tmpPath -Encoding UTF8 -Force
+            Move-Item -LiteralPath $tmpPath -Destination $path -Force -ErrorAction Stop
         } -ArgumentList $remotePath, $profileContent, $remoteTempDir -ErrorAction Stop
 
         Write-OutputColor "  Profile copied to: $remotePath" -color "Success"
@@ -1280,9 +1284,12 @@ function Show-InstalledSoftware {
             $hostSlug = $env:COMPUTERNAME -replace '[^\w\-]', '_'
             $csvPath = "$script:TempPath\SoftwareInventory_${hostSlug}_$timestamp.csv"
             try {
+                # Atomic write — Export-Csv mid-kill produces a half-truncated CSV.
+                $tmpCsv = "$csvPath.tmp"
                 $software | Sort-Object Name |
                     Select-Object Name, Version, Publisher, InstallDate, @{N='SizeMB';E={$_.Size}} |
-                    Export-Csv -LiteralPath $csvPath -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
+                    Export-Csv -LiteralPath $tmpCsv -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
+                Move-Item -LiteralPath $tmpCsv -Destination $csvPath -Force -ErrorAction Stop
                 Write-OutputColor "  Exported $($software.Count) entries to:" -color "Success"
                 Write-OutputColor "  $csvPath" -color "Info"
             } catch {

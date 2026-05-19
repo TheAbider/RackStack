@@ -447,8 +447,13 @@ function Export-ServerConfiguration {
         $null = $config.Add("EnD OF COnFIGURATIOn EXPORT")
         $null = $config.Add("=" * 80)
 
-        # Write to file
-        $config | Out-File -LiteralPath $exportPath -Encoding UTF8 -Force
+        # Atomic write — operator-visible export. The other Save- functions in this module
+        # already use the write-to-.tmp-then-rename pattern; the interactive Export-ServerConfiguration
+        # was missing it. A kill mid-write would leave a truncated config file next to the operator
+        # with no warning.
+        $tmpExportPath = "$exportPath.tmp"
+        $config | Out-File -LiteralPath $tmpExportPath -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpExportPath -Destination $exportPath -Force -ErrorAction Stop
 
         Write-OutputColor "`nConfiguration exported successfully!" -color "Success"
         Write-OutputColor "  File: $exportPath" -color "Info"
@@ -3154,19 +3159,24 @@ function Save-FleetResults {
 
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
-    # Save per-host results
+    # Save per-host results. Sanitize hostname before embedding in filename — fleet results
+    # may include remote hostnames that contain unexpected characters; raw interpolation
+    # could escape the OutputDir via `..\`. Atomic-write each per-host file.
     foreach ($r in $Results) {
         if ($null -ne $r.Result) {
-            $hostFile = Join-Path $OutputDir "$($r.Hostname)_${Action}_${timestamp}.json"
+            $hostSlug = ($r.Hostname -replace '[^\w\-]', '_')
+            $hostFile = Join-Path $OutputDir "${hostSlug}_${Action}_${timestamp}.json"
             try {
-                $r.Result | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $hostFile -Encoding UTF8 -Force
+                $tmpHostFile = "$hostFile.tmp"
+                $r.Result | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $tmpHostFile -Encoding UTF8 -Force
+                Move-Item -LiteralPath $tmpHostFile -Destination $hostFile -Force -ErrorAction Stop
             } catch {
                 Write-OutputColor "  Warning: Failed to save results for $($r.Hostname): $_" -color "Warning"
             }
         }
     }
 
-    # Save fleet summary
+    # Save fleet summary atomically
     $summaryFile = Join-Path $OutputDir "fleet_${Action}_${timestamp}.json"
     $summary = @{
         Action    = $Action
@@ -3178,7 +3188,9 @@ function Save-FleetResults {
         Results   = $Results
     }
     try {
-        $summary | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $summaryFile -Encoding UTF8 -Force
+        $tmpSummary = "$summaryFile.tmp"
+        $summary | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $tmpSummary -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpSummary -Destination $summaryFile -Force -ErrorAction Stop
     } catch {
         Write-OutputColor "  Warning: Failed to save fleet summary: $_" -color "Warning"
         return $null

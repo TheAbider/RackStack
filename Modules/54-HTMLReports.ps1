@@ -603,7 +603,11 @@ function Export-HTMLHealthReport {
 "@
 
     try {
-        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
+        # Atomic write: an HTML report half-written during a process kill or transcript flush
+        # would mislead the next operator into thinking the report rendered successfully.
+        $tmpHtml = "$OutputPath.tmp"
+        $html | Out-File -LiteralPath $tmpHtml -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpHtml -Destination $OutputPath -Force -ErrorAction Stop
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Report saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated HTML health report"
@@ -804,7 +808,11 @@ function Export-ProfileComparisonHTML {
 "@
 
     try {
-        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
+        # Atomic write: an HTML report half-written during a process kill or transcript flush
+        # would mislead the next operator into thinking the report rendered successfully.
+        $tmpHtml = "$OutputPath.tmp"
+        $html | Out-File -LiteralPath $tmpHtml -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpHtml -Destination $OutputPath -Force -ErrorAction Stop
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Comparison saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated HTML profile comparison"
@@ -1212,7 +1220,11 @@ function Export-HTMLReadinessReport {
 "@
 
     try {
-        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
+        # Atomic write: an HTML report half-written during a process kill or transcript flush
+        # would mislead the next operator into thinking the report rendered successfully.
+        $tmpHtml = "$OutputPath.tmp"
+        $html | Out-File -LiteralPath $tmpHtml -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpHtml -Destination $OutputPath -Force -ErrorAction Stop
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Report saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated HTML readiness report ($pct% ready)"
@@ -1488,7 +1500,11 @@ function Export-HTMLTrendReport {
 "@
 
     try {
-        $html | Out-File -LiteralPath $OutputPath -Encoding UTF8 -Force
+        # Atomic write: an HTML report half-written during a process kill or transcript flush
+        # would mislead the next operator into thinking the report rendered successfully.
+        $tmpHtml = "$OutputPath.tmp"
+        $html | Out-File -LiteralPath $tmpHtml -Encoding UTF8 -Force
+        Move-Item -LiteralPath $tmpHtml -Destination $OutputPath -Force -ErrorAction Stop
         Write-OutputColor "  Trend report saved to: $OutputPath" -color "Success"
         Add-SessionChange -Category "Report" -Description "Generated performance trend report ($($snapshots.Count) snapshots)"
 

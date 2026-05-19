@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## v1.98.28
+
+Round 20 — cross-module sweep continuation (Pattern 5 non-atomic exports).
+
+- **Fix:** 29-EventLogViewer event-log CSV export now writes to `.tmp` first then renames atomically. Prior direct `Export-Csv` left a truncated file if the export was killed mid-write, which downstream automation might consume as complete (29-EventLogViewer).
+- **Fix:** 35-Utilities SoftwareInventory CSV export atomic (35-Utilities).
+- **Fix:** 35-Utilities remote `Save-RemoteConfigProfile` Invoke-Command target atomic — partial profile would have been silently consumed or rejected on remote profile-load (35-Utilities).
+- **Fix:** 54-HTMLReports all four HTML report export sites (health, second variant, third variant, trend) write to `.tmp` then rename. Partial HTML would mislead the next operator into thinking the report rendered successfully but their server is "missing sections" (54-HTMLReports).
+- **Fix:** 47-ExitCleanup self-destruct manifest write atomic — this is forensic recovery data, partial write defeats its purpose (47-ExitCleanup).
+- **Fix:** 55-QoLFeatures `Save-SessionState` fallback path atomic + cleans up `.tmp` on failure. The 361 site already used the pattern; the 392 fallback site was inconsistent (55-QoLFeatures).
+- **Fix:** 45-ConfigExport `Export-ServerConfiguration` primary interactive export atomic (the module's flagship operator-visible export was missed in earlier rounds) (45-ConfigExport).
+- **Fix:** 45-ConfigExport fleet per-host JSON results + fleet summary write atomically. Also sanitizes remote hostname via `-replace '[^\w\-]', '_'` before embedding in filename — same path-traversal guard as 46-SessionSummary in v1.98.25 (45-ConfigExport).
+
+Remaining deferred sweep: Pattern 4 (storage cmdlet timeouts ~30 sites), Pattern 7 (English-only output parsing ~13 sites).
+
 ## v1.98.27
 
 - **Fix (CI/test):** 10-iSCSI subnet-prefix extraction used `$matches[1]` directly inside the v1.98.26 refusal-guard code. Codebase rule requires aliasing `$Matches` to `$regexMatches` first (Section 81). Aliased in both auto-config and per-NIC paths (10-iSCSI).

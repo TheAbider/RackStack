@@ -388,11 +388,17 @@ function Save-SessionState {
     }
 
     try {
+        # Atomic write — the load path Catch deletes the file on ConvertFrom-Json failure, so a
+        # mid-write truncation (process kill, disk full) causes the next run to lose session
+        # state. Write to .tmp first then rename.
         $json = $state | ConvertTo-Json -Depth 4
-        Set-Content -LiteralPath $stateFile -Value $json -Encoding UTF8
+        $tmpState = "$stateFile.tmp"
+        Set-Content -LiteralPath $tmpState -Value $json -Encoding UTF8 -ErrorAction Stop
+        Move-Item -LiteralPath $tmpState -Destination $stateFile -Force -ErrorAction Stop
     }
     catch {
         # Non-critical, don't break flow
+        if (Test-Path -LiteralPath "$stateFile.tmp") { Remove-Item -LiteralPath "$stateFile.tmp" -Force -ErrorAction SilentlyContinue }
     }
 }
 
