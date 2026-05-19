@@ -96,7 +96,11 @@ function Start-DiskCleanup {
             "5" {
                 Write-OutputColor "  Launching Windows Disk Cleanup..." -color "Info"
                 try {
-                    $cleanProc = Start-Process cleanmgr -ArgumentList "/d $($env:SystemDrive.TrimEnd(':'))" -PassThru -ErrorAction Stop
+                    # Pass args as an array — cleanmgr.exe expects `/d` and the drive letter
+                    # as separate argv entries. With `-ArgumentList "long string"` PowerShell's
+                    # native-call quoting could flatten to `"/d C"` (one token) which cleanmgr
+                    # treats as a malformed switch and silently falls back to all-drives mode.
+                    $cleanProc = Start-Process cleanmgr -ArgumentList @("/d", $env:SystemDrive.TrimEnd(':')) -PassThru -ErrorAction Stop
                     $null = $cleanProc | Wait-Process -Timeout 600 -ErrorAction SilentlyContinue
                     if (-not $cleanProc.HasExited) {
                         Write-OutputColor "  Disk Cleanup is still running. Continuing..." -color "Warning"
@@ -157,7 +161,13 @@ function Invoke-QuickClean {
     $tempPaths = @($env:TEMP, "$env:SystemRoot\Temp")
     foreach ($tempPath in $tempPaths) {
         if (Test-Path -LiteralPath $tempPath) {
-            $files = Get-ChildItem -LiteralPath $tempPath -Recurse -Force -File -ErrorAction SilentlyContinue
+            # Filter out reparse points (junctions / symlinks) so Remove-Item -Recurse can't
+            # follow a junction OUT of %TEMP% (e.g., a custom junction to a VHDX directory)
+            # and delete the target files. The Get-ChildItem -Recurse default would happily
+            # descend into a reparse point on PS 5.1 → destructive on a host with non-standard
+            # filesystem layout. Filter by FileAttributes flag, which is locale-neutral.
+            $files = Get-ChildItem -LiteralPath $tempPath -Recurse -Force -File -ErrorAction SilentlyContinue |
+                Where-Object { -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) }
             foreach ($file in $files) {
                 try {
                     $fileSize = $file.Length
@@ -493,9 +503,31 @@ function Invoke-RecycleBinCleanup {
     }
 
     Write-OutputColor "  Recycle Bin contains approximately $recycleBinCount item(s)." -color "Info"
+    # Enumerate per-volume so the operator knows what they're about to lose. Clear-RecycleBin
+    # with no -DriveLetter wipes EVERY drive's recycle bin — on a Hyper-V host with VHDX on
+    # D:, an admin's recently-moved-to-recycle-bin VHDX gets purged unconditionally.
+    $volumesWithBin = @()
+    try {
+        foreach ($vol in (Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter })) {
+            $binPath = Join-Path "$($vol.DriveLetter):" '$Recycle.Bin'
+            if (Test-Path -LiteralPath $binPath) {
+                $itemCount = @(Get-ChildItem -LiteralPath $binPath -Recurse -Force -File -ErrorAction SilentlyContinue).Count
+                if ($itemCount -gt 0) {
+                    $volumesWithBin += [PSCustomObject]@{ Drive = $vol.DriveLetter; Count = $itemCount }
+                }
+            }
+        }
+    } catch { }
+    if ($volumesWithBin.Count -gt 1) {
+        Write-OutputColor "  Multiple drives have recycle bin contents:" -color "Warning"
+        foreach ($vb in $volumesWithBin) {
+            Write-OutputColor "    $($vb.Drive): ~$($vb.Count) item(s)" -color "Warning"
+        }
+        Write-OutputColor "  Clear-RecycleBin without -DriveLetter clears ALL of them." -color "Warning"
+    }
     Write-OutputColor "" -color "Info"
 
-    if (-not (Confirm-UserAction -Message "Empty the Recycle Bin?" -DefaultYes)) {
+    if (-not (Confirm-UserAction -Message "Empty the Recycle Bin (ALL drives)?" -DefaultYes)) {
         Write-OutputColor "  Operation cancelled." -color "Info"
         return
     }
@@ -504,7 +536,7 @@ function Invoke-RecycleBinCleanup {
         # Try PowerShell 5.1+ cmdlet first
         Clear-RecycleBin -Force -ErrorAction Stop
         Write-OutputColor "  Recycle Bin emptied successfully." -color "Success"
-        Add-SessionChange -Category "System" -Description "Emptied Recycle Bin ($recycleBinCount items)"
+        Add-SessionChange -Category "System" -Description "Emptied Recycle Bin ($recycleBinCount items across $($volumesWithBin.Count) drive(s))"
         Clear-MenuCache
     }
     catch {

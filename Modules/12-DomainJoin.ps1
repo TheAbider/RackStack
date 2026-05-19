@@ -20,15 +20,21 @@ function Test-DomainJoinReadiness {
         return $false
     }
 
-    # 2. DC Port Connectivity (LDAP 389, Kerberos 88)
+    # 2. DC Port Connectivity (LDAP 389, Kerberos 88). EndConnect is required after WaitOne —
+    # WaitOne returning $true only means the wait completed, not that the connection succeeded.
+    # On a refused connection (RST), WaitOne returns $true immediately and the prior code
+    # reported "OK" for ports that were actually closed.
     $dcIP = $domainResolve.AddressList[0].ToString()
     foreach ($port in @(389, 88)) {
         $portName = if ($port -eq 389) { "LDAP" } else { "Kerberos" }
         $tcp = $null
+        $success = $false
         try {
             $tcp = New-Object System.Net.Sockets.TcpClient
             $connectResult = $tcp.BeginConnect($dcIP, $port, $null, $null)
-            $success = $connectResult.AsyncWaitHandle.WaitOne(3000, $false)
+            if ($connectResult.AsyncWaitHandle.WaitOne(3000, $false)) {
+                try { $tcp.EndConnect($connectResult); $success = $tcp.Connected } catch { $success = $false }
+            }
             if ($success) {
                 Write-OutputColor "  $portName port $port on ${dcIP}: OK" -color "Success"
             } else {

@@ -211,7 +211,16 @@ function Show-SessionSummary {
                         $summaryLines += "  - $reason"
                     }
                 }
-                $summaryLines | Out-File -LiteralPath $summaryPath -Encoding UTF8 -Force
+                # Atomic write-then-rename — operator-visible export, a kill mid-write would
+                # leave a confusing truncated file paired with the JSON sibling below.
+                $tmpTxt = "$summaryPath.tmp"
+                try {
+                    $summaryLines | Out-File -LiteralPath $tmpTxt -Encoding UTF8 -Force -ErrorAction Stop
+                    Move-Item -LiteralPath $tmpTxt -Destination $summaryPath -Force -ErrorAction Stop
+                } catch {
+                    if (Test-Path -LiteralPath $tmpTxt) { Remove-Item -LiteralPath $tmpTxt -Force -ErrorAction SilentlyContinue }
+                    throw
+                }
                 Write-OutputColor "  Summary exported to: $summaryPath" -color "Success"
             }
             catch {
@@ -223,6 +232,7 @@ function Show-SessionSummary {
             if (Confirm-UserAction -Message "Also export as JSON (for automation)?") {
                 $jsonPath = "$env:USERPROFILE\Desktop\$($env:COMPUTERNAME)_Session_$exportTsSuffix.json"
                 try {
+                    $tmpJson = "$jsonPath.tmp"
                     @{
                         Hostname = $env:COMPUTERNAME
                         SessionStart = $script:ScriptStartTime.ToString("yyyy-MM-ddTHH:mm:ss")
@@ -234,10 +244,12 @@ function Show-SessionSummary {
                         Changes = @($script:SessionChanges | ForEach-Object {
                             @{ Timestamp = $_.Timestamp; Category = $_.Category; Description = $_.Description }
                         })
-                    } | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $jsonPath -Encoding UTF8 -Force
+                    } | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $tmpJson -Encoding UTF8 -Force -ErrorAction Stop
+                    Move-Item -LiteralPath $tmpJson -Destination $jsonPath -Force -ErrorAction Stop
                     Write-OutputColor "  JSON export: $jsonPath" -color "Success"
                 }
                 catch {
+                    if (Test-Path -LiteralPath "$jsonPath.tmp") { Remove-Item -LiteralPath "$jsonPath.tmp" -Force -ErrorAction SilentlyContinue }
                     Write-OutputColor "  Failed to export JSON: $_" -color "Error"
                 }
             }

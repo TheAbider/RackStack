@@ -398,27 +398,34 @@ function Test-AllConnectivity {
         Write-OutputColor "  No connectivity! Check network configuration." -color "Error"
     }
 
-    # DNS resolution test (wrapped to avoid hanging the readiness check on a degraded resolver)
+    # DNS resolution test. The target is configurable via $script:NetworkTestDnsTarget
+    # (defaults.json key NetworkTestDnsTarget) so air-gapped / restricted environments that
+    # block public hostnames but allow internal DNS aren't forced into a false-negative.
+    # Default falls back to a public name for the common case.
+    $dnsTarget = if ($script:NetworkTestDnsTarget) { $script:NetworkTestDnsTarget } else { "google.com" }
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Testing DNS resolution..." -color "Info"
+    Write-OutputColor "  Testing DNS resolution ($dnsTarget)..." -color "Info"
     $dnsResult = Invoke-WithTimeout -ScriptBlock {
-        Resolve-DnsName -Name "google.com" -Type A -ErrorAction Stop
-    } -TimeoutSeconds 8 -Activity "DNS resolve"
+        param($target)
+        Resolve-DnsName -Name $target -Type A -ErrorAction Stop
+    } -ArgumentList @($dnsTarget) -TimeoutSeconds 8 -Activity "DNS resolve"
     if ($dnsResult.TimedOut) {
         Write-OutputColor "[FAIL] DNS resolution timed out" -color "Error"
     } elseif ($null -eq $dnsResult.Result) {
         Write-OutputColor "[FAIL] DNS resolution failed" -color "Error"
     } else {
         $dnsTest = $dnsResult.Result
-        Write-OutputColor "[OK ] DNS resolution working (google.com -> $(($dnsTest | Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress }) -join ', '))" -color "Success"
+        Write-OutputColor "[OK ] DNS resolution working ($dnsTarget -> $(($dnsTest | Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress }) -join ', '))" -color "Success"
     }
 
-    # HTTPS connectivity test (catches firewalls that block ICMP but allow HTTPS)
+    # HTTPS connectivity test (catches firewalls that block ICMP but allow HTTPS).
+    # Same configurability rationale as the DNS test above.
+    $httpsTarget = if ($script:NetworkTestHttpsTarget) { $script:NetworkTestHttpsTarget } else { "https://www.microsoft.com" }
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Testing HTTPS connectivity..." -color "Info"
+    Write-OutputColor "  Testing HTTPS connectivity ($httpsTarget)..." -color "Info"
     try {
-        $httpsResult = Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-        Write-OutputColor "[OK ] HTTPS connectivity working (microsoft.com - $($httpsResult.StatusCode))" -color "Success"
+        $httpsResult = Invoke-WebRequest -Uri $httpsTarget -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        Write-OutputColor "[OK ] HTTPS connectivity working ($httpsTarget - $($httpsResult.StatusCode))" -color "Success"
     }
     catch {
         Write-OutputColor "[FAIL] HTTPS connectivity failed: $($_.Exception.Message)" -color "Warning"

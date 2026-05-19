@@ -218,7 +218,17 @@ function New-BatchConfigTemplate {
     }
 
     try {
-        $configTemplate | Out-File -LiteralPath $savePath -Encoding UTF8 -Force
+        # Atomic write-then-rename — without this, a kill mid-Out-File would leave a corrupt
+        # template file that the operator might try to edit/import and produce confusing
+        # Test-BatchConfig failures. Matches the pattern used at line 728-730 for Save.
+        $tmpTemplate = "$savePath.tmp"
+        try {
+            $configTemplate | Out-File -LiteralPath $tmpTemplate -Encoding UTF8 -Force -ErrorAction Stop
+            Move-Item -LiteralPath $tmpTemplate -Destination $savePath -Force -ErrorAction Stop
+        } catch {
+            if (Test-Path -LiteralPath $tmpTemplate) { Remove-Item -LiteralPath $tmpTemplate -Force -ErrorAction SilentlyContinue }
+            throw
+        }
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Batch config template created: $savePath" -color "Success"
         Write-OutputColor "" -color "Info"

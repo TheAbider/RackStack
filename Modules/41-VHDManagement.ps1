@@ -288,6 +288,14 @@ function Copy-VHDForVM {
         $lastCopySpeedCheck = 0
         $copySpeedBps = 0
 
+        # Cap copy at 4 hours. Without a timeout, a network share lost mid-copy or a
+        # deduplication driver stuck on the destination volume hangs the loop indefinitely
+        # — operator can't Ctrl-C cleanly because Copy-Item runs out-of-process inside the
+        # Start-Job. Stop the job and surface a clear error on timeout.
+        $copyMaxSeconds = 14400
+        $copyStalledThreshold = 600  # 10 minutes of zero progress = stalled
+        $copyLastProgressSize = 0
+        $copyLastProgressAt = 0
         while ($copyJob.State -eq "Running") {
             $currentSize = 0
             if (Test-Path -LiteralPath $destPath) {
@@ -307,6 +315,28 @@ function Copy-VHDForVM {
             Write-ProgressBar -CurrentBytes $currentSize -TotalBytes $sourceSize -SpeedBytesPerSec $copySpeedBps -ElapsedSeconds $copyElapsed
             Start-Sleep -Seconds 1
             $copyElapsed++
+
+            # Track progress to detect a stall (no growth for 10 minutes).
+            if ($currentSize -gt $copyLastProgressSize) {
+                $copyLastProgressSize = $currentSize
+                $copyLastProgressAt = $copyElapsed
+            }
+            if ($copyElapsed -gt $copyMaxSeconds) {
+                Write-Host ""
+                Write-OutputColor "  Copy exceeded $($copyMaxSeconds / 3600) hour timeout — aborting." -color "Error"
+                try { Stop-Job $copyJob -ErrorAction SilentlyContinue } catch {}
+                try { Remove-Job $copyJob -Force -ErrorAction SilentlyContinue } catch {}
+                $copyJob = $null
+                return $null
+            }
+            if ($copyElapsed -gt 300 -and ($copyElapsed - $copyLastProgressAt) -gt $copyStalledThreshold) {
+                Write-Host ""
+                Write-OutputColor "  Copy stalled (no progress for $($copyStalledThreshold / 60) min) — aborting." -color "Error"
+                try { Stop-Job $copyJob -ErrorAction SilentlyContinue } catch {}
+                try { Remove-Job $copyJob -Force -ErrorAction SilentlyContinue } catch {}
+                $copyJob = $null
+                return $null
+            }
         }
         Write-Host ""
 
@@ -342,6 +372,11 @@ function Copy-VHDForVM {
         $spinChars = @('|', '/', '-', '\')
         $spinIndex = 0
 
+        # Cap convert at 4 hours, with a 15-min no-progress stall detector.
+        $convertMaxSeconds = 14400
+        $convertStalledThreshold = 900
+        $convertLastProgressSize = 0
+        $convertLastProgressAt = 0
         while ($convertJob.State -eq "Running") {
             $currentSize = 0
             if (Test-Path -LiteralPath $fixedPath) {
@@ -363,6 +398,27 @@ function Copy-VHDForVM {
             Write-ProgressBar -CurrentBytes $currentSize -Activity "Converting to fixed" -SpeedBytesPerSec $convertSpeedBps -ElapsedSeconds $convertElapsed -SpinChar $spin
             Start-Sleep -Seconds 2
             $convertElapsed += 2
+
+            if ($currentSize -gt $convertLastProgressSize) {
+                $convertLastProgressSize = $currentSize
+                $convertLastProgressAt = $convertElapsed
+            }
+            if ($convertElapsed -gt $convertMaxSeconds) {
+                Write-Host ""
+                Write-OutputColor "  Convert exceeded $($convertMaxSeconds / 3600) hour timeout — aborting." -color "Error"
+                try { Stop-Job $convertJob -ErrorAction SilentlyContinue } catch {}
+                try { Remove-Job $convertJob -Force -ErrorAction SilentlyContinue } catch {}
+                $convertJob = $null
+                return $null
+            }
+            if ($convertElapsed -gt 300 -and ($convertElapsed - $convertLastProgressAt) -gt $convertStalledThreshold) {
+                Write-Host ""
+                Write-OutputColor "  Convert stalled (no progress for $($convertStalledThreshold / 60) min) — aborting." -color "Error"
+                try { Stop-Job $convertJob -ErrorAction SilentlyContinue } catch {}
+                try { Remove-Job $convertJob -Force -ErrorAction SilentlyContinue } catch {}
+                $convertJob = $null
+                return $null
+            }
         }
         Write-Host ""
 
@@ -961,6 +1017,34 @@ function Optimize-VHDFile {
 
         if ($vhdInfo.Attached) {
             Write-OutputColor "  VHD is currently attached. Dismount before optimizing." -color "Error"
+            return
+        }
+
+        # CRITICAL: $vhdInfo.Attached only reports host-side mounts (Mount-VHD), NOT VHDs
+        # attached to a running Hyper-V VM. Optimize-VHD demands exclusive access — running
+        # it against a VM-backing VHDX with in-flight guest writes can corrupt the guest's
+        # filesystem. Refuse if any VM has this VHD attached, especially while running.
+        try {
+            $vhdLiteral = (Resolve-Path -LiteralPath $VHDPath -ErrorAction Stop).Path
+            $attachedVMs = @(Get-VMHardDiskDrive -VMName * -ErrorAction SilentlyContinue | Where-Object {
+                try { (Resolve-Path -LiteralPath $_.Path -ErrorAction Stop).Path -eq $vhdLiteral } catch { $false }
+            })
+            if ($attachedVMs.Count -gt 0) {
+                foreach ($att in $attachedVMs) {
+                    $vm = Get-VM -Name $att.VMName -ErrorAction SilentlyContinue
+                    $vmState = if ($null -ne $vm) { $vm.State } else { 'Unknown' }
+                    Write-OutputColor "  VHD is attached to VM '$($att.VMName)' (State: $vmState)." -color "Error"
+                    if ($vmState -eq 'Running' -or $vmState -eq 'Paused') {
+                        Write-OutputColor "  REFUSING to optimize — Optimize-VHD against a running VM's disk can corrupt the guest." -color "Error"
+                    } else {
+                        Write-OutputColor "  Detach the VHD from the VM (or shut down + Remove-VMHardDiskDrive) before optimizing." -color "Warning"
+                    }
+                }
+                return
+            }
+        } catch {
+            Write-OutputColor "  Could not verify VM attachment status: $($_.Exception.Message)" -color "Warning"
+            Write-OutputColor "  Refusing to optimize as fail-safe — could not prove the VHD is unattached." -color "Error"
             return
         }
 

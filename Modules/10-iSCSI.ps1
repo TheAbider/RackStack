@@ -77,6 +77,26 @@ function Test-iSCSIAdapterSide {
         # restore-on-exit path still rebuilds IPs from the snapshot taken at function start.
     }
 
+    # Also refuse if the adapter has any IP outside the iSCSI subnet — that IP is likely
+    # carrying SMB/cluster/heartbeat/management traffic on a multi-IP NIC, and wiping it
+    # would disrupt those services even when the NIC isn't the default-route owner.
+    # The default-route refusal above only covers single-route NICs; a non-default-route
+    # NIC with an additional management IP would still get wiped.
+    try {
+        $existingIPs = @(Get-NetIPAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -and $_.IPAddress -ne '169.254' -and $_.PrefixOrigin -ne 'WellKnown' })
+        $iscsiSubnetPrefix = "$($script:iSCSISubnet)."
+        $nonIscsiIPs = @($existingIPs | Where-Object { $_.IPAddress -notlike "${iscsiSubnetPrefix}*" })
+        if ($nonIscsiIPs.Count -gt 0) {
+            Write-OutputColor "    REFUSING to wipe IPs on '$AdapterName': adapter has non-iSCSI IP(s): $(($nonIscsiIPs | ForEach-Object { $_.IPAddress }) -join ', ')" -color "Error"
+            Write-OutputColor "    These IPs likely carry SMB / cluster / heartbeat traffic. Use a dedicated iSCSI NIC." -color "Warning"
+            $result.Side = "Skipped"
+            return $result
+        }
+    } catch {
+        # Get-NetIPAddress failures: continue — restore-on-exit will rebuild from the snapshot
+    }
+
     # Temporarily assign IP on the adapter
     $tempIPAssigned = $false
     try {

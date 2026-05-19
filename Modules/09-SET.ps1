@@ -306,6 +306,24 @@ function New-SwitchEmbeddedTeam {
         }
     }
 
+    # Warn if any selected adapter currently owns the default route — creating the SET will
+    # briefly rebind the physical adapter into the vSwitch and (despite -AllowManagementOS)
+    # the IP migration commonly fails, leaving the box reachable only via console / iLO.
+    try {
+        $defaultRouteIfs = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForEach-Object { $_.InterfaceAlias })
+        $atRiskAdapters = @($selectedAdapters | Where-Object { $_.Name -in $defaultRouteIfs })
+        if ($atRiskAdapters.Count -gt 0) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  WARNING: $(($atRiskAdapters | ForEach-Object { $_.Name }) -join ', ') owns the default route." -color "Warning"
+            Write-OutputColor "  Creating SET will briefly disconnect remote sessions on that adapter." -color "Warning"
+            Write-OutputColor "  Confirm you have console / iLO / out-of-band access before continuing." -color "Warning"
+            if (-not (Confirm-UserAction -Message "Proceed with SET creation on the default-route adapter?")) {
+                Write-OutputColor "  SET creation cancelled." -color "Info"
+                return
+            }
+        }
+    } catch { }
+
     if (-not (Confirm-UserAction -Message "`nCreate Switch Embedded Team with these adapters?")) {
         Write-OutputColor "  SET creation cancelled." -color "Info"
         return
@@ -320,21 +338,32 @@ function New-SwitchEmbeddedTeam {
         Set-VMSwitchTeam -Name $SwitchName -LoadBalancingAlgorithm Dynamic -ErrorAction SilentlyContinue
 
         Write-OutputColor "  Waiting for management adapter to appear..." -color "Info"
+        # Extend the wait window — VMM provider warm-up can take 60-90s on cold hosts. The
+        # prior 6-attempt exponential cap topped out around ~31s and frequently logged
+        # "may need to rename manually" on perfectly fine hosts where the vNIC just hadn't
+        # bound yet.
         $vnicReady = $false
-        $maxAttempts = 6
-        $waitSeconds = 1
-        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        $vnicDeadline = (Get-Date).AddSeconds(90)
+        while ((Get-Date) -lt $vnicDeadline) {
             $vnic = Get-VMNetworkAdapter -ManagementOS -SwitchName $SwitchName -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($null -ne $vnic) { $vnicReady = $true; break }
-            Start-Sleep -Seconds $waitSeconds
-            $waitSeconds = [math]::Min($waitSeconds * 2, 10)
+            Start-Sleep -Seconds 2
         }
 
         if ($vnicReady) {
-            Write-OutputColor "  Renaming management adapter to '$ManagementName'..." -color "Info"
-            Rename-VMNetworkAdapter -ManagementOS -Name $SwitchName -NewName $ManagementName -ErrorAction SilentlyContinue
+            # Use $script:ManagementName (defaults.json override-able) rather than the
+            # function param default of "Management" — operators who set defaults.json
+            # ManagementName were having it silently ignored by this SET branch even
+            # though the External-switch branch already used $script:ManagementName.
+            $resolvedMgmtName = if ($script:ManagementName) { $script:ManagementName } else { $ManagementName }
+            Write-OutputColor "  Renaming management adapter to '$resolvedMgmtName'..." -color "Info"
+            try {
+                Rename-VMNetworkAdapter -ManagementOS -Name $SwitchName -NewName $resolvedMgmtName -ErrorAction Stop
+            } catch {
+                Write-OutputColor "  Rename failed: $($_.Exception.Message). Adapter still has its default name '$SwitchName' — rename manually if needed." -color "Warning"
+            }
         } else {
-            Write-OutputColor "  Management adapter not yet available. You may need to rename it manually." -color "Warning"
+            Write-OutputColor "  Management adapter not yet available after 90s. You may need to rename it manually." -color "Warning"
         }
 
         # Verify SET team health

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.13
+    Automated Test Runner for RackStack v1.98.14
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11626,7 +11626,7 @@ try {
 
     # 05-SystemCheck: HTTPS connectivity test added
     Write-TestResult "05-SystemCheck: HTTPS connectivity test exists" ($sc3 -match 'HTTPS connectivity')
-    Write-TestResult "05-SystemCheck: HTTPS test uses Invoke-WebRequest" ($sc3 -match 'Invoke-WebRequest.*microsoft\.com')
+    Write-TestResult "05-SystemCheck: HTTPS test uses Invoke-WebRequest" ($sc3 -match 'Invoke-WebRequest -Uri \$httpsTarget')
 
     # 10-iSCSI: restoreOriginalConfig called in finally block (not just catch)
     $iscsi2 = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
@@ -12064,7 +12064,7 @@ try {
 
     # v1.98.2 — DNS wrapped in Invoke-WithTimeout
     $sysCheck98 = Get-Content (Join-Path $modulesPath "05-SystemCheck.ps1") -Raw
-    Write-TestResult "05-SystemCheck: DNS resolve wrapped in Invoke-WithTimeout" ($sysCheck98 -match 'Invoke-WithTimeout[\s\S]{0,300}Resolve-DnsName\s+-Name\s+"google\.com"')
+    Write-TestResult "05-SystemCheck: DNS resolve wrapped in Invoke-WithTimeout" ($sysCheck98 -match 'Invoke-WithTimeout[\s\S]{0,400}Resolve-DnsName\s+-Name\s+\$target')
 
     # v1.98.2 — Dashboard hardening
     $entry98 = Get-Content (Join-Path $modulesPath "50-EntryPoint.ps1") -Raw
