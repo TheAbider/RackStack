@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.31
+
+- **Fix (CI/test):** Test pattern `54-HTMLReports: Readiness checks defender` regex window bumped from 10000 to 12000 chars. My v1.98.30 Pattern 7 fix in Get-ReadinessChecks (registry-first time-sync source) added ~500 chars between `Get-ReadinessChecks` and the first `Defender` mention, pushing it to 10525 (just past the prior window). Not a functional regression (Tests/Run-Tests.ps1).
+- **Includes all v1.98.30 fixes** (v1.98.30 tag was never published; this version supersedes it under z-retention).
+
 ## v1.98.30
 
 Round 22 — cross-module sweep continuation (Pattern 7 English-only output parsing, broader subset).
