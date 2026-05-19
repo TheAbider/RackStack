@@ -552,7 +552,7 @@ function Set-iSCSIAutoConfiguration {
     # Defense-in-depth: refuse to wipe an adapter that's carrying default-route traffic or has
     # IPs outside the iSCSI subnet — same pattern that Test-iSCSIAdapterSide enforces upstream
     # (v1.98.14). The operator may have picked the wrong NIC at the Select-iSCSI-Adapters step.
-    $iscsiSubnetPrefix = if ($ip1 -match '^(\d+\.\d+\.\d+\.)') { $matches[1] } else { '' }
+    $iscsiSubnetPrefix = if ($ip1 -match '^(\d+\.\d+\.\d+\.)') { $regexMatches = $matches; $regexMatches[1] } else { '' }
     $checkAdapter = {
         param($adapterName, $expectPrefix)
         $hasDefaultRoute = @(Get-NetRoute -InterfaceAlias $adapterName -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue).Count -gt 0
@@ -695,7 +695,7 @@ function Set-iSCSIAdapter {
         Write-OutputColor "  This is your management/RDP NIC. Pick a dedicated iSCSI adapter instead." -color "Warning"
         return
     }
-    $iscsiPrefix = if ($ipAddress -match '^(\d+\.\d+\.\d+\.)') { $matches[1] } else { '' }
+    $iscsiPrefix = if ($ipAddress -match '^(\d+\.\d+\.\d+\.)') { $regexMatches = $matches; $regexMatches[1] } else { '' }
     if ($iscsiPrefix) {
         $existingIPs = @(Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue)
         $nonIscsiIPs = @($existingIPs | Where-Object { $_.IPAddress -notlike "${iscsiPrefix}*" })

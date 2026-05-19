@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.27
+
+- **Fix (CI/test):** 10-iSCSI subnet-prefix extraction used `$matches[1]` directly inside the v1.98.26 refusal-guard code. Codebase rule requires aliasing `$Matches` to `$regexMatches` first (Section 81). Aliased in both auto-config and per-NIC paths (10-iSCSI).
+- **Includes all v1.98.26 fixes** (the v1.98.26 tag was never published; this version supersedes it under z-retention).
+
 ## v1.98.26
 
 Round 19 — cross-module sweep continuation (Pattern 1 unscoped IP removal + Pattern 10 locale-fragile enum).
