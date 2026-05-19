@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.36
+
+- **Fix (CI/test):** `50-EntryPoint: TcpSettingsAudit JSON output` regex window bumped from 4000 to 5500 chars. The v1.98.34 netsh→Get-NetTCPSetting migration added ~700 chars between the `'TcpSettingsAudit'` label and the JSON-output marker, pushing it past the prior window. Not a functional regression (Tests/Run-Tests.ps1).
+- **Includes all v1.98.34 / v1.98.35 fixes** (neither tag was published; v1.98.34 CI failed on this test window, v1.98.35 inherited the same failure mode).
+
 ## v1.98.35
 
 Round 26 — VM-name path-traversal sweep + error-swallowing on destructive ops (agent findings from round 25 parallel sweep).

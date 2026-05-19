@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.35
+    Automated Test Runner for RackStack v1.98.36
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -11249,7 +11249,7 @@ try {
 
     # v1.80.0 — TcpSettingsAudit + WinRMAudit
     Write-TestResult "50-EntryPoint: TcpSettingsAudit checks auto-tuning" ($mod50 -match "'TcpSettingsAudit'[\s\S]{0,1000}Auto-Tuning")
-    Write-TestResult "50-EntryPoint: TcpSettingsAudit JSON output" ($mod50 -match "'TcpSettingsAudit'[\s\S]{0,4000}CLIOutputFormat.*eq.*JSON")
+    Write-TestResult "50-EntryPoint: TcpSettingsAudit JSON output" ($mod50 -match "'TcpSettingsAudit'[\s\S]{0,5500}CLIOutputFormat.*eq.*JSON")
     Write-TestResult "50-EntryPoint: WinRMAudit checks listeners" ($mod50 -match "'WinRMAudit'[\s\S]{0,2000}WSMan:\\localhost\\Listener")
     Write-TestResult "50-EntryPoint: WinRMAudit checks auth methods" ($mod50 -match "'WinRMAudit'[\s\S]{0,3000}Service\\Auth")
     Write-TestResult "50-EntryPoint: WinRMAudit checks TrustedHosts" ($mod50 -match "'WinRMAudit'[\s\S]{0,4000}TrustedHosts")
