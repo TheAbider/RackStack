@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.41
+
+- **Fix (CI/test):** v1.98.40's tightened `20-DiskCleanup destructive entry points gate on Confirm-UserAction` test correctly caught that the listed Invoke-*Clean functions don't gate inside their own body — but the design pattern uses the menu dispatcher (`Start-DiskCleanup`) to gate each call site BEFORE invoking the destructive function. Split the test into two assertions: (1) body-gated functions (`Clear-WindowsOld`, `Invoke-RecycleBinCleanup`, `Clear-UserProfileTemp`, `Clear-ShadowCopies`, `Invoke-FullEnhancedCleanup`) verified against function-body `Confirm-UserAction` within 3500 chars; (2) menu-gated functions (`Invoke-QuickClean`, `Invoke-StandardClean`, `Invoke-DeepClean`, `Clear-WindowsUpdateCache`) verified against same-line `Confirm-UserAction ... Invoke-X` proximity match. Both shapes now properly verified instead of trivially matching the word "Confirm" anywhere (Tests/Run-Tests.ps1).
+- **Includes v1.98.40 fixes** (v1.98.40 tag was never published; this version supersedes it under z-retention).
+
 ## v1.98.40
 
 Round 30 — Tier-1 trivial-test hardening (security-gate verifications that didn't actually verify).

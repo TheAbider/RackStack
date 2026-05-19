@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.40
+    Automated Test Runner for RackStack v1.98.41
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7205,26 +7205,42 @@ try {
     Write-TestResult "20-DiskCleanup: cleans Windows Update cache" ($dcContent -match 'SoftwareDistribution|wuauserv')
     Write-TestResult "20-DiskCleanup: deep clean uses DISM or component cleanup" ($dcContent -match 'DISM|Dism|StartComponentCleanup|ResetBase')
     Write-TestResult "20-DiskCleanup: shows space savings info" ($dcContent -match 'MB|Potential|savings|size')
-    # Verify each destructive entry point gates behind Confirm-UserAction. Prior test matched
-    # the literal word "Confirm" anywhere in the file (including comments), which trivially
-    # passed even if no actual gate existed. Now require Confirm-UserAction to appear in each
-    # named destructive function body within 2500 chars of the function declaration.
-    $destructiveDcFuncs = @(
-        'Clear-WindowsUpdateCache',
-        'Clear-EventLogs',
+    # Verify each destructive operation IS gated by Confirm-UserAction. Prior test matched the
+    # literal word "Confirm" anywhere in the file (including comments) — trivially passed even
+    # if no actual gate existed. 20-DiskCleanup uses two patterns: some destructive functions
+    # gate inside their own body, others rely on the menu dispatcher (Start-DiskCleanup) to
+    # gate the call site. Verify both shapes:
+    # 1. Functions that gate INSIDE their body
+    $bodyGatedFuncs = @(
+        'Clear-WindowsOld',
+        'Invoke-RecycleBinCleanup',
+        'Clear-UserProfileTemp',
+        'Clear-ShadowCopies',
+        'Invoke-FullEnhancedCleanup'
+    )
+    $missingBodyGate = @()
+    foreach ($fname in $bodyGatedFuncs) {
+        $pat = "function\s+$([regex]::Escape($fname))\b[\s\S]{0,3500}Confirm-UserAction"
+        if ($dcContent -notmatch $pat) { $missingBodyGate += $fname }
+    }
+    Write-TestResult "20-DiskCleanup: body-gated destructive functions call Confirm-UserAction" ($missingBodyGate.Count -eq 0) $(if ($missingBodyGate.Count -gt 0) { "Missing in: $($missingBodyGate -join ', ')" } else { "" })
+
+    # 2. Functions gated by the menu dispatcher — verify Start-DiskCleanup calls Confirm-UserAction
+    # immediately before each call site. Use a regex that requires `Confirm-UserAction` AND the
+    # target function name in close proximity on the same line.
+    $menuGatedFuncs = @(
         'Invoke-QuickClean',
         'Invoke-StandardClean',
         'Invoke-DeepClean',
-        'Invoke-FullClean'
+        'Clear-WindowsUpdateCache'
     )
-    $missingConfirms = @()
-    foreach ($fname in $destructiveDcFuncs) {
-        $pat = "function\s+$([regex]::Escape($fname))\b[\s\S]{0,2500}Confirm-UserAction"
-        if ($dcContent -notmatch $pat) {
-            $missingConfirms += $fname
-        }
+    $missingMenuGate = @()
+    foreach ($fname in $menuGatedFuncs) {
+        # Same-line match: `if (Confirm-UserAction ...) { Invoke-X }` or similar
+        $pat = "Confirm-UserAction[^\r\n]{0,200}$([regex]::Escape($fname))"
+        if ($dcContent -notmatch $pat) { $missingMenuGate += $fname }
     }
-    Write-TestResult "20-DiskCleanup: destructive entry points gate on Confirm-UserAction" ($missingConfirms.Count -eq 0) $(if ($missingConfirms.Count -gt 0) { "Missing in: $($missingConfirms -join ', ')" } else { "" })
+    Write-TestResult "20-DiskCleanup: menu-gated destructive call sites have Confirm-UserAction nearby" ($missingMenuGate.Count -eq 0) $(if ($missingMenuGate.Count -gt 0) { "Missing in: $($missingMenuGate -join ', ')" } else { "" })
 
 } catch {
     Write-TestResult "Disk Cleanup Module Tests" $false $_.Exception.Message
