@@ -1,6 +1,6 @@
 @{
     RootModule           = 'RackStack.psm1'
-    ModuleVersion        = '1.98.15'
+    ModuleVersion        = '1.98.16'
     GUID                 = 'c19b8e71-4a35-4f2b-9d06-8a24f7bc0e91'
     Author               = 'TheAbider'
     CompanyName          = 'TheAbider'

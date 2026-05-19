@@ -359,12 +359,41 @@ function Add-NodeToCluster {
 
         # Register manual-only undo — removing a node from a production cluster is a heavy operation.
         # The user must explicitly invoke "Undo last change" to trigger this; it never runs automatically.
+        # Defense-in-depth: re-query cluster state at undo time and refuse if eviction would destroy
+        # quorum or leave the cluster with fewer than 2 Up nodes. Past incident: a stale undo run on
+        # a partially-down cluster evicted the only surviving node, taking all CSVs offline.
         $nodeEsc = $env:COMPUTERNAME -replace "'", "''"
         $clusterEsc = $clusterName -replace "'", "''"
         Add-UndoAction -Category "Cluster" -Description "Leave cluster '$clusterName'" -UndoScript {
             param($Node, $Cluster)
-            Write-Host "  Removing node '$Node' from cluster '$Cluster'..." -ForegroundColor Yellow
-            Remove-ClusterNode -Cluster $Cluster -Name $Node -Force -ErrorAction Stop
+            Write-Host "  Verifying cluster state before evicting '$Node' from '$Cluster'..." -ForegroundColor Yellow
+            try {
+                $liveNodes = @(Get-ClusterNode -Cluster $Cluster -ErrorAction Stop)
+            } catch {
+                Write-Host "  Cannot query cluster '$Cluster': $($_.Exception.Message). Refusing to evict." -ForegroundColor Red
+                return
+            }
+            $upNodes = @($liveNodes | Where-Object { $_.State -eq 'Up' })
+            if ($upNodes.Count -le 2) {
+                Write-Host "  REFUSING to evict: only $($upNodes.Count) node(s) currently Up." -ForegroundColor Red
+                Write-Host "  Evicting '$Node' would leave the cluster without quorum." -ForegroundColor Red
+                Write-Host "  If this is intentional, evict manually via Failover Cluster Manager." -ForegroundColor Yellow
+                return
+            }
+            $target = $liveNodes | Where-Object { $_.Name -eq $Node }
+            if (-not $target) {
+                Write-Host "  Node '$Node' is no longer a member of cluster '$Cluster'. Nothing to undo." -ForegroundColor Yellow
+                return
+            }
+            Write-Host "  Cluster has $($upNodes.Count) Up nodes; safe to evict '$Node'." -ForegroundColor Green
+            Write-Host "  Type EVICT to confirm:" -ForegroundColor Yellow
+            $confirm = Read-Host
+            if ($confirm -ne 'EVICT') {
+                Write-Host "  Eviction cancelled (did not type EVICT)." -ForegroundColor Yellow
+                return
+            }
+            Remove-ClusterNode -Cluster $Cluster -Name $Node -ErrorAction Stop
+            Write-Host "  Node '$Node' evicted from '$Cluster'." -ForegroundColor Green
         }.GetNewClosure() -UndoParams @{ Node = $nodeEsc; Cluster = $clusterEsc }
     }
     catch {
@@ -525,16 +554,72 @@ function Edit-ClusterSharedVolume {
                 $selIdx = [int]$csvChoice - 1
                 if ($selIdx -ge 0 -and $selIdx -lt $csvs.Count) {
                     $selectedCSV = $csvs[$selIdx]
-                    if (Confirm-UserAction -Message "Remove $($selectedCSV.Name) from CSV?") {
-                        try {
-                            Remove-ClusterSharedVolume -Name $selectedCSV.Name -ErrorAction Stop
-                            Write-OutputColor "  Removed $($selectedCSV.Name) from CSV." -color "Success"
-                            Add-SessionChange -Category "Cluster" -Description "Removed $($selectedCSV.Name) from Cluster Shared Volumes"
-                            Clear-MenuCache
+
+                    # Defense-in-depth: refuse to remove a CSV with VMs whose storage lives on it.
+                    # Remove-ClusterSharedVolume yanks the volume out from under live guests — VHDX
+                    # I/O fails, guest OS crashes, and a mid-write VHDX can corrupt.
+                    $csvName = $selectedCSV.Name
+                    $csvMountRoot = $null
+                    try {
+                        $info = $selectedCSV.SharedVolumeInfo
+                        if ($info -and $info.FriendlyVolumeName) {
+                            $csvMountRoot = $info.FriendlyVolumeName.TrimEnd('\')
                         }
-                        catch {
-                            Write-OutputColor "  Failed: $_" -color "Error"
+                    } catch { }
+                    $dependentVMs = @()
+                    try {
+                        $clusteredVMs = @(Get-ClusterGroup -ErrorAction SilentlyContinue | Where-Object { $_.GroupType -eq 'VirtualMachine' })
+                        foreach ($vmGroup in $clusteredVMs) {
+                            try {
+                                $vmName = ($vmGroup.OwnerNode.Name)
+                                $vmList = @(Get-VM -ClusterObject $vmGroup -ErrorAction SilentlyContinue)
+                                foreach ($vm in $vmList) {
+                                    $paths = @()
+                                    if ($vm.Path) { $paths += $vm.Path }
+                                    if ($vm.HardDrives) { $paths += @($vm.HardDrives | ForEach-Object { $_.Path }) }
+                                    foreach ($p in ($paths | Where-Object { $_ })) {
+                                        if ($csvMountRoot -and $p -like "$csvMountRoot*") {
+                                            $dependentVMs += [PSCustomObject]@{ VM = $vm.Name; Path = $p; State = $vm.State }
+                                            break
+                                        }
+                                    }
+                                }
+                            } catch { }
                         }
+                    } catch { }
+
+                    if ($dependentVMs.Count -gt 0) {
+                        Write-OutputColor "" -color "Error"
+                        Write-OutputColor "  REFUSING to remove CSV '$csvName': $($dependentVMs.Count) clustered VM(s) have storage on it." -color "Error"
+                        foreach ($dep in ($dependentVMs | Select-Object -First 10)) {
+                            Write-OutputColor "    - $($dep.VM) [$($dep.State)]" -color "Error"
+                        }
+                        if ($dependentVMs.Count -gt 10) {
+                            Write-OutputColor "    ... and $($dependentVMs.Count - 10) more" -color "Error"
+                        }
+                        Write-OutputColor "  Migrate or delete these VMs first, then retry." -color "Warning"
+                        Write-PressEnter
+                        return
+                    }
+
+                    Write-OutputColor "" -color "Warning"
+                    Write-OutputColor "  About to remove CSV: $csvName" -color "Warning"
+                    Write-OutputColor "  Mount path: $($csvMountRoot)" -color "Info"
+                    Write-OutputColor "  No clustered VMs detected with VHDs on this CSV." -color "Info"
+                    Write-OutputColor "  Type the CSV name '$csvName' to confirm removal:" -color "Warning"
+                    $typed = Read-Host
+                    if ($typed -ne $csvName) {
+                        Write-OutputColor "  Removal cancelled (name did not match)." -color "Info"
+                        return
+                    }
+                    try {
+                        Remove-ClusterSharedVolume -Name $selectedCSV.Name -ErrorAction Stop
+                        Write-OutputColor "  Removed $($selectedCSV.Name) from CSV." -color "Success"
+                        Add-SessionChange -Category "Cluster" -Description "Removed $($selectedCSV.Name) from Cluster Shared Volumes"
+                        Clear-MenuCache
+                    }
+                    catch {
+                        Write-OutputColor "  Failed: $_" -color "Error"
                     }
                 }
             }
@@ -831,6 +916,27 @@ function Set-ClusterQuorumConfig {
 
     switch ($choice) {
         "1" {
+            # Microsoft guidance: clusters with an even node count MUST have a witness.
+            # Node Majority on 2 nodes means any single-node failure halts the cluster.
+            # On 4 nodes, losing 2 is a coin flip on which side keeps quorum.
+            $nodeCount = 0
+            try { $nodeCount = @(Get-ClusterNode -ErrorAction Stop).Count } catch { }
+            if ($nodeCount -gt 0 -and ($nodeCount % 2) -eq 0) {
+                Write-OutputColor "" -color "Critical"
+                Write-OutputColor "  WARNING: Cluster has $nodeCount nodes (even count)." -color "Critical"
+                Write-OutputColor "  Node Majority with no witness is NOT recommended on even-node clusters." -color "Critical"
+                Write-OutputColor "  Any single-node failure on a 2-node cluster halts the cluster." -color "Warning"
+                Write-OutputColor "  Microsoft recommends a Disk, File Share, or Cloud Witness instead." -color "Warning"
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Type DOWNGRADE to proceed without a witness:" -color "Warning"
+                $confirm = Read-Host
+                if ($confirm -ne 'DOWNGRADE') {
+                    Write-OutputColor "  Cancelled (did not type DOWNGRADE)." -color "Info"
+                    return
+                }
+            } else {
+                if (-not (Confirm-UserAction -Message "Set quorum to Node Majority (no witness)?")) { return }
+            }
             try {
                 Set-ClusterQuorum -NodeMajority -ErrorAction Stop
                 Write-OutputColor "  Quorum set to Node Majority." -color "Success"
@@ -1054,6 +1160,38 @@ function Suspend-ClusterNodeForMaintenance {
     if ($targetNode.State -ne 'Up') {
         Write-OutputColor "  Node '$($targetNode.Name)' is already $($targetNode.State)" -color "Warning"
         return
+    }
+
+    # Refuse if draining this node would take the cluster offline. If all other nodes are already
+    # Down/Paused, Suspend-ClusterNode -Drain has nowhere to move roles — they go unhosted and
+    # CSVs go offline. Past incident: operator on the only surviving node of a 3-node cluster
+    # didn't notice the other two were already down, picked self, took the entire cluster offline.
+    $otherUp = @($nodes | Where-Object { $_.State -eq 'Up' -and $_.Name -ne $targetNode.Name })
+    if ($otherUp.Count -eq 0) {
+        Write-OutputColor "" -color "Error"
+        Write-OutputColor "  REFUSING to pause '$($targetNode.Name)': no other Up nodes available." -color "Error"
+        Write-OutputColor "  Draining would leave roles unhosted and take the cluster offline." -color "Error"
+        Write-OutputColor "  Current node states:" -color "Info"
+        foreach ($n in $nodes) {
+            Write-OutputColor "    - $($n.Name): $($n.State)" -color "Info"
+        }
+        Write-PressEnter
+        return
+    }
+    # Warn if pause would drop active votes below quorum threshold.
+    $totalVoteCapable = $nodes.Count
+    $afterPauseUp = $otherUp.Count
+    $quorumThreshold = [math]::Floor($totalVoteCapable / 2) + 1
+    if ($afterPauseUp -lt $quorumThreshold) {
+        Write-OutputColor "" -color "Warning"
+        Write-OutputColor "  CAUTION: After pausing, only $afterPauseUp/$totalVoteCapable nodes will be Up" -color "Warning"
+        Write-OutputColor "  (quorum requires $quorumThreshold). Cluster may halt if any other node fails." -color "Warning"
+        Write-OutputColor "  Type CONTINUE to proceed:" -color "Warning"
+        $confirm = Read-Host
+        if ($confirm -ne 'CONTINUE') {
+            Write-OutputColor "  Cancelled." -color "Info"
+            return
+        }
     }
 
     # Check what roles would move

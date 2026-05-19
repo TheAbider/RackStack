@@ -316,7 +316,12 @@ function Export-FirewallRuleAudit {
             })
         }
 
-        $export | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Encoding UTF8
+        # Atomic write: a partial export written directly to $OutputPath could mislead an
+        # operator (or an external auditor pipeline) into thinking the export succeeded.
+        # Write to .tmp first, then rename.
+        $tmpPath = "$OutputPath.tmp"
+        $export | Export-Csv -LiteralPath $tmpPath -NoTypeInformation -Encoding UTF8
+        Move-Item -LiteralPath $tmpPath -Destination $OutputPath -Force -ErrorAction Stop
 
         $enabledCount = @($rules | Where-Object { $_.Enabled -eq $true }).Count
         $totalCount = @($rules).Count

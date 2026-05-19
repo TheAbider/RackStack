@@ -380,6 +380,23 @@ function Get-FileServerFile {
                     }
                     $resumeResponse = $resumeRequest.GetResponse()
                     if ($resumeResponse.StatusCode -eq [System.Net.HttpStatusCode]::PartialContent) {
+                        # Validate Content-Range matches our requested offset. A misconfigured nginx
+                        # behind a CDN that rewrites Range headers could return 206 with a different
+                        # byte range, which an Append-mode write would corrupt onto the partial file.
+                        # Test-FileIntegrity catches the resulting hash mismatch later, but this saves
+                        # the wasted retry.
+                        $contentRange = $resumeResponse.Headers['Content-Range']
+                        $rangeOk = $false
+                        if ($contentRange -and $contentRange -match '^bytes\s+(\d+)-\d+/') {
+                            if ([long]$matches[1] -eq $existingSize) { $rangeOk = $true }
+                        }
+                        if (-not $rangeOk) {
+                            try { $resumeResponse.Close() } catch { }
+                            try { $resumeRequest.Abort() } catch { }
+                            Write-OutputColor "  Server returned 206 with mismatched Content-Range ('$contentRange'); restarting download." -color "Warning"
+                            Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
+                            throw "Resume range mismatch"
+                        }
                         $responseStream = $resumeResponse.GetResponseStream()
                         $fileStream = [System.IO.File]::Open($destFile, [System.IO.FileMode]::Append)
                         try {

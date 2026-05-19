@@ -276,6 +276,27 @@ function Restore-VMCheckpointWizard {
 
     $selectedCP = $cpMap[$cpChoice]
 
+    # Verify the VM still exists and resolve current state. Restoring against a renamed/
+    # replaced VM (same name, different VMId) would silently target the wrong guest.
+    $liveVm = $null
+    try {
+        if ($selectedCP.VMId) {
+            $liveVm = Get-VM -Id $selectedCP.VMId -ErrorAction SilentlyContinue
+        }
+        if (-not $liveVm) {
+            $liveVm = Get-VM -Name $selectedCP.VMName -ErrorAction SilentlyContinue
+        }
+    } catch { }
+    if (-not $liveVm) {
+        Write-OutputColor "  VM '$($selectedCP.VMName)' no longer exists on this host. Refusing to restore." -color "Error"
+        return
+    }
+    if ($liveVm.VMId -ne $selectedCP.VMId) {
+        Write-OutputColor "  VM '$($selectedCP.VMName)' exists but VMId has changed since checkpoint was taken." -color "Error"
+        Write-OutputColor "  This is a different VM with the same name. Refusing to restore." -color "Error"
+        return
+    }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("  WARNING: This will restore the VM to a previous state!").PadRight(72))║" -color "Warning"
@@ -283,11 +304,26 @@ function Restore-VMCheckpointWizard {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  VM: $($selectedCP.VMName)" -color "Info"
+    Write-OutputColor "  Current state: $($liveVm.State)" -color $(if ($liveVm.State -eq 'Running') { "Critical" } else { "Info" })
     Write-OutputColor "  Checkpoint: $($selectedCP.Name)" -color "Info"
     Write-OutputColor "  Created: $($selectedCP.CreationTime)" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    if (-not (Confirm-UserAction -Message "Are you SURE you want to restore this checkpoint?")) { return }
+    if ($liveVm.State -eq 'Running') {
+        Write-OutputColor "  CRITICAL: VM is currently RUNNING." -color "Critical"
+        Write-OutputColor "  Restoring will terminate the live workload — in-flight transactions" -color "Warning"
+        Write-OutputColor "  (DB commits, file writes, AD replication) will be lost. The VM will" -color "Warning"
+        Write-OutputColor "  revert to the checkpoint state as if power was cut." -color "Warning"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Type RESTORE to confirm restoring a running VM:" -color "Warning"
+        $confirm = Read-Host
+        if ($confirm -ne 'RESTORE') {
+            Write-OutputColor "  Restore cancelled (did not type RESTORE)." -color "Info"
+            return
+        }
+    } else {
+        if (-not (Confirm-UserAction -Message "Are you SURE you want to restore this checkpoint?")) { return }
+    }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Restoring checkpoint..." -color "Info"
@@ -352,31 +388,99 @@ function Remove-VMCheckpointWizard {
     if ($navResult.ShouldReturn) { return }
 
     if ("$cpChoice".ToUpper() -eq "A") {
+        $totalCp = $result.Checkpoints.Count
+
+        # Group by VM and surface oldest/newest per VM so the operator sees what they're
+        # about to wipe. Past incident: a second admin's pre-patch snapshot got nuked in
+        # a "cleanup" sweep because the prompt didn't show per-VM detail.
+        $byVm = $result.Checkpoints | Group-Object VMName
+        Write-OutputColor "" -color "Warning"
+        Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Critical"
+        Write-OutputColor "  ║  DESTRUCTIVE: About to delete ALL $totalCp checkpoint(s) across $($byVm.Count) VM(s)" -color "Critical"
+        Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Critical"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  This will delete ALL $($result.Checkpoints.Count) checkpoints!" -color "Warning"
-        if (-not (Confirm-UserAction -Message "Delete all checkpoints?")) { return }
+        Write-OutputColor "  Per-VM breakdown:" -color "Info"
+        $now = Get-Date
+        $recentCount = 0
+        $runningVMCount = 0
+        foreach ($g in ($byVm | Sort-Object Name)) {
+            $oldest = ($g.Group | Sort-Object CreationTime | Select-Object -First 1).CreationTime
+            $newest = ($g.Group | Sort-Object CreationTime -Descending | Select-Object -First 1).CreationTime
+            $newestAge = ($now - $newest).TotalMinutes
+            if ($newestAge -lt 60) { $recentCount++ }
+            $vmState = ""
+            try {
+                $vm = Get-VM -Name $g.Name -ErrorAction SilentlyContinue
+                if ($vm) {
+                    $vmState = " [$($vm.State)]"
+                    if ($vm.State -eq 'Running') { $runningVMCount++ }
+                }
+            } catch { }
+            $lineStr = "  $($g.Name)$vmState : $($g.Count) checkpoint(s), oldest=$($oldest.ToString('yyyy-MM-dd HH:mm')), newest=$($newest.ToString('yyyy-MM-dd HH:mm'))"
+            if ($lineStr.Length -gt 100) { $lineStr = $lineStr.Substring(0, 97) + "..." }
+            $color = if ($newestAge -lt 60) { "Critical" } else { "Info" }
+            Write-OutputColor $lineStr -color $color
+        }
+
+        if ($recentCount -gt 0) {
+            Write-OutputColor "" -color "Critical"
+            Write-OutputColor "  WARNING: $recentCount VM(s) have a checkpoint less than 1 hour old." -color "Critical"
+            Write-OutputColor "  Another admin may have just taken a pre-change snapshot." -color "Warning"
+        }
+        if ($runningVMCount -gt 0) {
+            Write-OutputColor "" -color "Warning"
+            Write-OutputColor "  NOTE: $runningVMCount running VM(s) will see live AVHDX merges." -color "Warning"
+            Write-OutputColor "  Concurrent merges can spike storage latency and cause guest I/O timeouts." -color "Warning"
+            Write-OutputColor "  Deletions will be sequential (one VM's chain at a time) to limit blast radius." -color "Info"
+        }
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Type DELETE $totalCp to confirm (must match exactly):" -color "Critical"
+        $confirmInput = Read-Host
+        if ($confirmInput -ne "DELETE $totalCp") {
+            Write-OutputColor "  Cancelled (confirmation did not match)." -color "Info"
+            return
+        }
 
         Write-OutputColor "" -color "Info"
         $deleted = 0
-        # Delete children before parents. Hyper-V auto-merges a deleted parent's VHD
-        # onto its children, so removing in CreationTime-ascending order on a branched
-        # tree can leave orphaned VHDs if a merge fails mid-way. Sorting descending by
-        # CreationTime ensures leaves go first for linear chains; for branched trees
-        # it's still strictly better than parent-first.
-        $orderedCheckpoints = @($result.Checkpoints | Sort-Object CreationTime -Descending)
-        foreach ($cp in $orderedCheckpoints) {
-            Write-OutputColor "  Deleting: $($cp.VMName) - $($cp.Name)..." -color "Info"
+        $errors = 0
+        # Process one VM's chain to completion before starting the next — this caps concurrent
+        # AVHDX merges to a single VM, preventing the merge-storm pattern where parallel merges
+        # across many VMs saturate storage and cause guest OS I/O timeouts.
+        foreach ($vmGroup in ($byVm | Sort-Object Name)) {
+            # Within a VM, delete children before parents (descending CreationTime) so leaves
+            # merge first. Hyper-V handles ordering internally too, but this is a safe hint.
+            $vmCheckpoints = @($vmGroup.Group | Sort-Object CreationTime -Descending)
+            foreach ($cp in $vmCheckpoints) {
+                Write-OutputColor "  Deleting: $($cp.VMName) - $($cp.Name)..." -color "Info"
+                try {
+                    Remove-VMSnapshot -VMSnapshot $cp -Confirm:$false -ErrorAction Stop
+                    $deleted++
+                }
+                catch {
+                    Write-OutputColor "    Error: $_" -color "Error"
+                    $errors++
+                }
+            }
+            # Wait for this VM's merges to complete before moving to the next VM. Without this
+            # the loop fires deletes back-to-back across VMs, defeating the sequential intent.
             try {
-                Remove-VMSnapshot -VMSnapshot $cp -Confirm:$false -ErrorAction Stop
-                $deleted++
-            }
-            catch {
-                Write-OutputColor "    Error: $_" -color "Error"
-            }
+                $vm = Get-VM -Name $vmGroup.Name -ErrorAction SilentlyContinue
+                if ($vm) {
+                    $waitStart = Get-Date
+                    while ($vm.Status -match 'Merging|Updating' -and ((Get-Date) - $waitStart).TotalMinutes -lt 30) {
+                        Start-Sleep -Seconds 5
+                        $vm = Get-VM -Name $vmGroup.Name -ErrorAction SilentlyContinue
+                        if (-not $vm) { break }
+                    }
+                }
+            } catch { }
         }
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  Deleted $deleted of $($result.Checkpoints.Count) checkpoints." -color "Success"
-        Add-SessionChange -Category "VM" -Description "Deleted $deleted VM checkpoints"
+        $resultColor = if ($errors -eq 0) { "Success" } else { "Warning" }
+        Write-OutputColor "  Deleted $deleted of $totalCp checkpoints ($errors errors)." -color $resultColor
+        Add-SessionChange -Category "VM" -Description "Deleted $deleted VM checkpoints (bulk)"
         Clear-MenuCache
     }
     elseif ($cpMap.ContainsKey($cpChoice)) {
@@ -407,7 +511,33 @@ function Remove-VMCheckpointWizard {
 # Function to show checkpoint age warnings
 function Show-CheckpointAgeWarnings {
     try {
-        $checkpoints = Get-VMSnapshot -VMName * -ErrorAction SilentlyContinue
+        # On hosts with hundreds of VMs, Get-VMSnapshot -VMName * blocks for minutes
+        # with no progress indicator. Pre-check VM count and warn / cap before the slow
+        # call. Past incident: cluster node with 300+ VMs froze terminal for ~3 minutes.
+        $vmCount = 0
+        try { $vmCount = @(Get-VM -ErrorAction SilentlyContinue).Count } catch { }
+        if ($vmCount -gt 100) {
+            Write-OutputColor "" -color "Warning"
+            Write-OutputColor "  This host has $vmCount VMs. Scanning all checkpoints may take 1-3 minutes." -color "Warning"
+            if (-not (Confirm-UserAction -Message "Scan checkpoints across all $vmCount VMs?")) {
+                Write-OutputColor "  Scan skipped." -color "Info"
+                return
+            }
+        }
+
+        $cpResult = Invoke-WithTimeout -ScriptBlock {
+            Get-VMSnapshot -VMName * -ErrorAction SilentlyContinue
+        } -TimeoutSeconds 120 -Activity "Scanning VM checkpoints"
+
+        if ($cpResult.TimedOut) {
+            Write-OutputColor "  Checkpoint scan timed out after 120s. Try scanning per-VM instead." -color "Warning"
+            return
+        }
+        if ($cpResult.Failed) {
+            Write-OutputColor "  Checkpoint scan failed: $($cpResult.Error)" -color "Error"
+            return
+        }
+        $checkpoints = $cpResult.Result
         if ($null -eq $checkpoints -or @($checkpoints).Count -eq 0) {
             Write-OutputColor "  No VM checkpoints found" -color "Success"
             return

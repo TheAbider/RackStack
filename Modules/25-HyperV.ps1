@@ -173,7 +173,7 @@ function Install-HyperVRole {
                 Clear-MenuCache
 
                 # Check for common issues
-                if ($jobError -match "0x800F0906\|source files could not be found") {
+                if ($jobError -match '0x800F0906|source files could not be found') {
                     Write-OutputColor "  Tip: You may need to enable Windows Features through Settings > Apps > Optional Features" -color "Warning"
                 }
                 elseif ($jobError -match "0x80070422") {
