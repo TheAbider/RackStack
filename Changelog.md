@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.15
+
+- **CI/Workflow:** `gh release create` step in `.github/workflows/ci.yml` now retries up to 3 times on transient network failures. v1.98.14's release attempt failed twice with `wsarecv: An existing connection was forcibly closed by the remote host` mid-call (GitHub API instability on the self-hosted runner network path). The retry loop short-circuits via `gh release view` between attempts so a prior partial success doesn't cause a "tag already exists" double-create error. Same `$LASTEXITCODE` hygiene as the existing CI steps (.github/workflows/ci.yml).
+- **Includes all v1.98.14 fixes** (the v1.98.14 tag was never published due to the workflow failure; this release supersedes it under the z-retention rule).
+
 ## v1.98.14
 
 - **Fix (DESTRUCTIVE):** 41-VHDManagement `Optimize-VHDFile` checked `$vhdInfo.Attached` to detect mounted VHDs, but that property only reports host-side `Mount-VHD` attachment — NOT VHDs attached to a running Hyper-V VM. Running `Optimize-VHD -Mode Full` against a VHDX backing a running VM demands exclusive access and can corrupt the guest's filesystem with in-flight writes. Now enumerates `Get-VMHardDiskDrive` across all VMs, resolves the path, and refuses to optimize when the target VHD is attached anywhere — extra red warning when the attached VM is Running/Paused. Fails-safe if the VM enumeration itself fails (41-VHDManagement).

@@ -190,13 +190,50 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ver = '${{ steps.vercheck.outputs.version }}'
-          gh release create "v$ver" `
-            --title "RackStack v$ver" `
-            --notes-file 'release-body.md' `
-            "builds\RackStack.exe" `
-            "builds\RackStack v$ver.ps1" `
-            "defaults.example.json"
-          Write-Host "Release v$ver published."
+          # Retry up to 3 times on transient gh / api.github.com network errors. The
+          # self-hosted runner has seen wsarecv resets from api.github.com mid-call
+          # ("read tcp ...: An existing connection was forcibly closed by the remote
+          # host") that abort gh BEFORE the release is actually created. Re-checking
+          # via `gh release view` between attempts short-circuits if a prior attempt
+          # successfully created the release despite reporting non-zero exit.
+          $maxAttempts = 3
+          $attempt = 0
+          $created = $false
+          while (-not $created -and $attempt -lt $maxAttempts) {
+            $attempt++
+            Write-Host "Release attempt $attempt/$maxAttempts..."
+
+            $global:LASTEXITCODE = 0
+            $existsCheck = gh release view "v$ver" --json tagName 2>$null
+            if ($LASTEXITCODE -eq 0 -and $existsCheck) {
+              Write-Host "Release v$ver already exists (created on a prior attempt). Done."
+              $created = $true
+              break
+            }
+            $global:LASTEXITCODE = 0
+
+            gh release create "v$ver" `
+              --title "RackStack v$ver" `
+              --notes-file 'release-body.md' `
+              "builds\RackStack.exe" `
+              "builds\RackStack v$ver.ps1" `
+              "defaults.example.json"
+            $createExit = $LASTEXITCODE
+
+            if ($createExit -eq 0) {
+              $created = $true
+              Write-Host "Release v$ver published on attempt $attempt."
+            } else {
+              Write-Host "Attempt $attempt failed (gh exit $createExit). Retrying in 10s..."
+              Start-Sleep -Seconds 10
+            }
+          }
+
+          if (-not $created) {
+            Write-Error "Failed to create release v$ver after $maxAttempts attempts."
+            exit 1
+          }
+          $global:LASTEXITCODE = 0
 
       - name: Apply retention rule (only latest z in minor survives)
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
