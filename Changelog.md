@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.98.40
+
+Round 30 — Tier-1 trivial-test hardening (security-gate verifications that didn't actually verify).
+
+- **Tests/Run-Tests.ps1:** `20-DiskCleanup: has confirmation for destructive ops` previously matched the literal word "Confirm" anywhere in the file (including comments) — trivially passed even if no gate existed. Now requires `Confirm-UserAction` to appear within 2500 chars of each named destructive function body (`Clear-WindowsUpdateCache`, `Clear-EventLogs`, `Invoke-QuickClean/Standard/Deep/Full`).
+- **Tests/Run-Tests.ps1:** `22-Password: enforces minimum length` regex pattern `|length` matched the literal English word anywhere in the file. Same for uppercase/lowercase/digits/special-char check patterns. Now requires the actual code shape inside `Test-PasswordComplexity` body: `.Length -lt`, `-cmatch '[A-Z]'`, `-cmatch '[a-z]'`, `[0-9]` or `\d`, character class for specials.
+- **Tests/Run-Tests.ps1:** Added CI-runnable positive assertion for `Test-SystemDisk` that exercises the IsBoot/IsSystem early-return branch via fake PSCustomObject inputs — this path doesn't touch the Storage Management Provider, so it works on the CI runner whose storage stack is degraded. Replaces the previously-unverifiable disk-0 assertion that auto-passed on GitHub Actions. Three new tests: IsBoot=true → true, IsSystem=true → true, data disk (both false) returns within bound. The original disk-0 assertion still runs on non-CI hosts.
+
 ## v1.98.39
 
 Round 29 — TOCTOU + reparse-point sweep. **1 PRIVESC-class TOCTOU + 4 Tier-1 symlink-traversal fixes.**

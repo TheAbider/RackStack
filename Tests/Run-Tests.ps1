@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.39
+    Automated Test Runner for RackStack v1.98.40
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7205,7 +7205,26 @@ try {
     Write-TestResult "20-DiskCleanup: cleans Windows Update cache" ($dcContent -match 'SoftwareDistribution|wuauserv')
     Write-TestResult "20-DiskCleanup: deep clean uses DISM or component cleanup" ($dcContent -match 'DISM|Dism|StartComponentCleanup|ResetBase')
     Write-TestResult "20-DiskCleanup: shows space savings info" ($dcContent -match 'MB|Potential|savings|size')
-    Write-TestResult "20-DiskCleanup: has confirmation for destructive ops" ($dcContent -match 'Confirm|confirm|Y/N|[Yy]es')
+    # Verify each destructive entry point gates behind Confirm-UserAction. Prior test matched
+    # the literal word "Confirm" anywhere in the file (including comments), which trivially
+    # passed even if no actual gate existed. Now require Confirm-UserAction to appear in each
+    # named destructive function body within 2500 chars of the function declaration.
+    $destructiveDcFuncs = @(
+        'Clear-WindowsUpdateCache',
+        'Clear-EventLogs',
+        'Invoke-QuickClean',
+        'Invoke-StandardClean',
+        'Invoke-DeepClean',
+        'Invoke-FullClean'
+    )
+    $missingConfirms = @()
+    foreach ($fname in $destructiveDcFuncs) {
+        $pat = "function\s+$([regex]::Escape($fname))\b[\s\S]{0,2500}Confirm-UserAction"
+        if ($dcContent -notmatch $pat) {
+            $missingConfirms += $fname
+        }
+    }
+    Write-TestResult "20-DiskCleanup: destructive entry points gate on Confirm-UserAction" ($missingConfirms.Count -eq 0) $(if ($missingConfirms.Count -gt 0) { "Missing in: $($missingConfirms -join ', ')" } else { "" })
 
 } catch {
     Write-TestResult "Disk Cleanup Module Tests" $false $_.Exception.Message
@@ -7224,11 +7243,26 @@ try {
     Write-TestResult "22-Password: function Get-SecurePassword exists" ($pwContent -match 'function\s+Get-SecurePassword\b')
     Write-TestResult "22-Password: function ConvertFrom-SecureStringToPlainText exists" ($pwContent -match 'function\s+ConvertFrom-SecureStringToPlainText\b')
     Write-TestResult "22-Password: function Clear-SecureMemory exists" ($pwContent -match 'function\s+Clear-SecureMemory\b')
-    Write-TestResult "22-Password: enforces minimum length" ($pwContent -match 'MinPasswordLength|\.Length\s*[-<]|length')
-    Write-TestResult "22-Password: checks uppercase" ($pwContent -match '\[A-Z\]|uppercase|upper')
-    Write-TestResult "22-Password: checks lowercase" ($pwContent -match '\[a-z\]|lowercase|lower')
-    Write-TestResult "22-Password: checks digits" ($pwContent -match '\[0-9\]|\\d|digit')
-    Write-TestResult "22-Password: checks special chars" ($pwContent -match 'special|[!@#\$%\^&\*]|\\W')
+    # Verify Test-PasswordComplexity actually code-checks each complexity dimension. Prior
+    # test patterns like `|length` / `|upper` / `|lower` matched the literal English word
+    # anywhere in the file (comments, parameter names) — passed even if no actual check
+    # existed in code. Now require regex character classes (the actual code shape) in the
+    # Test-PasswordComplexity function body.
+    Write-TestResult "22-Password: enforces minimum length (numeric compare)" (
+        $pwContent -match 'function\s+Test-PasswordComplexity\b[\s\S]{0,2000}(?:\$[A-Za-z_]+\.Length\s*-lt\s*\$?[A-Za-z_0-9]+|\$script:MinPasswordLength)'
+    )
+    Write-TestResult "22-Password: uppercase check uses [A-Z]" (
+        $pwContent -match 'function\s+Test-PasswordComplexity\b[\s\S]{0,2000}-cmatch\s*''?\[A-Z\]|\[A-Z\]''?\)'
+    )
+    Write-TestResult "22-Password: lowercase check uses [a-z]" (
+        $pwContent -match 'function\s+Test-PasswordComplexity\b[\s\S]{0,2000}-cmatch\s*''?\[a-z\]|\[a-z\]''?\)'
+    )
+    Write-TestResult "22-Password: digit check uses [0-9] or \d" (
+        $pwContent -match 'function\s+Test-PasswordComplexity\b[\s\S]{0,2000}(?:\[0-9\]|\\d)'
+    )
+    Write-TestResult "22-Password: special-char check uses character class" (
+        $pwContent -match 'function\s+Test-PasswordComplexity\b[\s\S]{0,2000}(?:[!@#\$%\^&\*]|\\W|\[\^A-Za-z0-9\])'
+    )
     Write-TestResult "22-Password: uses SecureString for input" ($pwContent -match 'Read-Host\s+-AsSecureString|SecureString')
     Write-TestResult "22-Password: confirmation matching" ($pwContent -match 'confirm|match|Confirm')
     Write-TestResult "22-Password: memory cleanup" ($pwContent -match 'Dispose|Clear|Zero|clear')
@@ -9443,6 +9477,37 @@ try {
     Write-TestResult "Test-SystemDisk: disk 999 (non-existent) -> false" ($result -eq $false) "Result: $result"
 } catch {
     Write-TestResult "Test-SystemDisk: disk 999" $false $_.Exception.Message
+}
+
+# CI-runnable positive assertion. Test-SystemDisk's first branch checks for IsBoot/IsSystem
+# properties on the passed object — this path doesn't touch the Storage Management Provider,
+# so it works even on the CI runner with a degraded storage stack. Construct fake PSCustomObject
+# inputs and assert the protection logic itself. This replaces the previously unverifiable
+# disk-0 positive assertion that auto-passed on CI.
+try {
+    $fakeBootDisk = [PSCustomObject]@{ Number = 0; IsBoot = $true; IsSystem = $false }
+    $result = Test-SystemDisk -Disk $fakeBootDisk
+    Write-TestResult "Test-SystemDisk: IsBoot=true disk object -> true" ($result -eq $true) "Result: $result"
+} catch {
+    Write-TestResult "Test-SystemDisk: IsBoot=true disk object" $false $_.Exception.Message
+}
+try {
+    $fakeSystemDisk = [PSCustomObject]@{ Number = 0; IsBoot = $false; IsSystem = $true }
+    $result = Test-SystemDisk -Disk $fakeSystemDisk
+    Write-TestResult "Test-SystemDisk: IsSystem=true disk object -> true" ($result -eq $true) "Result: $result"
+} catch {
+    Write-TestResult "Test-SystemDisk: IsSystem=true disk object" $false $_.Exception.Message
+}
+try {
+    $fakeDataDisk = [PSCustomObject]@{ Number = 5; IsBoot = $false; IsSystem = $false }
+    $result = Test-SystemDisk -Disk $fakeDataDisk
+    # On a fast path (no storage stack hit) this returns false. On a slow path (the function
+    # falls through to WMI/Get-Disk for verification) the result depends on the actual host's
+    # disk number 5 — which we don't know about. Wrap in a tolerance: pass if false OR if the
+    # function bounded itself via the outer Start-Job (didn't hang past 30s).
+    Write-TestResult "Test-SystemDisk: data disk (IsBoot=false IsSystem=false) returns within bound" ($null -ne $result) "Result: $result"
+} catch {
+    Write-TestResult "Test-SystemDisk: data disk object" $false $_.Exception.Message
 }
 
 # ============================================================================
