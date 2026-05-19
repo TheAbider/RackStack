@@ -387,8 +387,14 @@ function Clear-BrowserCaches {
 
         if ($edgeTotal -gt 0) {
             if (Confirm-UserAction -Message "Clear Edge cache ($edgeMB MB)?" -DefaultYes) {
+                # Reparse-point filter on the recursion. The path globs into the operator's own
+                # LocalAppData, but a malicious or careless prior install could plant a junction
+                # inside the Edge profile path; without this filter, admin-context Remove-Item
+                # would walk through to the link target.
+                $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
                 $cleaned = 0
-                Get-ChildItem -Path "$edgeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ChildItem -Path "$edgeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue |
+                    Where-Object { -not ($_.Attributes -band $reparseAttr) } | ForEach-Object {
                     try {
                         $fileLen = $_.Length
                         Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
@@ -396,7 +402,8 @@ function Clear-BrowserCaches {
                     }
                     catch { $null = $_ }
                 }
-                Get-ChildItem -Path "$edgeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ChildItem -Path "$edgeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue |
+                    Where-Object { -not ($_.Attributes -band $reparseAttr) } | ForEach-Object {
                     try {
                         $fileLen = $_.Length
                         Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
@@ -665,7 +672,14 @@ function Clear-UserProfileTemp {
                 continue
             }
 
-            $files = Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue
+            # Filter out reparse points. RackStack runs as admin; a standard user's profile
+            # AppData is user-writable, so a non-admin could plant a junction under their own
+            # AppData\Local\Temp pointing at e.g. C:\Windows\System32 and the admin-context
+            # recursive delete would follow into the link target. Same fix shape as v1.98.14
+            # for the system-Temp path; this is the per-profile equivalent.
+            $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
+            $files = Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue |
+                Where-Object { -not ($_.Attributes -band $reparseAttr) }
             foreach ($file in $files) {
                 try {
                     $fileSize = $file.Length
@@ -1007,13 +1021,20 @@ function Invoke-FullEnhancedCleanup {
     $userProfiles = Get-ChildItem -LiteralPath "$env:SystemDrive\Users" -Directory -ErrorAction SilentlyContinue | Where-Object {
         $_.Name -notin @('Public', 'Default', 'Default User', 'All Users')
     }
+    # Reparse-point filter (junctions/symlinks) — standard users can plant a junction inside
+    # their own AppData pointing at e.g. C:\Windows; admin-context recursive delete would
+    # follow into the target without this filter. Same fix shape as the per-profile sweep
+    # above and the v1.98.14 system-Temp fix.
+    $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
     foreach ($userProfile in $userProfiles) {
         $isCurrentUser = ($userProfile.Name -eq $currentUser)
         foreach ($subPath in $subPaths) {
             if ($isCurrentUser -and $subPath -eq "AppData\Local\Temp") { continue }
             $fullPath = Join-Path -Path $userProfile.FullName -ChildPath $subPath
             if (Test-Path -LiteralPath $fullPath) {
-                Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ChildItem -LiteralPath $fullPath -Recurse -Force -File -ErrorAction SilentlyContinue |
+                    Where-Object { -not ($_.Attributes -band $reparseAttr) } |
+                    ForEach-Object {
                     try {
                         $fileLen = $_.Length
                         Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop

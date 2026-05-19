@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## v1.98.39
+
+Round 29 — TOCTOU + reparse-point sweep. **1 PRIVESC-class TOCTOU + 4 Tier-1 symlink-traversal fixes.**
+
+TOCTOU (verified-binary swap):
+- **Fix (PRIVESC):** 35-Utilities `Update-RackStack` had a verify-then-execute gap. SHA256 was verified against `$tempPath` in `$env:TEMP`, then a batch file with a 5-second sleep (+ time for the operator's Read-Host) ran `move /y "$tempPath" "$targetPath"` and `start "" "$targetPath"`. A parallel process watching `%TEMP%\RackStack_update_*` could swap the verified binary for a malicious one between verification and move — verified-binary swap = arbitrary code execution as future-admin. Now (1) moves the verified binary into `%ProgramData%\<Tool>\update\` with admin-only DACL (Administrators+SYSTEM, no inheritance) BEFORE the batch is written, and (2) re-verifies SHA256 inside the batch script via `certutil -hashfile SHA256` immediately before the `move /y` — closes the window even if the DACL somehow doesn't apply (35-Utilities).
+
+Reparse-point / symlink traversal (admin-context arbitrary delete):
+- **Fix (DESTRUCTIVE):** 47-ExitCleanup self-destruct path now filters `[System.IO.FileAttributes]::ReparsePoint` from both the Get-ChildItem -File and -Directory recursions over the Administrator profile. Without this filter, a junction planted under `C:\Users\Administrator\` (any user with redirected-folders write access, any prior limited compromise) would have caused the SYSTEM-scheduled-task recursive delete to walk into the link target and remove matching files outside the profile (47-ExitCleanup).
+- **Fix (DESTRUCTIVE):** 20-DiskCleanup `Clear-UserProfileTemp` per-profile recursion now filters ReparsePoint. RackStack runs as admin; a standard user could plant a junction inside their own `AppData\Local\Temp` pointing at e.g. `C:\Windows\System32` and the admin-context recursive delete would follow into the link target. Same fix shape as v1.98.14's system-Temp fix; this is the per-profile equivalent that was missed (20-DiskCleanup).
+- **Fix (DESTRUCTIVE):** 20-DiskCleanup `Invoke-FullClean` profile sweep same fix (20-DiskCleanup).
+- **Fix:** 20-DiskCleanup Edge browser cache sweep ReparsePoint filter added — admin's own LocalAppData but defense-in-depth for prior-install-time junctions (20-DiskCleanup).
+
 ## v1.98.38
 
 Round 28 — remaining Tier-2 job leaks from round 27 sweep.

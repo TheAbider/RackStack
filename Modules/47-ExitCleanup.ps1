@@ -118,7 +118,15 @@ function Exit-Script {
         $toolName = $script:ToolName
 
         if (Test-Path -LiteralPath $adminFolder) {
-            $allProfileFiles = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -File -ErrorAction SilentlyContinue
+            # Filter out reparse points (junctions / symlinks) from the recursion. Without this
+            # filter, an attacker who can write inside the Administrator profile (any standard
+            # user via redirected folders, or a prior limited compromise) could plant a junction
+            # at e.g. `C:\Users\Administrator\Documents\evil → C:\` and the SYSTEM-scheduled-task
+            # recursive delete would walk into the link target and delete arbitrary files matching
+            # the name patterns. Locale-neutral via [System.IO.FileAttributes]::ReparsePoint.
+            $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
+            $allProfileFiles = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -File -ErrorAction SilentlyContinue |
+                Where-Object { -not ($_.Attributes -band $reparseAttr) }
             $monoFiles = $allProfileFiles | Where-Object {
                 ($_.Name -like "$toolName v*.ps1") -or
                 ($_.Name -like "$toolName*Configuration Tool*.ps1") -or
@@ -130,7 +138,9 @@ function Exit-Script {
             }
             foreach ($f in $monoFiles) { $pathsToDelete.Add($f.FullName) }
 
-            $allProfileDirs = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue
+            # Directory recursion: also filter ReparsePoint so junction dirs aren't traversed.
+            $allProfileDirs = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue |
+                Where-Object { -not ($_.Attributes -band $reparseAttr) }
             foreach ($folder in $allProfileDirs) {
                 # Only delete folders whose path explicitly contains the tool name. The prior
                 # heuristic "any folder containing 00-Initialization.ps1" caught unrelated

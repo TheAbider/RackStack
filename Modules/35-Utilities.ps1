@@ -352,8 +352,36 @@ function Install-ScriptUpdate {
     }
 
     if ($isExe) {
-        # EXE self-update: write a helper batch script that replaces the exe after we exit
+        # EXE self-update: write a helper batch script that replaces the exe after we exit.
+        # Move the verified temp file into an admin-only-writable staging dir BEFORE building
+        # the batch — this closes a TOCTOU window where a parallel process watching $env:TEMP
+        # could swap the file between the SHA256 verification above and the `move /y` below.
+        # Stage location: %ProgramData%\<Tool>\update\ with DACL = Administrators+SYSTEM only.
         $targetPath = $script:ScriptPath
+        $stageDir = Join-Path $env:ProgramData $script:ToolName | Join-Path -ChildPath 'update'
+        try {
+            if (-not (Test-Path -LiteralPath $stageDir)) {
+                $null = New-Item -Path $stageDir -ItemType Directory -Force -ErrorAction Stop
+                # Lock down DACL — Administrators + SYSTEM only, no inheritance. Same pattern as
+                # v1.98.24's batch-undo state-dir fix in 50-EntryPoint.
+                $stageAcl = Get-Acl -LiteralPath $stageDir
+                $stageAcl.SetAccessRuleProtection($true, $false)
+                $stageAcl.Access | ForEach-Object { [void]$stageAcl.RemoveAccessRule($_) }
+                $adminsSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-544'
+                $systemSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-18'
+                $stageAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($adminsSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+                $stageAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+                Set-Acl -LiteralPath $stageDir -AclObject $stageAcl -ErrorAction SilentlyContinue
+            }
+            $stagedPath = Join-Path $stageDir ([System.IO.Path]::GetFileName($tempPath))
+            if (Test-Path -LiteralPath $stagedPath) { Remove-Item -LiteralPath $stagedPath -Force -ErrorAction SilentlyContinue }
+            Move-Item -LiteralPath $tempPath -Destination $stagedPath -Force -ErrorAction Stop
+            $tempPath = $stagedPath
+        } catch {
+            Write-OutputColor "  Warning: could not move verified binary to admin-only staging dir: $($_.Exception.Message)" -color "Warning"
+            Write-OutputColor "  Continuing with TEMP path; a parallel process could theoretically swap the file." -color "Warning"
+        }
+
         # Sanitize paths for batch file injection prevention:
         # Remove characters that could escape quoting in cmd.exe (& | < > ^ " %)
         $safeTempPath = $tempPath -replace '[&|<>^"%]', '_'
@@ -365,11 +393,28 @@ function Install-ScriptUpdate {
             Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
             return
         }
+        # Embed the expected hash in the batch so the post-sleep move only proceeds if the
+        # file STILL matches — closes the verify→move TOCTOU even if the staging dir DACL
+        # somehow fails to apply. Uses certutil which ships on every supported Windows.
         $batchPath = Join-Path $env:TEMP "RackStack_update_$([System.IO.Path]::GetRandomFileName()).cmd"
         $batchContent = @"
 @echo off
 echo Updating $($script:ToolName)...
 timeout /t 5 /nobreak >nul
+rem Re-verify SHA256 right before the move — TOCTOU defense.
+for /f "skip=1 tokens=*" %%H in ('certutil -hashfile "$tempPath" SHA256 ^| findstr /v ":"') do (
+    set "ACTUAL=%%H"
+    goto :hashed
+)
+:hashed
+set "ACTUAL=%ACTUAL: =%"
+if /i not "%ACTUAL%"=="$expectedHash" (
+    echo SHA256 mismatch after stage — refusing to replace EXE.
+    del "$tempPath" >nul 2>&1
+    timeout /t 5 /nobreak >nul
+    del "%~f0"
+    goto :eof
+)
 move /y "$tempPath" "$targetPath" >nul 2>&1
 if errorlevel 1 (
     echo Retry 1 - waiting for file lock to release...
