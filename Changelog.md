@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## v1.98.26
+
+Round 19 — cross-module sweep continuation (Pattern 1 unscoped IP removal + Pattern 10 locale-fragile enum).
+
+Pattern 1 (Tier-1 session-wipe class):
+- **Fix:** 09-SET vNIC IP-assign now scopes `Remove-NetIPAddress` to Manual-origin IPs only and `Remove-NetRoute` to the default route only. Brand-new vNICs typically have nothing to wipe, but a re-run after a failed configure used to yank any half-set state including secondary IPs (09-SET).
+- **Fix:** 10-iSCSI A-side / B-side configure (auto-iSCSI flow) now refuses to wipe an adapter that owns the default route or carries non-iSCSI IPs — same defense as Test-iSCSIAdapterSide already enforces upstream (v1.98.14). Protects operators who pick the wrong NIC at the Select-iSCSI-Adapters step (10-iSCSI).
+- **Fix:** 10-iSCSI per-NIC `Set-iSCSIAdapter` (manual flow) gets the same guard pair — default-route refusal + non-iSCSI-IP refusal — before the wipe (10-iSCSI).
+- **Fix:** 50-EntryPoint batch-mode network step (Inline iSCSI auto-config path) now scopes `Remove-NetIPAddress` to the captured primary IP and `Remove-NetRoute` to the default route. Prior unscoped wipe killed every IP on the NIC mid-batch — disconnecting the operator's RDP session if batch was driven over the same NIC, and wiping secondary IPs already configured for storage / cluster traffic (50-EntryPoint).
+- **Fix:** 50-EntryPoint batch-mode undo snippet matches the apply path — removes only the IP we just applied, not every IPv4 on the NIC. Prior undo wiped secondary IPs added between apply and undo (50-EntryPoint).
+
+Pattern 10 (locale-fragile enum .ToString()):
+- **Fix:** 50-EntryPoint Storage Pool + Virtual Disk health checks now compare `HealthStatus` and `OperationalStatus` by enum integer value (Healthy=1, OK=2) instead of localized `.ToString()`. The MSFT_StoragePool/MSFT_VirtualDisk CIM enums return localized display values on non-EN MUI builds — comparing strings like 'Healthy' / 'OK' silently fell into the default branch on non-EN hosts, so `$storIssues++` never fired and the health verdict reported "clean" against a degraded pool (50-EntryPoint).
+
+Remaining deferred sweep: Pattern 4 (storage cmdlet timeouts ~30 sites), Pattern 5 (non-atomic Out-File ~11 sites), Pattern 7 (English-only w32tm/slmgr/netsh output parsing ~13 sites).
+
 ## v1.98.25
 
 Round 18 — unblock v1.98.24 CI + Import-Defaults audit (1 Tier-1 PRIVESC variant) + cross-module sweep partial.

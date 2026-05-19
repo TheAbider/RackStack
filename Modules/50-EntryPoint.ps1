@@ -6187,13 +6187,19 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             $pools = @()
             $vDisks = @()
 
-            # Storage Pools
+            # Storage Pools — compare HealthStatus/OperationalStatus by integer enum value, not
+            # localized .ToString(). The MSFT_StoragePool/MSFT_VirtualDisk CIM enums return
+            # localized display values on non-EN MUI builds; comparing the integer value is
+            # invariant. Healthy=1; OperationalStatus OK=2.
             try {
                 $storagePools = @(Get-StoragePool -ErrorAction Stop | Where-Object { $_.FriendlyName -ne 'Primordial' })
                 foreach ($sp in $storagePools) {
                     $health = 'OK'
-                    if ("$($sp.HealthStatus)" -ne 'Healthy') { $health = 'FAIL'; $storIssues++ }
-                    if ("$($sp.OperationalStatus)" -ne 'OK') { $health = 'FAIL'; if ("$($sp.HealthStatus)" -eq 'Healthy') { $storIssues++ } }
+                    $healthInt = -1; try { $healthInt = [int]$sp.HealthStatus } catch { }
+                    $opStatusInts = @()
+                    try { $opStatusInts = @($sp.OperationalStatus | ForEach-Object { [int]$_ }) } catch { }
+                    if ($healthInt -ne 1) { $health = 'FAIL'; $storIssues++ }
+                    if (-not ($opStatusInts -contains 2)) { $health = 'FAIL'; if ($healthInt -eq 1) { $storIssues++ } }
                     $pools += @{
                         Name              = $sp.FriendlyName
                         SizeGB            = [math]::Round($sp.Size / 1GB, 1)
@@ -6205,13 +6211,16 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 }
             } catch { }
 
-            # Virtual Disks
+            # Virtual Disks (same enum-integer treatment as Storage Pools above)
             try {
                 $virtualDisks = @(Get-VirtualDisk -ErrorAction Stop)
                 foreach ($vd in $virtualDisks) {
                     $health = 'OK'
-                    if ("$($vd.HealthStatus)" -ne 'Healthy') { $health = 'FAIL'; $storIssues++ }
-                    if ("$($vd.OperationalStatus)" -ne 'OK') { $health = 'FAIL'; if ("$($vd.HealthStatus)" -eq 'Healthy') { $storIssues++ } }
+                    $vdHealthInt = -1; try { $vdHealthInt = [int]$vd.HealthStatus } catch { }
+                    $vdOpInts = @()
+                    try { $vdOpInts = @($vd.OperationalStatus | ForEach-Object { [int]$_ }) } catch { }
+                    if ($vdHealthInt -ne 1) { $health = 'FAIL'; $storIssues++ }
+                    if (-not ($vdOpInts -contains 2)) { $health = 'FAIL'; if ($vdHealthInt -eq 1) { $storIssues++ } }
                     $vDisks += @{
                         Name              = $vd.FriendlyName
                         SizeGB            = [math]::Round($vd.Size / 1GB, 1)
@@ -12955,9 +12964,20 @@ function Start-BatchMode {
                 $oldGW = (Get-NetRoute -InterfaceAlias $adapterName -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
                 $oldDNS = (Get-DnsClientServerAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
 
-                # Clear existing config
-                Remove-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                Remove-NetRoute -InterfaceAlias $adapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                # Clear existing config — scoped to Manual-origin primary IP only and the
+                # default route only (same fix pattern as 07-IPConfiguration in v1.98.24).
+                # The prior unscoped `-AddressFamily IPv4` wipe killed every IP on the NIC
+                # mid-batch — disconnecting the operator's RDP session if batch mode was being
+                # driven over the same NIC, and wiping secondary IPs the operator may have
+                # already configured for storage/cluster traffic.
+                $allManualIPs = @(Get-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -eq 'Manual' })
+                if ($null -ne $oldIP) {
+                    Remove-NetIPAddress -InterfaceAlias $adapterName -IPAddress $oldIP.IPAddress -Confirm:$false -ErrorAction SilentlyContinue
+                }
+                if ($allManualIPs.Count -gt 1) {
+                    Write-OutputColor "           NOTE: $($allManualIPs.Count) manual IPv4 IP(s) on $adapterName; only primary ($($oldIP.IPAddress)) replaced." -color "Info"
+                }
+                Remove-NetRoute -InterfaceAlias $adapterName -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
 
                 # Set IP
                 New-NetIPAddress -InterfaceAlias $adapterName -IPAddress $Config.IPAddress `
@@ -12994,8 +13014,11 @@ function Start-BatchMode {
                 } else {
                     '@()'
                 }
-                $undoSnippet = "Remove-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; " +
-                               "Remove-NetRoute -InterfaceAlias '$undoAdapterEsc' -AddressFamily IPv4 -Confirm:`$false -ErrorAction SilentlyContinue; " +
+                # Undo snippet must scope removal to the IP we just applied, not every IPv4 on
+                # the NIC — otherwise undo wipes secondary IPs added between apply and undo.
+                $newIPEsc = $Config.IPAddress -replace "'", "''"
+                $undoSnippet = "Remove-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -IPAddress '$newIPEsc' -Confirm:`$false -ErrorAction SilentlyContinue; " +
+                               "Remove-NetRoute -InterfaceAlias '$undoAdapterEsc' -DestinationPrefix '0.0.0.0/0' -Confirm:`$false -ErrorAction SilentlyContinue; " +
                                "if ('$undoOldIP') { New-NetIPAddress -InterfaceAlias '$undoAdapterEsc' -IPAddress '$undoOldIP' -PrefixLength $undoOldPrefix $(if($undoOldGW){"-DefaultGateway '$undoOldGW'"}) -ErrorAction SilentlyContinue }; " +
                                "`$dnsRestore = $undoOldDNSLiteral; if (`$dnsRestore.Count -gt 0) { Set-DnsClientServerAddress -InterfaceAlias '$undoAdapterEsc' -ServerAddresses `$dnsRestore -ErrorAction SilentlyContinue } else { Set-DnsClientServerAddress -InterfaceAlias '$undoAdapterEsc' -ResetServerAddresses -ErrorAction SilentlyContinue }"
                 $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore network config on $undoAdapter"; Reversible = $true; UndoScript = [scriptblock]::Create($undoSnippet) })

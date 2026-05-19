@@ -570,8 +570,16 @@ function Add-CustomVNIC {
             $cidr = $ipResult[1]
             $adapterAlias = "vEthernet ($vnicName)"
             try {
-                Remove-NetIPAddress -InterfaceAlias $adapterAlias -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                Remove-NetRoute -InterfaceAlias $adapterAlias -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                # Scoped removal: only wipe Manual-origin IPs (not DHCP-leased) on this brand-new
+                # vNIC. The unscoped `-AddressFamily IPv4` wipe would yank any IP the operator
+                # had pre-assigned for staging, plus every IPv4 route. Brand-new vNICs typically
+                # have nothing, but defense-in-depth — a re-run after a failed configure step
+                # used to wipe the half-set state including any secondary IP.
+                $preexistingIPs = @(Get-NetIPAddress -InterfaceAlias $adapterAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -eq 'Manual' })
+                foreach ($pre in $preexistingIPs) {
+                    Remove-NetIPAddress -InterfaceAlias $adapterAlias -IPAddress $pre.IPAddress -Confirm:$false -ErrorAction SilentlyContinue
+                }
+                Remove-NetRoute -InterfaceAlias $adapterAlias -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
                 New-NetIPAddress -InterfaceAlias $adapterAlias -IPAddress $ipAddress -PrefixLength $cidr -ErrorAction Stop
                 Write-OutputColor "  IP $ipAddress/$cidr set on '$vnicName'." -color "Success"
             }

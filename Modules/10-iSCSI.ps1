@@ -549,32 +549,58 @@ function Set-iSCSIAutoConfiguration {
     $aSideOK = $false
     $bSideOK = $false
 
-    # Configure A-side
-    try {
-        Write-OutputColor "  Configuring $($aSideAdapter.Name) with $ip1/24..." -color "Info"
-        Remove-NetIPAddress -InterfaceAlias $aSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
-        Remove-NetRoute -InterfaceAlias $aSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
-        New-NetIPAddress -InterfaceAlias $aSideAdapter.Name -IPAddress $ip1 -PrefixLength 24 -ErrorAction Stop
-        Disable-NetAdapterBinding -Name $aSideAdapter.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
-        Write-OutputColor "    A-side adapter configured successfully." -color "Success"
-        $aSideOK = $true
+    # Defense-in-depth: refuse to wipe an adapter that's carrying default-route traffic or has
+    # IPs outside the iSCSI subnet — same pattern that Test-iSCSIAdapterSide enforces upstream
+    # (v1.98.14). The operator may have picked the wrong NIC at the Select-iSCSI-Adapters step.
+    $iscsiSubnetPrefix = if ($ip1 -match '^(\d+\.\d+\.\d+\.)') { $matches[1] } else { '' }
+    $checkAdapter = {
+        param($adapterName, $expectPrefix)
+        $hasDefaultRoute = @(Get-NetRoute -InterfaceAlias $adapterName -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue).Count -gt 0
+        if ($hasDefaultRoute) {
+            Write-OutputColor "    REFUSING to wipe IPs on '$adapterName': it owns the default route (likely mgmt/RDP NIC)." -color "Error"
+            return $false
+        }
+        if ($expectPrefix) {
+            $existing = @(Get-NetIPAddress -InterfaceAlias $adapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue)
+            $nonIscsi = @($existing | Where-Object { $_.IPAddress -notlike "${expectPrefix}*" })
+            if ($nonIscsi.Count -gt 0) {
+                Write-OutputColor "    REFUSING to wipe IPs on '$adapterName': non-iSCSI IPs present ($(($nonIscsi | ForEach-Object { $_.IPAddress }) -join ', '))." -color "Error"
+                return $false
+            }
+        }
+        return $true
     }
-    catch {
-        Write-OutputColor "    Failed to configure A-side adapter: $_" -color "Error"
+
+    # Configure A-side
+    if (& $checkAdapter $aSideAdapter.Name $iscsiSubnetPrefix) {
+        try {
+            Write-OutputColor "  Configuring $($aSideAdapter.Name) with $ip1/24..." -color "Info"
+            Remove-NetIPAddress -InterfaceAlias $aSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-NetRoute -InterfaceAlias $aSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
+            New-NetIPAddress -InterfaceAlias $aSideAdapter.Name -IPAddress $ip1 -PrefixLength 24 -ErrorAction Stop
+            Disable-NetAdapterBinding -Name $aSideAdapter.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+            Write-OutputColor "    A-side adapter configured successfully." -color "Success"
+            $aSideOK = $true
+        }
+        catch {
+            Write-OutputColor "    Failed to configure A-side adapter: $_" -color "Error"
+        }
     }
 
     # Configure B-side
-    try {
-        Write-OutputColor "  Configuring $($bSideAdapter.Name) with $ip2/24..." -color "Info"
-        Remove-NetIPAddress -InterfaceAlias $bSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
-        Remove-NetRoute -InterfaceAlias $bSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
-        New-NetIPAddress -InterfaceAlias $bSideAdapter.Name -IPAddress $ip2 -PrefixLength 24 -ErrorAction Stop
-        Disable-NetAdapterBinding -Name $bSideAdapter.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
-        Write-OutputColor "    B-side adapter configured successfully." -color "Success"
-        $bSideOK = $true
-    }
-    catch {
-        Write-OutputColor "    Failed to configure B-side adapter: $_" -color "Error"
+    if (& $checkAdapter $bSideAdapter.Name $iscsiSubnetPrefix) {
+        try {
+            Write-OutputColor "  Configuring $($bSideAdapter.Name) with $ip2/24..." -color "Info"
+            Remove-NetIPAddress -InterfaceAlias $bSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-NetRoute -InterfaceAlias $bSideAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue
+            New-NetIPAddress -InterfaceAlias $bSideAdapter.Name -IPAddress $ip2 -PrefixLength 24 -ErrorAction Stop
+            Disable-NetAdapterBinding -Name $bSideAdapter.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+            Write-OutputColor "    B-side adapter configured successfully." -color "Success"
+            $bSideOK = $true
+        }
+        catch {
+            Write-OutputColor "    Failed to configure B-side adapter: $_" -color "Error"
+        }
     }
 
     if ($aSideOK -and $bSideOK) {
@@ -658,6 +684,26 @@ function Set-iSCSIAdapter {
     if ($confirmation -notmatch '^(y|yes)$') {
         Write-OutputColor "  Skipping $($nic.Name)..." -color "Warning"
         return
+    }
+
+    # Defense-in-depth: refuse if this NIC is the default-route owner or has non-iSCSI IPs.
+    # Same guard pattern as Test-iSCSIAdapterSide upstream — protects operators who pick the
+    # wrong NIC from Select-iSCSI-Adapters and would otherwise wipe management/cluster traffic.
+    $hasDefaultRoute = @(Get-NetRoute -InterfaceAlias $nic.Name -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue).Count -gt 0
+    if ($hasDefaultRoute) {
+        Write-OutputColor "  REFUSING to configure '$($nic.Name)' as iSCSI: it owns the default route." -color "Error"
+        Write-OutputColor "  This is your management/RDP NIC. Pick a dedicated iSCSI adapter instead." -color "Warning"
+        return
+    }
+    $iscsiPrefix = if ($ipAddress -match '^(\d+\.\d+\.\d+\.)') { $matches[1] } else { '' }
+    if ($iscsiPrefix) {
+        $existingIPs = @(Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue)
+        $nonIscsiIPs = @($existingIPs | Where-Object { $_.IPAddress -notlike "${iscsiPrefix}*" })
+        if ($nonIscsiIPs.Count -gt 0) {
+            Write-OutputColor "  REFUSING to wipe IPs on '$($nic.Name)': non-iSCSI IPs present ($(($nonIscsiIPs | ForEach-Object { $_.IPAddress }) -join ', '))." -color "Error"
+            Write-OutputColor "  These likely carry SMB / cluster / heartbeat traffic. Pick a dedicated iSCSI adapter." -color "Warning"
+            return
+        }
     }
 
     try {
