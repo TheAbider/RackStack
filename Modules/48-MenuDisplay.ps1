@@ -481,6 +481,19 @@ function Show-ToolsUtilitiesMenu {
 
     # Gather status info for display
     $ntpStatus = Get-CachedValue -Key "NTPSource" -FetchScript {
+        # Read time source from W32Time registry first (locale-neutral) — w32tm /query /status
+        # localizes the "Source:" label on non-EN MUI, so the English-only Select-String would
+        # render "Unknown" on non-EN hosts. Falls back to w32tm only if registry lookup fails.
+        try {
+            $w32cfg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'NtpServer','Type' -ErrorAction Stop
+            if ($w32cfg.Type -eq 'NoSync') {
+                return "Local (NoSync)"
+            } elseif ($w32cfg.NtpServer) {
+                $src = ($w32cfg.NtpServer -split '\s+' | ForEach-Object { ($_ -split ',')[0] } | Where-Object { $_ }) -join ', '
+                if ($src.Length -gt 25) { $src = $src.Substring(0, 22) + "..." }
+                return $src
+            }
+        } catch { }
         try {
             $w32tmQuery = w32tm /query /status 2>&1
             $sourceLine = $w32tmQuery | Select-String "Source:"

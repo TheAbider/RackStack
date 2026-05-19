@@ -1128,15 +1128,29 @@ function Show-SystemHealthCheck {
     }
     Write-OutputColor "" -color "Info"
 
-    # Time Sync Status
+    # Time Sync Status — pull source from W32Time registry first (locale-neutral). The
+    # "Source:" label in w32tm output is localized on non-EN MUI ("Quelle:", "Источник:", etc).
+    # Phase Offset's label is also localized but its numeric value is invariant, so we still
+    # attempt the regex below for offset only (the source pull falls back to w32tm if registry
+    # lookup fails and the host happens to be English).
     Write-OutputColor "=== TIME SYNC ===" -color "Success"
     try {
+        $timeSource = $null
+        try {
+            $w32cfg = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name 'NtpServer','Type' -ErrorAction Stop
+            if ($w32cfg.Type -eq 'NoSync') {
+                $timeSource = "Local clock (NoSync)"
+            } elseif ($w32cfg.NtpServer) {
+                $timeSource = ($w32cfg.NtpServer -split '\s+' | ForEach-Object { ($_ -split ',')[0] } | Where-Object { $_ }) -join ', '
+            }
+        } catch { }
+
         $w32tmStatus = w32tm /query /status 2>&1
-        $timeSource = "Unknown"
+        if (-not $timeSource) { $timeSource = "Unknown" }
         $timeOffset = $null
         foreach ($statusLine in $w32tmStatus) {
             $lineText = $statusLine.ToString()
-            if ($lineText -match 'Source:\s*(.+)') {
+            if (($timeSource -eq "Unknown") -and ($lineText -match 'Source:\s*(.+)')) {
                 $regexMatches = $matches
                 $timeSource = $regexMatches[1].Trim()
             }

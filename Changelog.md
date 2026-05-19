@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.98.29
+
+Round 21 — cross-module sweep continuation (Pattern 7 English-only output parsing, time-sync subset).
+
+- **Fix:** 48-MenuDisplay main-menu dashboard NTP source now reads from `HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters` registry first (locale-neutral) instead of parsing the English-only `Source:` label out of `w32tm /query /status`. Falls back to w32tm if registry lookup fails. Same pattern as the v1.98.13 19-NTPConfiguration fix — non-EN MUI hosts no longer show "Unknown" on the dashboard (48-MenuDisplay).
+- **Fix:** 37-HealthCheck Time-Sync block now uses the same registry-first source-detection. Phase Offset still parsed from w32tm because its numeric value is invariant (the label is localized, but the regex matches the value, not the label) — but if registry lookup succeeds, the localized `Source:` line is skipped entirely (37-HealthCheck).
+
+Remaining sweep backlog: Pattern 4 (storage cmdlet timeouts ~30 sites), Pattern 7 (~11 remaining sites in 54-HTMLReports, 50-EntryPoint, 13-Timezone, 45-ConfigExport, 61-ActiveDirectory).
+
 ## v1.98.28
 
 Round 20 — cross-module sweep continuation (Pattern 5 non-atomic exports).
