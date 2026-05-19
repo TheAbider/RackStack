@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.19
+
+- **Fix (CI/test):** 38-StorageManager `Test-SystemDisk` rewrite. The Invoke-WithTimeout-wrapped storage-cmdlet path from v1.98.18 still hung on the self-hosted CI runner — `Invoke-WithTimeout` uses a runspace which appears to deadlock when the underlying CIM/SMP call is itself stuck. The new design: try WMI Win32_OperatingSystem.SystemDevice FIRST (parses `\HarddiskN\` from `os.SystemDevice` — bypasses the Storage Management Provider entirely; fast on all known Windows builds). Fall back to `Get-Disk` and `Get-Partition` via `Start-Job` + `Wait-Job -Timeout 15` instead of runspace timeout — Start-Job spawns a real child process so a stuck cmdlet stays in that child and can never block the caller. Worst-case latency: 30s if WMI returns nothing AND both jobs time out (38-StorageManager).
+- **Includes all v1.98.16 / v1.98.17 / v1.98.18 fixes** (none of those tags were published — three consecutive CI runs cancelled/failed on the Test-SystemDisk runner issue; this release supersedes them under z-retention).
+
 ## v1.98.18
 
 - **Fix (CI/test):** 39-FileServer Content-Range resume validation (added in v1.98.17) used `$matches[1]` directly. RackStack codebase convention requires aliasing `$Matches` to `$regexMatches` first (some PowerShell hosts mutate `$Matches` mid-statement). Test `Codebase: no direct Matches[n] (use regexMatches)` flagged the violation and CI failed. Aliased to `$regexMatches` (39-FileServer).

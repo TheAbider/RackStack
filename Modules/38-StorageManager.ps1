@@ -69,48 +69,12 @@ function Test-SystemDisk {
         }
     }
 
-    # Get-Disk is normally faster than Get-Partition — try it first when caller passed an int.
-    # Storage cmdlets can hang for minutes when the storage stack is busy (slow CIM,
-    # MPIO claim cycles, paused tiering). Wrap each in Invoke-WithTimeout when the helper
-    # is loaded, with a try/catch fallback for early-boot callers (before module load).
-    if ($Disk -is [int]) {
-        $diskObj = $null
-        if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
-            $diskWrap = Invoke-WithTimeout -ScriptBlock {
-                param($n)
-                Get-Disk -Number $n -ErrorAction SilentlyContinue
-            } -ArgumentList @($diskNumber) -TimeoutSeconds 30 -Activity "Get-Disk"
-            if (-not $diskWrap.TimedOut -and -not $diskWrap.Failed) { $diskObj = $diskWrap.Result }
-        } else {
-            try { $diskObj = Get-Disk -Number $diskNumber -ErrorAction SilentlyContinue } catch { }
-        }
-        if ($null -ne $diskObj -and ($diskObj.IsBoot -eq $true -or $diskObj.IsSystem -eq $true)) {
-            return $true
-        }
-    }
-
-    # Fall back to OS-partition lookup. On a healthy system this returns in <1s; on a stuck
-    # storage stack it can hang indefinitely. Timeout-wrap to bound worst-case latency.
-    $systemDrive = $env:SystemDrive.TrimEnd(':')
-    $partResult = $null
-    if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
-        $partWrap = Invoke-WithTimeout -ScriptBlock {
-            param($drv)
-            Get-Partition -DriveLetter $drv -ErrorAction SilentlyContinue
-        } -ArgumentList @($systemDrive) -TimeoutSeconds 30 -Activity "Get-Partition"
-        if (-not $partWrap.TimedOut -and -not $partWrap.Failed) { $partResult = $partWrap.Result }
-    } else {
-        try {
-            $partResult = Get-Partition -DriveLetter $systemDrive -ErrorAction SilentlyContinue
-        } catch { }
-    }
-    if ($null -ne $partResult -and $partResult.DiskNumber -eq $diskNumber) {
-        return $true
-    }
-
-    # Last-resort: WMI Win32_OperatingSystem.SystemDevice gives `\Device\HarddiskN\PartitionM`
-    # without going through the Storage Management Provider — useful on hosts where the SMP
-    # is in a bad state but raw WMI still answers. Extract N and compare.
+    # Primary path: WMI Win32_OperatingSystem.SystemDevice returns `\Device\HarddiskN\PartitionM`
+    # without going through the Storage Management Provider (SMP). This route stays responsive
+    # even when SMP is broken — which is the case on the self-hosted CI runner where Get-Disk
+    # and Get-Partition can hang indefinitely. Past behavior: the test suite cancelled CI runs
+    # for v1.98.16/17/18 because the storage-cmdlet route never returned. Win32_OperatingSystem
+    # is one of the most-used CIM classes and is fast on all known Windows builds.
     try {
         $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
         if ($null -ne $os -and $os.SystemDevice -match '\\Harddisk(\d+)\\') {
@@ -119,6 +83,45 @@ function Test-SystemDisk {
             if ($systemDiskNumber -eq $diskNumber) { return $true }
         }
     } catch { }
+
+    # Secondary: Get-Disk -Number is bounded with Start-Job + Wait-Job timeout. Invoke-WithTimeout
+    # uses a runspace, which can deadlock on PSReadLine/host-state issues on some runners. Start-Job
+    # spawns a real child process — slower setup, but never deadlocks the caller.
+    if ($Disk -is [int]) {
+        $diskJob = $null
+        try {
+            $diskJob = Start-Job -ScriptBlock { param($n) Get-Disk -Number $n -ErrorAction SilentlyContinue } -ArgumentList $diskNumber
+            $completed = Wait-Job -Job $diskJob -Timeout 15
+            $diskObj = if ($null -ne $completed) { Receive-Job -Job $diskJob -ErrorAction SilentlyContinue } else { $null }
+            if ($null -ne $diskObj -and ($diskObj.IsBoot -eq $true -or $diskObj.IsSystem -eq $true)) {
+                return $true
+            }
+        } catch { }
+        finally {
+            if ($null -ne $diskJob) {
+                try { Stop-Job -Job $diskJob -ErrorAction SilentlyContinue } catch { }
+                try { Remove-Job -Job $diskJob -Force -ErrorAction SilentlyContinue } catch { }
+            }
+        }
+    }
+
+    # Tertiary: Get-Partition (same Start-Job timeout treatment).
+    $partJob = $null
+    try {
+        $systemDrive = $env:SystemDrive.TrimEnd(':')
+        $partJob = Start-Job -ScriptBlock { param($drv) Get-Partition -DriveLetter $drv -ErrorAction SilentlyContinue } -ArgumentList $systemDrive
+        $completed = Wait-Job -Job $partJob -Timeout 15
+        $partResult = if ($null -ne $completed) { Receive-Job -Job $partJob -ErrorAction SilentlyContinue } else { $null }
+        if ($null -ne $partResult -and $partResult.DiskNumber -eq $diskNumber) {
+            return $true
+        }
+    } catch { }
+    finally {
+        if ($null -ne $partJob) {
+            try { Stop-Job -Job $partJob -ErrorAction SilentlyContinue } catch { }
+            try { Remove-Job -Job $partJob -Force -ErrorAction SilentlyContinue } catch { }
+        }
+    }
 
     return $false
 }
