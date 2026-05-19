@@ -43,6 +43,35 @@ function Set-OfflineVHDConfiguration {
         return $false
     }
 
+    # Defense-in-depth: refuse if the VHD is attached to ANY Hyper-V VM. Get-VHD's Attached flag
+    # only catches host-side Mount-VHD attachment — not VHDs Hyper-V holds for a powered-off VM.
+    # Mount-VHD against a VM's VHDX (especially with differencing chains or snapshots) can
+    # corrupt the guest filesystem. Past pattern fixed in 41-VHDManagement; same risk here.
+    try {
+        $vhdLiteral = (Resolve-Path -LiteralPath $VHDPath -ErrorAction Stop).Path
+        $owningVMs = @(Get-VMHardDiskDrive -VMName * -ErrorAction SilentlyContinue | Where-Object {
+            try { (Resolve-Path -LiteralPath $_.Path -ErrorAction Stop).Path -ieq $vhdLiteral } catch { $false }
+        })
+        if ($owningVMs.Count -gt 0) {
+            Write-OutputColor "" -color "Error"
+            Write-OutputColor "  REFUSING: VHD is attached to Hyper-V VM(s):" -color "Error"
+            foreach ($vmd in $owningVMs) {
+                $vmState = ""
+                try { $vmState = " [$((Get-VM -Name $vmd.VMName -ErrorAction SilentlyContinue).State)]" } catch { }
+                Write-OutputColor "    - $($vmd.VMName)$vmState" -color "Error"
+            }
+            Write-OutputColor "  Offline customization on a VM-attached VHD can corrupt the guest filesystem." -color "Error"
+            Write-OutputColor "  Remove the VHD from the VM (or delete the VM) before retrying." -color "Warning"
+            return $false
+        }
+    } catch {
+        Write-OutputColor "  Warning: could not enumerate Hyper-V VMs to verify VHD ownership: $($_.Exception.Message)" -color "Warning"
+        Write-OutputColor "  Proceeding only if you're certain no VM uses this VHD." -color "Warning"
+        if (-not (Confirm-UserAction -Message "VM-attachment check failed — continue anyway?")) {
+            return $false
+        }
+    }
+
     $mountedVHD = $null
     $systemHiveLoaded = $false
     $softwareHiveLoaded = $false

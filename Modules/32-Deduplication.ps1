@@ -144,17 +144,29 @@ function Show-DeduplicationManagement {
                     $navResult = Test-NavigationCommand -UserInput $usageType
                     if ($navResult.ShouldReturn) { return }
 
-                    $usage = switch ($usageType) {
-                        "1" { "Default" }
-                        "2" { "HyperV" }
-                        "3" { "Backup" }
-                        default { "Default" }
+                    # No silent default — wrong UsageType has real consequences. "Default" profile
+                        # on a Hyper-V VHDX volume applies wrong MinimumFileAgeDays / open-file rules
+                        # and can corrupt running guests' VHDs during the next optimization pass.
+                        $usage = switch ($usageType) {
+                            "1" { "Default" }
+                            "2" { "HyperV" }
+                            "3" { "Backup" }
+                            default { $null }
+                        }
+                    if ($null -eq $usage) {
+                        Write-OutputColor "  Invalid usage type. Enter 1, 2, or 3." -color "Error"
+                        continue
+                    }
+
+                    if (-not (Confirm-UserAction -Message "Enable dedup on $($vol.DriveLetter): with '$usage' profile?")) {
+                        Write-OutputColor "  Cancelled." -color "Info"
+                        continue
                     }
 
                     try {
                         Enable-DedupVolume -Volume "$($vol.DriveLetter):" -UsageType $usage -ErrorAction Stop
                         Write-OutputColor "  Deduplication enabled on $($vol.DriveLetter): with $usage profile." -color "Success"
-                        Add-SessionChange -Category "Storage" -Description "Enabled deduplication on $($vol.DriveLetter):"
+                        Add-SessionChange -Category "Storage" -Description "Enabled deduplication on $($vol.DriveLetter): ($usage)"
                         Clear-MenuCache
                     }
                     catch {
@@ -169,7 +181,29 @@ function Show-DeduplicationManagement {
                 if ($navResult.ShouldReturn) { return }
                 if ($volNum -match '^\d+$' -and [int]$volNum -ge 1 -and [int]$volNum -le $volList.Count) {
                     $vol = $volList[[int]$volNum - 1]
-                    if (Confirm-UserAction -Message "Disable deduplication on $($vol.DriveLetter):?") {
+                    # Pre-check: refuse disable if Optimization/GarbageCollection/Scrubbing is mid-run.
+                    # Disabling while a job is hot leaves the chunk store in an inconsistent state —
+                    # reparse points keep pointing into a half-flushed store, files return zero-length
+                    # or I/O errors after the next mount. Per Microsoft KB, safe disable requires
+                    # Stop-DedupJob → wait → Disable-DedupVolume.
+                    $activeJobs = @(Get-DedupJob -Volume "$($vol.DriveLetter):" -ErrorAction SilentlyContinue | Where-Object { $_.State -in 'Running','Queued' })
+                    if ($activeJobs.Count -gt 0) {
+                        Write-OutputColor "" -color "Error"
+                        Write-OutputColor "  REFUSING to disable: $($activeJobs.Count) active dedup job(s) on $($vol.DriveLetter):" -color "Error"
+                        foreach ($j in $activeJobs) {
+                            Write-OutputColor "    - $($j.Type) ($($j.State))" -color "Error"
+                        }
+                        Write-OutputColor "  Stop the job(s) first: Stop-DedupJob -Volume $($vol.DriveLetter): -Type <Type>" -color "Warning"
+                        continue
+                    }
+
+                    Write-OutputColor "" -color "Warning"
+                    Write-OutputColor "  IMPORTANT: Disabling deduplication does NOT unoptimize existing files." -color "Warning"
+                    Write-OutputColor "  Files already optimized stay reparse-pointed to the chunk store." -color "Warning"
+                    Write-OutputColor "  To revert files to full content, run an Unoptimization job first:" -color "Info"
+                    Write-OutputColor "    Start-DedupJob -Type Unoptimization -Volume $($vol.DriveLetter):" -color "Info"
+                    Write-OutputColor "" -color "Info"
+                    if (Confirm-UserAction -Message "Disable deduplication on $($vol.DriveLetter): (leaves optimized files reparse-pointed)?") {
                         try {
                             Disable-DedupVolume -Volume "$($vol.DriveLetter):" -ErrorAction Stop
                             Write-OutputColor "  Deduplication disabled on $($vol.DriveLetter):" -color "Success"

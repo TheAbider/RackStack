@@ -165,15 +165,28 @@ function Enable-ReplicaFirewallRules {
 function Enable-LiveMigrationFirewallRules {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Enabling Live Migration firewall rules..." -color "Info"
+
+    # Snapshot rules that were DISABLED before this run so undo only re-disables what we enabled.
+    # Past pattern: undo blindly disabled the entire "Hyper-V" + "File and Printer Sharing" groups,
+    # which on a running production host severed all Hyper-V management traffic (Replica HTTP/S,
+    # management clients, VM authentication) and broke any tenant SMB shares — far beyond what
+    # the enable did. Capture the pre-state so undo is precise.
+    $rulesEnabledByUs = @()
     foreach ($group in @("Hyper-V", "File and Printer Sharing")) {
-        try { Enable-NetFirewallRule -DisplayGroup $group -ErrorAction Stop }
+        try {
+            $preDisabled = @(Get-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq $false })
+            Enable-NetFirewallRule -DisplayGroup $group -ErrorAction Stop
+            $rulesEnabledByUs += @($preDisabled | ForEach-Object { $_.Name })
+        }
         catch { Write-OutputColor "  Warning: Could not enable '$group' rules: $_" -color "Warning" }
     }
     # Live Migration port
+    $lmCreated = $false
     $lmRule = Get-NetFirewallRule -DisplayName "Hyper-V Live Migration" -ErrorAction SilentlyContinue
     if (-not $lmRule) {
         try {
             New-NetFirewallRule -DisplayName "Hyper-V Live Migration" -Direction Inbound -Protocol TCP -LocalPort 6600 -Action Allow -Profile Domain,Private -ErrorAction Stop | Out-Null
+            $lmCreated = $true
         }
         catch { Write-OutputColor "  Warning: Failed to create Live Migration rule: $_" -color "Error" }
     }
@@ -181,11 +194,16 @@ function Enable-LiveMigrationFirewallRules {
     Add-SessionChange -Category "Security" -Description "Enabled Live Migration firewall rules"
     Clear-MenuCache
     Add-UndoAction -Category "Security" -Description "Enabled Live Migration firewall rules" -UndoScript {
-        foreach ($group in @("Hyper-V", "File and Printer Sharing")) {
-            Disable-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue
+        param($EnabledRules, $LmCreated)
+        if ($EnabledRules) {
+            foreach ($n in $EnabledRules) {
+                Disable-NetFirewallRule -Name $n -ErrorAction SilentlyContinue
+            }
         }
-        Remove-NetFirewallRule -DisplayName "Hyper-V Live Migration" -ErrorAction SilentlyContinue
-    }
+        if ($LmCreated) {
+            Remove-NetFirewallRule -DisplayName "Hyper-V Live Migration" -ErrorAction SilentlyContinue
+        }
+    }.GetNewClosure() -UndoParams @{ EnabledRules = $rulesEnabledByUs; LmCreated = $lmCreated }
 }
 
 function Enable-iSCSIFirewallRules {

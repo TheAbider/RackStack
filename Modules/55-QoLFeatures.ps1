@@ -641,14 +641,26 @@ function Set-PagefileConfiguration {
                     continue
                 }
 
-                # Validate against available disk space on current pagefile drive
-                $currentDrive = "C:"
+                # Validate against available disk space on current pagefile drive. If we can't
+                # detect the existing pagefile location, require the operator to pick a target
+                # instead of silently defaulting to C: — past pattern would write to C: even
+                # when the operator's actual pagefile lived on D:, then the wipe loop below would
+                # delete the D: pagefile and the system drive would exhaust under memory pressure.
+                $currentDrive = $null
                 if ($null -ne $pagefileUsage -and $pagefileUsage.Count -gt 0) {
                     $pfName = "$($pagefileUsage[0].Name)"
                     if ($pfName -match '^([A-Z]:)') {
                         $regexMatches = $matches
                         $currentDrive = $regexMatches[1]
                     }
+                }
+                if (-not $currentDrive) {
+                    Write-OutputColor "" -color "Warning"
+                    Write-OutputColor "  Could not detect existing pagefile drive." -color "Warning"
+                    Write-OutputColor "  Use option [3] Move pagefile to pick a drive explicitly, or set up a pagefile" -color "Info"
+                    Write-OutputColor "  via System Properties → Advanced → Performance → Virtual Memory first." -color "Info"
+                    Write-PressEnter
+                    continue
                 }
                 # Invoke-WithTimeout runs in a fresh runspace, so $currentDrive isn't visible
                 # via closure. Pass it explicitly via -ArgumentList and a param() block.
@@ -675,10 +687,29 @@ function Set-PagefileConfiguration {
                         Set-CimInstance -InputObject $compSysObj -Property @{ AutomaticManagedPagefile = $false } -ErrorAction Stop
                     }
 
-                    # Remove existing pagefile settings
-                    $existingSettings = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
-                    if ($null -ne $existingSettings) {
-                        foreach ($existing in $existingSettings) {
+                    # Surface ALL existing pagefile settings before wiping them — multi-drive
+                    # pagefile configs are common on hypervisors (small one on C:, large on a
+                    # fast NVMe scratch volume). The previous code silently removed every drive's
+                    # setting and recreated only on $currentDrive, collapsing a 68 GB pagefile
+                    # to 8 GB without warning. Now: only remove the setting on $currentDrive,
+                    # leaving other drives' pagefiles intact.
+                    $existingSettings = @(Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue)
+                    if ($existingSettings.Count -gt 1) {
+                        Write-OutputColor "" -color "Warning"
+                        Write-OutputColor "  This host has pagefiles on multiple drives:" -color "Warning"
+                        foreach ($s in $existingSettings) {
+                            Write-OutputColor "    - $($s.Name) (init $($s.InitialSize)MB / max $($s.MaximumSize)MB)" -color "Info"
+                        }
+                        Write-OutputColor "  Only the $currentDrive pagefile will be modified. Others stay as-is." -color "Info"
+                        Write-OutputColor "  Type CONTINUE to confirm:" -color "Warning"
+                        $confirm = Read-Host
+                        if ($confirm -ne 'CONTINUE') {
+                            Write-OutputColor "  Cancelled." -color "Info"
+                            continue
+                        }
+                    }
+                    foreach ($existing in $existingSettings) {
+                        if ($existing.Name -like "$currentDrive*") {
                             Remove-CimInstance -InputObject $existing -ErrorAction SilentlyContinue
                         }
                     }
@@ -745,7 +776,19 @@ function Set-PagefileConfiguration {
                     continue
                 }
 
-                if (-not (Confirm-UserAction -Message "Move pagefile to $targetLetter ? (requires reboot)")) { continue }
+                # Show ALL existing pagefiles before wiping them — same multi-drive concern as
+                # the Custom Size path. Move semantics intentionally consolidate to one drive,
+                # but the operator deserves to see what they're collapsing.
+                $existingSettings = @(Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue)
+                if ($existingSettings.Count -gt 0) {
+                    Write-OutputColor "" -color "Info"
+                    Write-OutputColor "  Existing pagefile(s) that will be REMOVED:" -color "Warning"
+                    foreach ($s in $existingSettings) {
+                        Write-OutputColor "    - $($s.Name) (init $($s.InitialSize)MB / max $($s.MaximumSize)MB)" -color "Info"
+                    }
+                    Write-OutputColor "  Move will consolidate to a single pagefile on $targetLetter." -color "Info"
+                }
+                if (-not (Confirm-UserAction -Message "Move/consolidate pagefile to $targetLetter ? (requires reboot)")) { continue }
 
                 try {
                     # Disable automatic management
@@ -754,8 +797,7 @@ function Set-PagefileConfiguration {
                         Set-CimInstance -InputObject $compSysObj -Property @{ AutomaticManagedPagefile = $false } -ErrorAction Stop
                     }
 
-                    # Remove existing pagefile settings
-                    $existingSettings = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
+                    # Remove existing pagefile settings (intentional consolidation for Move)
                     if ($null -ne $existingSettings) {
                         foreach ($existing in $existingSettings) {
                             Remove-CimInstance -InputObject $existing -ErrorAction SilentlyContinue

@@ -139,8 +139,35 @@ function Export-VMWizard {
         Write-OutputColor "  Estimated export size: ${estimateGB} GB" -color "Info"
     }
 
+    # Pre-check: refuse to clobber an existing export. Hyper-V's Export-VM behavior on a
+    # collision is version-dependent — Server 2019+ throws "already exists" but some 2016/2022
+    # configurations silently merge over the existing Virtual Hard Disks folder, producing a
+    # Frankenstein export of mixed-timestamp VHDs. Past pattern: operator re-exports after a
+    # config change; second attempt corrupts the first.
+    $targetFolder = Join-Path $exportPath $selectedVM.Name
+    if (Test-Path -LiteralPath $targetFolder) {
+        Write-OutputColor "" -color "Warning"
+        Write-OutputColor "  Export folder already exists: $targetFolder" -color "Warning"
+        try {
+            $existingSize = (Get-ChildItem -LiteralPath $targetFolder -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+            $existingGB = [math]::Round($existingSize / 1GB, 2)
+            Write-OutputColor "  Existing size: ${existingGB} GB" -color "Info"
+        } catch { }
+        Write-OutputColor "  Re-exporting would mix new VHDs with the existing export contents." -color "Warning"
+        if (-not (Confirm-UserAction -Message "Delete existing export folder and re-export?")) {
+            Write-OutputColor "  Cancelled. Move/rename the existing folder and retry." -color "Info"
+            return
+        }
+        try {
+            Remove-Item -LiteralPath $targetFolder -Recurse -Force -ErrorAction Stop
+        } catch {
+            Write-OutputColor "  Failed to remove existing folder: $($_.Exception.Message)" -color "Error"
+            return
+        }
+    }
+
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  Starting export (this may take a while)..." -color "Info"
+    Write-OutputColor "  Starting export (this may take a while; press ESC to cancel)..." -color "Info"
 
     try {
         # Use a job for background progress
@@ -161,7 +188,40 @@ function Export-VMWizard {
         $exportSpeedBps = 0
         $exportFolder = Join-Path $exportPath $selectedVM.Name
 
+        $maxElapsedSeconds = 4 * 3600  # 4-hour hard cap; warn-and-confirm before resetting
+        $maxElapsedConfirmed = $false
+        $cancelRequested = $false
         while ($exportJob.State -eq 'Running') {
+            # Operator cancel via ESC. Stop-Job alone doesn't abort the underlying vmms.exe export
+            # operation — Hyper-V keeps writing files in the host's vmms process even after the
+            # PowerShell job is killed. We can't fully abort the WMI export without WMI tear-down,
+            # but at least surface to the operator that the job will keep running in the background
+            # and offer a tear-down path. The Confirm-UserAction below uses the same convention.
+            try {
+                if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and [Console]::KeyAvailable) {
+                    $k = [Console]::ReadKey($true)
+                    if ($k.Key -eq [ConsoleKey]::Escape) {
+                        Write-Host ""
+                        Write-OutputColor "  ESC pressed. NOTE: Hyper-V will continue exporting in the background until done." -color "Warning"
+                        Write-OutputColor "  To fully cancel, you must restart vmms.exe (will disrupt all VMs) or wait it out." -color "Warning"
+                        if (Confirm-UserAction -Message "Stop watching this export? (Hyper-V vmms keeps running)") {
+                            $cancelRequested = $true
+                            break
+                        }
+                    }
+                }
+            } catch { }
+            # 4-hour cap with one-time confirm to extend
+            if ($exportElapsed -gt $maxElapsedSeconds -and -not $maxElapsedConfirmed) {
+                Write-Host ""
+                Write-OutputColor "  Export has been running for over 4 hours." -color "Warning"
+                if (-not (Confirm-UserAction -Message "Continue watching (Hyper-V keeps running regardless)?")) {
+                    $cancelRequested = $true
+                    break
+                }
+                $maxElapsedConfirmed = $true
+            }
+
             $currentSize = 0
             if (Test-Path -LiteralPath $exportFolder) {
                 try {
@@ -322,6 +382,84 @@ function Import-VMWizard {
         if ($navResult.ShouldReturn) { return }
         if (-not [string]::IsNullOrWhiteSpace($destPath)) { $destPath = $destPath.Trim('"') }
         if ([string]::IsNullOrWhiteSpace($destPath)) { $destPath = $script:HostVMStoragePath }
+
+        # Hard validation — without these, Import-VM defaults VHD destination to
+        # %ProgramData%\Microsoft\Windows\Hyper-V on some builds and unspools multi-TB VHDs
+        # onto the system drive, filling C: until Windows hard-stops.
+        if ([string]::IsNullOrWhiteSpace($destPath)) {
+            Write-OutputColor "" -color "Error"
+            Write-OutputColor "  Destination path is empty and no default configured." -color "Error"
+            Write-OutputColor "  Configure $script:ToolFullName 'Host Storage Setup' first, or type a destination." -color "Info"
+            return
+        }
+        if (-not (Test-Path -LiteralPath $destPath)) {
+            try {
+                $null = New-Item -LiteralPath $destPath -ItemType Directory -Force -ErrorAction Stop
+                Write-OutputColor "  Created destination: $destPath" -color "Info"
+            } catch {
+                Write-OutputColor "  Cannot create destination '$destPath': $($_.Exception.Message)" -color "Error"
+                return
+            }
+        }
+        # Free-space check (parity with export-side check). Skip for UNC paths.
+        if ($destPath -match '^[A-Za-z]:') {
+            try {
+                $destLetter = $destPath.Substring(0, 1)
+                $destVolume = Get-Volume -DriveLetter $destLetter -ErrorAction SilentlyContinue
+                if ($destVolume) {
+                    $freeGB = [math]::Round($destVolume.SizeRemaining / 1GB, 1)
+                    # Compute source-VHD size as a rough minimum
+                    $sourceFolder = Split-Path $vmcxPath -Parent | Split-Path -Parent
+                    $needGB = 0
+                    try {
+                        $measured = Get-ChildItem -LiteralPath $sourceFolder -Recurse -Filter '*.vhd*' -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
+                        if ($measured.Sum) { $needGB = [math]::Round($measured.Sum / 1GB, 1) }
+                    } catch { }
+                    if ($needGB -gt 0 -and $freeGB -lt ($needGB * 1.1)) {
+                        Write-OutputColor "" -color "Error"
+                        Write-OutputColor "  Insufficient free space: ${freeGB} GB on ${destLetter}:, need ~${needGB} GB + 10% headroom." -color "Error"
+                        return
+                    }
+                }
+            } catch { }
+        }
+    }
+
+    # Pre-import: check for duplicate VM name on this host. Hyper-V allows duplicate names
+    # (uniqueness is on VMId, not Name). Past pattern: operator imports backup of DC01 onto
+    # a host already running DC01; both VMs exist; powering up the import without realizing
+    # the live one is still running causes AD USN rollback / SID collision / DHCP corruption.
+    try {
+        $cmp = Compare-VM -Path $vmcxPath -ErrorAction SilentlyContinue
+        if ($cmp -and $cmp.VM -and $cmp.VM.Name) {
+            $existingByName = @(Get-VM -Name $cmp.VM.Name -ErrorAction SilentlyContinue)
+            if ($existingByName.Count -gt 0) {
+                Write-OutputColor "" -color "Warning"
+                Write-OutputColor "  WARNING: A VM named '$($cmp.VM.Name)' already exists on this host:" -color "Warning"
+                foreach ($v in $existingByName) {
+                    Write-OutputColor "    - $($v.Name) (Id $($v.VMId), State $($v.State))" -color "Info"
+                }
+                Write-OutputColor "  Importing will create a second VM with the same name. Powering both on can cause" -color "Critical"
+                Write-OutputColor "  identity collisions (AD USN rollback, DHCP scope corruption, duplicate SPNs)." -color "Critical"
+                if (-not (Confirm-UserAction -Message "Continue with duplicate-name import?")) {
+                    Write-OutputColor "  Cancelled. Rename the existing VM or use a different export." -color "Info"
+                    return
+                }
+            }
+            # Surface Compare-VM incompatibilities (missing vSwitch, CPU features, parent VHDs).
+            if ($cmp.Incompatibilities -and $cmp.Incompatibilities.Count -gt 0) {
+                Write-OutputColor "" -color "Warning"
+                Write-OutputColor "  Compare-VM detected $($cmp.Incompatibilities.Count) incompatibility(ies):" -color "Warning"
+                foreach ($inc in ($cmp.Incompatibilities | Select-Object -First 8)) {
+                    Write-OutputColor "    - $($inc.Message)" -color "Warning"
+                }
+                if (-not (Confirm-UserAction -Message "Continue with incompatible config (may require manual fixup post-import)?")) {
+                    return
+                }
+            }
+        }
+    } catch {
+        Write-OutputColor "  Warning: Compare-VM pre-check failed: $($_.Exception.Message). Proceeding cautiously." -color "Warning"
     }
 
     Write-OutputColor "" -color "Info"
