@@ -87,6 +87,29 @@ function Set-HostName {
         Write-OutputColor "  NOTE: A reboot will be required to apply this change" -color "Warning"
     }
 
+    # Refuse on active cluster nodes. Renaming a clustered node without the proper
+    # Remove-ClusterNode / Add-ClusterNode dance breaks the cluster name object and leaves
+    # the node in a 'Down' state until manually evicted. Same guard as the 45-ConfigExport
+    # Import path — applies to this interactive Set-HostName entry point too.
+    try {
+        $clusSvc = Get-Service -Name ClusSvc -ErrorAction SilentlyContinue
+        if ($null -ne $clusSvc -and $clusSvc.Status -eq 'Running') {
+            $thisNode = $null
+            if (Get-Command Get-ClusterNode -ErrorAction SilentlyContinue) {
+                $thisNode = Get-ClusterNode -Name $env:COMPUTERNAME -ErrorAction SilentlyContinue
+            }
+            if ($null -ne $thisNode) {
+                Write-OutputColor "" -color "Error"
+                Write-OutputColor "  REFUSING: this server is an active Failover Cluster node." -color "Error"
+                Write-OutputColor "  Renaming a clustered node breaks the cluster name object — the node" -color "Error"
+                Write-OutputColor "  is evicted, CSVs go inaccessible, and clustered roles fail." -color "Error"
+                Write-OutputColor "  To rename: 1) evict via Failover Cluster Manager, 2) rename + reboot," -color "Warning"
+                Write-OutputColor "  3) re-add to the cluster." -color "Warning"
+                return
+            }
+        }
+    } catch { }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Changing hostname: '$currentHostname' -> '$newHostname'" -color "Warning"
 

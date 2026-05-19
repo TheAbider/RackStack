@@ -151,6 +151,28 @@ function Set-AdapterVLAN {
                 if (-not (Confirm-UserAction -Message "Use VLAN 4094?")) { return }
             }
 
+            # Session-loss warning. Changing the VLAN tag on the management vNIC can drop the
+            # operator's RDP/WinRM session immediately if the upstream switch port expects a
+            # different tag (trunk drops untagged, or trunk doesn't accept the new VLAN). Pin
+            # the warning to the adapter that currently carries the operator's default route.
+            $isManagementAdapter = $false
+            try {
+                $defaultRouteIf = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).InterfaceAlias
+                if ($defaultRouteIf -and ($defaultRouteIf -eq $selectedAdapterName -or $defaultRouteIf -like "vEthernet*$vmAdapterName*")) {
+                    $isManagementAdapter = $true
+                }
+            } catch { }
+            if ($isManagementAdapter) {
+                Write-OutputColor "" -color "Critical"
+                Write-OutputColor "  WARNING: '$selectedAdapterName' carries the default route — this is your management path." -color "Critical"
+                Write-OutputColor "  Changing the VLAN tag here will likely DROP your RDP/WinRM session if the" -color "Warning"
+                Write-OutputColor "  upstream switch port doesn't carry VLAN $vlanId. Type CONTINUE to proceed:" -color "Warning"
+                $vlanConfirm = Read-Host
+                if ($vlanConfirm -ne 'CONTINUE') {
+                    Write-OutputColor "  VLAN change cancelled." -color "Info"
+                    return
+                }
+            }
             try {
                 $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Access -VlanId $vlanId -ErrorAction Stop
@@ -172,6 +194,25 @@ function Set-AdapterVLAN {
             }
         }
         "2" {
+            # Same session-loss warning for untag — switch port may drop untagged frames.
+            $isManagementAdapter = $false
+            try {
+                $defaultRouteIf = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).InterfaceAlias
+                if ($defaultRouteIf -and ($defaultRouteIf -eq $selectedAdapterName -or $defaultRouteIf -like "vEthernet*$vmAdapterName*")) {
+                    $isManagementAdapter = $true
+                }
+            } catch { }
+            if ($isManagementAdapter) {
+                Write-OutputColor "" -color "Critical"
+                Write-OutputColor "  WARNING: '$selectedAdapterName' carries the default route." -color "Critical"
+                Write-OutputColor "  Untagging the management vNIC will DROP your session if the upstream port" -color "Warning"
+                Write-OutputColor "  is a trunk that requires a tag. Type CONTINUE to proceed:" -color "Warning"
+                $vlanConfirm = Read-Host
+                if ($vlanConfirm -ne 'CONTINUE') {
+                    Write-OutputColor "  VLAN removal cancelled." -color "Info"
+                    return
+                }
+            }
             try {
                 $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Untagged -ErrorAction Stop

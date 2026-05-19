@@ -204,14 +204,31 @@ function Set-VMIPAddress {
     }
 
     try {
-        # Save current config for rollback
-        $previousIP = Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+        # Save current config for rollback. Capture ALL manual IPv4 addresses (multi-IP NICs are
+        # common on Hyper-V hosts: mgmt + storage + cluster heartbeat) so we know which ones to
+        # surface and so undo can restore the primary correctly.
+        $previousIPs = @(Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -eq 'Manual' })
+        $previousIP = $previousIPs | Select-Object -First 1
         $previousRoute = Get-NetRoute -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
             Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' } | Select-Object -First 1
 
-        # Remove existing IPv4 configuration only
-        Remove-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-        Remove-NetRoute -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+        # Scoped removal: drop the existing PRIMARY manual IP and the default route only.
+        # The previous unscoped `-AddressFamily IPv4` wipe yanked every IPv4 address on the NIC
+        # (mgmt + iSCSI + cluster) and every route — disconnecting the operator's RDP session
+        # AND killing storage paths at the same time. Secondary IPs typically stay; if the user
+        # wants to swap them, they go through this menu per-IP.
+        if ($previousIPs.Count -gt 1) {
+            Write-OutputColor "  Adapter has $($previousIPs.Count) manual IPv4 address(es); only the primary ($($previousIP.IPAddress)) will be replaced." -color "Info"
+            foreach ($extra in ($previousIPs | Select-Object -Skip 1)) {
+                Write-OutputColor "    KEEPING: $($extra.IPAddress)/$($extra.PrefixLength)" -color "Info"
+            }
+        }
+        if ($null -ne $previousIP) {
+            Remove-NetIPAddress -InterfaceAlias $selectedAdapterName -IPAddress $previousIP.IPAddress -Confirm:$false -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRoute) {
+            Remove-NetRoute -InterfaceAlias $selectedAdapterName -DestinationPrefix '0.0.0.0/0' -NextHop $previousRoute.NextHop -Confirm:$false -ErrorAction SilentlyContinue
+        }
 
         # Apply new configuration
         try {
@@ -250,14 +267,17 @@ function Set-VMIPAddress {
         Clear-MenuCache
         if ($null -ne $previousIP) {
             $oldGW = if ($null -ne $previousRoute) { $previousRoute.NextHop } else { $null }
+            # Undo must remove ONLY the IP we just applied (not every IPv4 on the NIC).
+            # Past pattern: blanket Remove-NetIPAddress/Remove-NetRoute on undo wiped any
+            # secondary IPs the operator added between apply and undo (mgmt → iSCSI → cluster).
             Add-UndoAction -Category "Network" -Description "Set IP $ipAddress/$cidr on $selectedAdapterName" -UndoScript {
-                param($Adapter, $OldIP, $OldPrefix, $OldGW)
-                Remove-NetIPAddress -InterfaceAlias $Adapter -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                Remove-NetRoute -InterfaceAlias $Adapter -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                param($Adapter, $NewIP, $OldIP, $OldPrefix, $OldGW)
+                Remove-NetIPAddress -InterfaceAlias $Adapter -IPAddress $NewIP -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-NetRoute -InterfaceAlias $Adapter -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
                 $params = @{ InterfaceAlias = $Adapter; IPAddress = $OldIP; PrefixLength = $OldPrefix; ErrorAction = 'SilentlyContinue' }
                 if ($OldGW) { $params.DefaultGateway = $OldGW }
                 New-NetIPAddress @params
-            }.GetNewClosure() -UndoParams @{ Adapter = $selectedAdapterName; OldIP = $previousIP.IPAddress; OldPrefix = $previousIP.PrefixLength; OldGW = $oldGW }
+            }.GetNewClosure() -UndoParams @{ Adapter = $selectedAdapterName; NewIP = $ipAddress; OldIP = $previousIP.IPAddress; OldPrefix = $previousIP.PrefixLength; OldGW = $oldGW }
         }
         Clear-MenuCache
 

@@ -71,31 +71,37 @@ function Disable-BuiltInAdminAccount {
             return
         }
 
-        # Verify alternate admin access exists before allowing disable. Filter on
-        # PrincipalSource = 'Local' so Microsoft Account-backed admins
-        # (e.g. 'MicrosoftAccount\alice@outlook.com') and AzureAD-joined accounts
-        # ARE counted as alternate logon paths and not silently regex-stripped to
-        # a username that then fails Get-LocalUser. The previous filter could falsely
-        # report "no alternate admin" on an MSA-only home/workgroup host.
-        $adminMembers = @(Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue)
-        $enabledLocalAdmins = @($adminMembers | Where-Object {
-            $_.ObjectClass -eq 'User'
-        } | ForEach-Object {
-            $rawName = [string]$_.Name
+        # Verify alternate admin access exists. Resolve the Administrators group by its
+        # well-known SID (S-1-5-32-544) so this works on non-English Windows. For local
+        # accounts, verify via Get-LocalUser that they're enabled. For MSA/AzureAD accounts,
+        # do NOT trust them blindly — a stale principal in the Administrators group (former
+        # employee, AAD-revoked account, machine that lost AAD trust) counts as a "valid"
+        # alternate path under the prior logic, leading to permanent lockout after reboot.
+        # Require an explicit operator confirmation when MSA/AzureAD is the ONLY alternate.
+        try {
+            $adminGroupName = (Get-LocalGroup -SID 'S-1-5-32-544' -ErrorAction Stop).Name
+        } catch {
+            $adminGroupName = 'Administrators'
+        }
+        $adminMembers = @(Get-LocalGroupMember -Group $adminGroupName -ErrorAction SilentlyContinue)
+        $verifiedLocalAdmins = @()
+        $unverifiedExternalAdmins = @()
+        foreach ($m in $adminMembers) {
+            if ($m.ObjectClass -ne 'User') { continue }
+            $rawName = [string]$m.Name
             $shortName = $rawName -replace '^.*\\', ''
-            $source = $_.PrincipalSource
-            # MSA / AzureAD principals count as alternate admins as long as they're
-            # not the built-in 'Administrator'. Local accounts re-verified via
-            # Get-LocalUser so we know they're actually enabled.
+            if ($shortName -eq 'Administrator') { continue }
+            $source = $m.PrincipalSource
             if ($source -eq 'MicrosoftAccount' -or $source -eq 'AzureAD') {
-                if ($shortName -ne 'Administrator') {
-                    [PSCustomObject]@{ Name = $rawName; Enabled = $true; Source = $source }
-                }
-                return
+                $unverifiedExternalAdmins += [PSCustomObject]@{ Name = $rawName; Source = $source }
+                continue
             }
             $localUser = Get-LocalUser -Name $shortName -ErrorAction SilentlyContinue
-            if ($null -ne $localUser -and $localUser.Enabled -and $shortName -ne 'Administrator') { $localUser }
-        })
+            if ($null -ne $localUser -and $localUser.Enabled) {
+                $verifiedLocalAdmins += $localUser
+            }
+        }
+        $enabledLocalAdmins = $verifiedLocalAdmins
 
         $daCim = Invoke-WithTimeout -ScriptBlock {
             (Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction SilentlyContinue).PartOfDomain
@@ -103,7 +109,11 @@ function Disable-BuiltInAdminAccount {
         $isDomainJoined = if ($daCim.TimedOut) { $false } else { $daCim.Result }
         $hasDomainAdmins = @($adminMembers | Where-Object { $_.ObjectClass -eq 'Group' -or $_.PrincipalSource -eq 'ActiveDirectory' }).Count -gt 0
 
-        if ($enabledLocalAdmins.Count -eq 0 -and -not ($isDomainJoined -and $hasDomainAdmins)) {
+        $hasVerifiedLocal = $enabledLocalAdmins.Count -gt 0
+        $hasDomainPath = $isDomainJoined -and $hasDomainAdmins
+        $hasOnlyExternalUnverified = -not $hasVerifiedLocal -and -not $hasDomainPath -and $unverifiedExternalAdmins.Count -gt 0
+
+        if (-not $hasVerifiedLocal -and -not $hasDomainPath -and $unverifiedExternalAdmins.Count -eq 0) {
             Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Error"
             Write-OutputColor "  ║$("  BLOCKED: No alternate admin account detected!".PadRight(72))║" -color "Error"
             Write-OutputColor "  ╠════════════════════════════════════════════════════════════════════════╣" -color "Error"
@@ -113,6 +123,28 @@ function Disable-BuiltInAdminAccount {
             Write-OutputColor "" -color "Info"
             Write-PressEnter
             return
+        }
+
+        if ($hasOnlyExternalUnverified) {
+            # MSA / AzureAD-only alternate path: cannot be locally verified as logon-capable.
+            # AAD account revocation, deleted MSA, machine lost AAD trust — all leave this
+            # principal still in the group while logon fails. Require typed confirm so the
+            # operator acknowledges the lockout risk.
+            Write-OutputColor "" -color "Critical"
+            Write-OutputColor "  CAUTION: the only alternate admin path is an MSA / AzureAD account." -color "Critical"
+            Write-OutputColor "  These principals can't be verified locally — if the AAD account is" -color "Warning"
+            Write-OutputColor "  revoked, the MSA is stale, or the machine has lost its AAD trust," -color "Warning"
+            Write-OutputColor "  no one will be able to log in after the next reboot." -color "Warning"
+            foreach ($ext in $unverifiedExternalAdmins) {
+                Write-OutputColor "    - $($ext.Name) [$($ext.Source)]" -color "Info"
+            }
+            Write-OutputColor "  Type ACCEPT-LOCKOUT-RISK to proceed (or press Enter to cancel):" -color "Critical"
+            $extConfirm = Read-Host
+            if ($extConfirm -ne 'ACCEPT-LOCKOUT-RISK') {
+                Write-OutputColor "  Cancelled (typed confirmation did not match)." -color "Info"
+                Write-PressEnter
+                return
+            }
         }
 
         # Show who will retain admin access
@@ -130,12 +162,25 @@ function Disable-BuiltInAdminAccount {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        # Check if current session is running as the built-in Administrator
-        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name -replace '^.*\\', ''
-        if ($currentUser -eq 'Administrator') {
-            Write-OutputColor "  NOTE: You are currently logged in as Administrator." -color "Warning"
-            Write-OutputColor "  You will need to log in with an alternate account after disabling." -color "Warning"
-            Write-OutputColor "" -color "Info"
+        # Compare by SID, not by display name. Hardened environments rename the built-in to
+        # something like 'svc-root' or 'RootAdmin'; the SID -500 stays. The prior name-only
+        # check missed this and silently allowed the operator to disable their own session,
+        # which then survives in-process but blocks all future logons.
+        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $builtInSid = $adminAccount.SID.Value
+        if ($currentSid -eq $builtInSid) {
+            Write-OutputColor "" -color "Critical"
+            Write-OutputColor "  CAUTION: you are currently logged in AS the built-in Administrator." -color "Critical"
+            Write-OutputColor "  Account name in use: $($adminAccount.Name) (SID $builtInSid)" -color "Warning"
+            Write-OutputColor "  Disabling it keeps your CURRENT session alive but blocks all future logons" -color "Warning"
+            Write-OutputColor "  to this account. You must verify the alternate admin works BEFORE rebooting." -color "Warning"
+            Write-OutputColor "  Type LOGGED-IN-AS-BUILTIN to confirm you understand:" -color "Critical"
+            $selfConfirm = Read-Host
+            if ($selfConfirm -ne 'LOGGED-IN-AS-BUILTIN') {
+                Write-OutputColor "  Cancelled." -color "Info"
+                Write-PressEnter
+                return
+            }
         }
 
         if (-not (Confirm-UserAction -Message "Disable built-in Administrator account?")) {

@@ -95,13 +95,24 @@ function Assert-Elevation {
         Write-RackStackError -Code "RS-1001"
         $elevationFailed = $false
         try {
-            $elevateArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-            if ($script:CLIAction)  { $elevateArgs += " -Action $($script:CLIAction)" }
-            if ($script:CLIProfile -ne 'Standard') { $elevateArgs += " -Tier $($script:CLIProfile)" }
-            if ($script:CLIConfig)  { $elevateArgs += " -Config `"$($script:CLIConfig)`"" }
-            if ($script:CLISilent)  { $elevateArgs += " -Silent" }
-            if ($script:CLIQuiet)   { $elevateArgs += " -Quiet" }
-            if ($script:CLIOutputFormat -ne 'Console') { $elevateArgs += " -OutputFormat $($script:CLIOutputFormat)" }
+            # Use Start-Process with ArgumentList AS AN ARRAY, not a single string. The prior
+            # string-concat form passed the joined command line verbatim through to powershell.exe,
+            # which re-parses it — meaning a quote (`"`) inside $script:CLIConfig terminated the
+            # quoted argument early and let an attacker inject statements that ran at the
+            # elevated medium→high IL boundary after the UAC consent. Array form makes PowerShell
+            # call CommandLineToArgv-quote each element, blocking the injection class entirely.
+            # Also reject obvious injection metacharacters in -Config defensively.
+            if ($script:CLIConfig -and ($script:CLIConfig -match '["`;&|]')) {
+                Write-OutputColor "  Refusing to elevate: -Config value contains disallowed characters." -color "Error"
+                throw "Invalid -Config value (contains quote/semicolon/backtick/ampersand/pipe)"
+            }
+            $elevateArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+            if ($script:CLIAction)  { $elevateArgs += @('-Action', $script:CLIAction) }
+            if ($script:CLIProfile -ne 'Standard') { $elevateArgs += @('-Tier', $script:CLIProfile) }
+            if ($script:CLIConfig)  { $elevateArgs += @('-Config', $script:CLIConfig) }
+            if ($script:CLISilent)  { $elevateArgs += '-Silent' }
+            if ($script:CLIQuiet)   { $elevateArgs += '-Quiet' }
+            if ($script:CLIOutputFormat -ne 'Console') { $elevateArgs += @('-OutputFormat', $script:CLIOutputFormat) }
             Start-Process powershell -ArgumentList $elevateArgs -Verb RunAs -ErrorAction Stop
         }
         catch {
@@ -12736,15 +12747,62 @@ function Start-BatchMode {
     $errors = 0
     $script:BatchUndoStack = [System.Collections.Generic.List[object]]::new()
 
-    # Ensure TempPath exists for batch undo state
-    if ($null -ne $script:TempPath -and -not (Test-Path -LiteralPath $script:TempPath)) {
-        New-Item -Path $script:TempPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+    # Persist batch-undo state under ProgramData with admin-only ACLs. The prior location
+    # ($script:TempPath, default C:\Temp) is world-writable on default ACL inheritance from C:\.
+    # A non-admin local user could pre-plant a malicious batch-undo.json with an UndoScript
+    # containing `Add-LocalGroupMember Administrators attacker` — when the admin operator next
+    # answered Y to "Attempt rollback of previous session?", that script would execute elevated.
+    # Moving to %ProgramData%\<Tool>\state with explicit DACL of Administrators+SYSTEM only
+    # blocks the pre-plant entirely. Also verify the ACL at load time as defense-in-depth.
+    $stateDir = Join-Path $env:ProgramData $script:ToolName | Join-Path -ChildPath 'state'
+    if (-not (Test-Path -LiteralPath $stateDir)) {
+        try {
+            $null = New-Item -Path $stateDir -ItemType Directory -Force -ErrorAction Stop
+            # Lock down ACL: Administrators + SYSTEM full control, inherit; no Users/Authenticated Users.
+            $acl = Get-Acl -LiteralPath $stateDir
+            $acl.SetAccessRuleProtection($true, $false)  # disable inheritance, remove inherited ACEs
+            $acl.Access | ForEach-Object { [void]$acl.RemoveAccessRule($_) }
+            $adminsSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-544'
+            $systemSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-18'
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($adminsSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+            Set-Acl -LiteralPath $stateDir -AclObject $acl -ErrorAction SilentlyContinue
+        } catch {
+            Write-OutputColor "  Warning: could not create or lock down state directory: $($_.Exception.Message)" -color "Warning"
+        }
     }
-    $batchUndoPath = Join-Path $script:TempPath "batch-undo.json"
+    $batchUndoPath = Join-Path $stateDir "batch-undo.json"
+
+    # Defense-in-depth: refuse to load if the file or directory's ACL grants write to a
+    # non-admin principal. Detect any ACE for a SID outside {Administrators, SYSTEM} with
+    # WriteData/Modify/FullControl.
+    $aclSafe = $true
+    if (Test-Path -LiteralPath $batchUndoPath) {
+        try {
+            $fileAcl = Get-Acl -LiteralPath $batchUndoPath
+            foreach ($ace in $fileAcl.Access) {
+                if ($ace.AccessControlType -ne 'Allow') { continue }
+                $sid = $null
+                try { $sid = (New-Object System.Security.Principal.NTAccount($ace.IdentityReference.Value)).Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { }
+                if ($sid -in @('S-1-5-32-544', 'S-1-5-18', 'S-1-5-32-549')) { continue }  # Admins/SYSTEM/Server Operators
+                if ($ace.FileSystemRights -band ([System.Security.AccessControl.FileSystemRights]::WriteData -bor
+                                                 [System.Security.AccessControl.FileSystemRights]::Modify -bor
+                                                 [System.Security.AccessControl.FileSystemRights]::FullControl)) {
+                    $aclSafe = $false
+                    Write-OutputColor "  REFUSING to load batch-undo state: $($ace.IdentityReference.Value) has write access to $batchUndoPath." -color "Error"
+                    Write-OutputColor "  This is a privilege-escalation guard. Delete the file manually if you trust its origin." -color "Warning"
+                    break
+                }
+            }
+        } catch {
+            $aclSafe = $false
+            Write-OutputColor "  Refusing to load batch-undo state: could not verify ACL ($($_.Exception.Message))." -color "Warning"
+        }
+    }
 
     # Check for previous batch session recovery data (skip in dry-run mode)
-    if (-not $script:DryRunMode -and (Test-Path -LiteralPath $batchUndoPath)) {
-        Write-OutputColor "  Previous batch session recovery data found." -color "Warning"
+    if (-not $script:DryRunMode -and $aclSafe -and (Test-Path -LiteralPath $batchUndoPath)) {
+        Write-OutputColor "  Previous batch session recovery data found at: $batchUndoPath" -color "Warning"
         Write-OutputColor "  Attempt rollback of previous session? [y/N]: " -color "Warning"
         $recoveryChoice = Read-Host
         if ($recoveryChoice -eq 'y' -or $recoveryChoice -eq 'Y') {

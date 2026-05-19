@@ -193,17 +193,84 @@ function Install-WindowsUpdates {
         $updateCount = @($updates).Count
         Write-OutputColor "  Found $updateCount update(s) available." -color "Info"
 
+        # Group by category. Driver updates need explicit operator consent — bundling NIC /
+        # storage driver upgrades with a routine cumulative on a Hyper-V host is how operators
+        # lose console access after reboot (new NIC driver regresses RoCE/RDMA on the SET team
+        # carrying SMB Direct → S2D resync stalls → VMs unresponsive). List per-category counts
+        # so the operator sees what's actually about to install.
+        $driverUpdates = @($updates | Where-Object {
+            $cats = @()
+            try { $cats = @($_.Categories | ForEach-Object { $_.Name }) } catch { }
+            $cats -contains 'Drivers' -or $cats -contains 'Driver'
+        })
+        $featureUpdates = @($updates | Where-Object {
+            $cats = @()
+            try { $cats = @($_.Categories | ForEach-Object { $_.Name }) } catch { }
+            $cats -contains 'Upgrades' -or $cats -contains 'Feature Packs'
+        })
+        $qualityUpdates = @($updates | Where-Object { $_ -notin $driverUpdates -and $_ -notin $featureUpdates })
+
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Update breakdown:" -color "Info"
+        Write-OutputColor "    Quality / Security / Cumulative : $($qualityUpdates.Count)" -color "Info"
+        Write-OutputColor "    Drivers                        : $($driverUpdates.Count)" -color $(if ($driverUpdates.Count -gt 0) { 'Warning' } else { 'Info' })
+        Write-OutputColor "    Feature upgrades               : $($featureUpdates.Count)" -color $(if ($featureUpdates.Count -gt 0) { 'Warning' } else { 'Info' })
+        Write-OutputColor "" -color "Info"
+
         # List updates
-        Write-OutputColor "`nAvailable updates:" -color "Info"
+        Write-OutputColor "Available updates:" -color "Info"
         foreach ($update in $updates) {
             $size = if ($update.Size) { " ($([math]::Round($update.Size / 1MB, 1)) MB)" } else { "" }
-            Write-OutputColor "  - $($update.Title)$size" -color "Info"
+            $catTag = ''
+            try {
+                $catNames = @($update.Categories | ForEach-Object { $_.Name })
+                if ($catNames -contains 'Drivers' -or $catNames -contains 'Driver') { $catTag = ' [DRIVER]' }
+                elseif ($catNames -contains 'Upgrades' -or $catNames -contains 'Feature Packs') { $catTag = ' [FEATURE]' }
+            } catch { }
+            $clr = if ($catTag) { 'Warning' } else { 'Info' }
+            Write-OutputColor "  - $($update.Title)$size$catTag" -color $clr
         }
         Write-OutputColor "" -color "Info"
 
-        if (-not (Confirm-UserAction -Message "Install all $updateCount update(s)?")) {
-            Write-OutputColor "  Update installation cancelled." -color "Warning"
-            return
+        # Two install paths: quality-only (safer, default) vs everything-including-drivers
+        # (requires explicit second confirm). Driver updates on a production Hyper-V host
+        # bundled into a cumulative-install rollout commonly brick NIC/storage paths.
+        $installCategoriesFilter = $null
+        if ($driverUpdates.Count -gt 0 -or $featureUpdates.Count -gt 0) {
+            Write-OutputColor "  [1] Install QUALITY updates only ($($qualityUpdates.Count) update(s)) — RECOMMENDED" -color "Success"
+            Write-OutputColor "  [2] Install ALL updates ($updateCount, includes drivers/feature upgrades)" -color "Warning"
+            Write-OutputColor "  [3] Cancel" -color "Info"
+            $installChoice = Read-Host "  Select"
+            switch ($installChoice) {
+                "1" {
+                    if ($qualityUpdates.Count -eq 0) {
+                        Write-OutputColor "  No quality updates to install." -color "Info"
+                        return
+                    }
+                    $installCategoriesFilter = @('Security Updates', 'Critical Updates', 'Update Rollups', 'Updates', 'Definition Updates')
+                }
+                "2" {
+                    Write-OutputColor "" -color "Critical"
+                    Write-OutputColor "  Installing $($driverUpdates.Count) driver and $($featureUpdates.Count) feature update(s)" -color "Warning"
+                    Write-OutputColor "  bundled with quality updates can regress NIC/storage paths post-reboot." -color "Warning"
+                    Write-OutputColor "  Type INSTALL-ALL to confirm:" -color "Critical"
+                    $allConfirm = Read-Host
+                    if ($allConfirm -ne 'INSTALL-ALL') {
+                        Write-OutputColor "  Cancelled." -color "Info"
+                        return
+                    }
+                    $installCategoriesFilter = $null  # don't filter
+                }
+                default {
+                    Write-OutputColor "  Update installation cancelled." -color "Warning"
+                    return
+                }
+            }
+        } else {
+            if (-not (Confirm-UserAction -Message "Install all $updateCount quality update(s)?")) {
+                Write-OutputColor "  Update installation cancelled." -color "Warning"
+                return
+            }
         }
 
         Write-OutputColor "`nInstalling updates... This may take a while." -color "Warning"
@@ -213,9 +280,14 @@ function Install-WindowsUpdates {
         # Install updates with progress
         $installJob = $null
         $installJob = Start-Job -ScriptBlock {
+            param($CatFilter)
             Import-Module PSWindowsUpdate
-            Install-WindowsUpdate -AcceptAll -IgnoreReboot
-        }
+            if ($null -ne $CatFilter -and $CatFilter.Count -gt 0) {
+                Install-WindowsUpdate -AcceptAll -IgnoreReboot -Category $CatFilter
+            } else {
+                Install-WindowsUpdate -AcceptAll -IgnoreReboot
+            }
+        } -ArgumentList (,$installCategoriesFilter)
 
         $elapsed = 0
         $maxInstallTime = 3600  # 1 hour max for install
@@ -229,6 +301,28 @@ function Install-WindowsUpdates {
         if ($installJob.State -eq "Running") {
             Write-OutputColor "  Installation timed out after $([math]::Floor($maxInstallTime / 60)) minutes. Stopping job." -color "Warning"
             Stop-Job $installJob -ErrorAction SilentlyContinue
+            # Stop-Job kills the PSWindowsUpdate runspace but NOT the out-of-process TiWorker.exe
+            # that PSWindowsUpdate invokes via COM. If TiWorker is mid-SXS-commit and we reboot
+            # now, the next boot hits "Stage 3 of 3" and rolls back — sometimes leaving CBS in
+            # a broken state that needs `dism /restorehealth`. Poll for TiWorker exit (capped
+            # at 2× the install timeout) before declaring "timed out".
+            $maxTiWorkerWait = $maxInstallTime * 2
+            $tiwElapsed = 0
+            while ($tiwElapsed -lt $maxTiWorkerWait) {
+                $tiw = Get-Process -Name TiWorker -ErrorAction SilentlyContinue
+                if ($null -eq $tiw) { break }
+                if ($tiwElapsed -eq 0) {
+                    Write-OutputColor "  Waiting for TiWorker.exe to finish committing changes before declaring timeout..." -color "Warning"
+                }
+                Show-ProgressMessage -Activity "Waiting for TiWorker" -Status "still running" -SecondsElapsed $tiwElapsed
+                Start-Sleep -Seconds 5
+                $tiwElapsed += 5
+            }
+            Write-Host ""
+            if ($tiwElapsed -ge $maxTiWorkerWait) {
+                Write-OutputColor "  TiWorker.exe is STILL running after extended wait. Reboot WILL roll back." -color "Critical"
+                Write-OutputColor "  Wait for it to exit (or use 'sfc /verifyonly' to check CBS health) before rebooting." -color "Warning"
+            }
         }
         else {
             Complete-ProgressMessage -Activity "Update installation" -Status "Complete" -Success

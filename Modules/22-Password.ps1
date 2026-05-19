@@ -384,9 +384,30 @@ function New-StrongPassword {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  GENERATED PASSWORD".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-OutputColor "  │$("  $password".PadRight(72))│" -color "Success"
+    # Stop transcript (if running) around the password display so the plaintext doesn't get
+    # archived to disk. Start-Transcript captures every Write-Host/Write-Output line verbatim
+    # including the box rendering. Past pattern: operator generates a password during an
+    # admin session with transcripts enabled — plaintext ends up in the log on disk indefinitely.
+    $transcriptWasRunning = $false
+    try {
+        $existing = Stop-Transcript -ErrorAction Stop
+        if ($existing) { $transcriptWasRunning = $true }
+    } catch { }
+    # Write directly to the console (bypasses Write-OutputColor's transcript-routing).
+    [Console]::WriteLine()
+    [Console]::WriteLine("  │  $($password.PadRight(72).Substring(0,72))│")
     Write-OutputColor "  │$("  Length: $Length | Complexity: Upper+Lower+Digit+Special".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    if ($transcriptWasRunning) {
+        try {
+            $transcriptPath = if ($script:TranscriptPath) { $script:TranscriptPath } else { $null }
+            if ($transcriptPath) {
+                Start-Transcript -Path $transcriptPath -Append -ErrorAction SilentlyContinue | Out-Null
+            } else {
+                Start-Transcript -ErrorAction SilentlyContinue | Out-Null
+            }
+        } catch { }
+    }
 
     # Copy to clipboard with auto-clear timer. Uses [Threading.Timer] in the same
     # runspace rather than Start-Job, because Start-Job's -ArgumentList holds the

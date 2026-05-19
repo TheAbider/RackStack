@@ -42,16 +42,26 @@ function Test-ReplicationHealth {
     $criticalCount = 0
 
     foreach ($vm in $replicatedVMs) {
-        $status = "$($vm.ReplicationHealth)"
-        $color = switch ($status) {
-            'Normal'   { "Success" }
-            'Warning'  { "Warning" }
-            'Critical' { "Error" }
-            default    { "Info" }
+        # Compare against the enum value directly. The `.ToString()` of the ReplicationHealth
+        # enum returns the invariant name on most builds, but on some Hyper-V PowerShell modules
+        # with Set-Culture-overridden sessions the display value gets localized — comparing the
+        # localized string to literal English 'Normal'/'Warning'/'Critical' caused non-EN hosts
+        # to silently fall into the default branch and report "Info" (no issue) for actual
+        # Critical replications. The integer cast is invariant.
+        $healthInt = -1
+        try { $healthInt = [int]$vm.ReplicationHealth } catch { }
+        $color = switch ($healthInt) {
+            1       { "Success" }  # Normal
+            2       { "Warning" }  # Warning
+            3       { "Error" }    # Critical
+            default { "Info" }
+        }
+        $status = switch ($healthInt) {
+            1 { 'Normal' } 2 { 'Warning' } 3 { 'Critical' } default { "$($vm.ReplicationHealth)" }
         }
 
-        if ($status -eq 'Warning') { $warningCount++ }
-        if ($status -eq 'Critical') { $criticalCount++ }
+        if ($healthInt -eq 2) { $warningCount++ }
+        if ($healthInt -eq 3) { $criticalCount++ }
 
         $lastSync = if ($null -ne $vm.LastReplicationTime -and $vm.LastReplicationTime -ne [DateTime]::MinValue) {
             $vm.LastReplicationTime.ToString("yyyy-MM-dd HH:mm:ss")
@@ -750,7 +760,22 @@ function Show-ReplicationStatus {
 
     foreach ($repl in $replications) {
         try {
-            $stats = Measure-VMReplication -VMName $repl.VMName -ErrorAction SilentlyContinue
+            # Measure-VMReplication issues RPC to the replica server. If the replica is
+            # unreachable the call blocks for the default WMI/RPC timeout (~10 min) and the
+            # menu hangs. Wrap in Start-Job + 15s Wait-Job so an unreachable replica produces
+            # a clean "(unreachable)" line instead of freezing the dashboard.
+            $vmNameForJob = $repl.VMName
+            $measureJob = Start-Job -ScriptBlock {
+                param($n) Measure-VMReplication -VMName $n -ErrorAction SilentlyContinue
+            } -ArgumentList $vmNameForJob
+            $completed = Wait-Job -Job $measureJob -Timeout 15
+            $stats = if ($null -ne $completed) { Receive-Job -Job $measureJob -ErrorAction SilentlyContinue } else { $null }
+            Stop-Job -Job $measureJob -ErrorAction SilentlyContinue
+            Remove-Job -Job $measureJob -Force -ErrorAction SilentlyContinue
+            if ($null -eq $completed) {
+                Write-OutputColor "  │$("  $($repl.VMName): replica unreachable (15s timeout)".PadRight(72))│" -color "Warning"
+                continue
+            }
             if ($null -ne $stats) {
                 $pendingSize = if ($null -ne $stats.PendingReplicationSize) {
                     "{0:N2} MB" -f ($stats.PendingReplicationSize / 1MB)
@@ -799,29 +824,40 @@ function Test-FailoverPreFlight {
 
     $issueCount = 0
 
-    # Check 1: Replica VM state
-    $replState = "$($ReplicationInfo.State)"
-    $replHealth = "$($ReplicationInfo.ReplicationHealth)"
-    if ($replState -eq "Replicating" -or $replState -eq "ReadyForInitialReplication" -or $replState -eq "WaitingForInitialReplication") {
-        Write-OutputColor "  │$("  [OK]   Replication state: $replState".PadRight(72))│" -color "Success"
+    # Check 1: Replica VM state — compare enum integers (invariant) instead of localized strings.
+    # Past pattern: localized .ToString() on non-EN Hyper-V hosts made every check fall through
+    # to the catch-all, pre-flight reported "all checks passed" against a Critical-health VM,
+    # and the operator authorized a failover against stale data.
+    $stateInt = -1
+    try { $stateInt = [int]$ReplicationInfo.State } catch { }
+    $healthInt = -1
+    try { $healthInt = [int]$ReplicationInfo.ReplicationHealth } catch { }
+    # State enum: 1=Disabled, 2=ReadyForInitialReplication, 3=WaitingForInitialReplication,
+    # 4=InitialReplicationInProgress, 5=WaitingForUpdates, 6=Replicating, 7=PreparedForFailover,
+    # 8=Resynchronizing, 9=Suspended, 10=Error, 11=FailedOverWaitingCompletion, 12=FailedOver,
+    # 13=...
+    $replStateDisplay = "$($ReplicationInfo.State)"
+    if ($stateInt -in @(6, 2, 3)) {
+        Write-OutputColor "  │$("  [OK]   Replication state: $replStateDisplay".PadRight(72))│" -color "Success"
     }
     else {
-        $lineStr = "  [WARN] Replication state: $replState"
+        $lineStr = "  [WARN] Replication state: $replStateDisplay"
         if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
         Write-OutputColor "  │$($lineStr.PadRight(72))│" -color "Warning"
         $issueCount++
     }
 
-    # Check 2: Replication health
-    if ($replHealth -eq "Normal") {
+    # Check 2: Replication health (1=Normal, 2=Warning, 3=Critical)
+    $replHealthDisplay = "$($ReplicationInfo.ReplicationHealth)"
+    if ($healthInt -eq 1) {
         Write-OutputColor "  │$("  [OK]   Replication health: Normal".PadRight(72))│" -color "Success"
     }
-    elseif ($replHealth -eq "Warning") {
+    elseif ($healthInt -eq 2) {
         Write-OutputColor "  │$("  [WARN] Replication health: Warning".PadRight(72))│" -color "Warning"
         $issueCount++
     }
     else {
-        Write-OutputColor "  │$("  [WARN] Replication health: $replHealth".PadRight(72))│" -color "Error"
+        Write-OutputColor "  │$("  [CRIT] Replication health: $replHealthDisplay (int=$healthInt)".PadRight(72))│" -color "Error"
         $issueCount++
     }
 
@@ -1358,6 +1394,37 @@ function Remove-VMReplicationWizard {
     Write-OutputColor "  Mode: $($selectedRepl.Mode)" -color "Info"
     Write-OutputColor "  State: $($selectedRepl.State)" -color "Info"
     Write-OutputColor "" -color "Info"
+
+    # Refuse removal during failover-in-progress states. Removing replication mid-failover
+    # breaks the role pairing — Complete-VMFailover on the replica becomes impossible without
+    # manual fixup, and a full resync from scratch is needed.
+    $stateIntForRemove = -1
+    try { $stateIntForRemove = [int]$selectedRepl.State } catch { }
+    if ($stateIntForRemove -in @(7, 11)) {  # 7=PreparedForFailover, 11=FailedOverWaitingCompletion
+        Write-OutputColor "" -color "Error"
+        Write-OutputColor "  REFUSING: VM is in transitional failover state ($($selectedRepl.State))." -color "Error"
+        Write-OutputColor "  Running Remove-VMReplication now strands the role pairing. Complete the" -color "Error"
+        Write-OutputColor "  failover via Complete-VMFailover first, then retry the remove." -color "Warning"
+        return
+    }
+
+    # Warn explicitly when operator is on the Replica side — Remove-VMReplication here only
+    # wipes the receiver's config. The primary still thinks replication is active and will
+    # fail on the next cycle. Operator likely wants to clean up on the primary instead.
+    $modeStr = "$($selectedRepl.Mode)"
+    if ($modeStr -eq 'Replica') {
+        Write-OutputColor "" -color "Warning"
+        Write-OutputColor "  CAUTION: '$vmName' is the REPLICA side of this replication." -color "Warning"
+        Write-OutputColor "  Remove here only wipes the receiver. The PRIMARY still thinks replication" -color "Warning"
+        Write-OutputColor "  is active and will report errors on the next cycle. To fully tear down," -color "Warning"
+        Write-OutputColor "  remove from the primary host as well." -color "Info"
+        Write-OutputColor "  Type REMOVE-REPLICA-ONLY to confirm (Enter to cancel):" -color "Warning"
+        $replConfirm = Read-Host
+        if ($replConfirm -ne 'REMOVE-REPLICA-ONLY') {
+            Write-OutputColor "  Cancelled." -color "Info"
+            return
+        }
+    }
 
     if (-not (Confirm-UserAction -Message "Remove replication for VM '$vmName'? This cannot be undone.")) {
         Write-OutputColor "  Cancelled." -color "Info"

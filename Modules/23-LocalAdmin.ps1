@@ -33,12 +33,26 @@ function Add-LocalAdminAccount {
     Clear-Host
     Write-CenteredOutput "Create Local Admin Account" -color "Info"
 
-    $accountName = $localadminaccountname
-    $accountFullName = $FullName
+    # Resolve from the explicit script scope so a direct-import or refactor that doesn't
+    # populate the bare variable can't accidentally pick up a leaked $FullName/$localadminaccountname
+    # from a parent scope (e.g., PowerShell's auto-binding for [System.IO.FileInfo].FullName).
+    # Fail hard if either is missing — better to surface "config not loaded" than silently
+    # create an account with a wrong name.
+    $accountName = $script:localadminaccountname
+    if ([string]::IsNullOrWhiteSpace($accountName)) { $accountName = $localadminaccountname }
+    if ([string]::IsNullOrWhiteSpace($accountName)) {
+        Write-OutputColor "  Configuration error: localadminaccountname is not set." -color "Error"
+        Write-OutputColor "  Set 'LocalAdminAccountName' in defaults.json and restart $script:ToolFullName." -color "Warning"
+        Write-PressEnter
+        return
+    }
+    $accountFullName = $script:FullName
+    if ([string]::IsNullOrWhiteSpace($accountFullName)) { $accountFullName = $FullName }
+    if ([string]::IsNullOrWhiteSpace($accountFullName)) { $accountFullName = $accountName }
 
-    Write-OutputColor "  Default account name: $localadminaccountname" -color "Info"
+    Write-OutputColor "  Default account name: $accountName" -color "Info"
 
-    if (-not (Confirm-UserAction -Message "Use default account name ($localadminaccountname)?" -DefaultYes)) {
+    if (-not (Confirm-UserAction -Message "Use default account name ($accountName)?" -DefaultYes)) {
         Write-OutputColor "  Enter account name (letters, numbers, underscore, hyphen; 1-20 chars):" -color "Info"
         $customName = Read-Host
         $navResult = Test-NavigationCommand -UserInput $customName
@@ -87,17 +101,33 @@ function Add-LocalAdminAccount {
         return
     }
 
+    # Resolve Administrators group by SID (locale-neutral) — non-EN Windows uses
+    # "Administradores" / "Administratoren" / etc., breaking hardcoded English group names.
+    try {
+        $adminGroupName = (Get-LocalGroup -SID 'S-1-5-32-544' -ErrorAction Stop).Name
+    } catch {
+        $adminGroupName = 'Administrators'
+    }
+
     try {
         # Create the user
         New-LocalUser -Name $accountName -FullName $accountFullName -Password $Password -PasswordNeverExpires -AccountNeverExpires -ErrorAction Stop | Out-Null
 
         # Add to Administrators group
-        Add-LocalGroupMember -Group "Administrators" -Member $accountName -ErrorAction Stop
+        Add-LocalGroupMember -Group $adminGroupName -Member $accountName -ErrorAction Stop
 
         # Verify account creation and group membership
         Test-LocalAdminCreation -Username $accountName | Out-Null
         Add-SessionChange -Category "Security" -Description "Created local admin account '$accountName'"
         Clear-MenuCache
+
+        # Register undo so a wrong-name typo or wrong-machine slip is recoverable through
+        # the global undo system — was previously missing.
+        $undoName = $accountName
+        Add-UndoAction -Category "Security" -Description "Created local admin account '$accountName'" -UndoScript {
+            param($N)
+            Remove-LocalUser -Name $N -ErrorAction SilentlyContinue
+        }.GetNewClosure() -UndoParams @{ N = $undoName }
     }
     catch {
         Write-OutputColor "  Failed to create account: $_" -color "Error"

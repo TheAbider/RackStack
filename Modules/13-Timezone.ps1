@@ -424,6 +424,31 @@ function Sync-SystemTime {
         return
     }
 
+    # PDC-emulator guard. On the forest-root PDCe, w32tm /resync pulls from the configured
+    # external NTP peer — if that peer is unreachable but a transient one briefly was, the
+    # PDC's clock adjusts and the whole domain syncs to the drift. Every member machine and
+    # DC then has Kerberos failures cascade. Require explicit operator acknowledgement that
+    # they understand the forest-wide blast radius before letting this run on a PDCe.
+    try {
+        if (Get-Command Get-ADDomainController -ErrorAction SilentlyContinue) {
+            $pdce = Get-ADDomainController -Filter * -ErrorAction SilentlyContinue |
+                Where-Object { $_.OperationMasterRoles -contains 'PDCEmulator' } |
+                Select-Object -First 1
+            if ($null -ne $pdce -and $pdce.HostName -eq "$env:COMPUTERNAME.$env:USERDNSDOMAIN") {
+                Write-OutputColor "" -color "Critical"
+                Write-OutputColor "  WARNING: this server holds the PDC Emulator FSMO role." -color "Critical"
+                Write-OutputColor "  Re-syncing time on the PDCe changes the authoritative clock for the entire" -color "Warning"
+                Write-OutputColor "  forest. If the external NTP peer is misconfigured or returns drift, every" -color "Warning"
+                Write-OutputColor "  member machine will follow and Kerberos failures will cascade." -color "Warning"
+                Write-OutputColor "  Verify the external peer (UDP/123 outbound, NTP server reachability) first." -color "Info"
+                if (-not (Confirm-UserAction -Message "Proceed with time sync on the PDC Emulator?")) {
+                    Write-OutputColor "  Sync cancelled." -color "Info"
+                    return
+                }
+            }
+        }
+    } catch { }
+
     # Verify w32tm command is available
     if (-not (Get-Command w32tm -ErrorAction SilentlyContinue)) {
         Write-OutputColor "  w32tm command not found. Cannot sync time." -color "Error"

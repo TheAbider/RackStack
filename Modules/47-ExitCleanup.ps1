@@ -69,6 +69,36 @@ function Exit-Script {
     $rebootNeeded = $global:RebootNeeded -or $windowsRebootPending
 
     if ($global:DisabledAdminReboot -eq $true) {
+        # Pre-flight: refuse to self-destruct while Hyper-V VMs are mid-migrate or storage ops
+        # are in flight. Restart-Computer -Force only suppresses the logged-on-user prompt; it
+        # doesn't wait for in-progress vmms operations to drain, so a Ctrl-C → exit during a
+        # live migration leaves the VM in an unrecoverable state.
+        try {
+            $migratingVMs = @(Get-VM -ErrorAction SilentlyContinue | Where-Object {
+                $_.Status -match 'Migrating|Saving|Pending' -or $_.State -eq 'Migrating'
+            })
+            if ($migratingVMs.Count -gt 0) {
+                Write-OutputColor "" -color "Error"
+                Write-OutputColor "  REFUSING self-destruct: $($migratingVMs.Count) VM(s) in transitional state:" -color "Error"
+                foreach ($vm in $migratingVMs) {
+                    Write-OutputColor "    - $($vm.Name) [$($vm.State) / $($vm.Status)]" -color "Error"
+                }
+                Write-OutputColor "  Wait for VMs to settle before exiting." -color "Warning"
+                Write-PressEnter
+                return
+            }
+        } catch { }
+
+        Write-OutputColor "" -color "Critical"
+        Write-OutputColor "  WARNING: about to schedule a post-reboot SYSTEM deletion of tool files." -color "Critical"
+        Write-OutputColor "  This is a destructive operation that cannot be undone after reboot." -color "Warning"
+        Write-OutputColor "  Type the computer name '$env:COMPUTERNAME' to confirm:" -color "Critical"
+        $hostConfirm = Read-Host
+        if ($hostConfirm -ne $env:COMPUTERNAME) {
+            Write-OutputColor "  Cancelled (hostname did not match)." -color "Info"
+            return
+        }
+
         Write-OutputColor "  As always, should you or any member of your IT Force be caught or killed, the Abider will disavow any knowledge of your actions" -color "Error"
 
         for ($i = 5; $i -gt 0; $i--) {
@@ -78,44 +108,45 @@ function Exit-Script {
         Write-Host ""
 
         Write-OutputColor "  Good luck." -color "Error"
-        Clear-Host
 
-        # Build list of paths to delete
+        # Build list of paths to delete. Narrowed heuristics: only target folders whose path
+        # contains $script:ToolName literally so sibling Pester repos / customer migration
+        # scripts / third-party tooling that happens to contain a 00-Initialization.ps1 or a
+        # generic Tests/ folder aren't wiped along with us.
         $pathsToDelete = [System.Collections.Generic.List[string]]::new()
         $adminFolder = [System.IO.Path]::Combine($env:SystemDrive, "Users", "Administrator")
+        $toolName = $script:ToolName
 
-        # 1) Find all script-related files anywhere in the Administrator profile
         if (Test-Path -LiteralPath $adminFolder) {
-            # Single file traversal for script-related files (monolithic, exe, configs)
             $allProfileFiles = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -File -ErrorAction SilentlyContinue
             $monoFiles = $allProfileFiles | Where-Object {
-                $_.Name -like "$($script:ToolName) v*.ps1" -or
-                $_.Name -like "$($script:ToolName)*Configuration Tool*.ps1" -or
-                $_.Name -eq "$($script:ToolName).exe" -or
-                $_.Name -like "$($script:ToolName)*.exe" -or
-                $_.Name -eq "RackStack.ps1" -or
-                $_.Name -eq "defaults.json" -or
-                $_.Name -eq "defaults.example.json" -or
-                $_.Name -eq "PSScriptAnalyzerSettings.psd1" -or
-                $_.Name -eq "Header.ps1"
+                ($_.Name -like "$toolName v*.ps1") -or
+                ($_.Name -like "$toolName*Configuration Tool*.ps1") -or
+                ($_.Name -eq "$toolName.exe") -or
+                ($_.Name -like "$toolName*.exe") -or
+                # Only treat the listed config files as ours when they sit inside a directory
+                # whose path contains the tool name — protects unrelated dev work in other repos.
+                ((($_.Name -eq "RackStack.ps1") -or ($_.Name -eq "defaults.json") -or ($_.Name -eq "defaults.example.json") -or ($_.Name -eq "PSScriptAnalyzerSettings.psd1") -or ($_.Name -eq "Header.ps1")) -and ($_.DirectoryName -like "*$toolName*"))
             }
             foreach ($f in $monoFiles) { $pathsToDelete.Add($f.FullName) }
 
-            # Single directory traversal for module folders, tool folders, and test folders
             $allProfileDirs = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue
             foreach ($folder in $allProfileDirs) {
+                # Only delete folders whose path explicitly contains the tool name. The prior
+                # heuristic "any folder containing 00-Initialization.ps1" caught unrelated
+                # PowerShell projects (Pester fixtures, customer migration scripts) and
+                # "any folder named Tests" caught literally every Tests folder under the profile.
+                if ($folder.FullName -notlike "*$toolName*") { continue }
                 if (Test-Path -LiteralPath (Join-Path $folder.FullName "00-Initialization.ps1")) { $pathsToDelete.Add($folder.FullName) }
-                elseif ($folder.Name -eq "RackStack") { $pathsToDelete.Add($folder.FullName) }
+                elseif ($folder.Name -eq $toolName) { $pathsToDelete.Add($folder.FullName) }
                 elseif ($folder.Name -eq "Tests" -and (Test-Path -LiteralPath (Join-Path $folder.FullName "Run-Tests.ps1"))) { $pathsToDelete.Add($folder.FullName) }
             }
         }
 
-        # 2) Also delete the currently-running script and its parent (if modular)
         $currentScriptPath = $script:ScriptPath
         if ($currentScriptPath -and (Test-Path -LiteralPath $currentScriptPath)) {
             $pathsToDelete.Add($currentScriptPath)
         }
-        # If running modular version, also delete the Modules folder and loader
         if ($script:ModuleRoot) {
             $modulesDir = Join-Path $script:ModuleRoot "Modules"
             if (Test-Path -LiteralPath $modulesDir) { $pathsToDelete.Add($modulesDir) }
@@ -125,12 +156,13 @@ function Exit-Script {
             if (Test-Path -LiteralPath $defaultsPath) { $pathsToDelete.Add($defaultsPath) }
         }
 
-        # Clean up config directory (session logs, audit logs, etc.)
-        if ($script:AppConfigDir -and (Test-Path -LiteralPath $script:AppConfigDir)) {
+        # AppConfigDir cleanup — only if the directory's path matches the tool name (defensive
+        # check; AppConfigDir is configured at init and shouldn't drift, but a wrong defaults.json
+        # value pointing at C:\ would otherwise wipe everything).
+        if ($script:AppConfigDir -and (Test-Path -LiteralPath $script:AppConfigDir) -and $script:AppConfigDir -like "*$($script:ConfigDirName)*") {
             $pathsToDelete.Add($script:AppConfigDir)
         }
 
-        # If running as EXE, also clean up adjacent files
         if ($currentScriptPath -and $currentScriptPath -match '\.exe$') {
             $exeDir = Split-Path $currentScriptPath -Parent
             $adjacentDefaults = Join-Path $exeDir "defaults.json"
@@ -139,12 +171,29 @@ function Exit-Script {
             if (Test-Path -LiteralPath $adjacentExample) { $pathsToDelete.Add($adjacentExample) }
         }
 
-        # Deduplicate paths
         $uniquePaths = $pathsToDelete | Sort-Object -Unique
+
+        # Write a manifest of what's about to be deleted — forensic recovery aid in case the
+        # operator realizes mid-reboot they meant to disable on a different host. Also log to
+        # the Application event log so an audit trail survives the file deletion.
+        try {
+            $manifestPath = Join-Path $env:TEMP "$toolName-cleanup-manifest.txt"
+            $manifestLines = @("# $toolName self-destruct manifest", "# Host: $env:COMPUTERNAME", "# Scheduled at: $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')", "")
+            $manifestLines += $uniquePaths
+            $manifestLines | Out-File -LiteralPath $manifestPath -Encoding UTF8 -Force
+            Write-OutputColor "  Deletion manifest saved to: $manifestPath" -color "Info"
+        } catch {
+            Write-OutputColor "  Could not write deletion manifest: $($_.Exception.Message)" -color "Warning"
+        }
+        try {
+            $evtMsg = "$toolName self-destruct scheduled. Host=$env:COMPUTERNAME. $($uniquePaths.Count) path(s) queued for deletion on next boot."
+            Write-EventLog -LogName Application -Source $toolName -EventId 9999 -EntryType Warning -Message $evtMsg -ErrorAction SilentlyContinue
+        } catch {
+            try { New-EventLog -LogName Application -Source $toolName -ErrorAction SilentlyContinue } catch { }
+        }
 
         # Schedule deletion after reboot using a scheduled task
         try {
-            # Build cleanup commands for each path
             $cleanupCommands = "Start-Sleep 60`n"
             foreach ($p in $uniquePaths) {
                 $escapedPath = $p -replace "'", "''"
@@ -165,6 +214,7 @@ function Exit-Script {
             Write-OutputColor "  Could not schedule cleanup: $_" -color "Error"
         }
 
+        Clear-Host
         Restart-Computer -Force
     }
     elseif ($rebootNeeded) {

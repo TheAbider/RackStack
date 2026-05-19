@@ -485,6 +485,18 @@ function Invoke-RemoteServiceManager {
                     }
                 }
                 { $_ -eq 'T' -or $_ -eq 't' } {
+                    # Hard denylist of services that, when stopped with -Force on a remote host,
+                    # cascade-kill WinRM itself and lock us out. RpcSs and Winmgmt cascade through
+                    # the entire RPC subsystem (DcomLaunch, WinRM, EventLog, even Server). Once
+                    # remote, the only recovery is console / iLO / OOB.
+                    $remoteCriticalDenylist = @('RpcSs', 'Winmgmt', 'LanmanServer', 'EventLog', 'WinRM', 'DcomLaunch', 'RpcEptMapper', 'LSM', 'gpsvc', 'Schedule')
+                    if ($svcAction -in $remoteCriticalDenylist) {
+                        Write-OutputColor "" -color "Error"
+                        Write-OutputColor "  REFUSING to remotely stop '$svcAction' on $target." -color "Error"
+                        Write-OutputColor "  Stopping this service cascade-kills WinRM and you will lose remote access." -color "Error"
+                        Write-OutputColor "  Recovery would require console or out-of-band management." -color "Warning"
+                        break
+                    }
                     try {
                         Get-Service -ComputerName $target -Name $svcAction -ErrorAction Stop | Stop-Service -Force -ErrorAction Stop
                         Write-OutputColor "  Service '$svcAction' stopped." -color "Success"
@@ -494,6 +506,14 @@ function Invoke-RemoteServiceManager {
                     }
                 }
                 { $_ -eq 'R' -or $_ -eq 'r' } {
+                    # Same denylist for Restart (brief stop window is still a kill window for these).
+                    $remoteCriticalDenylist = @('RpcSs', 'Winmgmt', 'LanmanServer', 'EventLog', 'WinRM', 'DcomLaunch', 'RpcEptMapper', 'LSM', 'gpsvc', 'Schedule')
+                    if ($svcAction -in $remoteCriticalDenylist) {
+                        Write-OutputColor "" -color "Error"
+                        Write-OutputColor "  REFUSING to remotely restart '$svcAction' on $target." -color "Error"
+                        Write-OutputColor "  The brief stop window kills WinRM and you would lose remote access." -color "Warning"
+                        break
+                    }
                     try {
                         Get-Service -ComputerName $target -Name $svcAction -ErrorAction Stop | Restart-Service -Force -ErrorAction Stop
                         Write-OutputColor "  Service '$svcAction' restarted." -color "Success"
