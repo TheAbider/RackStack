@@ -69,28 +69,42 @@ function Test-SystemDisk {
         }
     }
 
-    # Also check by OS partition location
-    try {
-        $systemDrive = $env:SystemDrive.TrimEnd(':')
-        $osPartition = Get-Partition -DriveLetter $systemDrive -ErrorAction SilentlyContinue
-        if ($null -ne $osPartition -and $osPartition.DiskNumber -eq $diskNumber) {
-            return $true
-        }
+    # Also check by OS partition location. Get-Partition can hang for minutes on systems
+    # where the storage stack is busy (CIM timeouts, slow disks, hung MPIO claim cycles).
+    # The test suite tripped on this — CI's "Run tests (core)" step hit the runner timeout
+    # because this call never returned. Wrap in Invoke-WithTimeout when available, otherwise
+    # use a job-based fallback so the function still has a hard ceiling.
+    $systemDrive = $env:SystemDrive.TrimEnd(':')
+    $partResult = $null
+    if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
+        $partWrap = Invoke-WithTimeout -ScriptBlock {
+            param($drv)
+            Get-Partition -DriveLetter $drv -ErrorAction SilentlyContinue
+        } -ArgumentList @($systemDrive) -TimeoutSeconds 8 -Activity "Get-Partition"
+        if (-not $partWrap.TimedOut -and -not $partWrap.Failed) { $partResult = $partWrap.Result }
+    } else {
+        try {
+            $partResult = Get-Partition -DriveLetter $systemDrive -ErrorAction SilentlyContinue
+        } catch { }
     }
-    catch {
-        # Silently continue if we can't determine
+    if ($null -ne $partResult -and $partResult.DiskNumber -eq $diskNumber) {
+        return $true
     }
 
-    # Check via Get-Disk if we received an int
+    # Check via Get-Disk if we received an int (same timeout treatment).
     if ($Disk -is [int]) {
-        try {
-            $diskObj = Get-Disk -Number $diskNumber -ErrorAction SilentlyContinue
-            if ($null -ne $diskObj -and ($diskObj.IsBoot -eq $true -or $diskObj.IsSystem -eq $true)) {
-                return $true
-            }
+        $diskObj = $null
+        if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
+            $diskWrap = Invoke-WithTimeout -ScriptBlock {
+                param($n)
+                Get-Disk -Number $n -ErrorAction SilentlyContinue
+            } -ArgumentList @($diskNumber) -TimeoutSeconds 8 -Activity "Get-Disk"
+            if (-not $diskWrap.TimedOut -and -not $diskWrap.Failed) { $diskObj = $diskWrap.Result }
+        } else {
+            try { $diskObj = Get-Disk -Number $diskNumber -ErrorAction SilentlyContinue } catch { }
         }
-        catch {
-            # Silently continue
+        if ($null -ne $diskObj -and ($diskObj.IsBoot -eq $true -or $diskObj.IsSystem -eq $true)) {
+            return $true
         }
     }
 

@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.17
+
+- **Fix (CI/test):** 38-StorageManager `Test-SystemDisk` called `Get-Partition -DriveLetter` and `Get-Disk -Number` with no timeout. On hosts where the storage stack is busy (slow CIM responses, hung MPIO claim cycles, paused tiering) the call never returned, and the test suite's Section 152 froze indefinitely. CI's "Run tests (core)" step hit the runner timeout and cancelled the v1.98.16 release pipeline. Both storage calls now wrapped in `Invoke-WithTimeout` (8s cap each) when the helper is loaded, with a try/catch fallback when running before module load. Includes all v1.98.16 fixes (38-StorageManager).
+- **Includes all v1.98.16 fixes** (the v1.98.16 tag was never published because CI cancelled mid-test; this release supersedes it under the z-retention rule).
+
 ## v1.98.16
 
 - **Fix (DESTRUCTIVE):** 27-FailoverClustering `Add-NodeToCluster` undo invoked `Remove-ClusterNode -Force` with no defense-in-depth — a stale undo run on a partially-down cluster could evict the only surviving Up node, taking all CSVs and clustered VMs offline. The undo now re-queries cluster state at undo time, refuses if fewer than 3 Up nodes remain, and requires the operator to type `EVICT` to confirm. Also removed `-Force` so the cluster's own safety checks aren't bypassed (27-FailoverClustering).
