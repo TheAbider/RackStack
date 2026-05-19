@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.98.21
+
+- **Fix (CI/test):** 38-StorageManager `Test-SystemDisk` Start-Job scriptblock used `$matches[1]` directly. RackStack codebase rule (enforced by Section 81 of Run-Tests.ps1 + Section "Codebase: no direct Matches[n]") requires aliasing `$Matches` to `$regexMatches` first. Aliased inside the scriptblock (38-StorageManager).
+- **CONFIRMED FIX:** Section 152 in v1.98.20 ran in 30s (down from 13+ minute hang) — the outer Start-Job + Wait-Job ceiling holds on the degraded CI runner. The v1.98.21 release unblocks the rest of the test suite, which surfaces the regexMatches convention violation above.
+- **Includes all v1.98.16 through v1.98.20 fixes** (five consecutive unpublished tags; this version supersedes all under z-retention).
+
 ## v1.98.20
 
 - **Fix (CI/test):** 38-StorageManager `Test-SystemDisk` now wraps the entire detection logic (WMI + Get-Disk + Get-Partition) in a single outer `Start-Job` with `Wait-Job -Timeout 30`. The v1.98.19 design with per-cmdlet jobs still left the in-process Get-CimInstance Win32_OperatingSystem call unbounded — the self-hosted runner's WMI service is degraded enough that even Win32_OperatingSystem (the most-cached CIM class on Windows) hung indefinitely on v1.98.19's primary path. The child-process boundary is the only place a hard ceiling can hold (38-StorageManager).

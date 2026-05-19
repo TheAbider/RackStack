@@ -83,7 +83,8 @@ function Test-SystemDisk {
             try {
                 $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
                 if ($null -ne $os -and $os.SystemDevice -match '\\Harddisk(\d+)\\') {
-                    if ([int]$matches[1] -eq $targetNum) { return $true }
+                    $regexMatches = $matches
+                    if ([int]$regexMatches[1] -eq $targetNum) { return $true }
                 }
             } catch { }
             # Fall back to Get-Disk by Number.
