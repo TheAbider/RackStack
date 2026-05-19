@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+## v1.98.43
+
+- **Fix (CI/test):** Menu-gated proximity regex relaxed from same-line (`[^\r\n]{0,200}`) to multi-line (`[\s\S]{0,400}`). The dispatcher pattern in `Start-DiskCleanup` is `if (Confirm-UserAction "Run X?") {NL Invoke-X NL}` — multi-line block, not same-line. Now correctly matches the actual code shape while staying tight enough to reject false positives from unrelated Confirm calls (Tests/Run-Tests.ps1).
+- **Includes all v1.98.40-42 fixes** (none published; this version supersedes them under z-retention).
+
 ## v1.98.42
 
 - **Fix (CI/test):** v1.98.41 still had `Invoke-FullEnhancedCleanup` in the body-gated list, but the function's internal Confirm prompts (Windows.old at line 1062, shadow copies at 1088) are sub-prompts for individual operations — the up-front "Run Full Enhanced Cleanup?" gate happens at the menu dispatcher (`Start-DiskCleanup` line 138). Moved to menu-gated list so the test correctly verifies the actual design pattern (Tests/Run-Tests.ps1).

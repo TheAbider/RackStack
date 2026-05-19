@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.42
+    Automated Test Runner for RackStack v1.98.43
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7236,8 +7236,10 @@ try {
     )
     $missingMenuGate = @()
     foreach ($fname in $menuGatedFuncs) {
-        # Same-line match: `if (Confirm-UserAction ...) { Invoke-X }` or similar
-        $pat = "Confirm-UserAction[^\r\n]{0,200}$([regex]::Escape($fname))"
+        # Multi-line proximity match — `if (Confirm-UserAction ...) {NL    Invoke-X NL}` is the
+        # common dispatcher shape. 400 chars across newlines covers the message string + brace
+        # block while staying tight enough to avoid false positives from unrelated Confirm calls.
+        $pat = "Confirm-UserAction[\s\S]{0,400}$([regex]::Escape($fname))"
         if ($dcContent -notmatch $pat) { $missingMenuGate += $fname }
     }
     Write-TestResult "20-DiskCleanup: menu-gated destructive call sites have Confirm-UserAction nearby" ($missingMenuGate.Count -eq 0) $(if ($missingMenuGate.Count -gt 0) { "Missing in: $($missingMenuGate -join ', ')" } else { "" })
