@@ -1,0 +1,81 @@
+name: Cmdlet docs
+
+# Regenerates the PlatyPS cmdlet reference for the PSGallery wrapper module
+# and publishes the result to GitHub Pages. Runs on every push to master
+# that touches the module manifest or .psm1; consumers reading
+# https://theabider.github.io/RackStack/cmdlets/ see whichever version
+# corresponds to the latest module commit.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'RackStack.psd1'
+      - 'RackStack.psm1'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent docs deployment per branch — newer pushes cancel older runs.
+concurrency:
+  group: pages-docs
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Generate cmdlet docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PlatyPS
+        shell: pwsh
+        run: |
+          Install-Module platyPS -Force -Scope CurrentUser -AllowClobber
+
+      - name: Regenerate docs from module
+        shell: pwsh
+        run: |
+          Import-Module platyPS
+          Import-Module ./RackStack.psd1 -Force
+          $outDir = 'docs/cmdlets'
+          if (-not (Test-Path $outDir)) {
+            New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          }
+          New-MarkdownHelp -Module RackStack -OutputFolder $outDir -Force -NoMetadata | Out-Null
+          Get-ChildItem $outDir -Filter '*.md' | Format-Table Name,Length -AutoSize
+
+      - name: Build static site
+        shell: bash
+        run: |
+          # Minimal static-site layout — no Jekyll needed. Copy docs/ to a
+          # _site/ directory the Pages action expects.
+          mkdir -p _site
+          cp -R docs/* _site/
+          # Move the cmdlet index to be the docs landing page so the URL
+          # https://theabider.github.io/RackStack/ shows something useful.
+          if [ -f _site/cmdlets/index.md ]; then
+            cp _site/cmdlets/index.md _site/index.md
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

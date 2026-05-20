@@ -1,0 +1,38 @@
+name: gitleaks
+
+# Scans every push and PR for accidentally-committed secrets (API keys,
+# private keys, tokens). Runs on the GitHub-hosted Ubuntu runner because
+# gitleaks ships a Linux binary in its action; the scan reads the git
+# history (not Windows-specific files) so OS doesn't matter.
+#
+# Configuration: a `.gitleaks.toml` at the repo root tunes the ruleset.
+# Without one, gitleaks uses its built-in default rules which already
+# catch AWS, GitHub, Slack, GCP, Stripe, etc. tokens.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 6 * * 1'  # weekly full-history scan
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  scan:
+    name: Scan for secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Scan full git history on schedule + push, not just the PR diff.
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE is only needed for orgs; personal repos are free.

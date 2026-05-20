@@ -39,5 +39,6 @@ batch_config*.json
 *.swp
 *~
 
-# Pester NUnit output (per-run, not source)
+# Pester NUnit output + JaCoCo coverage (per-run, not source)
 Tests/pester-results.xml
+Tests/coverage.xml

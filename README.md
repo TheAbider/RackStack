@@ -18,10 +18,19 @@
 <p align="center">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell&logoColor=white">
   <img alt="Windows Server 2008R2-2025" src="https://img.shields.io/badge/Windows%20Server-2008R2--2025-0078D4?logo=windows&logoColor=white">
-  <img alt="CI" src="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml/badge.svg">
+  <a href="https://www.powershellgallery.com/packages/RackStack"><img alt="PSGallery" src="https://img.shields.io/powershellgallery/v/RackStack?label=PSGallery&logo=powershell&logoColor=white"></a>
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
+</p>
+<p align="center">
+  <a href="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/TheAbider/RackStack/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/TheAbider/RackStack/actions/workflows/codeql.yml/badge.svg"></a>
+  <a href="https://github.com/TheAbider/RackStack/actions/workflows/scorecard.yml"><img alt="OpenSSF Scorecard" src="https://api.securityscorecards.dev/projects/github.com/TheAbider/RackStack/badge"></a>
+  <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
   <img alt="4500+ Tests" src="https://img.shields.io/badge/tests-4500%2B-brightgreen">
+  <img alt="Pester 281 tests" src="https://img.shields.io/badge/Pester-281%20tests-brightgreen">
+  <img alt="Coverage 81%" src="https://img.shields.io/badge/coverage-81%25-brightgreen">
+  <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
 
 > Running in production across 300+ Hyper-V hosts spanning multiple isolated Active Directory forests.

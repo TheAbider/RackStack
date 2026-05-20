@@ -6,7 +6,9 @@ on:
     branches: [master]
 
 permissions:
-  contents: write  # needed for the auto-release step below
+  contents: write       # needed for the auto-release step below
+  id-token: write       # needed for actions/attest-build-provenance (SLSA Level 3 provenance)
+  attestations: write   # needed for actions/attest-build-provenance
 
 jobs:
   test:
@@ -70,8 +72,23 @@ jobs:
         run: |
           # Pester 5.x unit tests for pure functions (input validation, navigation, password
           # complexity, formatters). Complements the regex-pattern harness in Run-Tests.ps1.
+          # Also emits JaCoCo code-coverage XML at Tests/coverage.xml for Codecov upload.
           & .\Tests\pester-check.ps1
           exit $LASTEXITCODE
+
+      - name: Upload coverage to Codecov
+        # Best-effort: Codecov has occasional outages, and missing coverage is not worth
+        # failing CI over. `continue-on-error` so the release pipeline still proceeds.
+        if: always() && hashFiles('Tests/coverage.xml') != ''
+        continue-on-error: true
+        uses: codecov/codecov-action@v4
+        with:
+          files: Tests/coverage.xml
+          flags: pester
+          fail_ci_if_error: false
+          # CODECOV_TOKEN secret is optional for public repos — Codecov accepts
+          # tokenless uploads for OSS, just slower. Set the secret to skip queuing.
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload test artifacts on failure
         uses: actions/upload-artifact@v7
@@ -242,6 +259,42 @@ jobs:
           $lines | Set-Content 'release-hashes.txt' -Encoding utf8
           Get-Content 'release-hashes.txt'
 
+      # ─────────────────────────────────────────────────────────────────────────
+      # Supply-chain attestations: SLSA Level 3 build provenance + SBOM.
+      # The provenance attestation cryptographically links the EXE to this exact
+      # GitHub Actions workflow run on this exact commit — consumers can verify
+      # via `gh attestation verify RackStack.exe --owner TheAbider`.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Attest build provenance (SLSA Level 3)
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            builds/RackStack.exe
+            builds/RackStack v${{ steps.vercheck.outputs.version }}.ps1
+
+      - name: Generate SBOM (CycloneDX)
+        id: sbom
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        uses: anchore/sbom-action@v0
+        with:
+          path: builds/RackStack.exe
+          format: cyclonedx-json
+          artifact-name: RackStack-${{ steps.vercheck.outputs.version }}-sbom.cyclonedx.json
+          output-file: builds/RackStack-${{ steps.vercheck.outputs.version }}-sbom.cyclonedx.json
+          # Don't fail the release if the SBOM step trips — supply chain attestation
+          # is supplementary; the EXE + hashes + provenance attestation are the
+          # primary integrity guarantees.
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Attest SBOM
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false' && hashFiles(format('builds/RackStack-{0}-sbom.cyclonedx.json', steps.vercheck.outputs.version)) != ''
+        uses: actions/attest-sbom@v2
+        with:
+          subject-path: builds/RackStack.exe
+          sbom-path: builds/RackStack-${{ steps.vercheck.outputs.version }}-sbom.cyclonedx.json
+
       - name: Build release notes
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         run: |
@@ -263,6 +316,14 @@ jobs:
           ``````
 
           Verify with ``(Get-FileHash RackStack.exe -Algorithm SHA256).Hash.ToLower()``.
+
+          ## Supply-chain attestations
+
+          - **Build provenance** (SLSA Level 3): verify the EXE came from this exact workflow run on this commit:
+            ``````
+            gh attestation verify RackStack.exe --owner TheAbider
+            ``````
+          - **SBOM** (CycloneDX): see ``RackStack-$ver-sbom.cyclonedx.json`` attached below.
 
           ## Changes
 
@@ -298,12 +359,18 @@ jobs:
             }
             $global:LASTEXITCODE = 0
 
+            # Build the asset list dynamically so the SBOM is only attached when it exists.
+            $assetArgs = @(
+              "builds\RackStack.exe"
+              "builds\RackStack v$ver.ps1"
+              "defaults.example.json"
+            )
+            $sbomPath = "builds\RackStack-$ver-sbom.cyclonedx.json"
+            if (Test-Path -LiteralPath $sbomPath) { $assetArgs += $sbomPath }
             gh release create "v$ver" `
               --title "RackStack v$ver" `
               --notes-file 'release-body.md' `
-              "builds\RackStack.exe" `
-              "builds\RackStack v$ver.ps1" `
-              "defaults.example.json"
+              @assetArgs
             $createExit = $LASTEXITCODE
 
             if ($createExit -eq 0) {

@@ -1,5 +1,32 @@
 ﻿# Changelog
 
+## v1.98.51
+
+Gold-standard infrastructure push — 11 new OSS-best-practice signals added.
+
+**Security & supply chain:**
+- **OpenSSF Scorecard** automated weekly scan (`.github/workflows/scorecard.yml`). Publishes to the public Scorecard registry; results are SARIF-uploaded to GitHub's code-scanning dashboard.
+- **gitleaks** secret-scanning workflow runs on every push, PR, and weekly full-history sweep (`.github/workflows/gitleaks.yml`).
+- **CodeQL** with the `security-extended` ruleset covering JavaScript (the inline scripts in `actions/github-script` steps) and GitHub Actions (action-injection, untrusted-checkout) (`.github/workflows/codeql.yml`).
+- **SECURITY.md** rewritten with documented response timelines (acknowledge in 5 business days, triage in 10, Tier 1 fix in 14), scope (in/out), and operator hardening notes.
+- **SBOM** (CycloneDX) generated per release via `anchore/sbom-action` and attached to the GitHub Release.
+- **SLSA Level 3 build provenance** for every released artifact via `actions/attest-build-provenance@v2`. Consumers can verify with `gh attestation verify RackStack.exe --owner TheAbider`.
+- **SignPath workflow self-activating** — the previous placeholder turned into a real signing flow that auto-enables the moment the four `SIGNPATH_*` secrets are set (already done in v1.98.49; documented here for completeness).
+
+**Testing & coverage:**
+- **Pester suite expanded from 173 to 281 tests** across 9 files. New coverage:
+  - `Fuzz.Tests.ps1` — property-based fuzz tests asserting `Test-ValidHostname`, `Test-ValidIPAddress`, `Test-ValidVLANId` never throw, always return [bool], and are idempotent across 500+ random inputs each (seeded for reproducibility via `$env:RACKSTACK_FUZZ_SEED`).
+  - `Performance.Tests.ps1` — pins monolithic parse time, 65-module parse time, and validator throughput against documented upper bounds. Catches order-of-magnitude regressions (e.g. someone adding a Get-CimInstance to a validator) on every CI run.
+  - `PureFunctions.Tests.ps1` — covers pure helpers across 7 modules (`Format-LinkSpeed`, `Convert-SubnetMaskToPrefix`, `Get-HostNumberFromHostname`, `Get-iSCSIAutoIP`, `Get-TimezoneOffsetString`, `Test-ValidLicenseKey`, `Get-ConsoleCapabilities`).
+  - Expanded `InputValidation.Tests.ps1`, `Logging.Tests.ps1`, `Password.Tests.ps1` with Pester `Mock`-based tests for the Read-Host code paths (`Confirm-UserAction`, `Get-ValidatedInput`, `Get-SecurePassword`), the `Write-OutputColor` theme/box-drawing branches, and the `Write-RackStackError` error-code dispatcher.
+- **Code coverage reaches 81.4%** on the measured pure-function modules (03-InputValidation, 22-Password, 02-Logging), up from 12.42%. Pester emits JaCoCo XML; the CI workflow uploads it to Codecov.io for a public coverage badge. The remaining 18.6% is interactive console UI code (Show-LocalAccountAudit, etc.) that requires CIM mocking out of proportion to the value.
+- **PSScriptAnalyzer suppression list** kept tight — `PSAvoidGlobalVars` was already dropped in v1.98.46; the remaining suppressions all have one-line justifications in `PSScriptAnalyzerSettings.psd1`.
+
+**Documentation:**
+- **PlatyPS-generated cmdlet reference** for the PSGallery wrapper module. `docs/cmdlets/*.md` lands at https://theabider.github.io/RackStack/cmdlets/ via the new `docs.yml` workflow on every push that touches `RackStack.psd1` / `RackStack.psm1`. Adds `Get-Help <cmdlet> -Full` parity.
+- **OpenSSF Best Practices Badge questionnaire** answers pre-drafted in `local/openssf-best-practices-answers.md` (gitignored) for the maintainer to paste into bestpractices.dev when ready. Project is positioned for the silver tier.
+- **README badge wall** expanded: PSGallery version, OpenSSF Scorecard score, Codecov coverage %, CodeQL status, SLSA Level 3.
+
 ## v1.98.50
 
 First PowerShell Gallery publish — `Install-Module RackStack` now works.

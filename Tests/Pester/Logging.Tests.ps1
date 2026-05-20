@@ -12,6 +12,12 @@ BeforeAll {
     . (Join-Path $modulesPath '00-Initialization.ps1')
     . (Join-Path $modulesPath '01-Console.ps1')
     . (Join-Path $modulesPath '02-Logging.ps1')
+    # Write-RackStackError reads $script:ConsoleCapabilities for VT-escape
+    # decoration and Write-StructuredLog reads $script:TranscriptPath for the
+    # fall-through log path. Under strict mode, uninitialized reads throw —
+    # initialize both now so the tests exercise the documented branches.
+    $script:ConsoleCapabilities = Get-ConsoleCapabilities
+    $script:TranscriptPath = $null
     Set-StrictMode -Version Latest
 
     function script:Read-LogContent {
@@ -188,5 +194,149 @@ Describe 'Write-LogMessage' {
     It 'is a no-op when logFilePath is empty' {
         # Should not throw, should not create any file
         { Write-LogMessage -message 'orphan' -logFilePath '' } | Should -Not -Throw
+    }
+}
+
+Describe 'Write-OutputColor — exercise every theme + color branch' {
+    # These tests exist primarily for code coverage. Write-OutputColor's return value
+    # is $null (it writes to the host), so we can't assert on output directly without
+    # capturing the console stream. The goal is to exercise every documented color name
+    # and every branch (with/without -NoNewline, with/without box-drawing chars) so
+    # uncovered lines don't accumulate.
+
+    It 'handles every documented color name without throwing' {
+        foreach ($color in 'Success','Warning','Error','Info','Debug','Critical','Verbose') {
+            { Write-OutputColor "msg-$color" -color $color } | Should -Not -Throw
+        }
+    }
+
+    It 'handles -NoNewline switch' {
+        { Write-OutputColor 'no-newline-test' -color 'Info' -NoNewline } | Should -Not -Throw
+        # Emit one final newline so subsequent test output isn't on the same line
+        Write-Host ''
+    }
+
+    It 'handles an empty message (special-case branch)' {
+        { Write-OutputColor '' -color 'Info' } | Should -Not -Throw
+    }
+
+    It 'handles an empty message with -NoNewline (returns early)' {
+        { Write-OutputColor '' -color 'Info' -NoNewline } | Should -Not -Throw
+    }
+
+    It 'handles box-drawing content (triggers the multi-color split branch)' {
+        # A line containing the U+2502 box-drawing vertical bar at start AND end
+        # triggers Write-OutputColor's auto-split rendering.
+        $pipe = [char]0x2502
+        $boxed = "$pipe  some content      $pipe"
+        { Write-OutputColor $boxed -color 'Success' } | Should -Not -Throw
+    }
+
+    It 'handles box-drawing content with -NoNewline' {
+        $pipe = [char]0x2502
+        $boxed = "$pipe  content  $pipe"
+        { Write-OutputColor $boxed -color 'Error' -NoNewline } | Should -Not -Throw
+        Write-Host ''
+    }
+
+    It 'falls back gracefully on unknown theme (uses Default map)' {
+        $oldTheme = $script:ColorTheme
+        try {
+            $script:ColorTheme = 'NonexistentThemeName'
+            { Write-OutputColor 'fallback-test' -color 'Info' } | Should -Not -Throw
+        } finally {
+            $script:ColorTheme = $oldTheme
+        }
+    }
+}
+
+Describe 'Write-CenteredOutput' {
+    It 'renders a centered banner without throwing' {
+        { Write-CenteredOutput -text 'CENTERED' -color 'Info' -width 50 } | Should -Not -Throw
+    }
+
+    It 'handles short text (padding stays valid)' {
+        { Write-CenteredOutput -text 'X' -color 'Info' -width 40 } | Should -Not -Throw
+    }
+
+    It 'handles text longer than width (does not throw on negative padding)' {
+        $long = 'X' * 100
+        { Write-CenteredOutput -text $long -color 'Info' -width 20 } | Should -Not -Throw
+    }
+
+    It 'defaults width to 72 when omitted' {
+        { Write-CenteredOutput -text 'default' -color 'Info' } | Should -Not -Throw
+    }
+}
+
+Describe 'Write-RackStackError' {
+    # Documented error-code dispatcher: takes RS-NNNN, looks up message in
+    # $script:ErrorCodes, displays formatted error. Tests exercise the format
+    # contract + the unknown-code fallback path.
+    It 'rejects invalid code format via ValidatePattern' {
+        { Write-RackStackError -Code 'BAD-CODE' } | Should -Throw
+    }
+
+    It 'accepts a valid RS-NNNN code' {
+        { Write-RackStackError -Code 'RS-9999' } | Should -Not -Throw
+    }
+
+    It 'accepts a code with detail' {
+        { Write-RackStackError -Code 'RS-0001' -Detail 'Something went wrong.' } | Should -Not -Throw
+    }
+
+    It 'falls back gracefully when code is not in $script:ErrorCodes' {
+        # RS-9999 isn't a real code; exercise the "Unknown error" fallback branch.
+        { Write-RackStackError -Code 'RS-9999' -Detail 'unknown-fallback' } | Should -Not -Throw
+    }
+}
+
+Describe 'Write-MenuItem' {
+    # 2-column menu line renderer. Used throughout the menu UI to render
+    # rows with a status badge on the right.
+    It 'renders a basic menu item without throwing' {
+        { Write-MenuItem -Text 'Configure IP' } | Should -Not -Throw
+    }
+
+    It 'renders a menu item with a status badge' {
+        { Write-MenuItem -Text 'Configure IP' -Status 'OK' -StatusColor 'Success' } | Should -Not -Throw
+    }
+
+    It 'accepts each documented StatusColor value (ValidateSet)' {
+        foreach ($c in 'Success','Warning','Error','Info','Debug','Critical','Verbose','') {
+            { Write-MenuItem -Text 'item' -Status 'X' -StatusColor $c } | Should -Not -Throw
+        }
+    }
+
+    It 'rejects unknown StatusColor (ValidateSet enforcement)' {
+        { Write-MenuItem -Text 'item' -Status 'X' -StatusColor 'Fuchsia' } | Should -Throw
+    }
+
+    It 'tolerates an unknown -Color value (falls back to theme default)' {
+        { Write-MenuItem -Text 'item' -Color 'NoSuchColor' } | Should -Not -Throw
+    }
+
+    It 'rejects empty Text via ValidateNotNullOrEmpty' {
+        { Write-MenuItem -Text '' } | Should -Throw
+    }
+}
+
+Describe 'Write-LogMessage (additional coverage)' {
+    BeforeEach {
+        $script:logPath = Join-Path ([System.IO.Path]::GetTempPath()) "rackstack-pester-wlm2-$([guid]::NewGuid()).log"
+    }
+    AfterEach {
+        if (Test-Path -LiteralPath $script:logPath) {
+            Remove-Item -LiteralPath $script:logPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'appends to an existing log file (not overwrite)' {
+        Write-LogMessage -message 'first' -logFilePath $script:logPath
+        Write-LogMessage -message 'second' -logFilePath $script:logPath
+        $lines = Get-Content -LiteralPath $script:logPath
+        @($lines).Count | Should -Be 2
+        $lines[0] | Should -Match 'first'
+        $lines[1] | Should -Match 'second'
     }
 }

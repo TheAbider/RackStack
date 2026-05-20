@@ -5,7 +5,14 @@
 
 BeforeAll {
     $modulesPath = Join-Path $PSScriptRoot '..\..\Modules'
+    $script:ModuleRoot = (Resolve-Path -LiteralPath (Join-Path $modulesPath '..')).Path
+    Set-StrictMode -Off
+    # 02-Logging is required for Write-OutputColor (used by Confirm-UserAction).
+    . (Join-Path $modulesPath '00-Initialization.ps1')
+    . (Join-Path $modulesPath '01-Console.ps1')
+    . (Join-Path $modulesPath '02-Logging.ps1')
     . (Join-Path $modulesPath '03-InputValidation.ps1')
+    Set-StrictMode -Version Latest
 }
 
 Describe 'Test-ValidHostname' {
@@ -84,5 +91,115 @@ Describe 'Get-HostnameValidationError' {
     It 'reports invalid characters' {
         $msg = Get-HostnameValidationError -Hostname 'web@01'
         $msg | Should -Match 'Invalid characters'
+    }
+}
+
+Describe 'Confirm-UserAction (silent-mode branches)' {
+    # Confirm-UserAction has a Read-Host branch (interactive) and a $script:CLISilent
+    # branch (returns $DefaultYes.IsPresent immediately). The silent branch is the
+    # one batch / scheduled callers exercise and is fully testable.
+    BeforeEach {
+        $script:CLISilent = $true
+    }
+    AfterEach {
+        $script:CLISilent = $false
+    }
+
+    It 'returns $true when -DefaultYes set and silent mode is on' {
+        Confirm-UserAction -Message 'proceed?' -DefaultYes | Should -BeTrue
+    }
+
+    It 'returns $false when -DefaultYes NOT set and silent mode is on' {
+        Confirm-UserAction -Message 'proceed?' | Should -BeFalse
+    }
+
+    It 'is deterministic in silent mode (no Read-Host hang)' {
+        # If the Read-Host path were taken accidentally, this test would hang.
+        # Pester would time out and kill the test, which is the failure signal.
+        $r1 = Confirm-UserAction -Message 'a' -DefaultYes
+        $r2 = Confirm-UserAction -Message 'b' -DefaultYes
+        $r3 = Confirm-UserAction -Message 'c' -DefaultYes
+        $r1 | Should -BeTrue
+        $r2 | Should -BeTrue
+        $r3 | Should -BeTrue
+    }
+}
+
+Describe 'Confirm-UserAction (interactive Read-Host branches, via Mock)' {
+    # Exercise the Read-Host path by mocking Read-Host to return canned responses.
+    # Pester Mock intercepts the cmdlet inside the dot-sourced module's scope.
+    BeforeEach {
+        $script:CLISilent = $false
+    }
+
+    It 'returns $true when user types "y"' {
+        Mock Read-Host { 'y' }
+        Confirm-UserAction -Message 'proceed?' | Should -BeTrue
+    }
+
+    It 'returns $true when user types "yes"' {
+        Mock Read-Host { 'yes' }
+        Confirm-UserAction -Message 'proceed?' | Should -BeTrue
+    }
+
+    It 'returns $true case-insensitively for "Y"' {
+        Mock Read-Host { 'Y' }
+        Confirm-UserAction -Message 'proceed?' | Should -BeTrue
+    }
+
+    It 'returns $false for empty input when -DefaultYes is NOT set' {
+        Mock Read-Host { '' }
+        Confirm-UserAction -Message 'proceed?' | Should -BeFalse
+    }
+
+    It 'returns $true for empty input when -DefaultYes IS set (default-honoring)' {
+        Mock Read-Host { '' }
+        Confirm-UserAction -Message 'proceed?' -DefaultYes | Should -BeTrue
+    }
+
+    It 'returns $false for any non-yes input ("n", "no", "x")' {
+        Mock Read-Host { 'n' }
+        Confirm-UserAction -Message 'a' | Should -BeFalse
+        Mock Read-Host { 'no' }
+        Confirm-UserAction -Message 'b' | Should -BeFalse
+        Mock Read-Host { 'maybe' }
+        Confirm-UserAction -Message 'c' | Should -BeFalse
+    }
+
+    It 'trims whitespace around the response' {
+        Mock Read-Host { '   yes  ' }
+        Confirm-UserAction -Message 'proceed?' | Should -BeTrue
+    }
+}
+
+Describe 'Get-ValidatedInput (interactive, via Mock)' {
+    It 'returns the value when validation passes on first try' {
+        Mock Read-Host { '10.0.0.5' }
+        $result = Get-ValidatedInput -Prompt 'IP' -ValidationScript { param($v) Test-ValidIPAddress $v }
+        $result | Should -Be '10.0.0.5'
+    }
+
+    It 'retries up to MaxAttempts on invalid input, then returns $null' {
+        Mock Read-Host { 'not-an-ip' }
+        $result = Get-ValidatedInput -Prompt 'IP' -ValidationScript { param($v) Test-ValidIPAddress $v } -MaxAttempts 2
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'rejects empty when -AllowEmpty is not set' {
+        Mock Read-Host { '' }
+        $result = Get-ValidatedInput -Prompt 'thing' -ValidationScript { $true } -MaxAttempts 2
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'returns $null on empty when -AllowEmpty is set (intentional skip)' {
+        Mock Read-Host { '' }
+        $result = Get-ValidatedInput -Prompt 'optional' -ValidationScript { $true } -AllowEmpty
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'allows a custom validation scriptblock' {
+        Mock Read-Host { '4567' }
+        $result = Get-ValidatedInput -Prompt 'port' -ValidationScript { param($v) ($v -as [int]) -gt 1024 }
+        $result | Should -Be '4567'
     }
 }
