@@ -12,10 +12,14 @@ permissions:
 
 jobs:
   test:
-    # Push = self-hosted (fast, only repo owner can push). PR = GitHub-hosted (safe from fork attacks).
-    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || 'self-hosted' }}
-    # Prevents a hung test from tying up the runner — full suite normally runs in ~2.5 min
-    timeout-minutes: 15
+    # windows-latest (GitHub-hosted) for both push and PR. RackStack is a public
+    # repo — running on a self-hosted runner means anyone can fork, open a PR,
+    # and execute arbitrary code on the runner host. windows-latest is free and
+    # unlimited for public repos, has PowerShell 7 + pwsh + Git pre-installed,
+    # and avoids the security exposure entirely.
+    runs-on: windows-latest
+    # Prevents a hung test from tying up the runner — full suite normally runs in ~3 min
+    timeout-minutes: 20
     defaults:
       run:
         shell: pwsh
@@ -26,17 +30,6 @@ jobs:
           # Need at least 2 commits so the version-bump detection can diff Header.ps1
           # against the previous commit. Default fetch-depth is 1 which makes git show HEAD~1 fail.
           fetch-depth: 2
-
-      - name: Configure git safe.directory (self-hosted runner runs as SYSTEM)
-        if: runner.os == 'Windows' && runner.environment != 'github-hosted'
-        run: |
-          # The self-hosted runner service runs as NT AUTHORITY/SYSTEM but the repo
-          # is owned by the interactive user (ABIDER-LAPTOP\Abider). Git's
-          # safe.directory check refuses to operate on a repo with mismatched ownership
-          # unless explicitly allowed. Without this, `git show HEAD~1:Header.ps1`
-          # silently fails (returning '') in the version-bump detection step, and
-          # `gh release create` errors when it tries to invoke git internally.
-          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
 
       - name: Install PSScriptAnalyzer
         run: |

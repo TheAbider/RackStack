@@ -22,22 +22,13 @@ on:
 
 jobs:
   powershell-scan:
-    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || 'self-hosted' }}
+    # windows-latest (GitHub-hosted) — see ci.yml for the security rationale
+    # (public repo + self-hosted runner = arbitrary fork code execution).
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
-      - name: Configure git safe.directory (self-hosted runner runs as SYSTEM)
-        if: runner.environment != 'github-hosted'
-        shell: powershell
-        run: |
-          # The self-hosted runner service runs as NT AUTHORITY/SYSTEM but the
-          # repo is owned by ABIDER-LAPTOP\Abider. Without this, internal git
-          # operations during the scan / checkout intermittently fail with
-          # "fatal: detected dubious ownership in repository". Mirrors the fix
-          # in ci.yml.
-          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
 
       - name: Install PSScriptAnalyzer
         shell: powershell
