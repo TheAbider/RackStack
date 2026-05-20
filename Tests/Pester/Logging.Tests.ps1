@@ -289,6 +289,40 @@ Describe 'Write-RackStackError' {
         # RS-9999 isn't a real code; exercise the "Unknown error" fallback branch.
         { Write-RackStackError -Code 'RS-9999' -Detail 'unknown-fallback' } | Should -Not -Throw
     }
+
+    It 'renders a real error code (RS-1001 = admin privileges)' {
+        # Exercise the lookup-found branch of the code dispatcher.
+        { Write-RackStackError -Code 'RS-1001' } | Should -Not -Throw
+    }
+
+    It 'renders RS-1002 (defaults.json parse error)' {
+        { Write-RackStackError -Code 'RS-1002' -Detail 'JSON line 14 col 5' } | Should -Not -Throw
+    }
+}
+
+Describe 'Write-OutputColor (file-logging branch)' {
+    BeforeEach {
+        $script:logFilePath = Join-Path ([System.IO.Path]::GetTempPath()) "rackstack-pester-woc-$([guid]::NewGuid()).log"
+    }
+    AfterEach {
+        $script:logFilePath = $null
+        if (Test-Path -LiteralPath $script:logPath -ErrorAction SilentlyContinue) {
+            Remove-Item -LiteralPath $script:logPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'writes to the log file when $script:logFilePath is set' {
+        Write-OutputColor 'test-log-write' -color 'Info'
+        $content = Get-Content -LiteralPath $script:logFilePath -Raw -ErrorAction SilentlyContinue
+        $content | Should -Match 'test-log-write'
+    }
+
+    It 'also writes the box-drawing-split path to the log file' {
+        $pipe = [char]0x2502
+        Write-OutputColor "$pipe  boxed-log  $pipe" -color 'Success'
+        $content = Get-Content -LiteralPath $script:logFilePath -Raw -ErrorAction SilentlyContinue
+        $content | Should -Match 'boxed-log'
+    }
 }
 
 Describe 'Write-MenuItem' {

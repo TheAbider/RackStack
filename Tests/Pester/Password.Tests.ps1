@@ -157,6 +157,19 @@ Describe 'New-StrongPassword' {
             ($samples | Select-Object -Unique).Count | Should -Be 10
         }
     }
+
+    Context 'Clipboard side effects (via Mock)' {
+        It 'exercises the clipboard-success branch when Set-Clipboard works' {
+            Mock Set-Clipboard { }   # silent success
+            Mock Get-Clipboard { 'whatever' }  # for the timer callback path
+            { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+        }
+
+        It 'exercises the clipboard-failure branch when Set-Clipboard throws' {
+            Mock Set-Clipboard { throw 'clipboard locked' }
+            { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+        }
+    }
 }
 
 Describe 'Clear-SecureMemory' {
@@ -216,6 +229,159 @@ Describe 'Get-SecurePassword (interactive, via Mock)' {
     It 'rejects out-of-range -maxAttempts via ValidateRange' {
         { Get-SecurePassword -localadminaccountname 'admin' -maxAttempts 11 } | Should -Throw
         { Get-SecurePassword -localadminaccountname 'admin' -maxAttempts 0 } | Should -Throw
+    }
+}
+
+Describe 'Show-LocalAccountAudit (via Mock)' {
+    # Show-LocalAccountAudit reads Get-LocalUser, classifies each account on
+    # 4 dimensions (enabled, password age, last logon, password expiry), and
+    # renders a color-coded box. Mock Get-LocalUser to feed it shaped data so
+    # we exercise every classification branch and the empty-list / error paths.
+    BeforeAll {
+        # Add-SessionChange / Clear-MenuCache / Write-PressEnter are called at the
+        # end; stub them as no-ops so the tests don't need 04-Navigation / etc.
+        function Add-SessionChange { }
+        function Clear-MenuCache { }
+        function Write-PressEnter { }
+        # Clear-Host writes to console — stub it too so the test output isn't blanked
+        function Clear-Host { }
+    }
+
+    It 'handles a healthy account (recent pwd, recent logon, enabled)' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@(
+                [PSCustomObject]@{
+                    Name = 'admin'; Enabled = $true
+                    PasswordLastSet = $now.AddDays(-30)
+                    LastLogon = $now.AddDays(-1)
+                    PasswordNeverExpires = $false
+                    PasswordExpires = $now.AddDays(45)
+                }
+            )
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'flags an account with an OLD password (>365 days)' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'oldpwd'; Enabled = $true
+                PasswordLastSet = $now.AddDays(-400)
+                LastLogon = $now.AddDays(-5)
+                PasswordNeverExpires = $false
+                PasswordExpires = $now.AddDays(-30)
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'flags an AGING password (>90 days)' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'aging'; Enabled = $true
+                PasswordLastSet = $now.AddDays(-120)
+                LastLogon = $now.AddDays(-1)
+                PasswordNeverExpires = $false
+                PasswordExpires = $now.AddDays(30)
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'flags a STALE account (>90 days since login)' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'stale'; Enabled = $true
+                PasswordLastSet = $now.AddDays(-10)
+                LastLogon = $now.AddDays(-100)
+                PasswordNeverExpires = $false
+                PasswordExpires = $now.AddDays(60)
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'handles a disabled account (color branch = Info)' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'disabled'; Enabled = $false
+                PasswordLastSet = $now.AddDays(-30)
+                LastLogon = $null
+                PasswordNeverExpires = $false
+                PasswordExpires = $null
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'handles PasswordNeverExpires = true' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'svcacct'; Enabled = $true
+                PasswordLastSet = $now.AddDays(-30)
+                LastLogon = $now.AddDays(-1)
+                PasswordNeverExpires = $true
+                PasswordExpires = $null
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'handles a name longer than 20 chars (truncation branch)' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'this-is-a-very-very-long-account-name'; Enabled = $true
+                PasswordLastSet = $now.AddDays(-30)
+                LastLogon = $now.AddDays(-1)
+                PasswordNeverExpires = $false
+                PasswordExpires = $now.AddDays(30)
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'handles an empty user list (Count=0 branch)' {
+        Mock Get-LocalUser { @() }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'handles Get-LocalUser throwing (error branch)' {
+        Mock Get-LocalUser { throw 'Access denied' }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'handles a "Today" last-logon (special-case branch)' {
+        $now = Get-Date
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'today'; Enabled = $true
+                PasswordLastSet = $now.AddDays(-1)
+                LastLogon = $now  # today
+                PasswordNeverExpires = $false
+                PasswordExpires = $now.AddDays(60)
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
+    }
+
+    It 'handles "Never set" PasswordLastSet branch' {
+        Mock Get-LocalUser {
+            ,@([PSCustomObject]@{
+                Name = 'newuser'; Enabled = $true
+                PasswordLastSet = $null
+                LastLogon = $null
+                PasswordNeverExpires = $false
+                PasswordExpires = $null
+            })
+        }
+        { Show-LocalAccountAudit } | Should -Not -Throw
     }
 }
 

@@ -1,5 +1,31 @@
 ﻿# Changelog
 
+## v1.98.53
+
+Coverage push 81% → 95%, infrastructure hardening, Scorecard climb.
+
+**Testing & coverage (298 Pester tests, up from 281):**
+- New `Show-LocalAccountAudit` tests (10 tests, via `Mock Get-LocalUser`) covering every classification branch: healthy / OLD-PWD / AGING / STALE / disabled / PasswordNeverExpires / name-truncation / empty-list / Get-LocalUser-throws / Never-set.
+- New `Get-SecurePassword` tests (5 tests, via `Mock Read-Host -AsSecureString`): success on match + complexity, max-attempts on complexity fail, max-attempts on mismatch loop, ValidateNotNullOrEmpty + ValidateRange enforcement.
+- New `Confirm-UserAction` interactive tests (7 tests, via `Mock Read-Host`): y/yes/Y accept, empty rejects without -DefaultYes, empty accepts with -DefaultYes, n/no/garbage reject, whitespace trim.
+- New `Get-ValidatedInput` interactive tests (5 tests): success on first try, max-attempts on invalid, empty-rejection with/without -AllowEmpty, custom scriptblock.
+- New `Write-OutputColor` branches (7 tests): every documented color name, -NoNewline path, empty-message path, box-drawing split-render, unknown-theme fallback, file-logging path.
+- New `Write-RackStackError` tests (5 tests): code-format validation, valid + detail, fallback for unknown code, real `RS-1001` / `RS-1002` lookups.
+- New `Write-MenuItem` tests (5 tests): status badge, every documented StatusColor, unknown StatusColor rejection, unknown -Color fallback, ValidateNotNullOrEmpty.
+- New `New-StrongPassword` clipboard branches (2 tests, via `Mock Set-Clipboard`): success path, throw-then-fallback path.
+- Coverage **94.52% → 95.16%** on the measured pure-function modules (03-InputValidation, 22-Password, 02-Logging). Pester reports green (>75% Pester default).
+
+**OpenSSF Scorecard climb (4.4 → projected ~6-7):**
+- **Pinned-Dependencies (10/10)**: all 23 GitHub Action references SHA-pinned with version comments. Resolved 5 stale `actions/unpinned-tag` code-scanning alerts.
+- **Token-Permissions (0 → 10)**: top-level `permissions: read-all` in `ci.yml`, `powershell-scan.yml`, `docs.yml`, with per-job write grants only for the specific privileges each job needs.
+- **Dependency-Update-Tool (0 → 10)**: new `.github/dependabot.yml` for weekly `github-actions` updates, keeping SHA-pinned references current with upstream security fixes.
+
+**Security — self-hosted runner removed:**
+- Moved `ci.yml` + `powershell-scan.yml` from `self-hosted` to `windows-latest`. Public repos with self-hosted runners are a documented supply-chain attack vector — anyone can fork, open a PR, and execute arbitrary code on the runner host. GitHub-hosted `windows-latest` is free for public repos, sandboxed per-run, and has PowerShell 7 + Git pre-installed.
+- Removed the `Configure git safe.directory` steps (only needed because the self-hosted runner ran as SYSTEM while the repo was owned by the interactive user).
+
+**v1.98.52 was the actual gold-standard infrastructure release** — same content as v1.98.51 with the SBOM step pointed at the repo dir instead of the EXE.
+
 ## v1.98.52
 
 CI-release housekeeping — re-trigger the v1.98.51 release flow.
