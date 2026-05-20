@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## v1.98.52
+
+CI-release housekeeping — re-trigger the v1.98.51 release flow.
+
+v1.98.51's CI run failed at the SBOM-generation step (`anchore/sbom-action` /
+syft can't resolve a single Windows PE `.exe` as a scan source; needs a
+directory or recognized package format). The fix landed in a follow-up
+commit but didn't bump the version, so the version-bump detector saw
+"Bumped: false" and skipped the release flow. Bumping to v1.98.52 to
+re-trigger CI's release path with the SBOM fix and the rest of the
+v1.98.51 gold-standard infrastructure work intact.
+
+No functional code changes from v1.98.51 — same modules, same tests
+(281 Pester + 4598 regex-harness), same coverage (81.4%), same workflows.
+
 ## v1.98.51
 
 Gold-standard infrastructure push — 11 new OSS-best-practice signals added.
