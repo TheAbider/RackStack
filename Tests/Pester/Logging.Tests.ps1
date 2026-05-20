@@ -171,6 +171,60 @@ Describe 'Write-StructuredLog' {
             $content | Should -Match 'Username=maxz'
             $content | Should -Match 'Hostname=web-01'
         }
+
+        # New patterns added by round-33 audit (commit hash will follow).
+        It 'redacts Passphrase keys' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ Passphrase = 'phrase-leak' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'phrase-leak'
+        }
+
+        It 'redacts BitLocker RecoveryKey / Recovery-related keys' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ RecoveryKey = 'bitlocker-key-12345' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'bitlocker-key-12345'
+        }
+
+        It 'redacts DSRM credentials' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ DSRMPassword = 'dsrm-leak' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'dsrm-leak'
+        }
+
+        It 'redacts session / cookie / sid keys' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ Cookie = 'sess-cookie-payload' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'sess-cookie-payload'
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ SessionId = 'abc123session' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'abc123session'
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ SID = 'S-1-5-21' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'S-1-5-21'
+        }
+
+        It 'redacts signature / sig keys' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ Signature = 'crypto-sig-data' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'crypto-sig-data'
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ Sig = 'short-sig-data' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'short-sig-data'
+        }
+
+        It 'redacts private_key / pem keys' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ PrivateKey = '-----BEGIN-RSA-LEAK' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'BEGIN-RSA-LEAK'
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ private_key = 'snake-case-leak' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'snake-case-leak'
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ PEM = 'pem-leak-value' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'pem-leak-value'
+        }
+
+        It 'redacts webhook URL keys (RFC 3986 inline credentials)' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ WebhookUrl = 'https://user:pass@hooks.example.com/x' }
+            (Read-LogContent $script:logPath) | Should -Not -Match 'user:pass@hooks'
+        }
+
+        It 'still does NOT over-redact benign columnar keys (regression guard)' {
+            Write-StructuredLog -Message 'm' -LogFilePath $script:logPath -Data @{ Description = 'normal'; Status = 'ok'; Count = 5 }
+            $content = Read-LogContent $script:logPath
+            $content | Should -Match 'Description=normal'
+            $content | Should -Match 'Status=ok'
+            $content | Should -Match 'Count=5'
+        }
     }
 }
 

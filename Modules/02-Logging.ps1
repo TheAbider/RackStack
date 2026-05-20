@@ -45,7 +45,11 @@ function Write-StructuredLog {
         # Auto-redact values whose KEY looks like a secret — defense-in-depth so a future caller
         # that accidentally routes a credential through Write-StructuredLog can't leak it to disk.
         # Matches the name, not the value; value-pattern matching would have too many false positives.
-        $secretKeyPattern = '(?i)(password|passwd|pwd|secret|token|apikey|api[-_]?key|credential|clientsecret|authorization|bearer)'
+        # Pattern covers: auth (password/passwd/pwd/passphrase, token, secret, apikey, credential,
+        # clientsecret, authorization, bearer); BitLocker (recovery, dsrm); session (cookie, sid,
+        # session); cryptographic (signature/sig, private[-_]key, pem); webhook URLs that often
+        # embed credentials per RFC 3986.
+        $secretKeyPattern = '(?i)(password|passwd|pwd|passphrase|secret|token|apikey|api[-_]?key|credential|clientsecret|authorization|bearer|cookie|session|\bsid\b|signature|\bsig\b|private[-_]?key|\bpem\b|dsrm|recovery|webhook[-_]?url)'
         $kvPairs = @()
         foreach ($key in $Data.Keys) {
             $val = $Data[$key]
