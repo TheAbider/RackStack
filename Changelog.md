@@ -1,5 +1,27 @@
 ﻿# Changelog
 
+## v1.98.55
+
+Round-33 fresh-eyes security audit — code + GitHub config hardening.
+
+**Code findings fixed:**
+- **02-Logging.ps1 / `Write-StructuredLog` secret-redact pattern** — extended the case-insensitive key matcher to also catch `passphrase`, `cookie`, `session`, `\bsid\b`, `signature`, `\bsig\b`, `private[-_]?key`, `\bpem\b`, `dsrm`, `recovery`, `webhook[-_]?url`. The prior pattern covered the common HTTP/OAuth keys (`Password`, `Token`, `Secret`, `Authorization`, `Bearer`, etc.) but a future caller that routed a BitLocker recovery key, AD DSRM password, session cookie, or webhook URL with embedded credentials through `Write-StructuredLog -Data` would have written it to disk verbatim. 8 new Pester tests pin the new vocabulary; one regression test asserts benign keys (`Description`, `Status`, `Count`) are NOT redacted.
+- **50-EntryPoint.ps1 action-history file moved under `%ProgramData%\<Tool>\state\`** with Administrators+SYSTEM-only DACL. Old location `$script:TempPath\<Tool>-ActionHistory.json` defaulted to `C:\Temp` which inherits Users:CreateFiles from `C:\` on a fresh Windows install. A non-admin local user could pre-plant attacker-controlled entries that the next admin `-Action Replay` invocation would consume, forcing the operator to run an unexpected (though still ValidateSet-bounded) action. New helper `Get-RackStackSecureStateDir` creates the lockdown directory once; reader sites refuse to load if the file's ACL has drifted to allow non-admin writes (defense-in-depth, mirroring the v1.98.24 batch-undo fix).
+- **50-EntryPoint.ps1 `ScheduleUpdateCheck` metachar guards** — extended both guards (`$installLoc` from HKLM registry, `$outputJsonPath` from `$script:TempPath`) to also reject `(`, `)`, and any C0 control character (`\x00–\x1F`). Closes theoretical cmd.exe `for /f` parenthesis injection and Task Scheduler XML deserialization splits via embedded `\r\n\0`.
+
+**GitHub config findings fixed:**
+- **`master-protection` ruleset bypass mode changed `always` → `pull_request`.** Admin token compromise can no longer push directly to master — pushes must go through a PR and pass the required CI / gitleaks / CodeQL status checks. Ruleset rebuilt at id `16628252`.
+- **Repo `delete_branch_on_merge: true`.** Merged Dependabot / feature branches now clean up automatically.
+- **Actions `sha_pinning_required: true`.** Any future workflow commit that introduces an unpinned action reference (`@v4` instead of `@<sha> # v4`) is now rejected by the repo policy, not just by good practice.
+- 5 stale `actions/unpinned-tag` code-scanning alerts dismissed (resolved by the v1.98.51 SHA-pinning sweep); 1 stale `javascript-typescript` CodeQL analysis deleted (the language was removed from the workflow in commit `3fbed5c`).
+
+**Not in scope of this round (require user action or are inherent limits):**
+- OpenSSF Best Practices Badge registration (15-min questionnaire; answers ready in `local/openssf-best-practices-answers.md`)
+- Secret-scanning non-provider patterns + validity checks — GitHub-side Settings → Code security UI toggle (API write didn't take)
+- Codecov repo claim — log in to codecov.io once + add `CODECOV_TOKEN` secret
+- `Maintained` Scorecard check auto-resolves at 90-day project age
+- `Code-Review`, `Contributors`, `Fuzzing` are single-maintainer / PowerShell-tooling structural limits
+
 ## v1.98.54
 
 Signed releases (Sigstore cosign) + branch protection.

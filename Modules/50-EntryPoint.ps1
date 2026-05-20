@@ -1,4 +1,58 @@
 ﻿#region ===== SCRIPT ENTRY POINT =====
+# Returns a path under %ProgramData%\<ToolName>\state, creating it with an
+# Administrators+SYSTEM-only DACL on first call. Use this for any persisted
+# state file whose contents will later influence elevated execution (batch
+# undo, CLI action history, replay payloads). The default $script:TempPath
+# (C:\Temp) inherits Users:CreateFiles from C:\ on a fresh Windows install,
+# which lets a non-admin pre-plant attacker-controlled state that the next
+# admin run will trust.
+function Get-RackStackSecureStateDir {
+    $stateDir = Join-Path $env:ProgramData $script:ToolName | Join-Path -ChildPath 'state'
+    if (-not (Test-Path -LiteralPath $stateDir)) {
+        try {
+            $null = New-Item -Path $stateDir -ItemType Directory -Force -ErrorAction Stop
+            # Lock down ACL: Administrators + SYSTEM full control, inherit; no Users.
+            $acl = Get-Acl -LiteralPath $stateDir
+            $acl.SetAccessRuleProtection($true, $false)
+            $acl.Access | ForEach-Object { [void]$acl.RemoveAccessRule($_) }
+            $adminsSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-544'
+            $systemSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-18'
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($adminsSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+            Set-Acl -LiteralPath $stateDir -AclObject $acl -ErrorAction SilentlyContinue
+        } catch {
+            # Best effort — if ProgramData write fails, return $null so callers can fall back.
+            return $null
+        }
+    }
+    return $stateDir
+}
+
+# Defense-in-depth: refuse to load a state file whose ACL grants write to a
+# non-admin principal. Returns $true if the file is safe to load, $false if a
+# non-admin can write to it.
+function Test-RackStackStateFileAcl {
+    param([Parameter(Mandatory=$true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $true }
+    try {
+        $fileAcl = Get-Acl -LiteralPath $Path
+        foreach ($ace in $fileAcl.Access) {
+            if ($ace.AccessControlType -ne 'Allow') { continue }
+            $sid = $null
+            try { $sid = (New-Object System.Security.Principal.NTAccount($ace.IdentityReference.Value)).Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { }
+            if ($sid -in @('S-1-5-32-544', 'S-1-5-18', 'S-1-5-32-549')) { continue }  # Admins/SYSTEM/Server Operators
+            if ($ace.FileSystemRights -band ([System.Security.AccessControl.FileSystemRights]::WriteData -bor
+                                             [System.Security.AccessControl.FileSystemRights]::Modify -bor
+                                             [System.Security.AccessControl.FileSystemRights]::FullControl)) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 # Start transcript logging
 function Start-ScriptTranscript {
     # Ensure temp directory exists
@@ -373,16 +427,28 @@ function Assert-Elevation {
 function Add-CLIActionHistoryEntry {
     if ($script:CLIAction -in @('History','Replay')) { return }
     try {
-        if (-not (Test-Path -LiteralPath $script:TempPath)) {
-            New-Item -Path $script:TempPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
-        }
-        $historyPath = Join-Path $script:TempPath "$($script:ToolName)-ActionHistory.json"
+        # Lives under %ProgramData%\<Tool>\state\ with Administrators+SYSTEM-only DACL
+        # rather than C:\Temp. The Replay action consumes entries from this file and
+        # passes Action/Tier/Config to a spawned admin process — a non-admin who can
+        # pre-plant a JSON entry under the old (Users-writable) path could influence
+        # which action the next admin Replay invocation runs. See Get-RackStackSecureStateDir.
+        $stateDir = Get-RackStackSecureStateDir
+        if (-not $stateDir) { return }   # ProgramData write failed; skip history (best-effort)
+        $historyPath = Join-Path $stateDir "$($script:ToolName)-ActionHistory.json"
+        # Refuse to read an existing file whose ACL allows non-admin writes — would mean
+        # someone tampered with the inherited DACL or the file was placed by a non-admin
+        # process at some earlier point.
         $entries = @()
         if (Test-Path -LiteralPath $historyPath) {
-            try {
-                $raw = Get-Content -LiteralPath $historyPath -Raw -ErrorAction Stop
-                if ($raw) { $entries = @((ConvertFrom-Json -InputObject $raw -ErrorAction Stop)) }
-            } catch { $entries = @() }
+            if (-not (Test-RackStackStateFileAcl -Path $historyPath)) {
+                # ACL is unsafe — start fresh; do not trust prior entries
+                $entries = @()
+            } else {
+                try {
+                    $raw = Get-Content -LiteralPath $historyPath -Raw -ErrorAction Stop
+                    if ($raw) { $entries = @((ConvertFrom-Json -InputObject $raw -ErrorAction Stop)) }
+                } catch { $entries = @() }
+            }
         }
         $newEntry = [ordered]@{
             Timestamp    = (Get-Date -Format 'o')
@@ -1092,7 +1158,11 @@ function Invoke-CLIAction {
             # but the scheduled task runs as SYSTEM weekly — any local admin who poisoned the
             # registry value with `" & calc.exe &` would gain SYSTEM at schedule fire-time
             # without re-prompting. Reject suspicious characters defensively.
-            if ($installLoc -match '["`&|<>^%]' -or $installLoc -match '\.\.[\\/]') {
+            # Extended guard (round 33 audit) — also rejects ( ) so cmd.exe `for /f`
+            # parentheses can't be injected, and rejects all C0 control chars + NUL
+            # so embedded \r\n\0 in registry values can't split arguments at Task
+            # Scheduler XML deserialize time.
+            if ($installLoc -match '["`&|<>^%()]' -or $installLoc -match '\.\.[\\/]' -or $installLoc -match '[\x00-\x1F]') {
                 Write-OutputColor "  ScheduleUpdateCheck: InstallLocation '$installLoc' contains unsafe characters." -color "Error"
                 Write-OutputColor "  Refusing to register scheduled task. Re-install via Install-RackStack to a clean path." -color "Warning"
                 [Environment]::Exit(1)
@@ -1103,7 +1173,7 @@ function Invoke-CLIAction {
             # influenced via defaults.json (post-v1.98.25 we strict-validate ToolName but not
             # TempPath; an attacker who's already an admin and can edit defaults.json could
             # poison this path with quote characters to break out of the cmd arg).
-            if ($outputJsonPath -match '["`&|<>^%]') {
+            if ($outputJsonPath -match '["`&|<>^%()]' -or $outputJsonPath -match '[\x00-\x1F]') {
                 Write-OutputColor "  ScheduleUpdateCheck: output path '$outputJsonPath' contains unsafe characters." -color "Error"
                 [Environment]::Exit(1)
             }
@@ -1140,13 +1210,20 @@ function Invoke-CLIAction {
             if ($script:CLIConfig -match '^\d+$') {
                 $limit = [math]::Max(1, [math]::Min(50, [int]$script:CLIConfig))
             }
-            $historyPath = Join-Path $script:TempPath "$($script:ToolName)-ActionHistory.json"
-            if (-not (Test-Path -LiteralPath $historyPath)) {
+            $stateDir = Get-RackStackSecureStateDir
+            $historyPath = if ($stateDir) { Join-Path $stateDir "$($script:ToolName)-ActionHistory.json" } else { $null }
+            if (-not $historyPath -or -not (Test-Path -LiteralPath $historyPath)) {
                 Write-OutputColor "  No history yet at $historyPath" -color "Warning"
                 if ($script:CLIOutputFormat -eq 'JSON') {
                     Write-Output (@{ Tool=$script:ToolFullName; Version=$script:ScriptVersion; Action='History'; Timestamp=(Get-Date -Format 'o'); Hostname=$env:COMPUTERNAME; Success=$true; Count=0; Entries=@() } | ConvertTo-Json -Compress -Depth 10)
                 }
                 [Environment]::Exit(0)
+            }
+            # ACL safety: refuse to display history that a non-admin could have tampered with.
+            if (-not (Test-RackStackStateFileAcl -Path $historyPath)) {
+                Write-OutputColor "  REFUSING to read history: $historyPath has been written by a non-admin principal." -color "Error"
+                Write-OutputColor "  Delete the file and re-run to start fresh." -color "Warning"
+                [Environment]::Exit(1)
             }
             $entries = @()
             try {
@@ -1193,9 +1270,18 @@ function Invoke-CLIAction {
                 [Environment]::Exit(1)
             }
             $idx = [int]$script:CLIConfig
-            $historyPath = Join-Path $script:TempPath "$($script:ToolName)-ActionHistory.json"
-            if (-not (Test-Path -LiteralPath $historyPath)) {
+            $stateDir = Get-RackStackSecureStateDir
+            $historyPath = if ($stateDir) { Join-Path $stateDir "$($script:ToolName)-ActionHistory.json" } else { $null }
+            if (-not $historyPath -or -not (Test-Path -LiteralPath $historyPath)) {
                 Write-OutputColor "  No history at $historyPath — nothing to replay." -color "Error"
+                [Environment]::Exit(1)
+            }
+            # ACL safety: a non-admin who can write to the history file could plant entries
+            # that influence which Action / Tier / Config the next admin Replay invocation
+            # spawns. Refuse to load if the ACL has drifted.
+            if (-not (Test-RackStackStateFileAcl -Path $historyPath)) {
+                Write-OutputColor "  REFUSING to replay: $historyPath has been written by a non-admin principal." -color "Error"
+                Write-OutputColor "  This is a privilege-escalation guard. Delete the file and re-run if you trust its origin." -color "Warning"
                 [Environment]::Exit(1)
             }
             try {
