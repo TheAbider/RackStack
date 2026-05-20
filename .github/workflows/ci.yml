@@ -25,7 +25,7 @@ jobs:
         shell: pwsh
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           # Need at least 2 commits so the version-bump detection can diff Header.ps1
           # against the previous commit. Default fetch-depth is 1 which makes git show HEAD~1 fail.
@@ -74,7 +74,7 @@ jobs:
         # failing CI over. `continue-on-error` so the release pipeline still proceeds.
         if: always() && hashFiles('Tests/coverage.xml') != ''
         continue-on-error: true
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           files: Tests/coverage.xml
           flags: pester
@@ -84,7 +84,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload test artifacts on failure
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
           name: test-failure-logs
@@ -204,7 +204,7 @@ jobs:
       - name: Upload unsigned EXE for SignPath
         id: upload-unsigned
         if: steps.signpath-config.outputs.configured == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rackstack-exe-unsigned
           path: builds/RackStack.exe
@@ -213,7 +213,7 @@ jobs:
       - name: Sign RackStack.exe (SignPath.io)
         id: signpath-sign
         if: steps.signpath-config.outputs.configured == 'true'
-        uses: signpath/github-action-submit-signing-request@v1.2
+        uses: signpath/github-action-submit-signing-request@4f13d373e8f0cd8d3c0465ff4877feff27aed2ae # v1.2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
@@ -260,7 +260,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────────
       - name: Attest build provenance (SLSA Level 3)
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
             builds/RackStack.exe
@@ -270,7 +270,7 @@ jobs:
         id: sbom
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         continue-on-error: true
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           # Syft can't resolve a single Windows PE .exe as a source (needs a
           # directory or recognized package format). Scan the whole repo
@@ -291,7 +291,7 @@ jobs:
 
       - name: Attest SBOM
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false' && hashFiles(format('builds/RackStack-{0}-sbom.cyclonedx.json', steps.vercheck.outputs.version)) != ''
-        uses: actions/attest-sbom@v2
+        uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2
         with:
           subject-path: builds/RackStack.exe
           sbom-path: builds/RackStack-${{ steps.vercheck.outputs.version }}-sbom.cyclonedx.json
