@@ -2,7 +2,7 @@
 # Function to apply firewall rule templates
 function Set-FirewallRuleTemplates {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"

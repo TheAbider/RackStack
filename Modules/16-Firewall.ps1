@@ -124,7 +124,7 @@ function Disable-WindowsFirewallDomainPrivate {
 # Firewall Rule Search & Browser
 function Show-FirewallRuleSearch {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"

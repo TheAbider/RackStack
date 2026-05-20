@@ -113,7 +113,7 @@ function Show-BitLockerManagement {
                 $installResult = Install-WindowsFeatureWithTimeout -FeatureName "BitLocker" -DisplayName "BitLocker" -IncludeManagementTools
                 if ($installResult.Success) {
                     Write-OutputColor "  Reboot required before use." -color "Warning"
-                    $global:RebootNeeded = $true
+                    $script:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Installed BitLocker"
                     Clear-MenuCache
                 }
@@ -125,7 +125,7 @@ function Show-BitLockerManagement {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         # Show current BitLocker status
         Clear-Host
         Write-OutputColor "" -color "Info"

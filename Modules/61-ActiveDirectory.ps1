@@ -701,7 +701,7 @@ function Show-ReplicationMonitor {
 # Main AD DS Promotion menu
 function Show-ADDSPromotionMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -856,7 +856,7 @@ function Install-NewForest {
             -ErrorAction Stop
 
         Write-OutputColor "`n  Domain Controller promotion completed successfully!" -color "Success"
-        $global:RebootNeeded = $true
+        $script:RebootNeeded = $true
         Add-SessionChange -Category "AD DS" -Description "Promoted to DC: New forest $domainName"
         Clear-MenuCache
         Write-OutputColor "  A reboot is required to complete the promotion." -color "Warning"
@@ -1001,7 +1001,7 @@ function Install-AdditionalDC {
             -ErrorAction Stop
 
         Write-OutputColor "`n  Additional Domain Controller promotion completed successfully!" -color "Success"
-        $global:RebootNeeded = $true
+        $script:RebootNeeded = $true
         Add-SessionChange -Category "AD DS" -Description "Promoted to additional DC in domain $domainName"
         Clear-MenuCache
         Write-OutputColor "  A reboot is required to complete the promotion." -color "Warning"
@@ -1169,7 +1169,7 @@ function Install-ReadOnlyDC {
         Install-ADDSDomainController @rodcParams
 
         Write-OutputColor "`n  Read-Only Domain Controller promotion completed successfully!" -color "Success"
-        $global:RebootNeeded = $true
+        $script:RebootNeeded = $true
         Add-SessionChange -Category "AD DS" -Description "Promoted to RODC in domain $domainName"
         Clear-MenuCache
         Write-OutputColor "  A reboot is required to complete the promotion." -color "Warning"

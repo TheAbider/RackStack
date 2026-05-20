@@ -93,7 +93,7 @@ function Show-StorageReplicaManagement {
                     }
                     elseif ($installResult.Success) {
                         Write-OutputColor "  Storage Replica installed. Reboot required." -color "Success"
-                        $global:RebootNeeded = $true
+                        $script:RebootNeeded = $true
                         Add-SessionChange -Category "System" -Description "Installed Storage Replica"
                         Clear-MenuCache
                     }
@@ -115,7 +115,7 @@ function Show-StorageReplicaManagement {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         # Show current SR partnerships
         Clear-Host
         Write-OutputColor "" -color "Info"

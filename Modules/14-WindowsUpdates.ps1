@@ -50,7 +50,7 @@ function Show-UpdateHistory {
 # Function to display Windows Updates menu
 function Show-WindowsUpdatesMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -358,7 +358,7 @@ function Install-WindowsUpdates {
         else {
             Write-OutputColor "`nWindows updates installation complete!" -color "Success"
             Write-OutputColor "  A reboot may be required to complete the installation." -color "Warning"
-            $global:RebootNeeded = $true
+            $script:RebootNeeded = $true
             Add-SessionChange -Category "System" -Description "Installed $updateCount Windows update(s)"
             Clear-MenuCache
         }

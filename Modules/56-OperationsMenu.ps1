@@ -6,7 +6,7 @@ function Show-OperationsMenu {
     )
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         Clear-Host
         Write-OutputColor "" -color "Info"
@@ -1325,7 +1325,7 @@ function Export-CustomLicenses {
 # Settings menu: Edit Environment Defaults
 function Show-EditDefaults {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"
@@ -1653,7 +1653,7 @@ function Show-EditDefaults {
 # Settings menu: Edit Custom Licenses
 function Show-EditLicenses {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"

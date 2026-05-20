@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.98.46
+
+Gold-standard refactor — `$global:` → `$script:` across the codebase.
+
+- **PSAvoidGlobalVars elimination.** Converted all 130+ writes to `$global:RebootNeeded`, `$global:ReturnToMainMenu`, and `$global:DisabledAdminReboot` (plus the `$global:Rebootneeded` casing typo in 45-ConfigExport) to their `$script:` equivalents across 49 of the 65 module files. The dot-source loader runs every module into one shared script scope, so `$script:` and `$global:` were functionally equivalent for these cross-module state flags — switching to `$script:` is the documented PowerShell convention and clears PSAvoidGlobalVars cleanly. `$global:LASTEXITCODE` is the only remaining `$global:` reference (a runtime-set built-in that must stay global). PSSA: 0 errors / 0 warnings / 0 PSAvoidGlobalVars hits. All 71 Pester tests still pass.
+- **`Tests/pester-results.xml` added to .gitignore.** Generated NUnit output from `pester-check.ps1` was accidentally tracked in the v1.98.45 commit; it is per-run output and should not be checked in.
+
 ## v1.98.45
 
 Quality push — modern test framework + distribution channels.

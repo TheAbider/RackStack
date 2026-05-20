@@ -44,7 +44,7 @@ function Invoke-NavigationAction {
     }
 
     if ($NavResult.Action -eq "home") {
-        $global:ReturnToMainMenu = $true
+        $script:ReturnToMainMenu = $true
         return $true
     }
 

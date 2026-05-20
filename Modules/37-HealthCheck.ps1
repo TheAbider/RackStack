@@ -1727,7 +1727,7 @@ function Show-QuickSetupWizard {
         if (Confirm-UserAction -Message "Set hostname now? (Required before agent install)" -DefaultYes) {
             Set-HostName
             $completed++
-            if ($global:RebootNeeded) {
+            if ($script:RebootNeeded) {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Hostname change requires a reboot before continuing." -color "Warning"
                 Write-OutputColor "  Please reboot and re-run the Quick Setup Wizard." -color "Warning"
@@ -1769,7 +1769,7 @@ function Show-QuickSetupWizard {
         if (Confirm-UserAction -Message "Join a domain now?") {
             Join-Domain
             $completed++
-            if ($global:RebootNeeded) {
+            if ($script:RebootNeeded) {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Domain join requires a reboot before continuing." -color "Warning"
                 Write-OutputColor "  Please reboot and re-run the Quick Setup Wizard." -color "Warning"
@@ -1933,7 +1933,7 @@ function Show-QuickSetupWizard {
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
-    if ($global:RebootNeeded) {
+    if ($script:RebootNeeded) {
         Write-OutputColor "  A reboot is required to finalize changes." -color "Warning"
         Write-OutputColor "" -color "Info"
         if (Confirm-UserAction -Message "Reboot now?") {

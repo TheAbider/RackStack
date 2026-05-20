@@ -352,7 +352,7 @@ function Show-AgentInstallerList {
     $currentPage = 0
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $totalPages = [math]::Max(1, [math]::Ceiling($displayAgents.Count / $pageSize))
         if ($currentPage -ge $totalPages) { $currentPage = 0 }
         $startIdx = $currentPage * $pageSize
@@ -733,7 +733,7 @@ function Install-SelectedAgent {
         if ($exitCode -eq 3010 -or $exitCode -eq 1641) {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
-            $global:RebootNeeded = $true
+            $script:RebootNeeded = $true
         }
     }
     finally {
@@ -1043,7 +1043,7 @@ function Install-Agent {
 
         if (Confirm-UserAction -Message "Would you like to set the hostname now?") {
             Set-HostName
-            if ($global:RebootNeeded) {
+            if ($script:RebootNeeded) {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Hostname changes require a reboot to take effect." -color "Warning"
                 Write-OutputColor "  $toolName Agent must be installed after reboot." -color "Warning"
@@ -1064,7 +1064,7 @@ function Install-Agent {
     # --- Section: Step 4 - Full Agent Selection Menu ---
     # STEP 4: Full menu for manual selection
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"
@@ -1277,7 +1277,7 @@ function Show-AgentManagement {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         Clear-Host
         Write-OutputColor "" -color "Info"

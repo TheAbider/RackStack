@@ -368,7 +368,7 @@ function New-DebloatRestorePoint {
 # ════════════════════════════════════════════════════════════════════════
 function Start-SystemDebloat {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         Clear-Host
         Write-OutputColor "" -color "Info"
@@ -1648,7 +1648,7 @@ function Invoke-CustomDebloat {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         Clear-Host
         Write-OutputColor "" -color "Info"

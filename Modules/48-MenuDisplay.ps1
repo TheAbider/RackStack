@@ -132,7 +132,7 @@ function Show-MainMenu {
     # Status line
     $statusParts = @()
     $windowsRebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
-    if ($global:RebootNeeded -or $windowsRebootPending) {
+    if ($script:RebootNeeded -or $windowsRebootPending) {
         $statusParts += "REBOOT PENDING"
     }
     if ($script:SessionChanges.Count -gt 0) {
@@ -255,8 +255,8 @@ function Show-ConfigureServerMenu {
 
     # Check both our flag AND Windows pending reboot
     $windowsRebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
-    if ($global:RebootNeeded -or $windowsRebootPending) {
-        if ($windowsRebootPending -and -not $global:RebootNeeded) {
+    if ($script:RebootNeeded -or $windowsRebootPending) {
+        if ($windowsRebootPending -and -not $script:RebootNeeded) {
             Write-OutputColor "  ⚠ Windows has a pending reboot" -color "Warning"
         }
         else {
@@ -343,7 +343,7 @@ function Show-SystemConfigMenu {
 
     # Pending reboot indicator
     $windowsRebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 30
-    if ($global:RebootNeeded -or $windowsRebootPending) {
+    if ($script:RebootNeeded -or $windowsRebootPending) {
         Write-OutputColor "  [!] Reboot pending" -color "Warning"
         Write-OutputColor "" -color "Info"
     }

@@ -152,7 +152,7 @@ function Test-CustomRoleTemplate {
 # Interactive menu for selecting and installing server role templates
 function Show-RoleTemplateSelector {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -363,7 +363,7 @@ function Install-ServerRoleTemplate {
 
     # Set reboot flag if needed
     if ($template.RequiresReboot -and $successCount -gt 0) {
-        $global:RebootNeeded = $true
+        $script:RebootNeeded = $true
         Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
     }
 

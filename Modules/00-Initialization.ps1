@@ -172,7 +172,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.45"
+$script:ScriptVersion = "1.98.46"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.
@@ -229,9 +229,9 @@ if ([Net.ServicePointManager]::SecurityProtocol -notmatch "Tls12") {
 }
 
 # Initialize global flags (prevents undefined variable issues)
-$global:RebootNeeded = $false
-$global:DisabledAdminReboot = $false
-$global:ReturnToMainMenu = $false  # Flag to signal "go straight to main menu"
+$script:RebootNeeded = $false
+$script:DisabledAdminReboot = $false
+$script:ReturnToMainMenu = $false  # Flag to signal "go straight to main menu"
 
 # Auto-update: if true, automatically download and install updates on startup (override via defaults.json)
 $script:AutoUpdate = $false

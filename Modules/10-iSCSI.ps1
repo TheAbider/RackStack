@@ -1393,7 +1393,7 @@ function Show-iSCSISANMenu {
 # Function to run iSCSI & SAN Management menu
 function Start-Show-iSCSISANMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-iSCSISANMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
@@ -1424,7 +1424,7 @@ function Start-Show-iSCSISANMenu {
                 }
                 else {
                     while ($true) {
-                        if ($global:ReturnToMainMenu) { return }
+                        if ($script:ReturnToMainMenu) { return }
                         $identifyChoice = Show-NICIdentificationMenu -Adapters $adapters
                         if ($identifyChoice -match '^[Bb]$') {
                             break
@@ -1580,7 +1580,7 @@ function Start-Show-iSCSISANMenu {
                 Write-PressEnter
             }
             "M" {
-                $global:ReturnToMainMenu = $true
+                $script:ReturnToMainMenu = $true
                 return
             }
             default {

@@ -281,7 +281,7 @@ function Show-ISODownloadMenu {
 # Function to run ISO download menu loop
 function Start-ISODownload {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-ISODownloadMenu
 
         switch ($choice) {

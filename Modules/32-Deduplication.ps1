@@ -65,7 +65,7 @@ function Show-DeduplicationManagement {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         # Show current dedup status
         Clear-Host
         Write-OutputColor "" -color "Info"

@@ -771,7 +771,7 @@ function Import-ConfigurationProfile {
             elseif (Test-ValidHostname -Hostname $configProfile.Hostname) {
                 try {
                     Rename-Computer -newname $configProfile.Hostname -Force -ErrorAction Stop
-                    $global:Rebootneeded = $true
+                    $script:RebootNeeded = $true
                     $changesApplied++
                     Write-OutputColor "        Hostname set. Reboot required." -color "Success"
                     Add-SessionChange -Category "System" -Description "Set hostname to $($configProfile.Hostname)"
@@ -945,7 +945,7 @@ function Import-ConfigurationProfile {
             Write-OutputColor "  [8/13] Installing Hyper-V..." -color "Info"
             try {
                 Install-WindowsFeature -name Hyper-V -IncludeManagementTools -ErrorAction Stop
-                $global:Rebootneeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Write-OutputColor "        Hyper-V installed. Reboot required." -color "Success"
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V"
@@ -965,7 +965,7 @@ function Import-ConfigurationProfile {
             Write-OutputColor "  [9/13] Installing MPIO..." -color "Info"
             try {
                 Install-WindowsFeature -name Multipath-IO -ErrorAction Stop
-                $global:Rebootneeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Write-OutputColor "         MPIO installed. Reboot required." -color "Success"
                 Add-SessionChange -Category "System" -Description "Installed MPIO"
@@ -985,7 +985,7 @@ function Import-ConfigurationProfile {
             Write-OutputColor "  [10/13] Installing Failover Clustering..." -color "Info"
             try {
                 Install-WindowsFeature -name Failover-Clustering -IncludeManagementTools -ErrorAction Stop
-                $global:Rebootneeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Write-OutputColor "          Failover Clustering installed. Reboot required." -color "Success"
                 Add-SessionChange -Category "System" -Description "Installed Failover Clustering"
@@ -1072,7 +1072,7 @@ function Import-ConfigurationProfile {
                 $domainCred = Get-Credential -Message "Enter credentials to join $($configProfile.Domain.Domainname)"
                 if ($domainCred) {
                     Add-Computer -Domainname $configProfile.Domain.Domainname -Credential $domainCred -Force -ErrorAction Stop
-                    $global:Rebootneeded = $true
+                    $script:RebootNeeded = $true
                     $changesApplied++
                     Write-OutputColor "        Joined domain. Reboot required." -color "Success"
                     Add-SessionChange -Category "System" -Description "Joined domain $($configProfile.Domain.Domainname)"
@@ -1094,7 +1094,7 @@ function Import-ConfigurationProfile {
         Write-OutputColor "  Profile applied: $changesApplied succeeded, $errors failed" -color $resultColor
         Write-OutputColor ("  " + "=" * 55) -color "Info"
 
-        if ($global:Rebootneeded) {
+        if ($script:RebootNeeded) {
             Write-OutputColor "" -color "Info"
             Write-OutputColor "  ⚠ Reboot required to complete changes." -color "Warning"
         }
@@ -2131,7 +2131,7 @@ function Show-DriftTrend {
 # Interactive drift detection submenu (v1.7.1)
 function Show-DriftDetectionMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         Clear-Host
         Write-OutputColor "" -color "Info"

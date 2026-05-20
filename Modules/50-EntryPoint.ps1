@@ -2082,7 +2082,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             }
 
             if ($remediationResult.RebootRequired) {
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
             }
         }
         'Aggregate' {
@@ -12998,7 +12998,7 @@ function Start-BatchMode {
                 $oldHostname = $env:COMPUTERNAME
                 Rename-Computer -NewName $Config.Hostname -Force -ErrorAction Stop
                 Write-OutputColor "           Hostname set. Reboot required." -color "Success"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Set hostname to $($Config.Hostname)"
                 Clear-MenuCache
@@ -13364,7 +13364,7 @@ function Start-BatchMode {
             try {
                 Install-WindowsFeature -Name Hyper-V -IncludeManagementTools -ErrorAction Stop
                 Write-OutputColor "           Hyper-V installed. Reboot required." -color "Success"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V"
                 Clear-MenuCache
@@ -13397,7 +13397,7 @@ function Start-BatchMode {
             try {
                 Install-WindowsFeature -Name Multipath-IO -ErrorAction Stop
                 Write-OutputColor "           MPIO installed. Reboot required." -color "Success"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Installed MPIO"
                 Clear-MenuCache
@@ -13430,7 +13430,7 @@ function Start-BatchMode {
             try {
                 Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools -ErrorAction Stop
                 Write-OutputColor "           Failover Clustering installed. Reboot required." -color "Success"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Installed Failover Clustering"
                 Clear-MenuCache
@@ -13577,7 +13577,7 @@ function Start-BatchMode {
             if ($domainCred) {
                 Add-Computer -DomainName $Config.DomainName -Credential $domainCred -Force -ErrorAction Stop
                 Write-OutputColor "           Joined domain. Reboot required." -color "Success"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 $changesApplied++
                 Add-SessionChange -Category "System" -Description "Joined domain $($Config.DomainName)"
                 Clear-MenuCache
@@ -13623,7 +13623,7 @@ function Start-BatchMode {
                 }
                 Write-OutputColor "           Installed $installCount feature(s) for $($template.FullName)." -color "Success"
                 if ($template.RequiresReboot -and $installCount -gt 0) {
-                    $global:RebootNeeded = $true
+                    $script:RebootNeeded = $true
                 }
                 $changesApplied++
                 Add-SessionChange -Category "Roles" -Description "Installed role template: $($template.FullName)"
@@ -13684,7 +13684,7 @@ function Start-BatchMode {
                         $netbios = ($Config.ForestName -split '\.')[0].ToUpper()
                         $null = Install-ADDSForest -DomainName $Config.ForestName -ForestMode $forestMode -DomainMode $domainMode -DomainNetbiosName $netbios -SafeModeAdministratorPassword $dsrmPassword -InstallDns:$true -CreateDnsDelegation:$false -NoRebootOnCompletion:$true -Force:$true -ErrorAction Stop
                         Write-OutputColor "           New forest '$($Config.ForestName)' configured. Reboot required." -color "Success"
-                        $global:RebootNeeded = $true
+                        $script:RebootNeeded = $true
                         $changesApplied++
                         Add-SessionChange -Category "AD DS" -Description "Promoted to DC: New forest $($Config.ForestName)"
                         Clear-MenuCache
@@ -13699,7 +13699,7 @@ function Start-BatchMode {
                         $domainCred = Get-Credential -Message "Enter domain admin credentials for $domainName"
                         $null = Install-ADDSDomainController -DomainName $domainName -Credential $domainCred -SafeModeAdministratorPassword $dsrmPassword -InstallDns:$true -NoRebootOnCompletion:$true -Force:$true -ErrorAction Stop
                         Write-OutputColor "           Additional DC for '$domainName' configured. Reboot required." -color "Success"
-                        $global:RebootNeeded = $true
+                        $script:RebootNeeded = $true
                         $changesApplied++
                         Add-SessionChange -Category "AD DS" -Description "Promoted to additional DC: $domainName"
                         Clear-MenuCache
@@ -13714,7 +13714,7 @@ function Start-BatchMode {
                         $domainCred = Get-Credential -Message "Enter domain admin credentials for $domainName"
                         $null = Install-ADDSDomainController -DomainName $domainName -Credential $domainCred -ReadOnlyReplica:$true -SafeModeAdministratorPassword $dsrmPassword -InstallDns:$true -NoRebootOnCompletion:$true -Force:$true -ErrorAction Stop
                         Write-OutputColor "           RODC for '$domainName' configured. Reboot required." -color "Success"
-                        $global:RebootNeeded = $true
+                        $script:RebootNeeded = $true
                         $changesApplied++
                         Add-SessionChange -Category "AD DS" -Description "Promoted to RODC: $domainName"
                         Clear-MenuCache
@@ -14368,7 +14368,7 @@ function Start-BatchMode {
             ChangesApplied = $changesApplied
             Skipped       = $skipped
             Errors        = $errors
-            RebootNeeded  = [bool]$global:RebootNeeded
+            RebootNeeded  = [bool]$script:RebootNeeded
             Success       = ($errors -eq 0)
         }
         # In stream mode the summary is emitted as a typed terminal event for consumers parsing line-by-line.
@@ -14396,12 +14396,12 @@ function Start-BatchMode {
     Stop-ScriptTranscript
 
     # Auto-reboot if needed and configured
-    if ($global:RebootNeeded -and $Config.AutoReboot) {
+    if ($script:RebootNeeded -and $Config.AutoReboot) {
         Write-OutputColor "  Rebooting in 5 seconds... (Ctrl+C to cancel)" -color "Warning"
         Start-Sleep -Seconds 5
         Restart-Computer -Force
     }
-    elseif ($global:RebootNeeded) {
+    elseif ($script:RebootNeeded) {
         Write-OutputColor "⚠ Reboot required to complete changes. AutoReboot is disabled." -color "Warning"
         Write-OutputColor "  Run 'Restart-Computer' when ready." -color "Info"
     }

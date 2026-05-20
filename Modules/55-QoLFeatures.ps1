@@ -123,7 +123,7 @@ function Add-Favorite {
 # Function to show favorites menu
 function Show-Favorites {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Import-Favorites
 
         Clear-Host
@@ -279,7 +279,7 @@ function Export-CommandHistory {
 # Function to show command history
 function Show-CommandHistory {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Import-CommandHistory
 
         Clear-Host
@@ -491,7 +491,7 @@ function Restore-SessionState {
 function Set-PagefileConfiguration {
     # --- Section: Main Configuration Loop ---
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"
@@ -602,7 +602,7 @@ function Set-PagefileConfiguration {
                     Set-CimInstance -InputObject $compSysObj -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop
                     Write-OutputColor "  Pagefile set to System Managed (Automatic)." -color "Success"
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
-                    $global:RebootNeeded = $true
+                    $script:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Set pagefile to System Managed (Automatic)"
                     Clear-MenuCache
                 }
@@ -739,7 +739,7 @@ function Set-PagefileConfiguration {
 
                     Write-OutputColor "  Pagefile set to ${initialMB}MB - ${maxMB}MB on $currentDrive." -color "Success"
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
-                    $global:RebootNeeded = $true
+                    $script:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Set custom pagefile: ${initialMB}MB - ${maxMB}MB on $currentDrive"
                     Clear-MenuCache
                 }
@@ -829,7 +829,7 @@ function Set-PagefileConfiguration {
 
                     Write-OutputColor "  Pagefile moved to $targetLetter (system managed size)." -color "Success"
                     Write-OutputColor "  A reboot is required for changes to take effect." -color "Warning"
-                    $global:RebootNeeded = $true
+                    $script:RebootNeeded = $true
                     Add-SessionChange -Category "System" -Description "Moved pagefile to $targetLetter"
                     Clear-MenuCache
                 }
@@ -857,7 +857,7 @@ function Set-SNMPConfiguration {
 
     # --- Section: Main Configuration Loop ---
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"
@@ -1279,7 +1279,7 @@ function Install-WindowsServerBackup {
 # Certificate management submenu
 function Show-CertificateMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
 
         Write-OutputColor "" -color "Info"

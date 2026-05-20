@@ -1564,7 +1564,7 @@ function Start-MetricCollection {
     $endTime = (Get-Date).AddMinutes($DurationMinutes)
 
     while ((Get-Date) -lt $endTime) {
-        if ($global:ReturnToMainMenu) { break }
+        if ($script:ReturnToMainMenu) { break }
         $collected++
         $path = Save-PerformanceSnapshot
         if ($path) {
@@ -1579,7 +1579,7 @@ function Start-MetricCollection {
             # without waiting up to IntervalMinutes for the loop to wake.
             $wakeTime = (Get-Date).AddMinutes($IntervalMinutes)
             while ((Get-Date) -lt $wakeTime) {
-                if ($global:ReturnToMainMenu) { break }
+                if ($script:ReturnToMainMenu) { break }
                 Start-Sleep -Seconds 1
             }
         }

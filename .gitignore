@@ -38,3 +38,6 @@ batch_config*.json
 *.bak
 *.swp
 *~
+
+# Pester NUnit output (per-run, not source)
+Tests/pester-results.xml

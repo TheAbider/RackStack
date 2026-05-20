@@ -66,9 +66,9 @@ function Exit-Script {
 
     # Check for actual Windows pending reboot OR our flag
     $windowsRebootPending = Test-RebootPending
-    $rebootNeeded = $global:RebootNeeded -or $windowsRebootPending
+    $rebootNeeded = $script:RebootNeeded -or $windowsRebootPending
 
-    if ($global:DisabledAdminReboot -eq $true) {
+    if ($script:DisabledAdminReboot -eq $true) {
         # Pre-flight: refuse to self-destruct while Hyper-V VMs are mid-migrate or storage ops
         # are in flight. Restart-Computer -Force only suppresses the logged-on-user prompt; it
         # doesn't wait for in-progress vmms operations to drain, so a Ctrl-C → exit during a
@@ -231,7 +231,7 @@ function Exit-Script {
         Restart-Computer -Force
     }
     elseif ($rebootNeeded) {
-        if ($windowsRebootPending -and -not $global:RebootNeeded) {
+        if ($windowsRebootPending -and -not $script:RebootNeeded) {
             Write-OutputColor "  Windows has a pending reboot (from previous changes)." -color "Warning"
         }
         else {

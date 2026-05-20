@@ -1175,7 +1175,7 @@ function Set-VMConfigCPU {
     )
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return $false }
+        if ($script:ReturnToMainMenu) { return $false }
         Clear-Host
         Write-CenteredOutput "CPU Configuration" -color "Info"
 
@@ -1241,7 +1241,7 @@ function Set-VMConfigMemory {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return $false }
+        if ($script:ReturnToMainMenu) { return $false }
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Enter memory size in GB (1-1024):" -color "Info"
         Write-OutputColor "(Press Enter to keep current value: $($Config.MemoryGB) GB)" -color "Info"
@@ -1279,7 +1279,7 @@ function Set-VMConfigDisks {
     )
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Disk Configuration" -color "Info"
 
@@ -1448,7 +1448,7 @@ function Set-VMConfigNICs {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Network Adapter Configuration" -color "Info"
 
@@ -2280,7 +2280,7 @@ function Publish-StandardVM {
 
     # Show summary and allow editing
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Show-VMConfigSummary -Config $config
 
         Write-OutputColor "" -color "Info"
@@ -2301,7 +2301,7 @@ function Publish-StandardVM {
 
         $choice = Read-Host "Enter choice"
         $navResult = Test-NavigationCommand -UserInput $choice
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
         if ($navResult.ShouldReturn) { return }
 
         if (-not (Invoke-VMConfigEditAction -Config $config -Choice $choice)) {
@@ -2383,7 +2383,7 @@ function Publish-CustomVM {
 
     # Final review and create
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Show-VMConfigSummary -Config $config
 
         Write-OutputColor "" -color "Info"
@@ -2402,7 +2402,7 @@ function Publish-CustomVM {
 
         $choice = Read-Host "Enter choice"
         $navResult = Test-NavigationCommand -UserInput $choice
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
         if ($navResult.ShouldReturn) { return }
 
         if (-not (Invoke-VMConfigEditAction -Config $config -Choice $choice)) {
@@ -2853,7 +2853,7 @@ function Edit-QueuedVM {
     $config = $script:VMDeploymentQueue[$QueueIndex]
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
 
         $titleText = "EDIT QUEUED VM: $($config.VMName)"
@@ -2924,7 +2924,7 @@ function Edit-QueuedVM {
 # Function to manage the deployment queue (view, edit, remove, deploy, clear)
 function Show-VMQueueManagement {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         $queueCount = $script:VMDeploymentQueue.Count
 
@@ -3055,7 +3055,7 @@ function Show-VMQueueManagement {
 # Function to run VM Deployment menu
 function Start-VMDeployment {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         # First, select deployment mode if not connected
         if (-not $script:VMDeploymentConnected) {
             $modeChoice = Show-VMDeploymentModeMenu

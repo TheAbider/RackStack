@@ -106,7 +106,7 @@ function Install-HyperVRole {
             elseif ($installResult.Success) {
                 Write-OutputColor "`nHyper-V installed successfully!" -color "Success"
                 Test-HyperVInstallation
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V role"
                 Clear-MenuCache
                 # Hint about nested virtualization if running in a VM
@@ -185,7 +185,7 @@ function Install-HyperVRole {
                 Write-OutputColor "`nHyper-V installed successfully!" -color "Success"
                 Test-HyperVInstallation
                 Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Installed Hyper-V (Windows Client)"
                 Clear-MenuCache  # Invalidate cache after change
             }

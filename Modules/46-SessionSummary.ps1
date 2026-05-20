@@ -31,7 +31,7 @@ function Show-QuickSessionChanges {
 
     # Show reboot status in quick view
     $windowsRebootPending = Test-RebootPending
-    if ($global:RebootNeeded -or $windowsRebootPending) {
+    if ($script:RebootNeeded -or $windowsRebootPending) {
         $rebootLine = "  Reboot Required: Yes"
         Write-OutputColor "  │$($rebootLine.PadRight(72))│" -color "Warning"
     }
@@ -107,9 +107,9 @@ function Show-SessionSummary {
 
     # Check reboot status
     $windowsRebootPending = Test-RebootPending
-    $rebootNeeded = $global:RebootNeeded -or $windowsRebootPending
+    $rebootNeeded = $script:RebootNeeded -or $windowsRebootPending
     $rebootReasons = @()
-    if ($global:RebootNeeded) {
+    if ($script:RebootNeeded) {
         $rebootReasons = @(Get-RebootReasons)
     }
 
@@ -150,10 +150,10 @@ function Show-SessionSummary {
                 Write-OutputColor "  │$($reasonLine.PadRight(75))│" -color "Warning"
             }
         }
-        if ($windowsRebootPending -and -not $global:RebootNeeded) {
+        if ($windowsRebootPending -and -not $script:RebootNeeded) {
             Write-OutputColor "  │$("    - Windows pending reboot (from previous changes)".PadRight(75))│" -color "Warning"
         }
-        elseif ($windowsRebootPending -and $global:RebootNeeded) {
+        elseif ($windowsRebootPending -and $script:RebootNeeded) {
             Write-OutputColor "  │$("    - Windows also has a pending reboot".PadRight(75))│" -color "Warning"
         }
     }
@@ -264,7 +264,7 @@ function Show-SessionSummary {
 
     # Final reboot warning
     if ($rebootNeeded) {
-        if ($global:RebootNeeded -and $windowsRebootPending) {
+        if ($script:RebootNeeded -and $windowsRebootPending) {
             Write-OutputColor "[!] Reboot required (this session + Windows pending reboot)." -color "Warning"
         } elseif ($windowsRebootPending) {
             Write-OutputColor "[!] Windows has a pending reboot (from previous changes)." -color "Warning"

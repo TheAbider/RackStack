@@ -204,7 +204,7 @@ function Join-Domain {
             Write-Host ""
             Write-OutputColor "  Successfully joined domain '$targetDomain'!" -color "Success"
             Write-OutputColor "  A reboot is required to complete the domain join." -color "Warning"
-            $global:RebootNeeded = $true
+            $script:RebootNeeded = $true
             Add-SessionChange -Category "System" -Description "Joined domain '$targetDomain'"
             Clear-MenuCache
             return
@@ -232,7 +232,7 @@ function Join-Domain {
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Note: Server appears to be domain-joined (to $($postCheck.Domain))." -color "Warning"
                 Write-OutputColor "  A reboot may be required to complete the join." -color "Warning"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 Add-SessionChange -Category "System" -Description "Joined domain '$($postCheck.Domain)' (completed after error)"
                 Clear-MenuCache
                 return

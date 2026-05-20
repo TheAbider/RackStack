@@ -1978,7 +1978,7 @@ function Show-StorageManagerMenu {
 # Function to run Storage Manager
 function Start-StorageManager {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-StorageManagerMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice

@@ -3,7 +3,7 @@
 function Start-Show-Mainmenu {
     while ($true) {
         # Reset the "return to main menu" flag
-        $global:ReturnToMainMenu = $false
+        $script:ReturnToMainMenu = $false
 
         $choice = Show-MainMenu
 
@@ -54,7 +54,7 @@ function Start-Show-Mainmenu {
                     default {
                         $navResult = Test-NavigationCommand -UserInput $batchChoice
                         if ($navResult.Action -eq "exit") { Exit-Script; return }
-                        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+                        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
                         if ($batchChoice) {
                             Write-OutputColor "  Invalid choice. Enter 1, 2, 3, or B." -color "Error"
                             Start-Sleep -Milliseconds 500
@@ -109,7 +109,7 @@ function Start-Show-Mainmenu {
 # Function to run the Configure Server menu
 function Start-Show-ConfigureServerMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) {
+        if ($script:ReturnToMainMenu) {
             return
         }
 
@@ -124,38 +124,38 @@ function Start-Show-ConfigureServerMenu {
             return
         }
         if ($navResult.Action -eq "home") {
-            $global:ReturnToMainMenu = $true
+            $script:ReturnToMainMenu = $true
             return
         }
 
         switch ($choice) {
             "1" {
                 Start-Show-NetworkMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "2" {
                 Start-Show-SystemConfigMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "3" {
                 Start-Show-RolesFeaturesMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "4" {
                 Start-Show-SecurityAccessMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "5" {
                 Start-Show-ToolsUtilitiesMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "6" {
                 Start-Show-StorageClusteringMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "7" {
                 Show-OperationsMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "8" {
                 Show-SystemHealthCheck
@@ -186,14 +186,14 @@ function Start-Show-ConfigureServerMenu {
 # Function to run the System Configuration submenu
 function Start-Show-SystemConfigMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         $choice = Show-SystemConfigMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
             "1" { Set-HostName }
@@ -216,14 +216,14 @@ function Start-Show-SystemConfigMenu {
 # Function to run the Roles & Features submenu
 function Start-Show-RolesFeaturesMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         $choice = Show-RolesFeaturesMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
             "1" { Install-HyperVRole; Write-PressEnter }
@@ -242,14 +242,14 @@ function Start-Show-RolesFeaturesMenu {
 # Function to run the Security & Access submenu
 function Start-Show-SecurityAccessMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         $choice = Show-SecurityAccessMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
             "1" { Enable-RDP; Write-PressEnter }
@@ -275,14 +275,14 @@ function Start-Show-SecurityAccessMenu {
 # Function to run the Tools & Utilities submenu
 function Start-Show-ToolsUtilitiesMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         $choice = Show-ToolsUtilitiesMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
             "1" { Set-NTPConfiguration }
@@ -311,14 +311,14 @@ function Start-Show-ToolsUtilitiesMenu {
 # Function to run the Storage & Clustering submenu
 function Start-Show-StorageClusteringMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         $choice = Show-StorageClusteringMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
             "1" { Start-StorageManager }
@@ -340,7 +340,7 @@ function Start-Show-StorageClusteringMenu {
 function Start-Show-NetworkMenu {
     while ($true) {
         # Check if we need to return to main menu
-        if ($global:ReturnToMainMenu) {
+        if ($script:ReturnToMainMenu) {
             return
         }
 
@@ -356,18 +356,18 @@ function Start-Show-NetworkMenu {
             return
         }
         if ($navResult.Action -eq "home") {
-            $global:ReturnToMainMenu = $true
+            $script:ReturnToMainMenu = $true
             return
         }
 
         switch ($networkChoice) {
             "1" {
                 Start-Show-HostNetworkMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "2" {
                 Start-Show-VM-NetworkMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "back" {
                 return
@@ -383,7 +383,7 @@ function Start-Show-NetworkMenu {
 # Function to run the host network configuration menu
 function Start-Show-HostNetworkMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         # Check if a reboot is pending (cached to avoid repeated registry reads in loop)
         $rebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
         if ($rebootPending) {
@@ -404,7 +404,7 @@ function Start-Show-HostNetworkMenu {
             if (Confirm-UserAction -Message "Install Hyper-V now?") {
                 $installResult = Install-WindowsFeatureWithTimeout -FeatureName "Hyper-V" -DisplayName "Hyper-V" -IncludeManagementTools
                 if ($installResult.Success) {
-                    $global:RebootNeeded = $true
+                    $script:RebootNeeded = $true
                     Add-SessionChange -Category "Roles" -Description "Installed Hyper-V (reboot required)"
                     Clear-MenuCache
                     Write-OutputColor "  A reboot is required." -color "Warning"
@@ -429,14 +429,14 @@ function Start-Show-HostNetworkMenu {
             return
         }
         if ($navResult.Action -eq "home") {
-            $global:ReturnToMainMenu = $true
+            $script:ReturnToMainMenu = $true
             return
         }
 
         switch ($hostNetworkChoice) {
             "1" {
                 Start-Show-VirtualSwitchMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "2" {
                 Add-CustomVNIC
@@ -444,11 +444,11 @@ function Start-Show-HostNetworkMenu {
             }
             "3" {
                 Start-Show-HostNetworkIPMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "4" {
                 Start-StorageSANMenu
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "5" {
                 Rename-NetworkAdapter
@@ -459,7 +459,7 @@ function Start-Show-HostNetworkMenu {
                 Write-PressEnter
             }
             "M" {
-                $global:ReturnToMainMenu = $true
+                $script:ReturnToMainMenu = $true
                 return
             }
             default {
@@ -473,14 +473,14 @@ function Start-Show-HostNetworkMenu {
 # Function to run the Virtual Switch Management submenu
 function Start-Show-VirtualSwitchMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
 
         $choice = Show-VirtualSwitchMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($choice) {
             "1" { New-SwitchEmbeddedTeam -SwitchName $script:SwitchName -ManagementName $script:ManagementName; Write-PressEnter }
@@ -508,13 +508,13 @@ function Start-Show-HostNetworkIPMenu {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $vmNetworkChoice = Show-Host-IPNetworkMenu -selectedAdapterName $selectedAdapterName
 
         $navResult = Test-NavigationCommand -UserInput $vmNetworkChoice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($vmNetworkChoice) {
             "1" {
@@ -536,7 +536,7 @@ function Start-Show-HostNetworkIPMenu {
                 }
             }
             "M" {
-                $global:ReturnToMainMenu = $true
+                $script:ReturnToMainMenu = $true
                 return
             }
             "back" {
@@ -560,13 +560,13 @@ function Start-Show-VM-NetworkMenu {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $vmNetworkChoice = Show-VM-NetworkMenu -selectedAdapterName $selectedAdapterName
 
         $navResult = Test-NavigationCommand -UserInput $vmNetworkChoice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
-        if ($navResult.Action -eq "home") { $global:ReturnToMainMenu = $true; return }
+        if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
         switch ($vmNetworkChoice) {
             "1" {
@@ -588,7 +588,7 @@ function Start-Show-VM-NetworkMenu {
                 }
             }
             "M" {
-                $global:ReturnToMainMenu = $true
+                $script:ReturnToMainMenu = $true
                 return
             }
             "back" {

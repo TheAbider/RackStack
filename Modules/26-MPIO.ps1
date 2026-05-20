@@ -197,7 +197,7 @@ function Install-MPIOFeature {
             Write-OutputColor "  A reboot is required to complete the installation." -color "Warning"
             Write-OutputColor "  After rebooting, configure MPIO for your storage via:" -color "Info"
             Write-OutputColor "  - iSCSI Setup > Initialize MPIO for iSCSI" -color "Info"
-            $global:RebootNeeded = $true
+            $script:RebootNeeded = $true
             Add-SessionChange -Category "System" -Description "Installed MPIO (Multipath I/O)"
             Clear-MenuCache
         }

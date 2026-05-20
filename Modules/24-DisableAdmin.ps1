@@ -59,14 +59,14 @@ function Disable-BuiltInAdminAccount {
         $adminAccount = Show-AdminAccountStatus
 
         if ($null -eq $adminAccount) {
-            $global:DisabledAdminReboot = $false
+            $script:DisabledAdminReboot = $false
             Write-PressEnter
             return
         }
 
         if (-not $adminAccount.Enabled) {
             Write-OutputColor "  Built-in Administrator account is already disabled." -color "Info"
-            $global:DisabledAdminReboot = $false
+            $script:DisabledAdminReboot = $false
             Write-PressEnter
             return
         }
@@ -185,7 +185,7 @@ function Disable-BuiltInAdminAccount {
 
         if (-not (Confirm-UserAction -Message "Disable built-in Administrator account?")) {
             Write-OutputColor "  Operation cancelled." -color "Info"
-            $global:DisabledAdminReboot = $false
+            $script:DisabledAdminReboot = $false
             Write-PressEnter
             return
         }
@@ -196,7 +196,7 @@ function Disable-BuiltInAdminAccount {
         $adminAccount = Get-LocalUser -Name "Administrator"
         if (-not $adminAccount.Enabled) {
             Write-OutputColor "  Built-in Administrator account has been disabled." -color "Success"
-            $global:DisabledAdminReboot = $true
+            $script:DisabledAdminReboot = $true
             Add-SessionChange -Category "Security" -Description "Disabled built-in Administrator account"
             Add-UndoAction -Category "Security" -Description "Disabled built-in Administrator account" -UndoScript {
                 Enable-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue
@@ -205,12 +205,12 @@ function Disable-BuiltInAdminAccount {
         }
         else {
             Write-OutputColor "  Failed to disable the account." -color "Error"
-            $global:DisabledAdminReboot = $false
+            $script:DisabledAdminReboot = $false
         }
     }
     catch {
         Write-OutputColor "  Failed to disable Administrator account: $_" -color "Error"
-        $global:DisabledAdminReboot = $false
+        $script:DisabledAdminReboot = $false
     }
     Write-PressEnter
 }

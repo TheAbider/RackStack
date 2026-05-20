@@ -121,7 +121,7 @@ function Set-HostName {
     try {
         Rename-Computer -NewName $newHostname -Force -ErrorAction Stop
         Write-OutputColor "  Hostname changed to '$newHostname'. Reboot required!" -color "Success"
-        $global:RebootNeeded = $true
+        $script:RebootNeeded = $true
         Add-SessionChange -Category "System" -Description "Changed hostname from '$currentHostname' to '$newHostname'"
         Clear-MenuCache
         Add-UndoAction -Category "System" -Description "Changed hostname to '$newHostname'" -UndoScript {

@@ -309,7 +309,7 @@ function Show-FCSANMenu {
 # Function to run FC SAN menu
 function Start-FCSANMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-FCSANMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
@@ -321,7 +321,7 @@ function Start-FCSANMenu {
             "2" { Invoke-FCScan; Write-PressEnter }
             "3" { $null = Initialize-MPIOForFC; Write-PressEnter }
             "4" { Show-StorageBackendStatus; Write-PressEnter }
-            "M" { $global:ReturnToMainMenu = $true; return }
+            "M" { $script:ReturnToMainMenu = $true; return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
@@ -644,7 +644,7 @@ function Show-S2DMenu {
 # Function to run S2D menu
 function Start-S2DMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-S2DMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
@@ -656,7 +656,7 @@ function Start-S2DMenu {
             "2" { New-S2DVirtualDisk; Write-PressEnter }
             "3" { Show-S2DStatus; Write-PressEnter }
             "4" { Show-StorageBackendStatus; Write-PressEnter }
-            "M" { $global:ReturnToMainMenu = $true; return }
+            "M" { $script:ReturnToMainMenu = $true; return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
@@ -797,7 +797,7 @@ function Show-SMB3Menu {
 # Function to run SMB3 menu
 function Start-SMB3Menu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-SMB3Menu
 
         $navResult = Test-NavigationCommand -UserInput $choice
@@ -808,7 +808,7 @@ function Start-SMB3Menu {
             "1" { Test-SMB3SharePath; Write-PressEnter }
             "2" { Show-SMB3Status; Write-PressEnter }
             "3" { Show-StorageBackendStatus; Write-PressEnter }
-            "M" { $global:ReturnToMainMenu = $true; return }
+            "M" { $script:ReturnToMainMenu = $true; return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-3, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
@@ -897,7 +897,7 @@ function Show-NVMeoFMenu {
 # Function to run NVMe-oF menu
 function Start-NVMeoFMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-NVMeoFMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
@@ -913,7 +913,7 @@ function Start-NVMeoFMenu {
                 Write-PressEnter
             }
             "3" { Show-StorageBackendStatus; Write-PressEnter }
-            "M" { $global:ReturnToMainMenu = $true; return }
+            "M" { $script:ReturnToMainMenu = $true; return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-3, B, or M." -color "Error"
                 Start-Sleep -Seconds 1
@@ -1077,7 +1077,7 @@ function Show-StorageSANMenu {
 # Function to run the unified Storage & SAN menu
 function Start-StorageSANMenu {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-StorageSANMenu
 
         $navResult = Test-NavigationCommand -UserInput $choice
@@ -1098,7 +1098,7 @@ function Start-StorageSANMenu {
                         Write-PressEnter
                     }
                 }
-                if ($global:ReturnToMainMenu) { return }
+                if ($script:ReturnToMainMenu) { return }
             }
             "2" { Show-StorageBackendStatus; Write-PressEnter }
             "3" {
@@ -1118,7 +1118,7 @@ function Start-StorageSANMenu {
                 Write-PressEnter
             }
             "0" { Set-StorageBackendType; Write-PressEnter }
-            "M" { $global:ReturnToMainMenu = $true; return }
+            "M" { $script:ReturnToMainMenu = $true; return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 0-3, B, or M." -color "Error"
                 Start-Sleep -Seconds 1

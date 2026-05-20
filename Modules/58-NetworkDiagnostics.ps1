@@ -1,7 +1,7 @@
 ﻿#region ===== NETWORK DIAGNOSTICS =====
 function Show-NetworkDiagnostics {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -60,8 +60,8 @@ function Show-NetworkDiagnostics {
             "13" { Invoke-NetworkStackReset }
             "b" { return }
             "B" { return }
-            "m" { $global:ReturnToMainMenu = $true; return }
-            "M" { $global:ReturnToMainMenu = $true; return }
+            "m" { $script:ReturnToMainMenu = $true; return }
+            "M" { $script:ReturnToMainMenu = $true; return }
             default {
                 Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
                 Start-Sleep -Seconds 1
@@ -1030,7 +1030,7 @@ function Invoke-NetworkStackReset {
                 Write-OutputColor "  Winsock reset failed: $($result -join ' ')" -color "Error"
             } else {
                 Write-OutputColor "  Winsock catalog reset. REBOOT REQUIRED." -color "Warning"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 Add-SessionChange -Category "Network" -Description "Reset Winsock catalog (reboot required)"
             }
         }
@@ -1041,7 +1041,7 @@ function Invoke-NetworkStackReset {
                 Write-OutputColor "  TCP/IP reset failed: $($result -join ' ')" -color "Error"
             } else {
                 Write-OutputColor "  TCP/IP stack reset. REBOOT REQUIRED." -color "Warning"
-                $global:RebootNeeded = $true
+                $script:RebootNeeded = $true
                 Add-SessionChange -Category "Network" -Description "Reset TCP/IP stack (reboot required)"
             }
         }
@@ -1086,7 +1086,7 @@ function Invoke-NetworkStackReset {
             } else {
                 Write-OutputColor "  Network stack reset completed with $resetErrors warning(s). REBOOT REQUIRED." -color "Warning"
             }
-            $global:RebootNeeded = $true
+            $script:RebootNeeded = $true
             Add-SessionChange -Category "Network" -Description "Full network stack reset (Winsock + TCP/IP + DNS)"
         }
         default {

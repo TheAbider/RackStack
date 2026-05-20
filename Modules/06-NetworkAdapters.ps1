@@ -1,7 +1,7 @@
 ﻿#region ===== NETWORK ADAPTER FUNCTIONS =====
 function Select-PhysicalAdapters {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select Physical Adapters" -color "Info"
 
@@ -67,7 +67,7 @@ function Select-PhysicalAdapters {
 # Function to select a host network adapter (vEthernet adapters)
 function Select-Host-Network-Adapter {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select Host Network Adapter" -color "Info"
 
@@ -128,7 +128,7 @@ function Select-Host-Network-Adapter {
 # Function to select a VM network adapter (non-vEthernet adapters)
 function Select-VM-Network-Adapter {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select VM Network Adapter" -color "Info"
 
@@ -189,7 +189,7 @@ function Select-VM-Network-Adapter {
 # Function to select iSCSI adapters (shows all adapters including down)
 function Select-iSCSI-Adapters {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Select iSCSI Adapters" -color "Info"
 

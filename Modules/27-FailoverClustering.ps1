@@ -56,7 +56,7 @@ function Install-FailoverClusteringFeature {
         }
         elseif ($installResult.Success) {
             Write-OutputColor "`nFailover Clustering installed successfully!" -color "Success"
-            $global:RebootNeeded = $true
+            $script:RebootNeeded = $true
             Add-SessionChange -Category "System" -Description "Installed Failover Clustering"
             Clear-MenuCache
         }
@@ -101,7 +101,7 @@ function Show-ClusterManagementMenu {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -670,7 +670,7 @@ function Set-LiveMigrationSettings {
     }
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         # Re-query each iteration to show updated settings
         $vmHost = Get-VMHost -ErrorAction SilentlyContinue
         if (-not $vmHost) { return }

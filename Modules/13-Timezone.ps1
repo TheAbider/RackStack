@@ -155,7 +155,7 @@ function Set-ServerTimeZone {
 # Display the 7 regions for the user to pick
 function Show-TimezoneRegionPicker {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Set Timezone" -color "Info"
 
@@ -222,7 +222,7 @@ function Show-RegionTimezones {
     )
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "Set Timezone - $RegionName" -color "Info"
 
@@ -292,7 +292,7 @@ function Show-AllSystemTimezones {
     $totalPages = [math]::Ceiling($allTz.Count / $pageSize)
 
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         Clear-Host
         Write-CenteredOutput "All System Timezones" -color "Info"
 

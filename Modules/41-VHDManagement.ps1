@@ -943,7 +943,7 @@ function Show-VHDHealthStatus {
 
 function Start-VHDManagement {
     while ($true) {
-        if ($global:ReturnToMainMenu) { return }
+        if ($script:ReturnToMainMenu) { return }
         $choice = Show-VHDManagementMenu
 
         switch ($choice) {
