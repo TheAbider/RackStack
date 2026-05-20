@@ -276,9 +276,17 @@ jobs:
       - name: Generate SBOM (CycloneDX)
         id: sbom
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        continue-on-error: true
         uses: anchore/sbom-action@v0
         with:
-          path: builds/RackStack.exe
+          # Syft can't resolve a single Windows PE .exe as a source (needs a
+          # directory or recognized package format). Scan the whole repo
+          # checkout instead — that catches the PowerShell sources, the
+          # .psd1 manifest's PowerShellVersion declaration, and the
+          # monolithic .ps1 that the EXE is compiled from. The result is a
+          # source-level SBOM rather than a binary one, which is more
+          # useful for downstream consumers anyway.
+          path: .
           format: cyclonedx-json
           artifact-name: RackStack-${{ steps.vercheck.outputs.version }}-sbom.cyclonedx.json
           output-file: builds/RackStack-${{ steps.vercheck.outputs.version }}-sbom.cyclonedx.json
