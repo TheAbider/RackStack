@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## v1.98.45
+
+Quality push — modern test framework + distribution channels.
+
+- **Pester 5.x unit-test suite** under `Tests/Pester/` covering pure functions in 03-InputValidation, 04-Navigation, and 22-Password modules. 71 tests, complements the existing regex-pattern harness in `Run-Tests.ps1` (which stays as the structural / cross-cutting check). New CI step `Run Pester unit tests` after `Run tests (core)` (Tests/Pester/, Tests/pester-check.ps1, .github/workflows/ci.yml).
+- **PowerShell Gallery publish** step added to the release pipeline. Gated on `PSGALLERY_API_KEY` secret — skips silently if absent so the release pipeline still works without it set. Publishes the existing thin-wrapper module (`RackStack.psd1` + `RackStack.psm1`) so users can `Install-Module RackStack`. Verifies psd1 ModuleVersion matches Header.ps1 .VERSION before publishing (.github/workflows/ci.yml).
+- **Code-signing placeholder** for SignPath.io (free OSS plan). Workflow steps commented out with full enable instructions — uncomment + add four secrets to ship signed EXE that bypasses SmartScreen warnings (.github/workflows/ci.yml).
+
 ## v1.98.44
 
 Round 31 — info-disclosure + argument-injection sweep (1 Tier-1 + 1 Tier-2 latent-privesc applied).

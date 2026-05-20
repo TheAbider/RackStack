@@ -42,6 +42,13 @@ jobs:
             Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
           }
 
+      - name: Install Pester 5.x
+        run: |
+          $hasPester5 = Get-Module Pester -ListAvailable | Where-Object { $_.Version -ge [version]'5.0.0' }
+          if (-not $hasPester5) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+
       - name: Generate monolithic
         run: .\sync-to-monolithic.ps1
 
@@ -57,6 +64,13 @@ jobs:
         run: |
           # Core tests: parse, module load, function existence, validation, navigation
           & .\Tests\Run-Tests.ps1 -Quick
+          exit $LASTEXITCODE
+
+      - name: Run Pester unit tests
+        run: |
+          # Pester 5.x unit tests for pure functions (input validation, navigation, password
+          # complexity, formatters). Complements the regex-pattern harness in Run-Tests.ps1.
+          & .\Tests\pester-check.ps1
           exit $LASTEXITCODE
 
       - name: Upload test artifacts on failure
@@ -138,6 +152,49 @@ jobs:
           Invoke-PS2EXE -InputFile $mono -OutputFile 'builds\RackStack.exe' -Version $ver -RequireAdmin -IconFile 'RackStack.ico'
           $info = Get-Item 'builds\RackStack.exe'
           Write-Host "Compiled: $($info.FullName) ($([math]::Round($info.Length / 1MB, 2)) MB)"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Code signing (SignPath.io) — placeholder. SignPath is free for OSS projects;
+      # signed releases avoid SmartScreen "Unknown publisher" warnings and build
+      # reputation faster. To enable:
+      #
+      #   1. Sign up at https://signpath.io (request the free OSS plan)
+      #   2. Register the RackStack project; note organization-id, project-slug,
+      #      signing-policy-slug
+      #   3. Configure the artifact-configuration in SignPath UI:
+      #        artifact-configuration-slug = "rackstack-exe"
+      #   4. Add four GitHub secrets (Settings → Secrets → Actions):
+      #        SIGNPATH_API_TOKEN
+      #        SIGNPATH_ORG_ID
+      #        SIGNPATH_PROJECT_SLUG
+      #        SIGNPATH_POLICY_SLUG
+      #   5. Uncomment the upload + sign steps below.
+      #
+      # Until then the EXE ships unsigned; downloads trigger SmartScreen warnings.
+      # ─────────────────────────────────────────────────────────────────────────
+      #
+      # - name: Upload unsigned EXE for SignPath
+      #   id: upload-unsigned
+      #   if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: rackstack-exe-unsigned
+      #     path: builds/RackStack.exe
+      #     retention-days: 1
+      #
+      # - name: Sign RackStack.exe (SignPath.io)
+      #   id: signpath-sign
+      #   if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+      #   uses: signpath/github-action-submit-signing-request@v1.2
+      #   with:
+      #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+      #     organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+      #     project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+      #     signing-policy-slug: ${{ secrets.SIGNPATH_POLICY_SLUG }}
+      #     artifact-configuration-slug: 'rackstack-exe'
+      #     github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+      #     wait-for-completion: true
+      #     output-artifact-directory: 'builds'
 
       - name: Generate SHA256 hashes
         id: hashes
@@ -234,6 +291,46 @@ jobs:
             exit 1
           }
           $global:LASTEXITCODE = 0
+
+      - name: Publish to PowerShell Gallery
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          # Publishes the thin-wrapper module (RackStack.psd1 / RackStack.psm1) to PowerShell
+          # Gallery so users can `Install-Module RackStack`. The EXE is still downloaded
+          # separately at first use — the gallery module locates it via Get-RackStackExePath.
+          # Gated on the PSGALLERY_API_KEY secret existing; skips silently if absent so the
+          # release pipeline still works on forks / first-run before the secret is set.
+          if ([string]::IsNullOrWhiteSpace($env:PSGALLERY_API_KEY)) {
+            Write-Host "PSGALLERY_API_KEY secret not set — skipping PowerShell Gallery publish."
+            Write-Host "To enable: add the secret in Settings → Secrets → Actions, then re-run."
+            exit 0
+          }
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          # Verify the .psd1 ModuleVersion matches the .VERSION in Header.ps1 — both should be $ver.
+          $psd = Import-PowerShellDataFile -Path 'RackStack.psd1'
+          if ($psd.ModuleVersion -ne $ver) {
+            Write-Error "PSGallery publish: RackStack.psd1 ModuleVersion ($($psd.ModuleVersion)) does not match Header.ps1 version ($ver). Bump the manifest."
+            exit 1
+          }
+          # Stage the module into a clean directory (PSGallery wants module-name-as-dirname).
+          $stageDir = Join-Path $env:RUNNER_TEMP "RackStack-publish-$ver"
+          if (Test-Path -LiteralPath $stageDir) { Remove-Item -LiteralPath $stageDir -Recurse -Force }
+          $modDir = Join-Path $stageDir 'RackStack'
+          New-Item -Path $modDir -ItemType Directory -Force | Out-Null
+          Copy-Item -LiteralPath 'RackStack.psd1' -Destination $modDir -Force
+          Copy-Item -LiteralPath 'RackStack.psm1' -Destination $modDir -Force
+          # Publish — Publish-Module on PS 7.x uses NuGet under the hood; supports -SkipAutomaticTags.
+          try {
+            Publish-Module -Path $modDir -NuGetApiKey $env:PSGALLERY_API_KEY -ErrorAction Stop
+            Write-Host "Published RackStack v$ver to PowerShell Gallery."
+          } catch {
+            Write-Host "PSGallery publish failed: $($_.Exception.Message)"
+            # Non-fatal — the GitHub Release still publishes; PSGallery is a secondary channel.
+            # Operator can re-run manually with `Publish-Module -Path ... -NuGetApiKey ...`.
+          }
+          exit 0
 
       - name: Apply retention rule (only latest z in minor survives)
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'

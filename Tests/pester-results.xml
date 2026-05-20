@@ -1,0 +1,172 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="71" errors="0" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2026-05-19" time="20:13:14">
+  <environment clr-version="10.0.6" platform="Microsoft Windows 11 Pro|C:\WINDOWS|\Device\Harddisk0\Partition3" os-version="10.0.26200" user="Abider" machine-name="ABIDER-LAPTOP" user-domain="ABIDER-LAPTOP" nunit-version="2.5.8.0" cwd="C:\Users\Abider\Documents\RackStack" />
+  <culture-info current-culture="en-US" current-uiculture="en-US" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Success" success="True" time="1.9445" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="C:\Users\Abider\Documents\RackStack\Tests\Pester\InputValidation.Tests.ps1" executed="True" result="Success" success="True" time="1.2662" asserts="0" description="C:\Users\Abider\Documents\RackStack\Tests\Pester\InputValidation.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Test-ValidHostname" executed="True" result="Success" success="True" time="0.2824" asserts="0" description="Test-ValidHostname">
+            <results>
+              <test-suite type="TestFixture" name="Test-ValidHostname.Valid hostnames" executed="True" result="Success" success="True" time="0.2175" asserts="0" description="Test-ValidHostname.Valid hostnames">
+                <results>
+                  <test-case description="accepts a single letter" name="Test-ValidHostname.Valid hostnames.accepts a single letter" time="0.1144" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts a single digit" name="Test-ValidHostname.Valid hostnames.accepts a single digit" time="0.0061" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts letters and digits" name="Test-ValidHostname.Valid hostnames.accepts letters and digits" time="0.0043" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts hyphens in middle" name="Test-ValidHostname.Valid hostnames.accepts hyphens in middle" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts 15-character names (NetBIOS max)" name="Test-ValidHostname.Valid hostnames.accepts 15-character names (NetBIOS max)" time="0.0421" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="is case-insensitive in regex (works for upper)" name="Test-ValidHostname.Valid hostnames.is case-insensitive in regex (works for upper)" time="0.0062" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ValidHostname.Invalid hostnames" executed="True" result="Success" success="True" time="0.2654" asserts="0" description="Test-ValidHostname.Invalid hostnames">
+                <results>
+                  <test-case description="rejects 16-character names (over NetBIOS limit)" name="Test-ValidHostname.Invalid hostnames.rejects 16-character names (over NetBIOS limit)" time="0.0064" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects leading hyphen" name="Test-ValidHostname.Invalid hostnames.rejects leading hyphen" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects trailing hyphen" name="Test-ValidHostname.Invalid hostnames.rejects trailing hyphen" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects underscore" name="Test-ValidHostname.Invalid hostnames.rejects underscore" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects space" name="Test-ValidHostname.Invalid hostnames.rejects space" time="0.0035" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects period (FQDN form is invalid as NetBIOS name)" name="Test-ValidHostname.Invalid hostnames.rejects period (FQDN form is invalid as NetBIOS name)" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects null byte (injection prevention)" name="Test-ValidHostname.Invalid hostnames.rejects null byte (injection prevention)" time="0.0035" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects Unicode lookalike (Cyrillic а instead of Latin a)" name="Test-ValidHostname.Invalid hostnames.rejects Unicode lookalike (Cyrillic а instead of Latin a)" time="0.0088" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Test-ValidIPAddress" executed="True" result="Success" success="True" time="0.3895" asserts="0" description="Test-ValidIPAddress">
+            <results>
+              <test-suite type="TestFixture" name="Test-ValidIPAddress.Valid IPv4" executed="True" result="Success" success="True" time="0.0503" asserts="0" description="Test-ValidIPAddress.Valid IPv4">
+                <results>
+                  <test-case description="accepts 192.168.1.1" name="Test-ValidIPAddress.Valid IPv4.accepts 192.168.1.1" time="0.0314" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts 0.0.0.0" name="Test-ValidIPAddress.Valid IPv4.accepts 0.0.0.0" time="0.0042" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts 255.255.255.255" name="Test-ValidIPAddress.Valid IPv4.accepts 255.255.255.255" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts with CIDR suffix" name="Test-ValidIPAddress.Valid IPv4.accepts with CIDR suffix" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ValidIPAddress.Invalid IPv4" executed="True" result="Success" success="True" time="0.1016" asserts="0" description="Test-ValidIPAddress.Invalid IPv4">
+                <results>
+                  <test-case description="rejects 256 octet" name="Test-ValidIPAddress.Invalid IPv4.rejects 256 octet" time="0.0164" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects 3-octet form" name="Test-ValidIPAddress.Invalid IPv4.rejects 3-octet form" time="0.0039" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects 5-octet form" name="Test-ValidIPAddress.Invalid IPv4.rejects 5-octet form" time="0.0056" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects bare text" name="Test-ValidIPAddress.Invalid IPv4.rejects bare text" time="0.0042" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects IPv6 address" name="Test-ValidIPAddress.Invalid IPv4.rejects IPv6 address" time="0.007" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects null byte (injection prevention)" name="Test-ValidIPAddress.Invalid IPv4.rejects null byte (injection prevention)" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Test-ValidVLANId" executed="True" result="Success" success="True" time="0.4521" asserts="0" description="Test-ValidVLANId">
+            <results>
+              <test-suite type="TestFixture" name="Test-ValidVLANId.Valid VLAN IDs" executed="True" result="Success" success="True" time="0.0243" asserts="0" description="Test-ValidVLANId.Valid VLAN IDs">
+                <results>
+                  <test-case description="accepts 1 (lowest valid)" name="Test-ValidVLANId.Valid VLAN IDs.accepts 1 (lowest valid)" time="0.0076" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts 4094 (highest valid)" name="Test-ValidVLANId.Valid VLAN IDs.accepts 4094 (highest valid)" time="0.0059" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts string &quot;100&quot; (coerced to int)" name="Test-ValidVLANId.Valid VLAN IDs.accepts string &quot;100&quot; (coerced to int)" time="0.0048" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ValidVLANId.Invalid VLAN IDs" executed="True" result="Success" success="True" time="0.0575" asserts="0" description="Test-ValidVLANId.Invalid VLAN IDs">
+                <results>
+                  <test-case description="rejects 0 (reserved)" name="Test-ValidVLANId.Invalid VLAN IDs.rejects 0 (reserved)" time="0.0124" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects 4095 (reserved)" name="Test-ValidVLANId.Invalid VLAN IDs.rejects 4095 (reserved)" time="0.0045" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects negative" name="Test-ValidVLANId.Invalid VLAN IDs.rejects negative" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects non-numeric string" name="Test-ValidVLANId.Invalid VLAN IDs.rejects non-numeric string" time="0.0044" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-HostnameValidationError" executed="True" result="Success" success="True" time="0.5165" asserts="0" description="Get-HostnameValidationError">
+            <results>
+              <test-case description="returns null for valid hostname" name="Get-HostnameValidationError.returns null for valid hostname" time="0.0205" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="reports length for too-long name" name="Get-HostnameValidationError.reports length for too-long name" time="0.0136" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="reports leading hyphen" name="Get-HostnameValidationError.reports leading hyphen" time="0.0059" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="reports trailing hyphen" name="Get-HostnameValidationError.reports trailing hyphen" time="0.0074" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="reports invalid characters" name="Get-HostnameValidationError.reports invalid characters" time="0.0074" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\Abider\Documents\RackStack\Tests\Pester\Navigation.Tests.ps1" executed="True" result="Success" success="True" time="0.3559" asserts="0" description="C:\Users\Abider\Documents\RackStack\Tests\Pester\Navigation.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Test-NavigationCommand" executed="True" result="Success" success="True" time="0.141" asserts="0" description="Test-NavigationCommand">
+            <results>
+              <test-suite type="TestFixture" name="Test-NavigationCommand.Back commands" executed="True" result="Success" success="True" time="0.0651" asserts="0" description="Test-NavigationCommand.Back commands">
+                <results>
+                  <test-case description="recognizes &quot;back&quot;" name="Test-NavigationCommand.Back commands.recognizes &quot;back&quot;" time="0.0365" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;b&quot;" name="Test-NavigationCommand.Back commands.recognizes &quot;b&quot;" time="0.0057" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;B&quot; (case-insensitive)" name="Test-NavigationCommand.Back commands.recognizes &quot;B&quot; (case-insensitive)" time="0.0043" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;cancel&quot;" name="Test-NavigationCommand.Back commands.recognizes &quot;cancel&quot;" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;0&quot;" name="Test-NavigationCommand.Back commands.recognizes &quot;0&quot;" time="0.0039" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="sets ShouldReturn = true on back" name="Test-NavigationCommand.Back commands.sets ShouldReturn = true on back" time="0.0051" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-NavigationCommand.Exit commands" executed="True" result="Success" success="True" time="0.0853" asserts="0" description="Test-NavigationCommand.Exit commands">
+                <results>
+                  <test-case description="recognizes &quot;exit&quot;" name="Test-NavigationCommand.Exit commands.recognizes &quot;exit&quot;" time="0.0068" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;quit&quot;" name="Test-NavigationCommand.Exit commands.recognizes &quot;quit&quot;" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;QUIT&quot; (case-insensitive)" name="Test-NavigationCommand.Exit commands.recognizes &quot;QUIT&quot; (case-insensitive)" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-NavigationCommand.Home commands" executed="True" result="Success" success="True" time="0.1051" asserts="0" description="Test-NavigationCommand.Home commands">
+                <results>
+                  <test-case description="recognizes &quot;home&quot;" name="Test-NavigationCommand.Home commands.recognizes &quot;home&quot;" time="0.0044" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;main&quot;" name="Test-NavigationCommand.Home commands.recognizes &quot;main&quot;" time="0.0048" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="recognizes &quot;m&quot;" name="Test-NavigationCommand.Home commands.recognizes &quot;m&quot;" time="0.0045" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-NavigationCommand.Continue / empty" executed="True" result="Success" success="True" time="0.1354" asserts="0" description="Test-NavigationCommand.Continue / empty">
+                <results>
+                  <test-case description="returns continue for normal input" name="Test-NavigationCommand.Continue / empty.returns continue for normal input" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="returns continue for letter input" name="Test-NavigationCommand.Continue / empty.returns continue for letter input" time="0.01" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="returns empty for empty input" name="Test-NavigationCommand.Continue / empty.returns empty for empty input" time="0.0037" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="returns empty for whitespace-only" name="Test-NavigationCommand.Continue / empty.returns empty for whitespace-only" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="continue and empty do not set ShouldReturn" name="Test-NavigationCommand.Continue / empty.continue and empty do not set ShouldReturn" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Format-TransferSize" executed="True" result="Success" success="True" time="0.1793" asserts="0" description="Format-TransferSize">
+            <results>
+              <test-case description="formats 0 bytes" name="Format-TransferSize.formats 0 bytes" time="0.0117" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="formats 512 bytes" name="Format-TransferSize.formats 512 bytes" time="0.0037" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="formats 1024 bytes as 1 KB" name="Format-TransferSize.formats 1024 bytes as 1 KB" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="formats 1 MB" name="Format-TransferSize.formats 1 MB" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="formats 1 GB with decimals" name="Format-TransferSize.formats 1 GB with decimals" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="formats 1 TB" name="Format-TransferSize.formats 1 TB" time="0.0034" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="handles fractional GB" name="Format-TransferSize.handles fractional GB" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\Abider\Documents\RackStack\Tests\Pester\Password.Tests.ps1" executed="True" result="Success" success="True" time="0.3224" asserts="0" description="C:\Users\Abider\Documents\RackStack\Tests\Pester\Password.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Test-PasswordComplexity" executed="True" result="Success" success="True" time="0.1752" asserts="0" description="Test-PasswordComplexity">
+            <results>
+              <test-suite type="TestFixture" name="Test-PasswordComplexity.Length" executed="True" result="Success" success="True" time="0.0849" asserts="0" description="Test-PasswordComplexity.Length">
+                <results>
+                  <test-case description="rejects (throws on) empty password — refuse-to-evaluate is correct security behavior" name="Test-PasswordComplexity.Length.rejects (throws on) empty password — refuse-to-evaluate is correct security behavior" time="0.0513" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects short password (under MinPasswordLength)" name="Test-PasswordComplexity.Length.rejects short password (under MinPasswordLength)" time="0.0243" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts 14-character strong password (default min)" name="Test-PasswordComplexity.Length.accepts 14-character strong password (default min)" time="0.0035" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-PasswordComplexity.Character classes" executed="True" result="Success" success="True" time="0.1294" asserts="0" description="Test-PasswordComplexity.Character classes">
+                <results>
+                  <test-case description="rejects no uppercase" name="Test-PasswordComplexity.Character classes.rejects no uppercase" time="0.0093" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects no lowercase" name="Test-PasswordComplexity.Character classes.rejects no lowercase" time="0.0075" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects no digit" name="Test-PasswordComplexity.Character classes.rejects no digit" time="0.0099" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="rejects no special char" name="Test-PasswordComplexity.Character classes.rejects no special char" time="0.0083" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts all four classes" name="Test-PasswordComplexity.Character classes.accepts all four classes" time="0.0042" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-PasswordComplexity.Edge cases" executed="True" result="Success" success="True" time="0.1703" asserts="0" description="Test-PasswordComplexity.Edge cases">
+                <results>
+                  <test-case description="rejects unicode-only special chars (PowerShell -cmatch may not classify)" name="Test-PasswordComplexity.Edge cases.rejects unicode-only special chars (PowerShell -cmatch may not classify)" time="0.0087" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts dollar-sign as special" name="Test-PasswordComplexity.Edge cases.accepts dollar-sign as special" time="0.0039" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="accepts hash-sign as special" name="Test-PasswordComplexity.Edge cases.accepts hash-sign as special" time="0.0228" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>
