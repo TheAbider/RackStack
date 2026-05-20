@@ -1,0 +1,83 @@
+name: Bug report
+description: Report something that's broken in RackStack.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill in the fields below so the maintainer can reproduce it quickly.
+
+        **Security issues:** don't file them here. Use https://github.com/TheAbider/RackStack/security/advisories/new (private).
+
+  - type: input
+    id: version
+    attributes:
+      label: RackStack version
+      description: Output of `RackStack.exe -Version` or the EXE filename.
+      placeholder: "1.98.57"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      description: Output of `(Get-CimInstance Win32_OperatingSystem).Caption` + `(Get-ComputerInfo).WindowsBuildLabEx` if you have it.
+      placeholder: "Microsoft Windows Server 2022 Datacenter / 20348.2762.amd64fre.fe_release.210507-1500"
+    validations:
+      required: true
+
+  - type: input
+    id: psversion
+    attributes:
+      label: PowerShell version
+      description: Output of `$PSVersionTable.PSVersion`.
+      placeholder: "5.1.20348.2762"
+    validations:
+      required: true
+
+  - type: textarea
+    id: action
+    attributes:
+      label: What were you trying to do?
+      description: The CLI invocation, menu path, or batch config that triggered the bug.
+      placeholder: |
+        e.g. "Ran RackStack.exe -Action Batch -Config C:\configs\web.json -Silent"
+        or   "Selected menu option 4 -> 2 -> 1 in interactive mode"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Include the exact error message if there was one. Paste transcript output or screenshots.
+    validations:
+      required: true
+
+  - type: textarea
+    id: defaults
+    attributes:
+      label: Relevant defaults.json snippet (REDACT SECRETS)
+      description: If the bug involves config (network, agents, file-server, etc.), paste the matching defaults.json fragment. **Remove any credentials, tokens, or client secrets first.**
+      render: json
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I ran the tool as Administrator (or the bug specifically involves the auto-elevation path).
+          required: true
+        - label: I checked the [Changelog](../Changelog.md) and this isn't a documented limitation.
+          required: true
+        - label: I removed secrets from any pasted output above.
+          required: true

@@ -55,8 +55,12 @@ jobs:
         run: |
           # Minimal static-site layout — no Jekyll needed. Copy docs/ to a
           # _site/ directory the Pages action expects.
+          # Use `cp -R docs/. _site/` (trailing dot) instead of `docs/*` so
+          # dotfiles like .nojekyll and .well-known/ are included — needed
+          # for /.well-known/security.txt (RFC 9116) to be served at
+          # https://theabider.github.io/RackStack/.well-known/security.txt.
           mkdir -p _site
-          cp -R docs/* _site/
+          cp -R docs/. _site/
           # Move the cmdlet index to be the docs landing page so the URL
           # https://theabider.github.io/RackStack/ shows something useful.
           if [ -f _site/cmdlets/index.md ]; then

@@ -1,0 +1,42 @@
+name: Question / Help
+description: Ask how something works, or get help configuring RackStack.
+title: "[help] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a question issue, please check the [README](../README.md), the cmdlet reference at https://theabider.github.io/RackStack/cmdlets/, and the existing [closed issues](https://github.com/TheAbider/RackStack/issues?q=is%3Aissue) — there's a good chance your question was already answered.
+
+        **Security questions:** don't file them here. Use https://github.com/TheAbider/RackStack/security/advisories/new (private).
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What's your question?
+      description: Be specific. Include the action, menu path, or config you're trying to use.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What have you already tried?
+      description: Helps avoid suggesting things you've already ruled out.
+
+  - type: input
+    id: version
+    attributes:
+      label: RackStack version
+      description: Output of `RackStack.exe -Version`. Skip if not yet installed.
+      placeholder: "1.98.57"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues and the README.
+          required: true
+        - label: This is not a security report (those go through SECURITY.md instead).
+          required: true
