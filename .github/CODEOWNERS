@@ -1,0 +1,8 @@
+# CODEOWNERS — auto-assigns reviewers when a PR touches matching paths.
+# https://docs.github.com/en/repositories/managing-your-repositories-settings-and-customization/customizing-your-repository/about-code-owners
+#
+# Currently a single-maintainer project; @TheAbider owns everything.
+# When a second maintainer joins, scope their ownership here so PRs route
+# to the right reviewer automatically (e.g. `Modules/02-Logging.ps1 @co-maintainer`).
+
+* @TheAbider

@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest a new capability or improvement.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for thinking about how RackStack could be better. Please check the [ROADMAP](../ROADMAP.md) first — your idea may already be planned or explicitly out-of-scope.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the operator workflow or pain point. Don't jump to the solution yet.
+      placeholder: "When I'm configuring a new Hyper-V host, I have to manually X every time, which is tedious."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like RackStack to do? Be specific about the menu path / CLI action / config option.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you've tried or other tools that solve this differently.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope category
+      description: Roughly which module would this touch?
+      options:
+        - Networking (IP, VLAN, SET, DNS)
+        - Storage (iSCSI, MPIO, S2D, SMB3, NVMe-oF)
+        - Hyper-V (VM deployment, replica, checkpoints)
+        - Clustering (failover, quorum)
+        - Active Directory / Identity
+        - Configuration (defaults.json, batch mode)
+        - CLI / Headless surface
+        - Health / Monitoring / Reports
+        - Security hardening
+        - Developer experience (CI, tests, build)
+        - Other / Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I checked [ROADMAP.md](../ROADMAP.md) and this isn't already planned or explicitly out-of-scope.
+          required: true
+        - label: This is a feature for the documented user base (Windows sysadmins / MSP engineers running PowerShell on Windows Server), not a port to a different OS or rewrite to a different language.
+          required: true
