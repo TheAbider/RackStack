@@ -270,6 +270,48 @@ jobs:
             builds/RackStack.exe
             builds/RackStack v${{ steps.vercheck.outputs.version }}.ps1
 
+      # ─────────────────────────────────────────────────────────────────────────
+      # Sigstore cosign keyless signing — produces .sig files alongside each
+      # release artifact. Keyless mode uses GitHub OIDC + Sigstore's Fulcio CA
+      # to issue a short-lived certificate tied to this workflow run; no long-
+      # lived signing key to manage. Combined with SLSA provenance, this gives
+      # the project credit for the OpenSSF Scorecard "Signed-Releases" check.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Install cosign
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+
+      - name: Sign release artifacts with cosign (keyless)
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          $assets = @(
+            'builds\RackStack.exe'
+            "builds\RackStack v$ver.ps1"
+            'release-hashes.txt'
+          )
+          foreach ($a in $assets) {
+            if (-not (Test-Path -LiteralPath $a)) {
+              Write-Host "Skipping (not present): $a"
+              continue
+            }
+            $sigPath = "$a.sig"
+            $certPath = "$a.pem"
+            Write-Host "Signing $a..."
+            cosign sign-blob --yes `
+              --output-signature $sigPath `
+              --output-certificate $certPath `
+              $a
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "cosign sign-blob failed for $a (exit $LASTEXITCODE)"
+            } else {
+              Write-Host "  -> $sigPath + $certPath"
+            }
+          }
+          # Reset exit code so a single sign-blob failure doesn't abort the release flow.
+          $global:LASTEXITCODE = 0
+          exit 0
+
       - name: Generate SBOM (CycloneDX)
         id: sbom
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
@@ -328,6 +370,15 @@ jobs:
             ``````
             gh attestation verify RackStack.exe --owner TheAbider
             ``````
+          - **Cosign keyless signatures**: each artifact is signed via Sigstore Fulcio + GitHub OIDC. Verify with:
+            ``````
+            cosign verify-blob \``
+              --certificate RackStack.exe.pem \``
+              --signature RackStack.exe.sig \``
+              --certificate-identity-regexp "^https://github.com/TheAbider/RackStack/.github/workflows/ci.yml@refs/heads/master$" \``
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \``
+              RackStack.exe
+            ``````
           - **SBOM** (CycloneDX): see ``RackStack-$ver-sbom.cyclonedx.json`` attached below.
 
           ## Changes
@@ -364,14 +415,24 @@ jobs:
             }
             $global:LASTEXITCODE = 0
 
-            # Build the asset list dynamically so the SBOM is only attached when it exists.
+            # Build the asset list dynamically so optional files (SBOM + cosign
+            # .sig/.pem) are only attached when they exist. Scorecard's
+            # Signed-Releases check looks for .sig files on every release artifact.
             $assetArgs = @(
               "builds\RackStack.exe"
               "builds\RackStack v$ver.ps1"
               "defaults.example.json"
+              'release-hashes.txt'
             )
             $sbomPath = "builds\RackStack-$ver-sbom.cyclonedx.json"
             if (Test-Path -LiteralPath $sbomPath) { $assetArgs += $sbomPath }
+            # Cosign keyless signatures + certificates (one of each per artifact).
+            foreach ($base in @("builds\RackStack.exe", "builds\RackStack v$ver.ps1", 'release-hashes.txt')) {
+              foreach ($suffix in @('.sig', '.pem')) {
+                $sigFile = "$base$suffix"
+                if (Test-Path -LiteralPath $sigFile) { $assetArgs += $sigFile }
+              }
+            }
             gh release create "v$ver" `
               --title "RackStack v$ver" `
               --notes-file 'release-body.md' `

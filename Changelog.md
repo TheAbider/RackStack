@@ -1,5 +1,26 @@
 ﻿# Changelog
 
+## v1.98.54
+
+Signed releases (Sigstore cosign) + branch protection.
+
+**Signed-Releases — addresses OpenSSF Scorecard 0→10:**
+- New CI steps install Sigstore cosign and sign every release artifact (`RackStack.exe`, monolithic `.ps1`, `release-hashes.txt`) using keyless OIDC. Each release now ships with a `.sig` (signature) and a `.pem` (Fulcio-issued certificate) for every primary asset.
+- Verification (from any consumer machine with `cosign` installed):
+  ```
+  cosign verify-blob \
+    --certificate RackStack.exe.pem \
+    --signature RackStack.exe.sig \
+    --certificate-identity-regexp "^https://github.com/TheAbider/RackStack/.github/workflows/ci.yml@refs/heads/master$" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    RackStack.exe
+  ```
+- Keyless mode means there's no long-lived signing key to manage — Fulcio issues a short-lived cert tied to this exact workflow run, and Rekor logs the signature publicly for transparency.
+- Combined with the existing SLSA Level 3 `actions/attest-build-provenance` attestation, every release now has TWO independent cryptographic chains of custody back to a specific GitHub Actions run + commit.
+
+**Branch protection — addresses OpenSSF Scorecard Branch-Protection 0→partial:**
+- Created branch ruleset `master-protection` (id `16627068`): blocks force-pushes, blocks deletion, and requires the CI / gitleaks / CodeQL status checks to pass before any merge. Maintainer (RepositoryRole id 5) is in the bypass list so direct pushes still work, but the protections still apply to them.
+
 ## v1.98.53
 
 Coverage push 81% → 95%, infrastructure hardening, Scorecard climb.
