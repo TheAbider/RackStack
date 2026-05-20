@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.98.50
+
+First PowerShell Gallery publish — `Install-Module RackStack` now works.
+
+`PSGALLERY_API_KEY` was added to the repository secrets, so the publish step (in place since v1.98.45) now activates and pushes the thin-wrapper module (`RackStack.psd1` + `RackStack.psm1`) to https://www.powershellgallery.com/packages/RackStack on every version bump. Users can install the cmdlet wrappers (`Get-RackStackExePath`, `Invoke-RackStackAction`, `Test-RackStackUpdate`, etc.) directly from the Gallery; the EXE itself is still downloaded separately from GitHub Releases on first use.
+
 ## v1.98.49
 
 Pester coverage doubled + code-signing scaffold made self-activating.
