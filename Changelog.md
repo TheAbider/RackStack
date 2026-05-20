@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.98.48
+
+Regex-pattern test harness updated for the v1.98.46 `$script:` refactor.
+
+- **Run-Tests.ps1 regex tests** were still grepping for the literal text `$global:RebootNeeded` in module source. v1.98.46 renamed those to `$script:`, which caused two FAILs in CI (`47-ExitCleanup: checks RebootNeeded flag` and `14-WindowsUpdates: RebootNeeded/SessionChange only on success`). Patterns and the harness's own flag-initialization writes are now updated to `$script:`. 4598/4598 tests pass locally.
+
 ## v1.98.47
 
 UI output funneled through the theme/logging pipeline.

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.47
+    Automated Test Runner for RackStack v1.98.48
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -249,10 +249,10 @@ $script:ColorThemes = @{
     }
 }
 
-# Initialize global flags
-$global:RebootNeeded = $false
-$global:DisabledAdminReboot = $false
-$global:ReturnToMainMenu = $false
+# Initialize script-scope flags (modules use $script: after v1.98.46 refactor)
+$script:RebootNeeded = $false
+$script:DisabledAdminReboot = $false
+$script:ReturnToMainMenu = $false
 
 # Initialize menu cache
 $script:MenuCache = @{
@@ -1500,14 +1500,14 @@ try {
     Write-TestResult "Get-WinRMState returns string" $false $_.Exception.Message
 }
 
-# Global variables initialized correctly
+# Script-scope flag variables initialized correctly
 try {
-    $pass = $global:RebootNeeded -is [bool] -and
-            $global:DisabledAdminReboot -is [bool] -and
-            $global:ReturnToMainMenu -is [bool]
-    Write-TestResult "Global flags (RebootNeeded, DisabledAdminReboot, ReturnToMainMenu) are booleans" $pass
+    $pass = $script:RebootNeeded -is [bool] -and
+            $script:DisabledAdminReboot -is [bool] -and
+            $script:ReturnToMainMenu -is [bool]
+    Write-TestResult "Script-scope flags (RebootNeeded, DisabledAdminReboot, ReturnToMainMenu) are booleans" $pass
 } catch {
-    Write-TestResult "Global flags are booleans" $false $_.Exception.Message
+    Write-TestResult "Script-scope flags are booleans" $false $_.Exception.Message
 }
 
 # Script-scoped variables accessible
@@ -6108,8 +6108,8 @@ try {
     # Shows session summary before exiting
     Write-TestResult "47-ExitCleanup: calls Show-SessionSummary" ($ecContent -match 'Show-SessionSummary')
 
-    # Checks both global:RebootNeeded and Test-RebootPending
-    Write-TestResult "47-ExitCleanup: checks RebootNeeded flag" ($ecContent -match 'global:RebootNeeded')
+    # Checks both script:RebootNeeded and Test-RebootPending
+    Write-TestResult "47-ExitCleanup: checks RebootNeeded flag" ($ecContent -match 'script:RebootNeeded')
     Write-TestResult "47-ExitCleanup: calls Test-RebootPending" ($ecContent -match 'Test-RebootPending')
 
     # Cleanup targets use $script:ToolName (dynamic, not hardcoded). v1.98.24 introduced a
@@ -8146,7 +8146,7 @@ foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
 }
 Write-TestResult "All Read-Host Select prompts have Test-NavigationCommand" ($navMissing.Count -eq 0) $(if ($navMissing.Count -gt 0) { "Missing nav check at: $($navMissing -join ', ')" } else { "" })
 
-# --- Test: while($true) loops must check $global:ReturnToMainMenu ---
+# --- Test: while($true) loops must check $script:ReturnToMainMenu ---
 $rtmmMissing = @()
 foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
     # Skip entry point (manages the flag itself) and navigation module
@@ -12190,7 +12190,7 @@ try {
 
     # v1.98.3 — 14-WindowsUpdates failure path
     $upd98 = Get-Content (Join-Path $modulesPath "14-WindowsUpdates.ps1") -Raw
-    Write-TestResult "14-WindowsUpdates: RebootNeeded/SessionChange only on success" ($upd98 -match 'complete!"[\s\S]{0,400}\$global:RebootNeeded\s*=\s*\$true[\s\S]{0,300}Add-SessionChange')
+    Write-TestResult "14-WindowsUpdates: RebootNeeded/SessionChange only on success" ($upd98 -match 'complete!"[\s\S]{0,400}\$script:RebootNeeded\s*=\s*\$true[\s\S]{0,300}Add-SessionChange')
 
     # v1.98.3 — 15-RDP gating
     $rdp98 = Get-Content (Join-Path $modulesPath "15-RDP.ps1") -Raw
