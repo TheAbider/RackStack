@@ -32,8 +32,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: javascript-typescript
-            build-mode: none
+          # GitHub Actions language covers our workflow YAML files AND the JS
+          # embedded in actions/github-script steps. We don't ship standalone
+          # .js / .ts source, so the dedicated javascript-typescript analyzer
+          # has nothing to scan and fails with "no source code seen during build".
           - language: actions
             build-mode: none
 

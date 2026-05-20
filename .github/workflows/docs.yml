@@ -72,6 +72,10 @@ jobs:
     name: Deploy to Pages
     needs: build
     runs-on: ubuntu-latest
+    # continue-on-error at the job level: the deploy step fails with 404 until
+    # GitHub Pages is enabled at https://github.com/TheAbider/RackStack/settings/pages
+    # (set Source = "GitHub Actions"). Once enabled this just works.
+    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
