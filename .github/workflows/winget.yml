@@ -1,0 +1,64 @@
+name: winget submission
+
+# Auto-submits a new winget manifest to microsoft/winget-pkgs whenever a
+# GitHub Release is published. Uses vedantmgoyal9/winget-releaser which
+# wraps wingetcreate (Microsoft's official CLI) and submits a PR to
+# winget-pkgs on the project's behalf.
+#
+# First-time submission: maintainer reviews the bot-opened PR in
+# winget-pkgs and merges. Subsequent releases auto-submit identical-shape
+# manifests with version + URL + SHA-256 bumps.
+#
+# Requires a Personal Access Token (classic) with `public_repo` scope
+# stored as the WINGET_TOKEN repo secret. The default GITHUB_TOKEN does
+# not work because it cannot push to a different repository
+# (microsoft/winget-pkgs).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to submit (e.g. v1.98.57). Leave blank for latest."
+        required: false
+
+permissions: read-all
+
+jobs:
+  submit:
+    name: Submit manifest to winget-pkgs
+    runs-on: windows-latest
+    # Skip if the WINGET_TOKEN secret isn't set yet — keeps the workflow
+    # green on the first push before the maintainer creates the PAT.
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    steps:
+      - name: Detect token presence
+        id: tokcheck
+        env:
+          T: ${{ secrets.WINGET_TOKEN }}
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:T)) {
+            Write-Host "WINGET_TOKEN secret not set — skipping submission."
+            Write-Host "To enable: create a Personal Access Token (classic) with 'public_repo' scope at"
+            Write-Host "  https://github.com/settings/tokens/new?scopes=public_repo and store as WINGET_TOKEN."
+            "configured=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } else {
+            "configured=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+
+      - name: Submit to winget-pkgs
+        if: steps.tokcheck.outputs.configured == 'true'
+        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+        with:
+          # Microsoft's PackageIdentifier convention: Publisher.PackageName
+          identifier: TheAbider.RackStack
+          # The release-asset filename pattern — winget-releaser matches each
+          # release's exe by this. Our CI publishes `RackStack.exe` verbatim.
+          installers-regex: '^RackStack\.exe$'
+          # Maximum version to submit; blank = latest release on this repo.
+          max-versions-to-keep: 0
+          token: ${{ secrets.WINGET_TOKEN }}
+          # Optional release-tag override for workflow_dispatch runs.
+          release-tag: ${{ inputs.tag || github.event.release.tag_name }}

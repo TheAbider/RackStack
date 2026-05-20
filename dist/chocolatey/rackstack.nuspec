@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>rackstack</id>
+    <version>0.0.0</version>
+    <packageSourceUrl>https://github.com/TheAbider/RackStack/tree/master/dist/chocolatey</packageSourceUrl>
+    <owners>TheAbider</owners>
+    <title>RackStack — Windows Server configuration toolkit</title>
+    <authors>TheAbider</authors>
+    <projectUrl>https://github.com/TheAbider/RackStack</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/TheAbider/RackStack/master/RackStack.ico</iconUrl>
+    <copyright>Copyright (c) 2026 TheAbider</copyright>
+    <licenseUrl>https://github.com/TheAbider/RackStack/blob/master/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/TheAbider/RackStack</projectSourceUrl>
+    <docsUrl>https://github.com/TheAbider/RackStack#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/TheAbider/RackStack/issues</bugTrackerUrl>
+    <tags>windows-server hyper-v iscsi clustering powershell sysadmin automation msp admin-tools</tags>
+    <summary>PowerShell automation toolkit for configuring Windows Server hosts</summary>
+    <description>
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." 176 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, and batch automation, all with undo, transaction rollback, and audit logging.
+
+Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
+
+Requires Administrator privileges (auto-elevates if needed). Compatible with Windows Server 2008 R2 SP1 through Windows Server 2025, plus Windows 10/11 for testing.
+
+Verify releases via Sigstore cosign:
+  https://github.com/TheAbider/RackStack/releases
+    </description>
+    <releaseNotes>https://github.com/TheAbider/RackStack/blob/master/Changelog.md</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
