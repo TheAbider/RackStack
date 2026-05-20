@@ -1,0 +1,40 @@
+# Default: auto-detect text vs binary
+* text=auto eol=lf
+
+# PowerShell sources are CRLF in the working tree (Windows native) but stored
+# normalized to LF in the repo. Explicit eol declaration silences the
+# "LF will be replaced by CRLF" warning Git emits on every Windows commit.
+*.ps1   text eol=crlf
+*.psm1  text eol=crlf
+*.psd1  text eol=crlf
+*.ps1xml text eol=crlf
+
+# Windows batch / cmd
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# Cross-platform text (LF in working tree)
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.toml  text eol=lf
+*.sh    text eol=lf
+
+# Binary — never normalize
+*.exe   binary
+*.dll   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+
+# GitHub Linguist — exclude generated monolithic and vendored files from
+# the language stats on the repo front page (otherwise the 71k-line
+# RackStack v*.ps1 dwarfs the modular source).
+builds/**         linguist-generated=true
+docs/cmdlets/*.md linguist-documentation=true
+local/**          linguist-vendored=true
