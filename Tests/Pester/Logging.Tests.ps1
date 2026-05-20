@@ -298,6 +298,43 @@ Describe 'Write-RackStackError' {
     It 'renders RS-1002 (defaults.json parse error)' {
         { Write-RackStackError -Code 'RS-1002' -Detail 'JSON line 14 col 5' } | Should -Not -Throw
     }
+
+    It 'renders OSC 8 hyperlink when terminal supports it (Windows Terminal)' {
+        # Simulate Windows Terminal env: SupportsVT + not redirected + WT_SESSION set
+        $savedCaps = $script:ConsoleCapabilities
+        $savedWT = $env:WT_SESSION
+        try {
+            $script:ConsoleCapabilities = @{
+                SupportsVT = $true
+                IsRedirected = $false
+                SupportsUnicode = $true
+                BufferWidth = 120
+                BufferHeight = 30
+                ColorDepth = 16777216
+                HostName = 'ConsoleHost'
+            }
+            $env:WT_SESSION = 'fake-wt-session-for-test'
+            { Write-RackStackError -Code 'RS-1001' -Detail 'OSC8 hyperlink path' } | Should -Not -Throw
+        } finally {
+            $script:ConsoleCapabilities = $savedCaps
+            $env:WT_SESSION = $savedWT
+        }
+    }
+
+    It 'also writes to $script:logFilePath when set' {
+        $tmpLog = Join-Path ([System.IO.Path]::GetTempPath()) "rs-err-$([guid]::NewGuid()).log"
+        $saved = $script:logFilePath
+        try {
+            $script:logFilePath = $tmpLog
+            Write-RackStackError -Code 'RS-1001' -Detail 'file-log test'
+            $content = Get-Content -LiteralPath $tmpLog -Raw -ErrorAction SilentlyContinue
+            $content | Should -Match 'RS-1001'
+            $content | Should -Match 'file-log test'
+        } finally {
+            $script:logFilePath = $saved
+            if (Test-Path -LiteralPath $tmpLog) { Remove-Item -LiteralPath $tmpLog -Force -ErrorAction SilentlyContinue }
+        }
+    }
 }
 
 Describe 'Write-OutputColor (file-logging branch)' {

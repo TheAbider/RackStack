@@ -28,8 +28,8 @@
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
   <img alt="4500+ Tests" src="https://img.shields.io/badge/tests-4500%2B-brightgreen">
-  <img alt="Pester 298 tests" src="https://img.shields.io/badge/Pester-298%20tests-brightgreen">
-  <img alt="Coverage 95%" src="https://img.shields.io/badge/coverage-95%25-brightgreen">
+  <img alt="Pester 300 tests" src="https://img.shields.io/badge/Pester-300%20tests-brightgreen">
+  <img alt="Coverage 96%" src="https://img.shields.io/badge/coverage-96%25-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
 
