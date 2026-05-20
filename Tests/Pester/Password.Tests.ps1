@@ -41,3 +41,130 @@ Describe 'Test-PasswordComplexity' {
         It 'accepts hash-sign as special' { Test-PasswordComplexity 'MyStr0ngPass###' | Should -BeTrue }
     }
 }
+
+Describe 'ConvertFrom-SecureStringToPlainText' {
+    It 'round-trips a plaintext value through SecureString' {
+        $original = 'CorrectHorseBatteryStaple-42!'
+        $secure = ConvertTo-SecureString -String $original -AsPlainText -Force
+        $roundTripped = ConvertFrom-SecureStringToPlainText -secureString $secure
+        $roundTripped | Should -Be $original
+    }
+
+    It 'handles values containing special characters' {
+        $original = "p@ss!#`$%^&*()_+-=" + '<>?[]{}|'
+        $secure = ConvertTo-SecureString -String $original -AsPlainText -Force
+        ConvertFrom-SecureStringToPlainText -secureString $secure | Should -Be $original
+    }
+
+    It 'handles a single-character value (boundary)' {
+        $secure = ConvertTo-SecureString -String 'x' -AsPlainText -Force
+        ConvertFrom-SecureStringToPlainText -secureString $secure | Should -Be 'x'
+    }
+
+    It 'throws on $null input (parameter is Mandatory)' {
+        { ConvertFrom-SecureStringToPlainText -secureString $null } | Should -Throw
+    }
+}
+
+Describe 'New-StrongPassword' {
+    BeforeAll {
+        # New-StrongPassword writes box-drawing UI through Write-OutputColor; capture its
+        # console output to keep the test stream tidy, then check the returned string.
+        function script:Invoke-Silently {
+            param([scriptblock]$Script)
+            $oldErr = $ErrorActionPreference
+            $ErrorActionPreference = 'SilentlyContinue'
+            try {
+                # 6>&1 redirects Information stream, *>&1 captures everything else
+                & $Script *>&1 | Out-Null
+            } finally {
+                $ErrorActionPreference = $oldErr
+            }
+        }
+    }
+
+    Context 'Length boundaries' {
+        It 'defaults to length 16' {
+            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw.Length | Should -Be 16
+        }
+
+        It 'respects an explicit length parameter (24)' {
+            $pw = New-StrongPassword -Length 24 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw.Length | Should -Be 24
+        }
+
+        It 'floors length to 12 when caller asks for less' {
+            $pw = New-StrongPassword -Length 4 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw.Length | Should -Be 12
+        }
+
+        It 'caps length at 128 when caller asks for more' {
+            $pw = New-StrongPassword -Length 1000 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw.Length | Should -Be 128
+        }
+    }
+
+    Context 'Generated complexity' {
+        It 'contains at least one uppercase letter' {
+            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw | Should -Match '[A-Z]'
+        }
+
+        It 'contains at least one lowercase letter' {
+            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw | Should -Match '[a-z]'
+        }
+
+        It 'contains at least one digit (excluding ambiguous 0/1)' {
+            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw | Should -Match '[2-9]'
+        }
+
+        It 'contains at least one special char from the safe set !@#%^&*-_=+' {
+            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw | Should -Match '[!@#%^&\*\-_=+]'
+        }
+
+        It 'excludes ambiguous characters 0, 1, I, O, i, l, o (case-sensitive check)' {
+            $pw = New-StrongPassword -Length 64 6>$null 4>$null 5>$null 3>$null 2>$null
+            # PowerShell -match (and Pester Should -Match) is case-insensitive by default,
+            # which would falsely flag uppercase L. Use -cnotmatch for a literal case-sensitive check.
+            ($pw -cmatch '[01IOilo]') | Should -BeFalse
+        }
+
+        It 'passes Test-PasswordComplexity (own check)' {
+            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            Test-PasswordComplexity $pw | Should -BeTrue
+        }
+    }
+
+    Context 'Cryptographic randomness (statistical)' {
+        It 'produces distinct passwords across calls' {
+            $samples = 1..10 | ForEach-Object {
+                New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            }
+            ($samples | Select-Object -Unique).Count | Should -Be 10
+        }
+    }
+}
+
+Describe 'Clear-SecureMemory' {
+    It 'nulls the referenced string variable' {
+        $s = 'sensitive-data'
+        Clear-SecureMemory -StringRef ([ref]$s)
+        $s | Should -BeNullOrEmpty
+    }
+
+    It 'is a no-op for a $null input ref' {
+        $s = $null
+        { Clear-SecureMemory -StringRef ([ref]$s) } | Should -Not -Throw
+        $s | Should -BeNullOrEmpty
+    }
+
+    It 'leaves non-string ref values unchanged (function checks type)' {
+        $n = 42
+        Clear-SecureMemory -StringRef ([ref]$n)
+        $n | Should -Be 42
+    }
+}

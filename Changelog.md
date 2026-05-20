@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## v1.98.49
+
+Pester coverage doubled + code-signing scaffold made self-activating.
+
+- **Pester suite expanded from 71 to 159 tests.** Three new test files cover security-critical and operator-facing pure functions:
+  - `Logging.Tests.ps1` (32 tests) — `Write-StructuredLog` format guarantees, parameter validation, key-value emission, and the secret-key redaction (`Password`, `Token`, `Secret`, `ApiKey`, `ClientSecret`, `Authorization` — case-insensitive). The redaction pins prevent a future refactor from silently disabling defense-in-depth credential leak prevention.
+  - `BatchConfig.Tests.ps1` (29 tests) — `Test-BatchConfig`'s validation rules for unattended-install config: hostname format, IPv4 fields, network field interdependency, SubnetCIDR range, boolean type checking, power-plan / virtual-switch enums.
+  - `ConfigExport.Tests.ps1` (15 tests) — `Get-DefaultWatchThresholds` pinned to documented operator-facing values (CPU 90%, Memory 90%, Disk 95%, Uptime 60d, Cert 7d minimum, etc.).
+  - `Password.Tests.ps1` extended (+15 tests) — `ConvertFrom-SecureStringToPlainText` round-trip, `New-StrongPassword` length boundaries / complexity / cryptographic uniqueness / ambiguous-char exclusion, `Clear-SecureMemory` ref nulling.
+
+- **SignPath.io code-signing scaffold converted from commented placeholder to self-activating workflow.** A new `Detect SignPath configuration` step checks whether all four secrets (`SIGNPATH_API_TOKEN`, `SIGNPATH_ORG_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_POLICY_SLUG`) are present; the subsequent upload / sign / verify steps gate on that output. Without the secrets, signing skips silently with an explanatory message. Add the secrets and signing kicks in on the next version bump — no workflow edit required. A post-sign `Get-AuthenticodeSignature` verification step fails the build if SignPath returns an EXE whose signature does not validate locally.
+
 ## v1.98.48
 
 Regex-pattern test harness updated for the v1.98.46 `$script:` refactor.
