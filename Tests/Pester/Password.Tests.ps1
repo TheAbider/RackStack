@@ -10,6 +10,10 @@ BeforeAll {
     . (Join-Path $modulesPath '00-Initialization.ps1')
     . (Join-Path $modulesPath '02-Logging.ps1')
     . (Join-Path $modulesPath '22-Password.ps1')
+    # New-StrongPassword reads $script:TranscriptPath under its transcript-pause /
+    # restart logic. Under strict mode an uninitialized read throws; initialize to
+    # $null so the "no transcript path known" else-branch tests can execute.
+    $script:TranscriptPath = $null
     Set-StrictMode -Version Latest
 }
 
@@ -168,6 +172,57 @@ Describe 'New-StrongPassword' {
         It 'exercises the clipboard-failure branch when Set-Clipboard throws' {
             Mock Set-Clipboard { throw 'clipboard locked' }
             { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+        }
+    }
+
+    Context 'Transcript pause / restart branches (via Mock)' {
+        # The plaintext-display path stops the transcript before the box render
+        # and restarts it after. Mock Stop-Transcript / Start-Transcript so both
+        # the "transcript was running" and "no transcript" code paths execute.
+
+        It 'exercises the transcript-stopped-and-restarted path with $script:TranscriptPath set' {
+            $oldTp = $script:TranscriptPath
+            try {
+                $script:TranscriptPath = (Join-Path ([System.IO.Path]::GetTempPath()) "fake-transcript-$([guid]::NewGuid()).log")
+                Mock Stop-Transcript { 'fake-transcript-path' }   # truthy = was running
+                Mock Start-Transcript { }                          # no-op success
+                Mock Set-Clipboard { }
+                { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+            } finally {
+                $script:TranscriptPath = $oldTp
+            }
+        }
+
+        It 'exercises the transcript-stopped path with $script:TranscriptPath = $null' {
+            $oldTp = $script:TranscriptPath
+            try {
+                $script:TranscriptPath = $null
+                Mock Stop-Transcript { 'something-truthy' }
+                Mock Start-Transcript { }   # the else branch path
+                Mock Set-Clipboard { }
+                { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+            } finally {
+                $script:TranscriptPath = $oldTp
+            }
+        }
+
+        It 'exercises the no-transcript-running path (Stop-Transcript throws)' {
+            Mock Stop-Transcript { throw 'no transcript running' }   # catch -> $transcriptWasRunning stays false
+            Mock Set-Clipboard { }
+            { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+        }
+
+        It 'exercises the transcript-restart-fails path (Start-Transcript throws)' {
+            $oldTp = $script:TranscriptPath
+            try {
+                $script:TranscriptPath = (Join-Path ([System.IO.Path]::GetTempPath()) "fake-restart-fail-$([guid]::NewGuid()).log")
+                Mock Stop-Transcript { 'truthy' }
+                Mock Start-Transcript { throw 'restart failed' }   # outer catch swallows it
+                Mock Set-Clipboard { }
+                { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+            } finally {
+                $script:TranscriptPath = $oldTp
+            }
         }
     }
 }

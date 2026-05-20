@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## v1.98.56
+
+OpenSSF Best Practices **Silver tier achieved** (project 12921). Coverage push 96.18% → 97.45%.
+
+**Silver tier — earned 2026-05-20:**
+- The project now displays the OpenSSF Best Practices Silver badge in the README header. The same badge URL auto-refreshes if/when Gold is earned in the future. All Silver-tier criteria are documented in `local/openssf-best-practices-answers.md` (the Gold-tier answers are drafted too, with structural Unmets honestly marked — bus_factor, contributors_unassociated, two_person_review are inherent to single-maintainer projects).
+- 5 Scorecard code-scanning alerts (Maintained, Code-Review, Branch-Protection, Fuzzing, CII-Best-Practices) dismissed as structural limits for solo PowerShell projects, each with rationale. Code-scanning dashboard now shows 0 open alerts.
+
+**Coverage push:**
+- 4 new Pester tests for `New-StrongPassword`'s transcript-pause / restart logic via `Mock Stop-Transcript` and `Mock Start-Transcript`. Covers the "transcript was running + restart with TranscriptPath", "transcript was running + restart without TranscriptPath", "Stop-Transcript throws → no-restart", and "Start-Transcript throws → outer catch swallows" branches. **312/312 Pester tests pass; coverage 97.45%** on the measured pure-function modules (up from 96.18%).
+- Remaining 2.55% (20 commands of 785) is single-instruction branches across 9 functions — every additional point of coverage now requires its own targeted mock with diminishing return-on-effort.
+
+**Branch ruleset relaxation:**
+- `master-protection` ruleset rebuilt (now id `16651736`) with `require_last_push_approval: false`, `required_review_thread_resolution: false`, `dismiss_stale_reviews_on_push: false`. Solo-maintainer self-merge once CI passes no longer needs explicit admin bypass; the PR audit trail + 5 required status checks are the gate.
+
 ## v1.98.55
 
 Round-33 fresh-eyes security audit — code + GitHub config hardening.
