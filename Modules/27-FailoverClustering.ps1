@@ -366,34 +366,34 @@ function Add-NodeToCluster {
         $clusterEsc = $clusterName -replace "'", "''"
         Add-UndoAction -Category "Cluster" -Description "Leave cluster '$clusterName'" -UndoScript {
             param($Node, $Cluster)
-            Write-Host "  Verifying cluster state before evicting '$Node' from '$Cluster'..." -ForegroundColor Yellow
+            Write-OutputColor "  Verifying cluster state before evicting '$Node' from '$Cluster'..." -color "Warning"
             try {
                 $liveNodes = @(Get-ClusterNode -Cluster $Cluster -ErrorAction Stop)
             } catch {
-                Write-Host "  Cannot query cluster '$Cluster': $($_.Exception.Message). Refusing to evict." -ForegroundColor Red
+                Write-OutputColor "  Cannot query cluster '$Cluster': $($_.Exception.Message). Refusing to evict." -color "Error"
                 return
             }
             $upNodes = @($liveNodes | Where-Object { $_.State -eq 'Up' })
             if ($upNodes.Count -le 2) {
-                Write-Host "  REFUSING to evict: only $($upNodes.Count) node(s) currently Up." -ForegroundColor Red
-                Write-Host "  Evicting '$Node' would leave the cluster without quorum." -ForegroundColor Red
-                Write-Host "  If this is intentional, evict manually via Failover Cluster Manager." -ForegroundColor Yellow
+                Write-OutputColor "  REFUSING to evict: only $($upNodes.Count) node(s) currently Up." -color "Error"
+                Write-OutputColor "  Evicting '$Node' would leave the cluster without quorum." -color "Error"
+                Write-OutputColor "  If this is intentional, evict manually via Failover Cluster Manager." -color "Warning"
                 return
             }
             $target = $liveNodes | Where-Object { $_.Name -eq $Node }
             if (-not $target) {
-                Write-Host "  Node '$Node' is no longer a member of cluster '$Cluster'. Nothing to undo." -ForegroundColor Yellow
+                Write-OutputColor "  Node '$Node' is no longer a member of cluster '$Cluster'. Nothing to undo." -color "Warning"
                 return
             }
-            Write-Host "  Cluster has $($upNodes.Count) Up nodes; safe to evict '$Node'." -ForegroundColor Green
-            Write-Host "  Type EVICT to confirm:" -ForegroundColor Yellow
+            Write-OutputColor "  Cluster has $($upNodes.Count) Up nodes; safe to evict '$Node'." -color "Success"
+            Write-OutputColor "  Type EVICT to confirm:" -color "Warning"
             $confirm = Read-Host
             if ($confirm -ne 'EVICT') {
-                Write-Host "  Eviction cancelled (did not type EVICT)." -ForegroundColor Yellow
+                Write-OutputColor "  Eviction cancelled (did not type EVICT)." -color "Warning"
                 return
             }
             Remove-ClusterNode -Cluster $Cluster -Name $Node -ErrorAction Stop
-            Write-Host "  Node '$Node' evicted from '$Cluster'." -ForegroundColor Green
+            Write-OutputColor "  Node '$Node' evicted from '$Cluster'." -color "Success"
         }.GetNewClosure() -UndoParams @{ Node = $nodeEsc; Cluster = $clusterEsc }
     }
     catch {

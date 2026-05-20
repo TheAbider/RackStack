@@ -201,7 +201,7 @@ function Join-Domain {
             # Start-Job cannot access $targetDomain/$credential from parent scope
             Write-Host "`r  [|] Joining domain '$targetDomain'...    " -NoNewline
             Add-Computer -DomainName $targetDomain -Credential $credential -ErrorAction Stop
-            Write-Host ""
+            Write-OutputColor ""
             Write-OutputColor "  Successfully joined domain '$targetDomain'!" -color "Success"
             Write-OutputColor "  A reboot is required to complete the domain join." -color "Warning"
             $script:RebootNeeded = $true

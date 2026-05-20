@@ -281,7 +281,7 @@ function Show-StorageReplicaManagement {
                         $rgEsc = $rgName -replace "'", "''"
                         Add-UndoAction -Category "Storage" -Description "Remove SR partnership '$rgName' (breaks replication)" -UndoScript {
                             param($SrcServer, $RGName)
-                            Write-Host "  Removing SR partnership '$RGName' on '$SrcServer'..." -ForegroundColor Yellow
+                            Write-OutputColor "  Removing SR partnership '$RGName' on '$SrcServer'..." -color "Warning"
                             Remove-SRPartnership -SourceComputerName $SrcServer -SourceRGName $RGName -Confirm:$false -ErrorAction Stop
                         }.GetNewClosure() -UndoParams @{ SrcServer = $srcEsc; RGName = $rgEsc }
                     }

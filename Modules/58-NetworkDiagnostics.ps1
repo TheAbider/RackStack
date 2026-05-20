@@ -381,7 +381,7 @@ function Invoke-SubnetSweep {
         $scannedSoFar = [math]::Min($batchEnd - $start + 1, $total)
         Write-Host "`r  Scanned $scannedSoFar/$total | Found: $($batchAlive.Count) hosts (last: $lastFound)     "
     }
-    Write-Host ""
+    Write-OutputColor ""
     if ($timedOutCount -gt 0) {
         Write-OutputColor "  Warning: $timedOutCount ping(s) timed out" -color "Warning"
     }

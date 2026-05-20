@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## v1.98.47
+
+UI output funneled through the theme/logging pipeline.
+
+- **51 raw `Write-Host` calls converted to `Write-OutputColor`** across 17 modules. Simple colored lines (`Write-Host "..." -ForegroundColor Green/Yellow/Red/Cyan`) and blank-line emits (`Write-Host ""`) now go through the semantic color wrapper (`-color Success/Warning/Error/Info`). This routes those lines through the active console theme and the log-file capture path, instead of bypassing both. The 87 `-NoNewline` calls (carriage-return spinners, multi-color line composition) and `02-Logging.ps1` itself (the wrapper implementation) are intentionally left as-is.
+- **PSScriptAnalyzer suppression cleanup.** Dropped `PSAvoidGlobalVars` from `PSScriptAnalyzerSettings.psd1` — the v1.98.46 refactor removed every flagged usage, so the rule now runs clean against the whole module set. The remaining suppressions (`PSAvoidUsingWriteHost`, `PSUseShouldProcessForStateChangingFunctions`, etc.) all have one-line justifications.
+
 ## v1.98.46
 
 Gold-standard refactor — `$global:` → `$script:` across the codebase.

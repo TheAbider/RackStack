@@ -140,7 +140,7 @@ function Install-HyperVRole {
                 if ($elapsed -gt $script:FeatureInstallTimeoutSeconds) {
                     Stop-Job $installJob -ErrorAction SilentlyContinue
                     Remove-Job $installJob -Force -ErrorAction SilentlyContinue
-                    Write-Host ""
+                    Write-OutputColor ""
                     Complete-ProgressMessage -Activity "Hyper-V installation" -Status "Timed out" -Failed
                     Write-OutputColor "  Installation timed out after 30 minutes." -color "Error"
                     Add-SessionChange -Category "System" -Description "Hyper-V installation timed out (Windows Client)"

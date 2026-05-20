@@ -320,7 +320,7 @@ function Install-WindowsUpdates {
                 Start-Sleep -Seconds 5
                 $tiwElapsed += 5
             }
-            Write-Host ""
+            Write-OutputColor ""
             if ($tiwElapsed -ge $maxTiWorkerWait) {
                 Write-OutputColor "  TiWorker.exe is STILL running after extended wait. Reboot WILL roll back." -color "Critical"
                 Write-OutputColor "  Wait for it to exit (or use 'sfc /verifyonly' to check CBS health) before rebooting." -color "Warning"

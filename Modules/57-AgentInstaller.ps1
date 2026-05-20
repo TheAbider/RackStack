@@ -592,7 +592,7 @@ function Install-SelectedAgent {
                     $earlyDetect = $true
                     break
                 }
-                Write-Host ""
+                Write-OutputColor ""
                 Write-OutputColor "  Installation timed out after $installTimeout seconds." -color "Warning"
                 try { $installProcess.Kill() } catch {}
                 Add-SessionChange -Category "Software" -Description "$toolName Agent installation timed out after ${installTimeout}s"
@@ -600,7 +600,7 @@ function Install-SelectedAgent {
                 return
             }
         }
-        Write-Host ""
+        Write-OutputColor ""
 
         # Determine install result
         $exitCode = $null
@@ -661,7 +661,7 @@ function Install-SelectedAgent {
                         break
                     }
                 }
-                Write-Host ""
+                Write-OutputColor ""
             }
 
             if ($null -ne $agentResult -and $agentResult.Installed) {

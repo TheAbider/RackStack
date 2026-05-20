@@ -222,7 +222,7 @@ function Export-VMWizard {
                 if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and [Console]::KeyAvailable) {
                     $k = [Console]::ReadKey($true)
                     if ($k.Key -eq [ConsoleKey]::Escape) {
-                        Write-Host ""
+                        Write-OutputColor ""
                         Write-OutputColor "  ESC pressed. NOTE: Hyper-V will continue exporting in the background until done." -color "Warning"
                         Write-OutputColor "  To fully cancel, you must restart vmms.exe (will disrupt all VMs) or wait it out." -color "Warning"
                         if (Confirm-UserAction -Message "Stop watching this export? (Hyper-V vmms keeps running)") {
@@ -234,7 +234,7 @@ function Export-VMWizard {
             } catch { }
             # 4-hour cap with one-time confirm to extend
             if ($exportElapsed -gt $maxElapsedSeconds -and -not $maxElapsedConfirmed) {
-                Write-Host ""
+                Write-OutputColor ""
                 Write-OutputColor "  Export has been running for over 4 hours." -color "Warning"
                 if (-not (Confirm-UserAction -Message "Continue watching (Hyper-V keeps running regardless)?")) {
                     $cancelRequested = $true
@@ -275,7 +275,7 @@ function Export-VMWizard {
             Start-Sleep -Seconds 1
             $exportElapsed++
         }
-        Write-Host ""
+        Write-OutputColor ""
 
         $null = Receive-Job -Job $exportJob -ErrorAction Stop
         Remove-Job -Job $exportJob

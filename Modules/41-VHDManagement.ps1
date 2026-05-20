@@ -331,7 +331,7 @@ function Copy-VHDForVM {
                 $copyLastProgressAt = $copyElapsed
             }
             if ($copyElapsed -gt $copyMaxSeconds) {
-                Write-Host ""
+                Write-OutputColor ""
                 Write-OutputColor "  Copy exceeded $($copyMaxSeconds / 3600) hour timeout — aborting." -color "Error"
                 try { Stop-Job $copyJob -ErrorAction SilentlyContinue } catch {}
                 try { Remove-Job $copyJob -Force -ErrorAction SilentlyContinue } catch {}
@@ -339,7 +339,7 @@ function Copy-VHDForVM {
                 return $null
             }
             if ($copyElapsed -gt 300 -and ($copyElapsed - $copyLastProgressAt) -gt $copyStalledThreshold) {
-                Write-Host ""
+                Write-OutputColor ""
                 Write-OutputColor "  Copy stalled (no progress for $($copyStalledThreshold / 60) min) — aborting." -color "Error"
                 try { Stop-Job $copyJob -ErrorAction SilentlyContinue } catch {}
                 try { Remove-Job $copyJob -Force -ErrorAction SilentlyContinue } catch {}
@@ -347,7 +347,7 @@ function Copy-VHDForVM {
                 return $null
             }
         }
-        Write-Host ""
+        Write-OutputColor ""
 
         $null = Receive-Job $copyJob -ErrorAction SilentlyContinue
         $copyState = $copyJob.State
@@ -413,7 +413,7 @@ function Copy-VHDForVM {
                 $convertLastProgressAt = $convertElapsed
             }
             if ($convertElapsed -gt $convertMaxSeconds) {
-                Write-Host ""
+                Write-OutputColor ""
                 Write-OutputColor "  Convert exceeded $($convertMaxSeconds / 3600) hour timeout — aborting." -color "Error"
                 try { Stop-Job $convertJob -ErrorAction SilentlyContinue } catch {}
                 try { Remove-Job $convertJob -Force -ErrorAction SilentlyContinue } catch {}
@@ -421,7 +421,7 @@ function Copy-VHDForVM {
                 return $null
             }
             if ($convertElapsed -gt 300 -and ($convertElapsed - $convertLastProgressAt) -gt $convertStalledThreshold) {
-                Write-Host ""
+                Write-OutputColor ""
                 Write-OutputColor "  Convert stalled (no progress for $($convertStalledThreshold / 60) min) — aborting." -color "Error"
                 try { Stop-Job $convertJob -ErrorAction SilentlyContinue } catch {}
                 try { Remove-Job $convertJob -Force -ErrorAction SilentlyContinue } catch {}
@@ -429,7 +429,7 @@ function Copy-VHDForVM {
                 return $null
             }
         }
-        Write-Host ""
+        Write-OutputColor ""
 
         $null = Receive-Job $convertJob -ErrorAction SilentlyContinue
         $convertState = $convertJob.State

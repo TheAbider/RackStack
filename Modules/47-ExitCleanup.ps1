@@ -105,7 +105,7 @@ function Exit-Script {
             Write-Host "`r  This script will now self destruct in $i seconds   " -ForegroundColor Red -NoNewline
             Start-Sleep -Seconds 1
         }
-        Write-Host ""
+        Write-OutputColor ""
 
         Write-OutputColor "  Good luck." -color "Error"
 

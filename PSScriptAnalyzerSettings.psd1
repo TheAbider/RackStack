@@ -8,10 +8,6 @@
         # progress spinners, and box-drawing menus
         'PSAvoidUsingWriteHost',
 
-        # Cross-scope flags (RebootNeeded, DisabledAdminReboot, ReturnToMainMenu)
-        # must be global so they persist across dot-sourced module boundaries
-        'PSAvoidGlobalVars',
-
         # Interactive menu functions (Set-HostName, Start-ISODownload, etc.)
         # use Confirm-UserAction for confirmation, not ShouldProcess
         'PSUseShouldProcessForStateChangingFunctions',

@@ -332,10 +332,10 @@ function Test-SANTargetConnectivity {
         Write-Host "  Testing $($san.IP) ($($san.Label))... " -NoNewline
         $san.Reachable = Test-Connection -ComputerName $san.IP -Count 1 -Quiet -ErrorAction SilentlyContinue
         if ($san.Reachable) {
-            Write-Host "OK" -ForegroundColor Green
+            Write-OutputColor "OK" -color "Success"
         }
         else {
-            Write-Host "NO RESPONSE" -ForegroundColor Yellow
+            Write-OutputColor "NO RESPONSE" -color "Warning"
         }
     }
 
@@ -891,18 +891,18 @@ function Find-ReachableSANTargets {
         Write-Host "    Pinging A-side ($($pair.A))... " -NoNewline
         $aReachable = Test-Connection -ComputerName $pair.A -Count 1 -Quiet -ErrorAction SilentlyContinue
         if ($aReachable) {
-            Write-Host "OK" -ForegroundColor Green
+            Write-OutputColor "OK" -color "Success"
         } else {
-            Write-Host "NO RESPONSE" -ForegroundColor Yellow
+            Write-OutputColor "NO RESPONSE" -color "Warning"
         }
 
         # Test B-side
         Write-Host "    Pinging B-side ($($pair.B))... " -NoNewline
         $bReachable = Test-Connection -ComputerName $pair.B -Count 1 -Quiet -ErrorAction SilentlyContinue
         if ($bReachable) {
-            Write-Host "OK" -ForegroundColor Green
+            Write-OutputColor "OK" -color "Success"
         } else {
-            Write-Host "NO RESPONSE" -ForegroundColor Yellow
+            Write-OutputColor "NO RESPONSE" -color "Warning"
         }
 
         # If both are reachable, return this pair

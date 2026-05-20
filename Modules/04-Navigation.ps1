@@ -555,7 +555,7 @@ function Get-FileHashBackground {
             Start-Sleep -Milliseconds 500
             $hashElapsed += 0.5
         }
-        Write-Host ""
+        Write-OutputColor ""
 
         if ($hashJob.State -eq "Running") {
             Write-OutputColor "  Hash computation exceeded 30-minute cap. Aborting." -color "Warning"
@@ -607,7 +607,7 @@ function Invoke-WithTimeout {
         Start-Sleep -Seconds 1
         $elapsed++
     }
-    Write-Host ""
+    Write-OutputColor ""
 
     if (-not $handle.IsCompleted) {
         # Non-blocking stop — BeginStop sends cancellation without waiting for completion.

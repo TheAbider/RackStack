@@ -934,7 +934,7 @@ function Show-StandardVMTemplates {
     Write-Host "RAM   " -NoNewline -ForegroundColor White
     Write-Host "C Drive  " -NoNewline -ForegroundColor White
     Write-Host "D Drive     " -NoNewline -ForegroundColor White
-    Write-Host "│" -ForegroundColor Cyan
+    Write-OutputColor "│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     $index = 1
@@ -969,7 +969,7 @@ function Show-StandardVMTemplates {
         Write-Host "$($template.MemoryGB)GB".PadRight(6) -NoNewline -ForegroundColor White
         Write-Host $cDrive.PadRight(9) -NoNewline -ForegroundColor White
         Write-Host $dDrive.PadRight(12) -NoNewline -ForegroundColor White
-        Write-Host "│" -ForegroundColor Cyan
+        Write-OutputColor "│" -color "Info"
 
         $index++
     }
@@ -2677,7 +2677,7 @@ function Start-BatchDeployment {
     Write-Host "Disks  " -NoNewline -ForegroundColor White
     Write-Host "NICs  " -NoNewline -ForegroundColor White
     Write-Host "OS Source             " -NoNewline -ForegroundColor White
-    Write-Host "│" -ForegroundColor Cyan
+    Write-OutputColor "│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
     foreach ($vm in $script:VMDeploymentQueue) {
@@ -2700,7 +2700,7 @@ function Start-BatchDeployment {
         Write-Host "$diskCol" -NoNewline -ForegroundColor White
         Write-Host "$nicCol" -NoNewline -ForegroundColor White
         Write-Host "$osCol" -NoNewline -ForegroundColor White
-        Write-Host "│" -ForegroundColor Cyan
+        Write-OutputColor "│" -color "Info"
     }
 
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -2957,7 +2957,7 @@ function Show-VMQueueManagement {
         Write-Host "RAM      " -NoNewline -ForegroundColor White
         Write-Host "Disk     " -NoNewline -ForegroundColor White
         Write-Host "OS Source             " -NoNewline -ForegroundColor White
-        Write-Host "│" -ForegroundColor Cyan
+        Write-OutputColor "│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
 
         $totalDiskGB = 0
@@ -2985,7 +2985,7 @@ function Show-VMQueueManagement {
             Write-Host "$ramCol" -NoNewline -ForegroundColor White
             Write-Host "$diskCol" -NoNewline -ForegroundColor White
             Write-Host "$osCol" -NoNewline -ForegroundColor White
-            Write-Host "│" -ForegroundColor Cyan
+            Write-OutputColor "│" -color "Info"
         }
 
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"

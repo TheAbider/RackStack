@@ -1522,7 +1522,7 @@ function Show-DriveLetterMap {
         $totalLen = ($lineParts | ForEach-Object { $_.Text.Length } | Measure-Object -Sum).Sum
         $remaining = 70 - $totalLen
         if ($remaining -gt 0) { Write-Host (' ' * $remaining) -NoNewline }
-        Write-Host "│" -ForegroundColor Cyan
+        Write-OutputColor "│" -color "Info"
     }
 
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
@@ -1533,7 +1533,7 @@ function Show-DriveLetterMap {
     Write-Host " = In Use  " -NoNewline -ForegroundColor Cyan
     Write-Host "Yellow" -NoNewline -ForegroundColor Yellow
     Write-Host " = CD/DVD (can be moved)" -NoNewline -ForegroundColor Cyan
-    Write-Host "   │" -ForegroundColor Cyan
+    Write-OutputColor "   │" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 
     return $map

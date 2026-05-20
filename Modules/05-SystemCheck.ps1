@@ -369,12 +369,12 @@ function Test-AllConnectivity {
         if ($pingResult) {
             # Get latency
             $latency = $pingResult.ResponseTime
-            Write-Host ""
+            Write-OutputColor ""
             Write-OutputColor "[OK ] $($item.Name) ($($item.Target)) - ${latency}ms" -color "Success"
             $results += @{ Name = $item.Name; Status = "OK"; Latency = $latency }
         }
         else {
-            Write-Host ""
+            Write-OutputColor ""
             $color = if ($item.Critical) { "Error" } else { "Warning" }
             Write-OutputColor "[FAIL] $($item.Name) ($($item.Target)) - Not reachable" -color $color
             $results += @{ Name = $item.Name; Status = "FAIL"; Latency = $null }
@@ -552,13 +552,13 @@ function Install-WindowsFeatureWithTimeout {
         if ($elapsed -gt $script:FeatureInstallTimeoutSeconds) {
             Stop-Job $installJob -ErrorAction SilentlyContinue
             Remove-Job $installJob -Force -ErrorAction SilentlyContinue
-            Write-Host ""
+            Write-OutputColor ""
             Complete-ProgressMessage -Activity "$DisplayName installation" -Status "Timed out" -Failed
             Write-OutputColor "  Installation timed out after 30 minutes." -color "Error"
             return @{ Success = $false; TimedOut = $true; Result = $null }
         }
     }
-    Write-Host ""
+    Write-OutputColor ""
 
     $result = Receive-Job $installJob -ErrorAction SilentlyContinue
     $jobFailed = $installJob.State -eq "Failed"

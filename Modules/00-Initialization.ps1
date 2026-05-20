@@ -172,7 +172,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.46"
+$script:ScriptVersion = "1.98.47"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.
@@ -213,7 +213,7 @@ $script:OSBuildNumber = try {
     } catch {
         # Both detection paths failed — warn loudly rather than silently pinning to 0.
         # BuildNumber=0 would make every version-gated feature think we're on a pre-2008R2 OS.
-        Write-Host "[WARN] OS build number detection failed (registry + WMI both unreachable). Feature compatibility checks may misbehave." -ForegroundColor Yellow
+        Write-OutputColor "[WARN] OS build number detection failed (registry + WMI both unreachable). Feature compatibility checks may misbehave." -color "Warning"
         0
     }
 }

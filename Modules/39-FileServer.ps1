@@ -509,7 +509,7 @@ function Get-FileServerFile {
                     if ($elapsed.TotalSeconds -gt $TimeoutSeconds) {
                         Stop-Job $downloadJob -ErrorAction SilentlyContinue
                         Remove-Job $downloadJob -Force -ErrorAction SilentlyContinue
-                        Write-Host ""
+                        Write-OutputColor ""
                         Write-OutputColor "  Download timed out after $([math]::Round($elapsed.TotalSeconds)) seconds" -color "Error"
                         return @{
                             Success = $false
@@ -518,7 +518,7 @@ function Get-FileServerFile {
                         }
                     }
                 }
-                Write-Host ""
+                Write-OutputColor ""
                 $totalElapsed = [int][math]::Floor(((Get-Date) - $downloadStartTime).TotalSeconds)
 
                 # Capture result while job still exists. The finally below removes the job,
