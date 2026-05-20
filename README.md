@@ -80,6 +80,8 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 Grab `RackStack.exe` from the [latest release](https://github.com/TheAbider/RackStack/releases/latest), drop it on your server, and run it as Administrator. That's it.
 
+Releases of `RackStack.exe` are code-signed by [SignPath Foundation](https://signpath.io) under the SignPath Foundation OSS program. Each release page also lists SHA-256 hashes for independent verification.
+
 On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `defaults.json` next to the exe. To pre-configure, download `defaults.example.json` from the release, rename it to `defaults.json`, fill in your values, and place it alongside the exe.
 
 <!--
@@ -509,6 +511,8 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 ## Acknowledgments
 
 Special thanks to Ravi -- whose existence provided the spite-fueled motivation to build this entire project from scratch. Every feature is a testament to what happens when someone says "you can't automate that."
+
+Code signing for `RackStack.exe` is provided free of charge by [SignPath Foundation](https://signpath.io), and the signing infrastructure is provided by [SignPath.io](https://about.signpath.io/) under the SignPath Foundation OSS program.
 
 ## License
 
