@@ -2393,7 +2393,7 @@ try {
 
 # Test Import-Defaults with no file (should set generic defaults)
 try {
-    $testDir = "$env:TEMP\appconfig_test_$(Get-Random)"
+    $testDir = "$env:TEMP\appconfig_test_$([guid]::NewGuid().ToString('N'))"
     $origDefaultsPath = $script:DefaultsPath
     $origConfigDir = $script:AppConfigDir
     $origModuleRoot = $script:ModuleRoot
@@ -2425,7 +2425,7 @@ try {
 
 # Test Import-Defaults with file (should merge)
 try {
-    $testDir = "$env:TEMP\appconfig_test_$(Get-Random)"
+    $testDir = "$env:TEMP\appconfig_test_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir -ItemType Directory -Force
     $origDefaultsPath = $script:DefaultsPath
     $origConfigDir = $script:AppConfigDir
@@ -2468,7 +2468,7 @@ try {
 
 # Test Export-Defaults round-trip
 try {
-    $testDir = "$env:TEMP\appconfig_test_$(Get-Random)"
+    $testDir = "$env:TEMP\appconfig_test_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir -ItemType Directory -Force
     $origDefaultsPath = $script:DefaultsPath
     $origConfigDir = $script:AppConfigDir
@@ -2855,7 +2855,7 @@ if ($script:CompanyDefaultsPath) {
 
 # --- 35f: Import-Defaults merges FileServer fields ---
 try {
-    $testDir = "$env:TEMP\appconfig_qatest_$(Get-Random)"
+    $testDir = "$env:TEMP\appconfig_qatest_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir -ItemType Directory -Force
     $origDefaultsPath2 = $script:DefaultsPath
     $origConfigDir2 = $script:AppConfigDir
@@ -2913,7 +2913,7 @@ try {
 
 # --- 35g: Export-Defaults includes FileServer block ---
 try {
-    $testDir = "$env:TEMP\appconfig_qatest_$(Get-Random)"
+    $testDir = "$env:TEMP\appconfig_qatest_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir -ItemType Directory -Force
     $origDefaultsPath3 = $script:DefaultsPath
     $origConfigDir3 = $script:AppConfigDir
@@ -5139,7 +5139,7 @@ Write-TestResult "BuiltInVMTemplates set after Import-Defaults" ($null -ne $scri
 
 # Partial override: merge with temp defaults.json
 try {
-    $testDir = "$env:TEMP\appconfig_vmtest_$(Get-Random)"
+    $testDir = "$env:TEMP\appconfig_vmtest_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir -ItemType Directory -Force
     $origDefaultsPath = $script:DefaultsPath
     $origConfigDir = $script:AppConfigDir
@@ -5255,7 +5255,7 @@ try {
 
 # _comment fields are skipped
 try {
-    $testDir2 = "$env:TEMP\appconfig_vmtest2_$(Get-Random)"
+    $testDir2 = "$env:TEMP\appconfig_vmtest2_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir2 -ItemType Directory -Force
     $origDefaultsPath2 = $script:DefaultsPath
     $origConfigDir2 = $script:AppConfigDir
@@ -5303,7 +5303,7 @@ try {
 
 # Edge case: empty CustomVMTemplates and CustomVMDefaults
 try {
-    $testDir3 = "$env:TEMP\appconfig_vmtest3_$(Get-Random)"
+    $testDir3 = "$env:TEMP\appconfig_vmtest3_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir3 -ItemType Directory -Force
     $origDefaultsPath3 = $script:DefaultsPath
     $origConfigDir3 = $script:AppConfigDir
@@ -5334,7 +5334,7 @@ try {
 
 # Edge case: new template missing optional fields gets defaults
 try {
-    $testDir4 = "$env:TEMP\appconfig_vmtest4_$(Get-Random)"
+    $testDir4 = "$env:TEMP\appconfig_vmtest4_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir4 -ItemType Directory -Force
     $origDefaultsPath4 = $script:DefaultsPath
     $origConfigDir4 = $script:AppConfigDir
@@ -5384,7 +5384,7 @@ try {
 
 # Edge case: MemoryType override on existing template
 try {
-    $testDir5 = "$env:TEMP\appconfig_vmtest5_$(Get-Random)"
+    $testDir5 = "$env:TEMP\appconfig_vmtest5_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir5 -ItemType Directory -Force
     $origDefaultsPath5 = $script:DefaultsPath
     $origConfigDir5 = $script:AppConfigDir
@@ -5411,7 +5411,7 @@ try {
 
 # Edge case: no CustomVMTemplates key at all in defaults.json
 try {
-    $testDir6 = "$env:TEMP\appconfig_vmtest6_$(Get-Random)"
+    $testDir6 = "$env:TEMP\appconfig_vmtest6_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir6 -ItemType Directory -Force
     $origDefaultsPath6 = $script:DefaultsPath
     $origConfigDir6 = $script:AppConfigDir
@@ -5436,7 +5436,7 @@ try {
 
 # VMNaming import from defaults.json
 try {
-    $testDir7 = "$env:TEMP\appconfig_vmtest7_$(Get-Random)"
+    $testDir7 = "$env:TEMP\appconfig_vmtest7_$([guid]::NewGuid().ToString('N'))"
     $null = New-Item -Path $testDir7 -ItemType Directory -Force
     $origDefaultsPath7 = $script:DefaultsPath
     $origConfigDir7 = $script:AppConfigDir

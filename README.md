@@ -25,6 +25,7 @@
   <a href="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/TheAbider/RackStack/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/TheAbider/RackStack/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/TheAbider/RackStack/actions/workflows/codeql.yml/badge.svg"></a>
   <a href="https://github.com/TheAbider/RackStack/actions/workflows/scorecard.yml"><img alt="OpenSSF Scorecard" src="https://api.securityscorecards.dev/projects/github.com/TheAbider/RackStack/badge"></a>
+  <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
   <img alt="4500+ Tests" src="https://img.shields.io/badge/tests-4500%2B-brightgreen">
