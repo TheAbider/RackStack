@@ -16,10 +16,8 @@ on:
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Top-level: read-only. Job-level grants below for Pages deploy.
+permissions: read-all
 
 # Allow one concurrent docs deployment per branch — newer pushes cancel older runs.
 concurrency:
@@ -30,6 +28,8 @@ jobs:
   build:
     name: Generate cmdlet docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read     # checkout only
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -72,6 +72,10 @@ jobs:
     name: Deploy to Pages
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write       # deploy-pages
+      id-token: write    # OIDC for deploy-pages
+      contents: read
     # continue-on-error at the job level: the deploy step fails with 404 until
     # GitHub Pages is enabled at https://github.com/TheAbider/RackStack/settings/pages
     # (set Source = "GitHub Actions"). Once enabled this just works.

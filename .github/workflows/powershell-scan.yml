@@ -1,8 +1,7 @@
 name: PowerShell Scan
 
-permissions:
-  issues: write
-  contents: read
+# Top-level: read-only. The job grants the specific write privilege it needs.
+permissions: read-all
 
 on:
   workflow_dispatch:
@@ -22,6 +21,9 @@ on:
 
 jobs:
   powershell-scan:
+    permissions:
+      issues: write   # the github-script step creates / updates "Scan Results:" issues
+      contents: read  # checkout
     # windows-latest (GitHub-hosted) — see ci.yml for the security rationale
     # (public repo + self-hosted runner = arbitrary fork code execution).
     runs-on: windows-latest

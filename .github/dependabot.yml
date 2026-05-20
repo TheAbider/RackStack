@@ -1,0 +1,36 @@
+version: 2
+
+# Dependabot keeps the SHA-pinned action references in lockstep with upstream.
+# When upstream cuts a new release (e.g. actions/checkout v6.1), Dependabot
+# opens a PR that updates the SHA and bumps the trailing `# v6` comment.
+# Without this, SHA-pinning would drift — we'd be on actions/checkout v6.0
+# forever even after v6.1 ships security fixes.
+#
+# Scorecard recognizes the presence of this file as the
+# `Dependency-Update-Tool` signal.
+
+updates:
+  # GitHub Actions used in workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "America/Chicago"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
+    # Group all minor + patch action bumps into one PR per week to keep noise low.
+    # Major bumps still surface as individual PRs because they may need a
+    # workflow change.
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch

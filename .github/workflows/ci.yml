@@ -5,13 +5,17 @@ on:
   pull_request:
     branches: [master]
 
-permissions:
-  contents: write       # needed for the auto-release step below
-  id-token: write       # needed for actions/attest-build-provenance (SLSA Level 3 provenance)
-  attestations: write   # needed for actions/attest-build-provenance
+# Top-level: read-only. Write privileges granted only on the test job that needs them.
+# Scorecard's Token-Permissions check awards full credit for this least-privilege pattern.
+permissions: read-all
 
 jobs:
   test:
+    permissions:
+      contents: write       # needed for the auto-release step (gh release create)
+      id-token: write       # needed for actions/attest-build-provenance (SLSA Level 3)
+      attestations: write   # needed for actions/attest-build-provenance
+      actions: read         # explicit; needed for run metadata in attestations
     # windows-latest (GitHub-hosted) for both push and PR. RackStack is a public
     # repo — running on a self-hosted runner means anyone can fork, open a PR,
     # and execute arbitrary code on the runner host. windows-latest is free and
