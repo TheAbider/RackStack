@@ -165,7 +165,7 @@ function Invoke-WSUSPostInstall {
 
     if (-not (Test-Path -LiteralPath $contentPath)) {
         try {
-            $null = New-Item -Path $contentPath -ItemType Directory -Force -ErrorAction Stop
+            $null = New-Item -LiteralPath $contentPath -ItemType Directory -Force -ErrorAction Stop
         }
         catch {
             Write-OutputColor "  Could not create content directory '$contentPath': $($_.Exception.Message)" -color "Error"
@@ -240,14 +240,26 @@ function Set-WSUSDefaultConfiguration {
     }
     try {
         $allClass = $wsus.GetUpdateClassifications()
-        $selected = $allClass | Where-Object { $_.Title -in $wantClassifications }
-        if ($selected) {
+        $selected = @($allClass | Where-Object { $_.Title -in $wantClassifications })
+        # Surface any requested classification that WSUS doesn't recognize —
+        # a typo in defaults.json must NOT be swallowed (a misconfigured WSUS
+        # that syncs nothing while reporting success is the worst outcome).
+        $matchedTitles = @($selected | ForEach-Object { $_.Title })
+        $missing = @($wantClassifications | Where-Object { $_ -notin $matchedTitles })
+        if ($missing.Count -gt 0) {
+            Write-OutputColor "  Unrecognized classifications ignored: $($missing -join ', ')" -color "Warning"
+        }
+        if ($selected.Count -eq 0) {
+            Write-OutputColor "  No requested classification matched a WSUS classification — none enabled." -color "Error"
+            Write-OutputColor "  Check the WSUS.Classifications values in defaults.json." -color "Warning"
+        }
+        else {
             $sub = $wsus.GetSubscription()
             $coll = New-Object Microsoft.UpdateServices.Administration.UpdateClassificationCollection
             foreach ($c in $selected) { [void]$coll.Add($c) }
             $sub.SetUpdateClassifications($coll)
             $sub.Save()
-            Write-OutputColor "  Enabled classifications: $(($selected | ForEach-Object { $_.Title }) -join ', ')" -color "Success"
+            Write-OutputColor "  Enabled classifications: $($matchedTitles -join ', ')" -color "Success"
         }
     }
     catch {

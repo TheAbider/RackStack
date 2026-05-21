@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.99.2
+
+Security + correctness hardening of the five v1.99.0 feature modules, from a multi-agent independent audit. No behavior changes for correctly-configured environments — these close edge cases and tighten the security-sensitive paths.
+
+**65-AzureArc.ps1:**
+- The downloaded Connected Machine Agent MSI is now Authenticode-verified (`Get-AuthenticodeSignature`, signer must be `O=Microsoft Corporation`) before `msiexec` runs it — closes the gap where a tampered `AgentInstallerUrl`, a MITM, or a poisoned temp file could run arbitrary code as admin.
+- The installer-URL HTTPS check now parses with `[uri]` instead of a case-sensitive regex.
+- `azcmagent`'s output is discarded with `2>$null` instead of `2>&1` so the service-principal secret can never be merged into a captured stream; the `catch` blocks no longer interpolate `$_` from a call that received the secret.
+- The disconnect path now scrubs the secret slot in its argument list (parity with onboard).
+- `Get-AzureArcAgentPath` filters base directories for null before `Join-Path`.
+
+**66-DefenderEndpoint.ps1:**
+- `Invoke-DefenderEndpointOnboard` / `Invoke-DefenderEndpointOffboard` now launch the onboarding `.cmd` directly via `Start-Process -FilePath` instead of `cmd /c <path>`. The old form broke on any path containing a space (`C:\Program Files\...`) and risked an unquoted-path binary hijack — `-FilePath` takes the whole path as one value, no cmd.exe re-tokenization.
+- `Test-MDEScriptPath` now canonicalizes the path with `Resolve-Path` and returns the resolved path, so the validated path and the executed path are identical.
+- The detection-test temp directory is cleaned up in a `finally` block; the test-file path is escaped before interpolation into the child command.
+- Fixed an off-by-one that slept 5s after the final onboarding-state check.
+
+**67-WSUS.ps1:**
+- `Set-WSUSDefaultConfiguration` now warns when a configured update classification doesn't match any WSUS classification, and errors clearly when *none* match — previously a typo in `WSUS.Classifications` silently enabled zero classifications while reporting success.
+- `New-Item` for the content directory uses `-LiteralPath`.
+
+**68-ADCS.ps1:**
+- The typed CA-name confirmation is now **case-sensitive** (`-cne`) — the whole point of the ritual is to prove the operator read the exact CN that gets baked into a decade-lived root certificate.
+- `HashAlgorithm` is now validated against an allowlist (`SHA256`/`SHA384`/`SHA512`) like every other CA parameter, so a typo or a weak value (SHA1/MD5) can't reach the irreversible `Install-AdcsCertificationAuthority` call.
+- The CA common name is trimmed so a stray space in `defaults.json` doesn't become part of the certificate subject.
+
+**69-StorageMigration.ps1:** audited clean — no changes needed.
+
+The structural test harness gains regression tests for each fix (Sections 160-163). Regex harness 4766/4766, Pester 312/312, PSScriptAnalyzer 0/0.
+
 ## v1.99.1
 
 Removed the Authenticode code-signing scaffold from the release pipeline.

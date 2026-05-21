@@ -134,7 +134,10 @@ function Install-ADCSCertificationAuthority {
         return $false
     }
 
-    $caName    = $script:ADCS.CACommonName
+    # Trim the CN so a stray leading/trailing space in defaults.json does not
+    # become part of a decade-lived certificate subject (and so the typed
+    # confirmation below compares against a clean value).
+    $caName    = ([string]$script:ADCS.CACommonName).Trim()
     $caType    = if (-not [string]::IsNullOrWhiteSpace($script:ADCS.CAType)) { $script:ADCS.CAType } else { 'StandaloneRootCA' }
     $keyLength = if ($null -ne $script:ADCS.KeyLength) { [int]$script:ADCS.KeyLength } else { 4096 }
     $hashAlgo  = if (-not [string]::IsNullOrWhiteSpace($script:ADCS.HashAlgorithm)) { $script:ADCS.HashAlgorithm } else { 'SHA256' }
@@ -154,6 +157,14 @@ function Install-ADCSCertificationAuthority {
     }
     if ($keyLength -notin @(2048, 3072, 4096)) {
         Write-OutputColor "  ADCS.KeyLength must be 2048, 3072, or 4096." -color "Error"
+        return $false
+    }
+    # Validate the hash algorithm against an allowlist — like every other CA
+    # parameter, it must never reach the irreversible Install-AdcsCertificationAuthority
+    # call unchecked (a typo or a weak value such as SHA1/MD5 would otherwise
+    # bake into the root cert for its whole lifetime).
+    if ($hashAlgo -notin @('SHA256', 'SHA384', 'SHA512')) {
+        Write-OutputColor "  ADCS.HashAlgorithm must be SHA256, SHA384, or SHA512." -color "Error"
         return $false
     }
     if ($validity -lt 1 -or $validity -gt 25) {
@@ -186,9 +197,11 @@ function Install-ADCSCertificationAuthority {
     Write-OutputColor "" -color "Info"
 
     # Typed confirmation — operator must enter the CA common name exactly.
+    # Case-SENSITIVE (`-cne`): the whole point of the ritual is to prove the
+    # operator read the exact CN that will be baked into the root cert.
     $typed = Read-Host "  Type the CA common name '$caName' to proceed (or anything else to cancel)"
-    if ($typed -ne $caName) {
-        Write-OutputColor "  Confirmation did not match. CA configuration cancelled." -color "Info"
+    if ($typed.Trim() -cne $caName) {
+        Write-OutputColor "  Confirmation did not match (exact, case-sensitive). CA configuration cancelled." -color "Info"
         return $false
     }
 
