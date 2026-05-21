@@ -28,9 +28,9 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="4500+ Tests" src="https://img.shields.io/badge/tests-4500%2B-brightgreen">
+  <img alt="4759 tests" src="https://img.shields.io/badge/tests-4759-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
-  <img alt="Coverage 100%" src="https://img.shields.io/badge/coverage-100%25-brightgreen">
+  <img alt="line coverage 100%" src="https://img.shields.io/badge/line%20coverage-100%25-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
 
@@ -481,10 +481,10 @@ RackStack/
 ├── Modules/
 │   ├── 00-Initialization.ps1   # Constants, variables, config loading
 │   ├── 01-Console.ps1          # Console window management
-│   ├── ...                     # 61 more modules
-│   └── 64-SystemDebloat.ps1
+│   ├── ...                     # 67 more modules
+│   └── 69-StorageMigration.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 4500+ automated tests
+│   ├── Run-Tests.ps1           # 4,759 automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -514,7 +514,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (~4,500+ tests, ~4 minutes)
+# Full test suite (4,759 tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 70 modules + monolithic)
