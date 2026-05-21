@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.57
+    Automated Test Runner for RackStack v1.98.58
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 65 modules)
+    - Parse tests (monolithic + 66 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 65  # 00-64 inclusive
+$expectedModuleCount = 66  # 00-65 inclusive
 
 # ============================================================================
 # BANNER
@@ -148,7 +148,7 @@ try {
 }
 } # end if (-not $Quick) — skip monolithic parse in Quick mode
 
-# 1b. All 65 module files parse
+# 1b. All 66 module files parse
 $moduleFiles = Get-ChildItem -Path $modulesPath -Filter "*.ps1" | Sort-Object Name
 
 foreach ($moduleFile in $moduleFiles) {
@@ -270,7 +270,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 65 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 66 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "64-SystemDebloat.ps1"
-    Write-TestResult "Module range 00-Initialization to 64-SystemDebloat" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "65-AzureArc.ps1"
+    Write-TestResult "Module range 00-Initialization to 65-AzureArc" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 64 #region tags" ($regionStartCount -eq 64) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 64 #endregion tags" ($regionEndCount -eq 64) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 65 #region tags" ($regionStartCount -eq 65) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 65 #endregion tags" ($regionEndCount -eq 65) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 65 modules" ($readmeContent -match '65 module')
+    Write-TestResult "README: mentions 66 modules" ($readmeContent -match '66 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,18 +6898,18 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 65 modules" ($loaderContent -match '65 modules')
+    Write-TestResult "RackStack.ps1: mentions 66 modules" ($loaderContent -match '66 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 65" ($moduleCount -eq 65) "Found $moduleCount modules"
+    Write-TestResult "Module count is 66" ($moduleCount -eq 66) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
     $changelogContent = Get-Content $changelogPath -Raw
     Write-TestResult "Changelog: has v1.4.0 entry" ($changelogContent -match '## v1\.4\.0')
     Write-TestResult "Changelog: mentions Server Role Templates" ($changelogContent -match 'Server Role Templates')
-    Write-TestResult "Changelog: mentions 65 modules" ($changelogContent -match '65 modules')
+    Write-TestResult "Changelog: mentions 66 modules" ($changelogContent -match '66 modules')
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
@@ -8033,6 +8033,67 @@ try {
 
 } catch {
     Write-TestResult "Scheduled Task Manager Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 160: AZURE ARC ONBOARDING (Module 65)
+# ============================================================================
+Write-SectionHeader "SECTION 160: AZURE ARC ONBOARDING (Module 65)"
+
+try {
+    $arcContent = Get-Content "$modulesPath\65-AzureArc.ps1" -Raw
+
+    Write-TestResult "65-AzureArc: function Test-AzureArcConfigured exists" ($arcContent -match 'function\s+Test-AzureArcConfigured\b')
+    Write-TestResult "65-AzureArc: function Resolve-AzureArcSecret exists" ($arcContent -match 'function\s+Resolve-AzureArcSecret\b')
+    Write-TestResult "65-AzureArc: function Get-AzureArcAgentPath exists" ($arcContent -match 'function\s+Get-AzureArcAgentPath\b')
+    Write-TestResult "65-AzureArc: function Test-AzureArcAgentInstalled exists" ($arcContent -match 'function\s+Test-AzureArcAgentInstalled\b')
+    Write-TestResult "65-AzureArc: function Get-AzureArcStatus exists" ($arcContent -match 'function\s+Get-AzureArcStatus\b')
+    Write-TestResult "65-AzureArc: function Install-AzureArcAgent exists" ($arcContent -match 'function\s+Install-AzureArcAgent\b')
+    Write-TestResult "65-AzureArc: function Invoke-AzureArcOnboard exists" ($arcContent -match 'function\s+Invoke-AzureArcOnboard\b')
+    Write-TestResult "65-AzureArc: function Invoke-AzureArcDisconnect exists" ($arcContent -match 'function\s+Invoke-AzureArcDisconnect\b')
+    Write-TestResult "65-AzureArc: function Show-AzureArcManagement exists" ($arcContent -match 'function\s+Show-AzureArcManagement\b')
+
+    # Security: SP secret must be handled as SecureString, never plaintext-logged
+    Write-TestResult "65-AzureArc: resolves secret as SecureString" ($arcContent -match 'ConvertTo-SecureString')
+    Write-TestResult "65-AzureArc: scrubs plaintext secret after use" ($arcContent -match 'Clear-SecureMemory')
+    Write-TestResult "65-AzureArc: pauses transcript around connect" ($arcContent -match 'Stop-Transcript')
+    Write-TestResult "65-AzureArc: prefers RACKSTACK_ARC_SECRET env var" ($arcContent -match 'RACKSTACK_ARC_SECRET')
+    Write-TestResult "65-AzureArc: rejects non-HTTPS installer URL" ($arcContent -match "notmatch '\^https://'")
+    Write-TestResult "65-AzureArc: builds azcmagent args as array (no string concat)" ($arcContent -match 'System\.Collections\.Generic\.List\[string\]')
+
+    # Conventions
+    Write-TestResult "65-AzureArc: region header present" ($arcContent -match '#region ===== AZURE ARC')
+    Write-TestResult "65-AzureArc: region closed" ($arcContent -match '#endregion')
+    Write-TestResult "65-AzureArc: ReturnToMainMenu check" ($arcContent -match 'ReturnToMainMenu')
+    Write-TestResult "65-AzureArc: navigation support" ($arcContent -match 'Test-NavigationCommand')
+    Write-TestResult "65-AzureArc: session change tracking" ($arcContent -match 'Add-SessionChange')
+    Write-TestResult "65-AzureArc: Test-Path uses -LiteralPath" (-not ($arcContent -match 'Test-Path\s+\$') -or $arcContent -match 'Test-Path -LiteralPath')
+
+    # Loader + monolithic integration
+    $loaderArc = Get-Content "$script:ModuleRoot\RackStack.ps1" -Raw
+    Write-TestResult "65-AzureArc: loader includes module" ($loaderArc -match '65-AzureArc\.ps1')
+
+    # CLI action integration
+    $entryArc = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "65-AzureArc: CLI action AzureArcEnroll in action list" ($entryArc -match "Action = 'AzureArcEnroll'")
+    Write-TestResult "65-AzureArc: CLI dispatch handler for AzureArcEnroll" ($entryArc -match "'AzureArcEnroll'\s*\{")
+
+    # Header param ValidateSet
+    $headerArc = Get-Content "$script:ModuleRoot\Header.ps1" -Raw
+    Write-TestResult "65-AzureArc: Header ValidateSet includes AzureArcEnroll" ($headerArc -match "'AzureArcEnroll'")
+
+    # Menu integration
+    $menuArc = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    $runnerArc = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "65-AzureArc: menu entry exists" ($menuArc -match 'Azure Arc')
+    Write-TestResult "65-AzureArc: menu runner dispatches Show-AzureArcManagement" ($runnerArc -match 'Show-AzureArcManagement')
+
+    # Config schema
+    $initArc = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    Write-TestResult "65-AzureArc: `$script:AzureArc config block defined" ($initArc -match '\$script:AzureArc\s*=\s*@\{')
+
+} catch {
+    Write-TestResult "Azure Arc Onboarding Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -9291,7 +9352,12 @@ $newFunctions = @(
     "Get-TimezoneOffsetString",
     "Show-TimezoneComparison",
     "Show-AdminAccountStatus",
-    "Show-MPIOStatusSummary"
+    "Show-MPIOStatusSummary",
+    # Wave 9: Azure Arc server onboarding (module 65)
+    "Test-AzureArcConfigured",
+    "Get-AzureArcStatus",
+    "Invoke-AzureArcOnboard",
+    "Show-AzureArcManagement"
 )
 
 $newFuncPassed = 0
@@ -11971,7 +12037,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 176 entries" ($listActionCount -eq 176) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 177 entries" ($listActionCount -eq 177) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12004,7 +12070,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 176 entries" ($actionCount2 -eq 176) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 177 entries" ($actionCount2 -eq 177) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12030,7 +12096,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 176 entries" ($actionCount3 -eq 176) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 177 entries" ($actionCount3 -eq 177) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12068,7 +12134,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 176 entries" ($actionCount4 -eq 176) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 177 entries" ($actionCount4 -eq 177) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

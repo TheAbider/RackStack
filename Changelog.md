@@ -1,5 +1,28 @@
 ﻿# Changelog
 
+## v1.98.58
+
+New feature module: **Azure Arc server onboarding** (module 65 — RackStack is now 66 modules).
+
+`Modules/65-AzureArc.ps1` onboards a Windows Server into Azure Arc, Microsoft's hybrid-cloud management plane. Once Arc-connected, the server appears in the Azure portal and can be governed by Azure Policy, scanned by Defender for Cloud, patched by Azure Update Manager, and monitored by Azure Monitor — without the server living in Azure.
+
+**What it does:**
+- Installs the Azure Connected Machine Agent (`azcmagent`) from the Microsoft-hosted MSI (HTTPS-only; non-HTTPS installer URLs are refused).
+- Onboards via service-principal auth — `azcmagent connect` with tenant / subscription / resource-group / location from `defaults.json`.
+- Reports current Arc state (`azcmagent show -j`), and supports clean disconnect.
+- Interactive menu under **Tools & Utilities → Cloud → [15] Azure Arc Onboarding**, plus a headless CLI action: `RackStack.exe -Action AzureArcEnroll [-OutputFormat JSON]`.
+
+**Security handling of the service-principal secret:**
+- The SP secret is resolved as a `SecureString`. Preferred source is the `RACKSTACK_ARC_SECRET` environment variable so the secret never has to live in `defaults.json`; `defaults.json` `AzureArc.ServicePrincipalSecret` is a documented fallback but discouraged.
+- The transcript is paused around the `azcmagent connect` / `disconnect` calls so the secret never lands in the session log.
+- `azcmagent` arguments are built as a `[List[string]]` array (never string-concatenated), so there's no shell re-parsing of the secret.
+- The plaintext secret is scrubbed from memory (`Clear-SecureMemory`) immediately after the call, and the secret slot in the argument list is blanked.
+- `Write-StructuredLog`'s secret-key redaction (extended in v1.98.55) catches the `secret` key name as defense-in-depth.
+
+**Config:** new `$script:AzureArc` block in `00-Initialization.ps1`, overridable via the new `AzureArc` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
+
+**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Tools & Utilities menu, and the structural test harness (new Section 160, 25 tests). The module count references (65 → 66) across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md` are updated. RackStack now exposes 177 CLI actions.
+
 ## v1.98.57
 
 Coverage measurement scoped to fully-testable modules → **100% line coverage**.

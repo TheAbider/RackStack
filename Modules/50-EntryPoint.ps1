@@ -394,6 +394,7 @@ function Assert-Elevation {
                 @{ Action = 'Dashboard';        Description = 'Serve HealthDashboard as HTML + JSON via HttpListener (default 127.0.0.1:8080)' }
                 @{ Action = 'History';          Description = 'Show the last N CLI invocations (rolling log of 50 entries)' }
                 @{ Action = 'Replay';           Description = 'Re-run a prior invocation by index (1 = most recent; see History)' }
+                @{ Action = 'AzureArcEnroll';   Description = 'Onboard this server to Azure Arc (service-principal auth; config from defaults.json AzureArc)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1836,6 +1837,30 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             }
 
             if ($failed -gt 0) { [Environment]::Exit(1) }
+        }
+        'AzureArcEnroll' {
+            # Onboard this server to Azure Arc. Config (tenant, subscription,
+            # resource group, service principal) comes from defaults.json
+            # "AzureArc"; the SP secret comes from $env:RACKSTACK_ARC_SECRET
+            # or defaults.json. Exit 0 on a confirmed Connected state, 1 otherwise.
+            $arcOk = Invoke-AzureArcOnboard
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $arcStatus = Get-AzureArcStatus
+                $jsonResult = @{
+                    Tool          = $script:ToolFullName
+                    Version       = $script:ScriptVersion
+                    Action        = 'AzureArcEnroll'
+                    Timestamp     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname      = $env:COMPUTERNAME
+                    Success       = [bool]$arcOk
+                    Connected     = [bool]$arcStatus.Connected
+                    ResourceName  = $arcStatus.ResourceName
+                    ResourceGroup = $arcStatus.ResourceGroup
+                    AgentVersion  = $arcStatus.AgentVersion
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            [Environment]::Exit([int](-not $arcOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
