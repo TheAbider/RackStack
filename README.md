@@ -38,7 +38,7 @@
 
 ---
 
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Where sconfig gives you 15 options, RackStack gives you 180 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, cloud onboarding, and batch automation, all with undo, transaction rollback, and audit logging.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Where sconfig gives you 15 options, RackStack gives you 181 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, cloud onboarding, and batch automation, all with undo, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
 
@@ -62,7 +62,7 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Automation** -- JSON-driven batch mode (24 idempotent steps with transaction rollback), Quick Setup Wizard, configuration export/import, HTML reports, JSON audit logging with rotation
 
-**Monitoring** -- 180 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
+**Monitoring** -- 181 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
 
 **Cloud & Security** -- Azure Arc server onboarding (install the Connected Machine Agent, connect the host to Azure's hybrid management plane via service-principal auth); Microsoft Defender for Endpoint onboarding (activate the built-in EDR sensor against your tenant, with a built-in detection test)
 
@@ -138,7 +138,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\RackStack.ps1
 ```
 
-> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 69 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
+> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 70 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
 
 ### Single-File Deployment (Production)
 
@@ -149,7 +149,7 @@ For production use, generate a monolithic single-file script (~66K lines) that y
 .\sync-to-monolithic.ps1
 ```
 
-The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 69 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
+The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 70 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
 > **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v{version}.ps1` = monolithic build for deployment/compilation.
 
@@ -436,7 +436,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 180 CLI Actions
+### 181 CLI Actions
 
 | Category | Actions |
 |----------|---------|
@@ -464,6 +464,7 @@ $report.Issues
 | **Cloud & Security** | `AzureArcEnroll` `DefenderEndpointOnboard` |
 | **Update Server** | `WSUSSetup` |
 | **PKI** | `ADCSSetup` |
+| **Migration** | `StorageMigrationSetup` |
 
 Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JSON` for the full list with descriptions.
 
@@ -471,7 +472,7 @@ Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JS
 
 ```
 RackStack/
-├── RackStack.ps1               # Modular loader -- dot-sources 69 modules (dev use)
+├── RackStack.ps1               # Modular loader -- dot-sources 70 modules (dev use)
 ├── RackStack v{version}.ps1    # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
@@ -492,7 +493,7 @@ RackStack/
 
 ### Module Architecture
 
-69 modules numbered for load order. Dependencies flow downward.
+70 modules numbered for load order. Dependencies flow downward.
 
 | Range | Category | Highlights |
 |---|---|---|
@@ -508,6 +509,7 @@ RackStack/
 | 65-66 | **Cloud & Security** | Azure Arc server onboarding, Microsoft Defender for Endpoint onboarding |
 | 67    | **Update Server** | WSUS install, post-install, configuration, and sync |
 | 68    | **PKI** | AD CS Certificate Authority bootstrap |
+| 69    | **Migration** | Storage Migration Service role setup |
 
 ## Testing
 
@@ -515,7 +517,7 @@ RackStack/
 # Full test suite (~4,500+ tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
-# PSScriptAnalyzer (0 errors on all 69 modules + monolithic)
+# PSScriptAnalyzer (0 errors on all 70 modules + monolithic)
 powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 # Pre-release validation (parse + PSSA + structure + sync + version + tests)

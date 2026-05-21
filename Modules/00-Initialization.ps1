@@ -184,6 +184,13 @@ $script:ADCS = @{
     ValidityYears = 10                  # Root CA certificate validity (1-25 years)
 }
 
+# Storage Migration Service (override via defaults.json "StorageMigration")
+# InstallProxy controls whether the StorageMigrationSetup CLI action also
+# installs the SMS-Proxy feature (run the proxy on the destination server).
+$script:StorageMigration = @{
+    InstallProxy = $false               # Also install SMS-Proxy when running StorageMigrationSetup
+}
+
 # Folder file cache - keyed by folder path, each entry has Files array and CacheTime
 $script:FileCache = @{}
 
@@ -218,7 +225,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.61"
+$script:ScriptVersion = "1.98.62"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

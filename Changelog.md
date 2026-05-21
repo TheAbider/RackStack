@@ -1,5 +1,25 @@
 ﻿# Changelog
 
+## v1.98.62
+
+New feature module: **Storage Migration Service** (module 69 — RackStack is now 70 modules).
+
+`Modules/69-StorageMigration.ps1` installs Storage Migration Service (SMS), Microsoft's tool for migrating file servers — their shares, data, security, and even server identity — onto modern Windows Server.
+
+**What it does:**
+- Installs the SMS orchestrator role (`SMS`) — the role that coordinates a migration project.
+- Optionally installs the SMS proxy (`SMS-Proxy`) — run on the destination Windows Server so migration data transfers locally instead of round-tripping through the orchestrator.
+- Reports orchestrator/proxy install state, the SMS service status, and the orchestrator state from `Get-SMSState`.
+- Interactive menu under **Configure Server → Roles & Features → [7] Storage Migration Service**, plus a headless CLI action `RackStack.exe -Action StorageMigrationSetup` (installs the orchestrator, and the proxy too when `StorageMigration.InstallProxy` is set).
+
+**Scope (deliberately honest):** this module stands up the SMS *roles*. The migration jobs themselves — Inventory → Transfer → Cutover, including source/destination pairing and the identity-swap decision — are an interactive, multi-phase, per-project workflow that Microsoft drives through Windows Admin Center. RackStack gets SMS installed and ready; the menu states plainly that job orchestration is a WAC workflow.
+
+**Config:** new `$script:StorageMigration` block in `00-Initialization.ps1` (single `InstallProxy` toggle), overridable via the new `StorageMigration` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
+
+**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Roles & Features menu, and the structural test harness (new Section 164, 22 tests). Module count references (69 → 70) and CLI-action count (180 → 181) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 181 CLI actions across 70 modules.
+
+This completes the five Tier-1 feature modules planned for this development cycle: Azure Arc onboarding, Microsoft Defender for Endpoint onboarding, WSUS server setup, AD CS Certificate Authority bootstrap, and Storage Migration Service.
+
 ## v1.98.61
 
 New feature module: **AD CS Certificate Authority bootstrap** (module 68 — RackStack is now 69 modules).
