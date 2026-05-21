@@ -86,11 +86,34 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 ## Quick Start
 
-### Download & Run (recommended)
+### Install via a package manager
+
+RackStack is published to every major Windows package manager. Pick whichever you already use:
+
+```powershell
+# winget (Microsoft's official package manager — built into Windows 11 / Server 2025)
+winget install TheAbider.RackStack
+
+# Scoop
+scoop bucket add rackstack https://github.com/TheAbider/scoop-bucket
+scoop install rackstack
+
+# Chocolatey
+choco install rackstack
+
+# PowerShell Gallery (installs the cmdlet-wrapper module, not the EXE)
+Install-Module RackStack
+```
+
+The package-manager installs all pull the same code-signed `RackStack.exe` from the GitHub release. Updates come through the package manager (`winget upgrade`, `scoop update`, `choco upgrade`).
+
+> Scoop and PowerShell Gallery are live now. winget and Chocolatey publish automatically on each release — the first submission of each is pending review by the respective registry. See [`dist/`](dist/) for distribution details.
+
+### Download & Run
 
 Grab `RackStack.exe` from the [latest release](https://github.com/TheAbider/RackStack/releases/latest), drop it on your server, and run it as Administrator. That's it.
 
-Releases of `RackStack.exe` are code-signed by [SignPath Foundation](https://signpath.io) under the SignPath Foundation OSS program. Each release page also lists SHA-256 hashes for independent verification.
+Releases of `RackStack.exe` are code-signed by [SignPath Foundation](https://signpath.io) under the SignPath Foundation OSS program, signed with [Sigstore](https://www.sigstore.dev/) cosign (keyless), and carry [SLSA Level 3](https://slsa.dev/) build provenance. Each release page lists SHA-256 hashes and the verification commands.
 
 On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `defaults.json` next to the exe. To pre-configure, download `defaults.example.json` from the release, rename it to `defaults.json`, fill in your values, and place it alongside the exe.
 
