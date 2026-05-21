@@ -398,6 +398,7 @@ function Assert-Elevation {
                 @{ Action = 'DefenderEndpointOnboard'; Description = 'Onboard this server to Microsoft Defender for Endpoint (runs the onboarding .cmd from defaults.json DefenderEndpoint)' }
                 @{ Action = 'WSUSSetup';        Description = 'Install + post-install + default-configure the WSUS update server (config from defaults.json WSUS)' }
                 @{ Action = 'ADCSSetup';        Description = 'Install the AD CS role (CA configuration is interactive-only — it needs a typed confirmation)' }
+                @{ Action = 'StorageMigrationSetup'; Description = 'Install the Storage Migration Service orchestrator role (+proxy if StorageMigration.InstallProxy is set)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1947,6 +1948,36 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             [Environment]::Exit([int](-not $adcsRole))
+        }
+        'StorageMigrationSetup' {
+            # Install the Storage Migration Service orchestrator role, and the
+            # proxy too if defaults.json StorageMigration.InstallProxy is set.
+            # Migration jobs themselves run interactively via Windows Admin
+            # Center. Exit 0 if the orchestrator role is installed.
+            Write-OutputColor "  Installing Storage Migration Service..." -color "Info"
+            $smsRole  = Install-SMSRole
+            $smsProxy = $false
+            if ($null -ne $script:StorageMigration -and $script:StorageMigration.InstallProxy) {
+                $smsProxy = Install-SMSProxy
+            }
+            if ($smsRole) {
+                Write-OutputColor "  SMS roles installed. Drive migration jobs from Windows Admin Center." -color "Info"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $smsStatus = Get-SMSStatus
+                $jsonResult = @{
+                    Tool                  = $script:ToolFullName
+                    Version               = $script:ScriptVersion
+                    Action                = 'StorageMigrationSetup'
+                    Timestamp             = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname              = $env:COMPUTERNAME
+                    Success               = [bool]$smsRole
+                    OrchestratorInstalled = [bool]$smsStatus.OrchestratorInstalled
+                    ProxyInstalled        = [bool]$smsStatus.ProxyInstalled
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            [Environment]::Exit([int](-not $smsRole))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

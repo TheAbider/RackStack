@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.61
+    Automated Test Runner for RackStack v1.98.62
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 69 modules)
+    - Parse tests (monolithic + 70 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 69  # 00-68 inclusive
+$expectedModuleCount = 70  # 00-69 inclusive
 
 # ============================================================================
 # BANNER
@@ -148,7 +148,7 @@ try {
 }
 } # end if (-not $Quick) — skip monolithic parse in Quick mode
 
-# 1b. All 69 module files parse
+# 1b. All 70 module files parse
 $moduleFiles = Get-ChildItem -Path $modulesPath -Filter "*.ps1" | Sort-Object Name
 
 foreach ($moduleFile in $moduleFiles) {
@@ -270,7 +270,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 69 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 70 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "68-ADCS.ps1"
-    Write-TestResult "Module range 00-Initialization to 68-ADCS" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "69-StorageMigration.ps1"
+    Write-TestResult "Module range 00-Initialization to 69-StorageMigration" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 68 #region tags" ($regionStartCount -eq 68) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 68 #endregion tags" ($regionEndCount -eq 68) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 69 #region tags" ($regionStartCount -eq 69) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 69 #endregion tags" ($regionEndCount -eq 69) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 69 modules" ($readmeContent -match '69 module')
+    Write-TestResult "README: mentions 70 modules" ($readmeContent -match '70 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,18 +6898,18 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 69 modules" ($loaderContent -match '69 modules')
+    Write-TestResult "RackStack.ps1: mentions 70 modules" ($loaderContent -match '70 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 69" ($moduleCount -eq 69) "Found $moduleCount modules"
+    Write-TestResult "Module count is 70" ($moduleCount -eq 70) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
     $changelogContent = Get-Content $changelogPath -Raw
     Write-TestResult "Changelog: has v1.4.0 entry" ($changelogContent -match '## v1\.4\.0')
     Write-TestResult "Changelog: mentions Server Role Templates" ($changelogContent -match 'Server Role Templates')
-    Write-TestResult "Changelog: mentions 69 modules" ($changelogContent -match '69 modules')
+    Write-TestResult "Changelog: mentions 70 modules" ($changelogContent -match '70 modules')
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
@@ -8286,6 +8286,62 @@ try {
 }
 
 # ============================================================================
+# SECTION 164: STORAGE MIGRATION SERVICE (Module 69)
+# ============================================================================
+Write-SectionHeader "SECTION 164: STORAGE MIGRATION SERVICE (Module 69)"
+
+try {
+    $smsContent = Get-Content "$modulesPath\69-StorageMigration.ps1" -Raw
+
+    Write-TestResult "69-SMS: function Test-SMSInstalled exists" ($smsContent -match 'function\s+Test-SMSInstalled\b')
+    Write-TestResult "69-SMS: function Test-SMSProxyInstalled exists" ($smsContent -match 'function\s+Test-SMSProxyInstalled\b')
+    Write-TestResult "69-SMS: function Get-SMSStatus exists" ($smsContent -match 'function\s+Get-SMSStatus\b')
+    Write-TestResult "69-SMS: function Install-SMSRole exists" ($smsContent -match 'function\s+Install-SMSRole\b')
+    Write-TestResult "69-SMS: function Install-SMSProxy exists" ($smsContent -match 'function\s+Install-SMSProxy\b')
+    Write-TestResult "69-SMS: function Show-StorageMigrationManagement exists" ($smsContent -match 'function\s+Show-StorageMigrationManagement\b')
+
+    # Conventions + correctness
+    Write-TestResult "69-SMS: uses Install-WindowsFeatureWithTimeout wrapper" ($smsContent -match 'Install-WindowsFeatureWithTimeout')
+    Write-TestResult "69-SMS: checks Windows Server SKU before install" ($smsContent -match 'Test-WindowsServer')
+    Write-TestResult "69-SMS: uses script-scoped RebootNeeded (not global)" ($smsContent -match '\$script:RebootNeeded' -and -not ($smsContent -match '\$global:RebootNeeded'))
+    Write-TestResult "69-SMS: region header present" ($smsContent -match '#region ===== STORAGE MIGRATION SERVICE')
+    Write-TestResult "69-SMS: region closed" ($smsContent -match '#endregion')
+    Write-TestResult "69-SMS: ReturnToMainMenu check" ($smsContent -match 'ReturnToMainMenu')
+    Write-TestResult "69-SMS: navigation support" ($smsContent -match 'Test-NavigationCommand')
+    Write-TestResult "69-SMS: session change tracking" ($smsContent -match 'Add-SessionChange')
+
+    # Loader integration
+    $loaderSms = Get-Content "$script:ModuleRoot\RackStack.ps1" -Raw
+    Write-TestResult "69-SMS: loader includes module" ($loaderSms -match '69-StorageMigration\.ps1')
+
+    # CLI action integration
+    $entrySms = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "69-SMS: CLI action StorageMigrationSetup in action list" ($entrySms -match "Action = 'StorageMigrationSetup'")
+    Write-TestResult "69-SMS: CLI dispatch handler for StorageMigrationSetup" ($entrySms -match "'StorageMigrationSetup'\s*\{")
+
+    # Header param ValidateSet
+    $headerSms = Get-Content "$script:ModuleRoot\Header.ps1" -Raw
+    Write-TestResult "69-SMS: Header ValidateSet includes StorageMigrationSetup" ($headerSms -match "'StorageMigrationSetup'")
+
+    # Menu integration
+    $menuSms = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    $runnerSms = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "69-SMS: menu entry exists" ($menuSms -match 'Storage Migration Service')
+    Write-TestResult "69-SMS: menu runner dispatches Show-StorageMigrationManagement" ($runnerSms -match 'Show-StorageMigrationManagement')
+
+    # Config schema
+    $initSms = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    Write-TestResult "69-SMS: `$script:StorageMigration config block defined" ($initSms -match '\$script:StorageMigration\s*=\s*@\{')
+
+    # Import-Defaults merge
+    $opsSms = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    Write-TestResult "69-SMS: Import-Defaults merges StorageMigration" ($opsSms -match '\$merged\.StorageMigration')
+
+} catch {
+    Write-TestResult "Storage Migration Service Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 
@@ -9561,7 +9617,12 @@ $newFunctions = @(
     "Test-ADCSConfigured",
     "Get-ADCSStatus",
     "Install-ADCSRole",
-    "Show-ADCSManagement"
+    "Show-ADCSManagement",
+    # Wave 13: Storage Migration Service (module 69)
+    "Test-SMSInstalled",
+    "Get-SMSStatus",
+    "Install-SMSRole",
+    "Show-StorageMigrationManagement"
 )
 
 $newFuncPassed = 0
@@ -12241,7 +12302,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 180 entries" ($listActionCount -eq 180) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 181 entries" ($listActionCount -eq 181) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12274,7 +12335,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 180 entries" ($actionCount2 -eq 180) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 181 entries" ($actionCount2 -eq 181) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12300,7 +12361,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 180 entries" ($actionCount3 -eq 180) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 181 entries" ($actionCount3 -eq 181) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12338,7 +12399,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 180 entries" ($actionCount4 -eq 180) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 181 entries" ($actionCount4 -eq 181) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

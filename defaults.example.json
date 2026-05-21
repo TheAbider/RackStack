@@ -139,6 +139,14 @@
         "_ValidityYears_help": "Validity period of the root CA certificate in years (1-25). 10 is a common choice for a root that issues shorter-lived certificates."
     },
 
+    "_section_storagemigration": "========== STORAGE MIGRATION SERVICE ==========",
+
+    "StorageMigration": {
+        "_comment": "Optional. Storage Migration Service (SMS) migrates file servers onto modern Windows Server. The SMS menu lives under Configure Server > Roles & Features > Storage Migration Service, and the CLI action 'StorageMigrationSetup' installs the orchestrator role. Migration jobs (Inventory > Transfer > Cutover) run interactively through Windows Admin Center.",
+        "InstallProxy": false,
+        "_InstallProxy_help": "When true, the StorageMigrationSetup CLI action also installs the SMS-Proxy feature. Install the proxy on the DESTINATION Windows Server so migration data transfers locally instead of round-tripping through the orchestrator. Leave false if this server is only the orchestrator."
+    },
+
     "_section_storage": "========== STORAGE BACKEND ==========",
 
     "StorageBackendType": "iSCSI",

@@ -393,6 +393,12 @@ function Show-RolesFeaturesMenu {
     } -CacheSeconds 120
     $adcsColor = if ($adcsStatusText -eq "CA configured") { "Success" } elseif ($adcsStatusText -eq "CA config needed") { "Warning" } else { "Warning" }
 
+    $smsStatusText = Get-CachedValue -Key "SMSState" -FetchScript {
+        $sm = Get-SMSStatus
+        if ($sm.OrchestratorInstalled) { "Installed" } else { "Not Installed" }
+    } -CacheSeconds 120
+    $smsColor = if ($smsStatusText -eq "Installed") { "Success" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -406,6 +412,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[4]  Install $($script:AgentInstaller.ToolName) Agent" -Status $agentStatus -StatusColor $agentColor
     Write-MenuItem "[5]  WSUS Update Server ►" -Status $wsusStatusText -StatusColor $wsusColor
     Write-MenuItem "[6]  Certificate Services (AD CS) ►" -Status $adcsStatusText -StatusColor $adcsColor
+    Write-MenuItem "[7]  Storage Migration Service ►" -Status $smsStatusText -StatusColor $smsColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

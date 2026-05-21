@@ -232,9 +232,10 @@ function Start-Show-RolesFeaturesMenu {
             "4" { Install-Agent }
             "5" { Show-WSUSManagement }
             "6" { Show-ADCSManagement }
+            "7" { Show-StorageMigrationManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

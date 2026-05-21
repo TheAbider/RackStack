@@ -1104,6 +1104,21 @@ function Import-Defaults {
         }
     }
 
+    # Update Storage Migration Service settings (deep-merge from defaults.json "StorageMigration")
+    $acSms = $merged.StorageMigration
+    if ($acSms) {
+        if ($acSms -is [PSCustomObject]) {
+            foreach ($prop in $acSms.PSObject.Properties) {
+                if ($script:StorageMigration.ContainsKey($prop.Name)) { $script:StorageMigration[$prop.Name] = $prop.Value }
+            }
+        }
+        elseif ($acSms -is [hashtable]) {
+            foreach ($key in $acSms.Keys) {
+                if ($script:StorageMigration.ContainsKey($key)) { $script:StorageMigration[$key] = $acSms[$key] }
+            }
+        }
+    }
+
     # Import custom license keys from merged defaults (supports company + personal)
     $script:CustomKMSKeys = @{}
     $script:CustomAVMAKeys = @{}
