@@ -107,9 +107,9 @@ choco install rackstack
 Install-Module RackStack
 ```
 
-The package-manager installs all pull the same code-signed `RackStack.exe` from the GitHub release. Updates come through the package manager (`winget upgrade`, `scoop update`, `choco upgrade`).
+The package-manager installs all pull the same `RackStack.exe` from the GitHub release. Updates come through the package manager (`winget upgrade`, `scoop update`, `choco upgrade`).
 
-> Scoop and PowerShell Gallery are live now. winget and Chocolatey publish automatically on each release — the first submission of each is pending review by the respective registry. See [`dist/`](dist/) for distribution details.
+> **Channel status:** PowerShell Gallery and Scoop are live now. Chocolatey is submitted and in community moderation review. winget is awaiting its one-time first submission to `microsoft/winget-pkgs`. See [`dist/`](dist/) for per-channel details.
 
 ### Download & Run
 
