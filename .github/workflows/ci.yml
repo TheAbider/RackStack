@@ -516,15 +516,37 @@ jobs:
       # with GITHUB_TOKEN does NOT trigger `release` event workflows — GitHub's
       # recursion-prevention. Running it here fires exactly when a release is
       # cut. continue-on-error so a winget hiccup never fails the release.
+      #
+      # Uses Microsoft's wingetcreate CLI directly rather than a winget
+      # submission Action — the popular winget-releaser Action pulls in an
+      # unpinned transitive action (cargo-bins/cargo-binstall@main), which the
+      # repo's SHA-pinning policy correctly rejects. wingetcreate is a single
+      # signed .exe with no nested actions, so it stays inside the policy.
+      #
+      # `wingetcreate update` requires the package to already exist in
+      # winget-pkgs. The FIRST submission of TheAbider.RackStack is a one-time
+      # manual step (`wingetcreate new` locally, or a hand-authored manifest
+      # PR — see dist/README.md). Every release after that is automated here.
       - name: Submit to winget-pkgs
         if: steps.pubtokens.outputs.winget == 'true'
         continue-on-error: true
-        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
-        with:
-          identifier: TheAbider.RackStack
-          installers-regex: '^RackStack\.exe$'
-          release-tag: v${{ steps.vercheck.outputs.version }}
-          token: ${{ secrets.WINGET_TOKEN }}
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          $exeUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/v$ver/RackStack.exe"
+          $wc = Join-Path $env:RUNNER_TEMP 'wingetcreate.exe'
+          Write-Host "Downloading wingetcreate..."
+          Invoke-WebRequest -Uri 'https://aka.ms/wingetcreate/latest' -OutFile $wc -UseBasicParsing
+          Write-Host "Submitting TheAbider.RackStack v$ver to winget-pkgs..."
+          & $wc update TheAbider.RackStack --version $ver --urls $exeUrl --submit --token $env:WINGET_TOKEN
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "wingetcreate exit $LASTEXITCODE — if this is the first-ever submission,"
+            Write-Host "the package does not exist in winget-pkgs yet; do the first one manually"
+            Write-Host "(see dist/README.md). Subsequent releases will auto-submit."
+          }
+          $global:LASTEXITCODE = 0
+          exit 0
 
       # Publish to the Chocolatey Community Repository. Inlined for the same
       # reason as winget above. The EXE is already built in builds\ for this

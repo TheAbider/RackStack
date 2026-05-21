@@ -18,18 +18,31 @@ Automated as a step in `.github/workflows/ci.yml` — it runs inside the
 release job right after the GitHub Release is created. (It is inlined
 rather than a separate `release:`-triggered workflow because a release
 created with `GITHUB_TOKEN` does not trigger `release` event workflows.)
-Activates on every release once the `WINGET_TOKEN` repo secret is set
-(Personal Access Token classic with `public_repo` scope). The first
-submission opens a PR against `microsoft/winget-pkgs` for human review;
-subsequent releases auto-submit identical-shape manifests.
+The step uses Microsoft's `wingetcreate` CLI directly — not a winget
+submission Action, because the popular one pulls in an unpinned
+transitive action that the repo's SHA-pinning policy rejects.
+
+`wingetcreate update` requires the package to already exist in
+`microsoft/winget-pkgs`. So the **first** submission of
+`TheAbider.RackStack` is a one-time manual step; every release after
+that is automated.
 
 **Setup:**
 1. Create a Personal Access Token (classic) with `public_repo` scope at
    https://github.com/settings/tokens/new?scopes=public_repo
 2. Save it as `WINGET_TOKEN` at
    https://github.com/TheAbider/RackStack/settings/secrets/actions/new
-3. The next release will auto-submit a PR to winget-pkgs. Review and merge
-   it (your name appears as author).
+3. **First submission (one-time, manual):** on a Windows machine, install
+   wingetcreate (`winget install wingetcreate`) and run:
+   ```powershell
+   $ver = '1.99.0'   # current release
+   wingetcreate new "https://github.com/TheAbider/RackStack/releases/download/v$ver/RackStack.exe"
+   ```
+   Follow the prompts (PackageIdentifier `TheAbider.RackStack`, MIT
+   license, etc.), then submit. It opens a PR against `winget-pkgs` for
+   review.
+4. After that first PR merges, every release auto-submits via the ci.yml
+   step — no further action needed.
 
 ## Scoop
 
