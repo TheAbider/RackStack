@@ -526,6 +526,12 @@ function Show-ToolsUtilitiesMenu {
     } -CacheSeconds 120
     $arcColor = if ($arcStatus -eq "Connected") { "Success" } elseif ($arcStatus -eq "Agent only") { "Warning" } else { "Info" }
 
+    $mdeStatus = Get-CachedValue -Key "DefenderEndpointState" -FetchScript {
+        $m = Get-DefenderEndpointStatus
+        if ($m.Onboarded) { "Onboarded" } else { "Not onboarded" }
+    } -CacheSeconds 120
+    $mdeColor = if ($mdeStatus -eq "Onboarded") { "Success" } else { "Info" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                          TOOLS & UTILITIES").PadRight(72))║" -color "Info"
@@ -566,9 +572,10 @@ function Show-ToolsUtilitiesMenu {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-OutputColor "  │$("  CLOUD".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  CLOUD & SECURITY".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[15] Azure Arc Onboarding ►" -Status $arcStatus -StatusColor $arcColor
+    Write-MenuItem "[16] Defender for Endpoint ►" -Status $mdeStatus -StatusColor $mdeColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

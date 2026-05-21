@@ -300,9 +300,10 @@ function Start-Show-ToolsUtilitiesMenu {
             "13" { Show-ScheduledTaskManager }
             "14" { Start-SystemDebloat }
             "15" { Show-AzureArcManagement }
+            "16" { Show-DefenderEndpointManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-15 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-16 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

@@ -99,6 +99,16 @@
         "_Tags_help": "Optional Azure resource tags applied to the Arc machine, comma-separated key=value pairs (e.g. 'env=prod,owner=infra')."
     },
 
+    "_section_mde": "========== MICROSOFT DEFENDER FOR ENDPOINT ==========",
+
+    "DefenderEndpoint": {
+        "_comment": "Optional. Onboard this server to Microsoft Defender for Endpoint (MDE), Microsoft's enterprise EDR. Download the per-tenant onboarding package from security.microsoft.com > Settings > Endpoints > Onboarding, extract the .cmd, and point OnboardingScriptPath at it. The MDE menu lives under Tools & Utilities > Cloud & Security, and the CLI action is 'DefenderEndpointOnboard'.",
+        "OnboardingScriptPath": "",
+        "_OnboardingScriptPath_help": "Full path to WindowsDefenderATPLocalOnboardingScript.cmd from the Defender portal onboarding package. The .cmd is Microsoft-signed and tenant-specific. Leave blank to disable MDE onboarding.",
+        "OffboardingScriptPath": "",
+        "_OffboardingScriptPath_help": "Full path to the offboarding .cmd (also from the Defender portal). Offboarding packages expire roughly 30 days after generation — download a fresh one when you need to offboard."
+    },
+
     "_section_storage": "========== STORAGE BACKEND ==========",
 
     "StorageBackendType": "iSCSI",

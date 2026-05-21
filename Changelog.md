@@ -1,5 +1,27 @@
 ﻿# Changelog
 
+## v1.98.59
+
+New feature module: **Microsoft Defender for Endpoint onboarding** (module 66 — RackStack is now 67 modules).
+
+`Modules/66-DefenderEndpoint.ps1` onboards a Windows Server into Microsoft Defender for Endpoint (MDE), Microsoft's enterprise EDR. On modern Windows Server (2019+) and Windows 10/11 the MDE sensor (the "Sense" service) ships with the OS; onboarding activates it against the operator's tenant.
+
+**What it does:**
+- Runs the per-tenant onboarding `.cmd` package the operator downloads from the Microsoft Defender portal (security.microsoft.com → Settings → Endpoints → Onboarding). RackStack runs it idempotently and verifies the result.
+- Reports onboarding state from the registry (`HKLM:\SOFTWARE\Microsoft\Windows Advanced Threat Protection\Status`), Sense service status, sensor version, and tenant Org ID.
+- Supports clean offboarding via the operator's offboarding `.cmd`.
+- Runs the Microsoft-documented EDR detection test (creates a benign test artifact that produces a test alert in the portal — no real malware).
+- Interactive menu under **Tools & Utilities → Cloud & Security → [16] Defender for Endpoint**, plus a headless CLI action: `RackStack.exe -Action DefenderEndpointOnboard [-OutputFormat JSON]`.
+
+**Security handling:**
+- The onboarding/offboarding script path is validated before execution: must exist, must be a `.cmd`, and is rejected if it contains shell metacharacters (`Test-MDEScriptPath`).
+- The script is launched via `Start-Process` with an array-form `ArgumentList` (`cmd /c <path>`) — no string concatenation, no shell re-parsing.
+- No secret to handle: the tenant binding lives inside the Microsoft-signed onboarding package, not in RackStack config.
+
+**Config:** new `$script:DefenderEndpoint` block in `00-Initialization.ps1`, overridable via the new `DefenderEndpoint` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
+
+**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Tools & Utilities menu (the "Cloud" section is now "Cloud & Security"), and the structural test harness (new Section 161, 24 tests). Module count references (66 → 67) and CLI-action count (177 → 178) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 178 CLI actions across 67 modules.
+
 ## v1.98.58
 
 New feature module: **Azure Arc server onboarding** (module 65 — RackStack is now 66 modules).
