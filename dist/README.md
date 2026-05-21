@@ -14,11 +14,14 @@ and submission scaffolding.
 
 ## winget
 
-Automated via `.github/workflows/winget.yml`. Activates on every published
-release once the `WINGET_TOKEN` repo secret is set (Personal Access Token
-classic with `public_repo` scope). The first submission opens a PR against
-`microsoft/winget-pkgs` for human review; subsequent releases auto-submit
-identical-shape manifests.
+Automated as a step in `.github/workflows/ci.yml` — it runs inside the
+release job right after the GitHub Release is created. (It is inlined
+rather than a separate `release:`-triggered workflow because a release
+created with `GITHUB_TOKEN` does not trigger `release` event workflows.)
+Activates on every release once the `WINGET_TOKEN` repo secret is set
+(Personal Access Token classic with `public_repo` scope). The first
+submission opens a PR against `microsoft/winget-pkgs` for human review;
+subsequent releases auto-submit identical-shape manifests.
 
 **Setup:**
 1. Create a Personal Access Token (classic) with `public_repo` scope at

@@ -494,6 +494,78 @@ jobs:
           }
           exit 0
 
+      # Detect which publish-channel tokens are configured. The `secrets`
+      # context is not reliably usable in step-level `if:` conditions, so
+      # presence is checked here and exposed as step outputs the winget /
+      # chocolatey steps gate on.
+      - name: Detect publish tokens
+        id: pubtokens
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        env:
+          WT: ${{ secrets.WINGET_TOKEN }}
+          CT: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          $w = if ([string]::IsNullOrWhiteSpace($env:WT)) { 'false' } else { 'true' }
+          $c = if ([string]::IsNullOrWhiteSpace($env:CT)) { 'false' } else { 'true' }
+          "winget=$w" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "choco=$c"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "winget token: $w   choco token: $c"
+
+      # Submit to winget-pkgs. Inlined into the release job (rather than a
+      # separate workflow on `release: published`) because a release created
+      # with GITHUB_TOKEN does NOT trigger `release` event workflows — GitHub's
+      # recursion-prevention. Running it here fires exactly when a release is
+      # cut. continue-on-error so a winget hiccup never fails the release.
+      - name: Submit to winget-pkgs
+        if: steps.pubtokens.outputs.winget == 'true'
+        continue-on-error: true
+        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+        with:
+          identifier: TheAbider.RackStack
+          installers-regex: '^RackStack\.exe$'
+          release-tag: v${{ steps.vercheck.outputs.version }}
+          token: ${{ secrets.WINGET_TOKEN }}
+
+      # Publish to the Chocolatey Community Repository. Inlined for the same
+      # reason as winget above. The EXE is already built in builds\ for this
+      # run, so no download is needed.
+      - name: Publish to Chocolatey
+        if: steps.pubtokens.outputs.choco == 'true'
+        continue-on-error: true
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          $exe = 'builds\RackStack.exe'
+          if (-not (Test-Path -LiteralPath $exe)) {
+            Write-Host 'RackStack.exe not present — skipping Chocolatey publish.'
+            exit 0
+          }
+          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLower()
+          Push-Location dist/chocolatey
+          # Stamp the templated nuspec + install script with this version + hash.
+          (Get-Content 'rackstack.nuspec' -Raw) -replace '<version>0\.0\.0</version>', "<version>$ver</version>" |
+            Set-Content 'rackstack.nuspec' -Encoding utf8
+          (Get-Content 'tools/chocolateyinstall.ps1' -Raw) `
+            -replace '__VERSION__', $ver `
+            -replace '__CHECKSUM_SHA256__', $hash |
+            Set-Content 'tools/chocolateyinstall.ps1' -Encoding utf8
+          choco pack rackstack.nuspec
+          $nupkg = Get-ChildItem -Filter 'rackstack.*.nupkg' | Select-Object -First 1
+          if ($nupkg) {
+            Write-Host "Pushing $($nupkg.Name) to Chocolatey..."
+            choco apikey --key $env:CHOCO_API_KEY --source https://push.chocolatey.org/
+            choco push $nupkg.FullName --source https://push.chocolatey.org/
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "choco push exit $LASTEXITCODE — first submissions queue for moderation."
+            }
+          } else {
+            Write-Host "choco pack produced no .nupkg."
+          }
+          $global:LASTEXITCODE = 0
+          Pop-Location
+          exit 0
+
       - name: Apply retention rule (only latest z in minor survives)
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         env:
