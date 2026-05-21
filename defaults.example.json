@@ -123,6 +123,22 @@
         "_SyncHour_help": "Hour of day (0-23, local time) for the daily automatic catalog synchronization. Default 3 = 03:00."
     },
 
+    "_section_adcs": "========== AD CS CERTIFICATE AUTHORITY ==========",
+
+    "ADCS": {
+        "_comment": "Optional. Bootstrap an Active Directory Certificate Services root CA. The AD CS menu lives under Configure Server > Roles & Features > Certificate Services, and the CLI action 'ADCSSetup' installs the role only. Configuring the CA is interactive-only (it requires a typed confirmation because it is hard to reverse). Leave CACommonName blank to disable.",
+        "CACommonName": "",
+        "_CACommonName_help": "Common name of the root CA certificate, e.g. 'Contoso Root CA'. 1-64 chars of letters, digits, spaces, hyphens, underscores. This name is permanent for the life of the CA.",
+        "CAType": "StandaloneRootCA",
+        "_CAType_help": "'StandaloneRootCA' (works on any server) or 'EnterpriseRootCA' (requires domain membership; integrates with AD certificate templates and auto-enrollment). Subordinate CAs are out of scope for this module.",
+        "KeyLength": 4096,
+        "_KeyLength_help": "RSA key length for the CA certificate: 2048, 3072, or 4096. 4096 is the recommended default for a long-lived root.",
+        "HashAlgorithm": "SHA256",
+        "_HashAlgorithm_help": "Signature hash algorithm. SHA256 is the standard choice; SHA384/SHA512 are also accepted by Windows.",
+        "ValidityYears": 10,
+        "_ValidityYears_help": "Validity period of the root CA certificate in years (1-25). 10 is a common choice for a root that issues shorter-lived certificates."
+    },
+
     "_section_storage": "========== STORAGE BACKEND ==========",
 
     "StorageBackendType": "iSCSI",

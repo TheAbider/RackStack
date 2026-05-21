@@ -1,5 +1,29 @@
 ﻿# Changelog
 
+## v1.98.61
+
+New feature module: **AD CS Certificate Authority bootstrap** (module 68 — RackStack is now 69 modules).
+
+`Modules/68-ADCS.ps1` bootstraps Active Directory Certificate Services (AD CS) — a Windows internal Certification Authority for issuing certificates for authentication, code signing, S/MIME, and TLS.
+
+**What it does:**
+- Installs the AD CS Certification Authority role (via the shared `Install-WindowsFeatureWithTimeout` wrapper).
+- Configures a single root CA — Enterprise or Standalone — with safe defaults: 4096-bit RSA, SHA-256, a 10-year root validity.
+- Reports role state, CA-configured state, CA name, CA type, and the CertSvc service status.
+- Interactive menu under **Configure Server → Roles & Features → [6] Certificate Services (AD CS)**, plus a headless CLI action `RackStack.exe -Action ADCSSetup` which installs the role only.
+
+**Scope (deliberately conservative):** this module sets up ONE root CA. A production two-tier PKI (offline root + issuing subordinate, custom CDP/AIA URLs, key ceremony) involves decisions that should be made deliberately, not automated — the module is explicit about that boundary and rejects subordinate-CA types.
+
+**Security handling:**
+- Configuring a CA is hard to reverse — the CA certificate and every certificate it issues depend on the configuration for the CA's entire multi-year lifetime. `Install-ADCSCertificationAuthority` therefore requires the operator to **type the CA common name exactly** to confirm; anything else cancels.
+- The CA common name is allowlist-validated (`^[A-Za-z0-9 _-]{1,64}$`); CA type is restricted to `EnterpriseRootCA` / `StandaloneRootCA`; key length is restricted to 2048/3072/4096; validity to 1-25 years.
+- `EnterpriseRootCA` is refused unless the machine is domain-joined.
+- The headless `ADCSSetup` CLI action installs the role only — CA configuration is intentionally interactive-only so the typed confirmation can never be bypassed in a script.
+
+**Config:** new `$script:ADCS` block in `00-Initialization.ps1`, overridable via the new `ADCS` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
+
+**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Roles & Features menu, and the structural test harness (new Section 163, 26 tests). Module count references (68 → 69) and CLI-action count (179 → 180) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 180 CLI actions across 69 modules.
+
 ## v1.98.60
 
 New feature module: **WSUS server setup** (module 67 — RackStack is now 68 modules).
