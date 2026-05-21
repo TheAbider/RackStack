@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.58
+    Automated Test Runner for RackStack v1.98.59
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 66 modules)
+    - Parse tests (monolithic + 67 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 66  # 00-65 inclusive
+$expectedModuleCount = 67  # 00-66 inclusive
 
 # ============================================================================
 # BANNER
@@ -148,7 +148,7 @@ try {
 }
 } # end if (-not $Quick) — skip monolithic parse in Quick mode
 
-# 1b. All 66 module files parse
+# 1b. All 67 module files parse
 $moduleFiles = Get-ChildItem -Path $modulesPath -Filter "*.ps1" | Sort-Object Name
 
 foreach ($moduleFile in $moduleFiles) {
@@ -270,7 +270,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 66 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 67 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "65-AzureArc.ps1"
-    Write-TestResult "Module range 00-Initialization to 65-AzureArc" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "66-DefenderEndpoint.ps1"
+    Write-TestResult "Module range 00-Initialization to 66-DefenderEndpoint" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 65 #region tags" ($regionStartCount -eq 65) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 65 #endregion tags" ($regionEndCount -eq 65) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 66 #region tags" ($regionStartCount -eq 66) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 66 #endregion tags" ($regionEndCount -eq 66) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 66 modules" ($readmeContent -match '66 module')
+    Write-TestResult "README: mentions 67 modules" ($readmeContent -match '67 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,18 +6898,18 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 66 modules" ($loaderContent -match '66 modules')
+    Write-TestResult "RackStack.ps1: mentions 67 modules" ($loaderContent -match '67 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 66" ($moduleCount -eq 66) "Found $moduleCount modules"
+    Write-TestResult "Module count is 67" ($moduleCount -eq 67) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
     $changelogContent = Get-Content $changelogPath -Raw
     Write-TestResult "Changelog: has v1.4.0 entry" ($changelogContent -match '## v1\.4\.0')
     Write-TestResult "Changelog: mentions Server Role Templates" ($changelogContent -match 'Server Role Templates')
-    Write-TestResult "Changelog: mentions 66 modules" ($changelogContent -match '66 modules')
+    Write-TestResult "Changelog: mentions 67 modules" ($changelogContent -match '67 modules')
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
@@ -8094,6 +8094,68 @@ try {
 
 } catch {
     Write-TestResult "Azure Arc Onboarding Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 161: DEFENDER FOR ENDPOINT ONBOARDING (Module 66)
+# ============================================================================
+Write-SectionHeader "SECTION 161: DEFENDER FOR ENDPOINT ONBOARDING (Module 66)"
+
+try {
+    $mdeContent = Get-Content "$modulesPath\66-DefenderEndpoint.ps1" -Raw
+
+    Write-TestResult "66-MDE: function Test-DefenderEndpointConfigured exists" ($mdeContent -match 'function\s+Test-DefenderEndpointConfigured\b')
+    Write-TestResult "66-MDE: function Test-DefenderEndpointOnboarded exists" ($mdeContent -match 'function\s+Test-DefenderEndpointOnboarded\b')
+    Write-TestResult "66-MDE: function Get-DefenderEndpointStatus exists" ($mdeContent -match 'function\s+Get-DefenderEndpointStatus\b')
+    Write-TestResult "66-MDE: function Test-MDEScriptPath exists" ($mdeContent -match 'function\s+Test-MDEScriptPath\b')
+    Write-TestResult "66-MDE: function Invoke-DefenderEndpointOnboard exists" ($mdeContent -match 'function\s+Invoke-DefenderEndpointOnboard\b')
+    Write-TestResult "66-MDE: function Invoke-DefenderEndpointOffboard exists" ($mdeContent -match 'function\s+Invoke-DefenderEndpointOffboard\b')
+    Write-TestResult "66-MDE: function Test-DefenderEndpointSensor exists" ($mdeContent -match 'function\s+Test-DefenderEndpointSensor\b')
+    Write-TestResult "66-MDE: function Show-DefenderEndpointManagement exists" ($mdeContent -match 'function\s+Show-DefenderEndpointManagement\b')
+
+    # Security: onboarding script path must be metachar-validated before execution
+    Write-TestResult "66-MDE: validates script path for metacharacters" ($mdeContent -match 'Test-MDEScriptPath')
+    Write-TestResult "66-MDE: rejects non-.cmd script paths" ($mdeContent -match "notmatch '\\\.cmd")
+    Write-TestResult "66-MDE: Start-Process uses array ArgumentList" ($mdeContent -match "ArgumentList @\(")
+    Write-TestResult "66-MDE: Test-Path uses -LiteralPath" ($mdeContent -match 'Test-Path -LiteralPath')
+    Write-TestResult "66-MDE: detection test uses GUID temp dir (not Get-Random)" ($mdeContent -match "\[guid\]::NewGuid" -and -not ($mdeContent -match 'Get-Random'))
+
+    # Conventions
+    Write-TestResult "66-MDE: region header present" ($mdeContent -match '#region ===== MICROSOFT DEFENDER FOR ENDPOINT')
+    Write-TestResult "66-MDE: region closed" ($mdeContent -match '#endregion')
+    Write-TestResult "66-MDE: ReturnToMainMenu check" ($mdeContent -match 'ReturnToMainMenu')
+    Write-TestResult "66-MDE: navigation support" ($mdeContent -match 'Test-NavigationCommand')
+    Write-TestResult "66-MDE: session change tracking" ($mdeContent -match 'Add-SessionChange')
+
+    # Loader integration
+    $loaderMde = Get-Content "$script:ModuleRoot\RackStack.ps1" -Raw
+    Write-TestResult "66-MDE: loader includes module" ($loaderMde -match '66-DefenderEndpoint\.ps1')
+
+    # CLI action integration
+    $entryMde = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "66-MDE: CLI action DefenderEndpointOnboard in action list" ($entryMde -match "Action = 'DefenderEndpointOnboard'")
+    Write-TestResult "66-MDE: CLI dispatch handler for DefenderEndpointOnboard" ($entryMde -match "'DefenderEndpointOnboard'\s*\{")
+
+    # Header param ValidateSet
+    $headerMde = Get-Content "$script:ModuleRoot\Header.ps1" -Raw
+    Write-TestResult "66-MDE: Header ValidateSet includes DefenderEndpointOnboard" ($headerMde -match "'DefenderEndpointOnboard'")
+
+    # Menu integration
+    $menuMde = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    $runnerMde = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "66-MDE: menu entry exists" ($menuMde -match 'Defender for Endpoint')
+    Write-TestResult "66-MDE: menu runner dispatches Show-DefenderEndpointManagement" ($runnerMde -match 'Show-DefenderEndpointManagement')
+
+    # Config schema
+    $initMde = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    Write-TestResult "66-MDE: `$script:DefenderEndpoint config block defined" ($initMde -match '\$script:DefenderEndpoint\s*=\s*@\{')
+
+    # Import-Defaults merge
+    $opsMde = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    Write-TestResult "66-MDE: Import-Defaults merges DefenderEndpoint" ($opsMde -match '\$merged\.DefenderEndpoint')
+
+} catch {
+    Write-TestResult "Defender for Endpoint Onboarding Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -9357,7 +9419,12 @@ $newFunctions = @(
     "Test-AzureArcConfigured",
     "Get-AzureArcStatus",
     "Invoke-AzureArcOnboard",
-    "Show-AzureArcManagement"
+    "Show-AzureArcManagement",
+    # Wave 10: Microsoft Defender for Endpoint onboarding (module 66)
+    "Test-DefenderEndpointConfigured",
+    "Get-DefenderEndpointStatus",
+    "Invoke-DefenderEndpointOnboard",
+    "Show-DefenderEndpointManagement"
 )
 
 $newFuncPassed = 0
@@ -12037,7 +12104,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 177 entries" ($listActionCount -eq 177) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 178 entries" ($listActionCount -eq 178) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12070,7 +12137,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 177 entries" ($actionCount2 -eq 177) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 178 entries" ($actionCount2 -eq 178) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12096,7 +12163,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 177 entries" ($actionCount3 -eq 177) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 178 entries" ($actionCount3 -eq 178) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12134,7 +12201,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 177 entries" ($actionCount4 -eq 177) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 178 entries" ($actionCount4 -eq 178) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

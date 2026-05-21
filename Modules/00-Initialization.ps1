@@ -155,6 +155,14 @@ $script:AzureArc = @{
     Tags                   = ""          # Optional Arc resource tags, "key1=val1,key2=val2"
 }
 
+# Microsoft Defender for Endpoint onboarding (override via defaults.json "DefenderEndpoint")
+# Paths point to the per-tenant onboarding/offboarding .cmd scripts downloaded
+# from the Defender portal (security.microsoft.com). Empty = MDE not configured.
+$script:DefenderEndpoint = @{
+    OnboardingScriptPath  = ""   # Path to WindowsDefenderATPLocalOnboardingScript.cmd
+    OffboardingScriptPath = ""   # Path to the offboarding .cmd (expires ~30 days after generation)
+}
+
 # Folder file cache - keyed by folder path, each entry has Files array and CacheTime
 $script:FileCache = @{}
 
@@ -189,7 +197,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.58"
+$script:ScriptVersion = "1.98.59"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

@@ -1059,6 +1059,21 @@ function Import-Defaults {
         }
     }
 
+    # Update Defender for Endpoint onboarding settings (deep-merge from defaults.json "DefenderEndpoint")
+    $acMde = $merged.DefenderEndpoint
+    if ($acMde) {
+        if ($acMde -is [PSCustomObject]) {
+            foreach ($prop in $acMde.PSObject.Properties) {
+                if ($script:DefenderEndpoint.ContainsKey($prop.Name)) { $script:DefenderEndpoint[$prop.Name] = $prop.Value }
+            }
+        }
+        elseif ($acMde -is [hashtable]) {
+            foreach ($key in $acMde.Keys) {
+                if ($script:DefenderEndpoint.ContainsKey($key)) { $script:DefenderEndpoint[$key] = $acMde[$key] }
+            }
+        }
+    }
+
     # Import custom license keys from merged defaults (supports company + personal)
     $script:CustomKMSKeys = @{}
     $script:CustomAVMAKeys = @{}

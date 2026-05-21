@@ -395,6 +395,7 @@ function Assert-Elevation {
                 @{ Action = 'History';          Description = 'Show the last N CLI invocations (rolling log of 50 entries)' }
                 @{ Action = 'Replay';           Description = 'Re-run a prior invocation by index (1 = most recent; see History)' }
                 @{ Action = 'AzureArcEnroll';   Description = 'Onboard this server to Azure Arc (service-principal auth; config from defaults.json AzureArc)' }
+                @{ Action = 'DefenderEndpointOnboard'; Description = 'Onboard this server to Microsoft Defender for Endpoint (runs the onboarding .cmd from defaults.json DefenderEndpoint)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1861,6 +1862,28 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             [Environment]::Exit([int](-not $arcOk))
+        }
+        'DefenderEndpointOnboard' {
+            # Onboard this server to Microsoft Defender for Endpoint by running
+            # the operator-supplied onboarding .cmd (path from defaults.json
+            # "DefenderEndpoint"). Exit 0 on a confirmed onboarded state, 1 otherwise.
+            $mdeOk = Invoke-DefenderEndpointOnboard
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $mdeStatus = Get-DefenderEndpointStatus
+                $jsonResult = @{
+                    Tool         = $script:ToolFullName
+                    Version      = $script:ScriptVersion
+                    Action       = 'DefenderEndpointOnboard'
+                    Timestamp    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname     = $env:COMPUTERNAME
+                    Success      = [bool]$mdeOk
+                    Onboarded    = [bool]$mdeStatus.Onboarded
+                    SenseService = $mdeStatus.SenseService
+                    OrgId        = $mdeStatus.OrgId
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            [Environment]::Exit([int](-not $mdeOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

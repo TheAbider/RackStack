@@ -3,7 +3,7 @@
     RackStack - Modular Loader (Development)
 
 .DESCRIPTION
-    This is the MODULAR LOADER -- it dot-sources all 66 modules from the Modules/
+    This is the MODULAR LOADER -- it dot-sources all 67 modules from the Modules/
     subfolder and starts RackStack. Use this file for development and testing.
 
     This is NOT the monolithic build. The monolithic single-file version is:
@@ -13,7 +13,7 @@
     Environment-specific settings are configured via defaults.json.
 
 .VERSION
-    1.98.58
+    1.98.59
 
 .NOTES
     - Requires Windows Server 2012 R2 or later (or Windows 10/11 for testing)
@@ -103,6 +103,7 @@ $moduleFiles = @(
     "63-ScheduledTasks.ps1"
     "64-SystemDebloat.ps1"
     "65-AzureArc.ps1"
+    "66-DefenderEndpoint.ps1"
 )
 
 # Load all modules
