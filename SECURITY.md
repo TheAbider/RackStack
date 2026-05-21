@@ -87,15 +87,29 @@ before running:
 (Get-FileHash RackStack.exe -Algorithm SHA256).Hash.ToLower()
 ```
 
-Once SignPath Foundation signing is active (in progress), the EXE will
-also be Authenticode-signed by SignPath Foundation. Verify with:
+Every release artifact is also signed with Sigstore cosign (keyless)
+and carries SLSA Level 3 build provenance. The matching `.sig` and
+`.pem` files are attached to each release. Verify the EXE with:
 
 ```powershell
-Get-AuthenticodeSignature -FilePath RackStack.exe
+cosign verify-blob `
+  --certificate RackStack.exe.pem `
+  --signature RackStack.exe.sig `
+  --certificate-identity-regexp "^https://github.com/TheAbider/RackStack/.github/workflows/ci.yml@refs/heads/master$" `
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com `
+  RackStack.exe
 ```
 
-Signature `Status` should be `Valid` and the signer subject should
-contain `SignPath Foundation`.
+And verify build provenance with:
+
+```powershell
+gh attestation verify RackStack.exe --owner TheAbider
+```
+
+The EXE is not Authenticode-signed, so Windows SmartScreen may show an
+"Unknown publisher" prompt on first run until the project builds enough
+download reputation. The SHA-256 hash, cosign signature, and SLSA
+provenance are the integrity guarantees in the meantime.
 
 ## defaults.json
 

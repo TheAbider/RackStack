@@ -188,7 +188,6 @@ added as part of the patch that introduces them, by policy.
 | SLSA Level 3 build provenance attestation | `actions/attest-build-provenance@v2` on every release; verifiable via `gh attestation verify`. |
 | Reproducible build from source | `.\sync-to-monolithic.ps1` produces deterministic monolithic; `Invoke-PS2EXE` output is byte-identical given the same source + version arguments. |
 | SHA-pinned GitHub Actions enforced at the repo policy level | `gh api repos/TheAbider/RackStack/actions/permissions` shows `"sha_pinning_required": true`. |
-| Authenticode signing via SignPath Foundation OSS program | Configured in CI; activates when the SignPath OSS approval lands. |
 
 **Counter-argument considered.** The maintainer's GitHub account could
 be compromised, then signatures over malicious artifacts would still

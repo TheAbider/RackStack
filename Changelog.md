@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.99.1
+
+Removed the Authenticode code-signing scaffold from the release pipeline.
+
+The CI workflow previously carried a code-signing flow that would
+Authenticode-sign `RackStack.exe` once an OSS code-signing program
+approved the project. That approval is not available at the project's
+current size, so the scaffold has been removed rather than left dormant.
+
+- `.github/workflows/ci.yml`: the "Detect configuration", upload-unsigned,
+  sign, and signature-verify steps are removed. The release job no longer
+  references the related secrets or the third-party signing action (one
+  fewer SHA-pinned dependency).
+- `README.md`, `SECURITY.md`, `GOVERNANCE.md`, `ROADMAP.md`,
+  `docs/ASSURANCE_CASE.md`: the signing section is corrected — the EXE is
+  **not** Authenticode-signed, so Windows SmartScreen may show an
+  "Unknown publisher" prompt on first run.
+
+Release integrity is unchanged and still strong: every artifact carries
+a **SHA-256 hash** (`release-hashes.txt`), a **Sigstore cosign keyless
+signature** (`.sig` + `.pem`), and **SLSA Level 3 build provenance**
+(`gh attestation verify`). SECURITY.md documents the verification
+commands for all three.
+
 ## v1.99.0
 
 **Five new feature modules** — RackStack grows from 65 to 70 modules and from 176 to 181 CLI actions. This minor release bundles the Tier-1 feature backlog for this development cycle.
@@ -144,7 +168,6 @@ Gold-standard infrastructure push — 11 new OSS-best-practice signals added.
 - **SECURITY.md** rewritten with documented response timelines (acknowledge in 5 business days, triage in 10, Tier 1 fix in 14), scope (in/out), and operator hardening notes.
 - **SBOM** (CycloneDX) generated per release via `anchore/sbom-action` and attached to the GitHub Release.
 - **SLSA Level 3 build provenance** for every released artifact via `actions/attest-build-provenance@v2`. Consumers can verify with `gh attestation verify RackStack.exe --owner TheAbider`.
-- **SignPath workflow self-activating** — the previous placeholder turned into a real signing flow that auto-enables the moment the four `SIGNPATH_*` secrets are set (already done in v1.98.49; documented here for completeness).
 
 **Testing & coverage:**
 - **Pester suite expanded from 173 to 281 tests** across 9 files. New coverage:
@@ -176,8 +199,6 @@ Pester coverage doubled + code-signing scaffold made self-activating.
   - `ConfigExport.Tests.ps1` (15 tests) — `Get-DefaultWatchThresholds` pinned to documented operator-facing values (CPU 90%, Memory 90%, Disk 95%, Uptime 60d, Cert 7d minimum, etc.).
   - `Password.Tests.ps1` extended (+15 tests) — `ConvertFrom-SecureStringToPlainText` round-trip, `New-StrongPassword` length boundaries / complexity / cryptographic uniqueness / ambiguous-char exclusion, `Clear-SecureMemory` ref nulling.
 
-- **SignPath.io code-signing scaffold converted from commented placeholder to self-activating workflow.** A new `Detect SignPath configuration` step checks whether all four secrets (`SIGNPATH_API_TOKEN`, `SIGNPATH_ORG_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_POLICY_SLUG`) are present; the subsequent upload / sign / verify steps gate on that output. Without the secrets, signing skips silently with an explanatory message. Add the secrets and signing kicks in on the next version bump — no workflow edit required. A post-sign `Get-AuthenticodeSignature` verification step fails the build if SignPath returns an EXE whose signature does not validate locally.
-
 ## v1.98.48
 
 Regex-pattern test harness updated for the v1.98.46 `$script:` refactor.
@@ -204,7 +225,6 @@ Quality push — modern test framework + distribution channels.
 
 - **Pester 5.x unit-test suite** under `Tests/Pester/` covering pure functions in 03-InputValidation, 04-Navigation, and 22-Password modules. 71 tests, complements the existing regex-pattern harness in `Run-Tests.ps1` (which stays as the structural / cross-cutting check). New CI step `Run Pester unit tests` after `Run tests (core)` (Tests/Pester/, Tests/pester-check.ps1, .github/workflows/ci.yml).
 - **PowerShell Gallery publish** step added to the release pipeline. Gated on `PSGALLERY_API_KEY` secret — skips silently if absent so the release pipeline still works without it set. Publishes the existing thin-wrapper module (`RackStack.psd1` + `RackStack.psm1`) so users can `Install-Module RackStack`. Verifies psd1 ModuleVersion matches Header.ps1 .VERSION before publishing (.github/workflows/ci.yml).
-- **Code-signing placeholder** for SignPath.io (free OSS plan). Workflow steps commented out with full enable instructions — uncomment + add four secrets to ship signed EXE that bypasses SmartScreen warnings (.github/workflows/ci.yml).
 
 ## v1.98.44
 

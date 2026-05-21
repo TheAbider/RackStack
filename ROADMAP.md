@@ -17,7 +17,6 @@ Last updated: **2026-05-20** (v1.98.55).
 
 | Item | Status | Why |
 |---|---|---|
-| SignPath Foundation Authenticode signing | In progress (form submitted; awaiting OSS approval) | Removes the SmartScreen "Unknown publisher" warning on the EXE; complements the existing Sigstore cosign signatures. |
 | OpenSSF Best Practices **Silver** badge | In progress (Passing earned; this roadmap + GOVERNANCE.md + ASSURANCE_CASE.md unblock Silver) | Silver tier is achievable; Gold is structurally blocked by single-maintainer bus factor. |
 | GPG-signed git tags | Planned | Closes the OpenSSF `version_tags_signed` criterion. One-time `git config commit.gpgsign true` + `tag.gpgsign true` + key registration at https://github.com/TheAbider.gpg. |
 | Codecov coverage badge | In progress (token added; waiting for next CI upload to populate) | Public coverage % surface. |

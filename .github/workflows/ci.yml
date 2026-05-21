@@ -167,77 +167,11 @@ jobs:
           $info = Get-Item 'builds\RackStack.exe'
           Write-Host "Compiled: $($info.FullName) ($([math]::Round($info.Length / 1MB, 2)) MB)"
 
-      # ─────────────────────────────────────────────────────────────────────────
-      # Code signing (SignPath.io) — auto-enabled when SignPath secrets are present.
-      # SignPath is free for OSS projects; signed releases avoid SmartScreen
-      # "Unknown publisher" warnings and build reputation faster.
-      #
-      # To enable: add four GitHub secrets (Settings → Secrets → Actions):
-      #   SIGNPATH_API_TOKEN
-      #   SIGNPATH_ORG_ID
-      #   SIGNPATH_PROJECT_SLUG       (e.g. "rackstack")
-      #   SIGNPATH_POLICY_SLUG        (e.g. "release-signing")
-      # And ensure the SignPath artifact-configuration "rackstack-exe" exists in the
-      # SignPath UI. Once all four secrets are set, signing kicks in on the next
-      # version bump automatically — no workflow edit needed. Without the secrets,
-      # the signing steps skip silently and the EXE ships unsigned.
-      # ─────────────────────────────────────────────────────────────────────────
-      - name: Detect SignPath configuration
-        id: signpath-config
-        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
-        env:
-          SP_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-          SP_ORG:   ${{ secrets.SIGNPATH_ORG_ID }}
-          SP_PROJ:  ${{ secrets.SIGNPATH_PROJECT_SLUG }}
-          SP_POL:   ${{ secrets.SIGNPATH_POLICY_SLUG }}
-        run: |
-          $configured = -not (
-            [string]::IsNullOrWhiteSpace($env:SP_TOKEN) -or
-            [string]::IsNullOrWhiteSpace($env:SP_ORG)   -or
-            [string]::IsNullOrWhiteSpace($env:SP_PROJ)  -or
-            [string]::IsNullOrWhiteSpace($env:SP_POL)
-          )
-          $val = if ($configured) { 'true' } else { 'false' }
-          Write-Host "SignPath configured: $val"
-          if (-not $configured) {
-            Write-Host "  Missing one or more of: SIGNPATH_API_TOKEN, SIGNPATH_ORG_ID, SIGNPATH_PROJECT_SLUG, SIGNPATH_POLICY_SLUG"
-            Write-Host "  EXE will ship unsigned. To enable signing, set the secrets above."
-          }
-          "configured=$val" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-      - name: Upload unsigned EXE for SignPath
-        id: upload-unsigned
-        if: steps.signpath-config.outputs.configured == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: rackstack-exe-unsigned
-          path: builds/RackStack.exe
-          retention-days: 1
-
-      - name: Sign RackStack.exe (SignPath.io)
-        id: signpath-sign
-        if: steps.signpath-config.outputs.configured == 'true'
-        uses: signpath/github-action-submit-signing-request@4f13d373e8f0cd8d3c0465ff4877feff27aed2ae # v1.2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
-          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ secrets.SIGNPATH_POLICY_SLUG }}
-          artifact-configuration-slug: 'rackstack-exe'
-          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: 'builds'
-
-      - name: Verify signature on signed EXE
-        if: steps.signpath-config.outputs.configured == 'true'
-        run: |
-          $sig = Get-AuthenticodeSignature -FilePath 'builds\RackStack.exe'
-          Write-Host "Signature status: $($sig.Status)"
-          Write-Host "Signer: $($sig.SignerCertificate.Subject)"
-          if ($sig.Status -ne 'Valid') {
-            Write-Error "RackStack.exe is not validly signed (status: $($sig.Status)). SignPath returned an EXE that does not verify."
-            exit 1
-          }
+      # Release integrity is provided by SHA-256 hashes, Sigstore cosign
+      # keyless signatures, and SLSA Level 3 build provenance (all below).
+      # The EXE is not Authenticode-signed — Windows SmartScreen may show an
+      # "Unknown publisher" prompt on first run until the project builds
+      # enough download reputation.
 
       - name: Generate SHA256 hashes
         id: hashes
