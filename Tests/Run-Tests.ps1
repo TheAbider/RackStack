@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.59
+    Automated Test Runner for RackStack v1.98.60
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 67 modules)
+    - Parse tests (monolithic + 68 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 67  # 00-66 inclusive
+$expectedModuleCount = 68  # 00-67 inclusive
 
 # ============================================================================
 # BANNER
@@ -148,7 +148,7 @@ try {
 }
 } # end if (-not $Quick) — skip monolithic parse in Quick mode
 
-# 1b. All 67 module files parse
+# 1b. All 68 module files parse
 $moduleFiles = Get-ChildItem -Path $modulesPath -Filter "*.ps1" | Sort-Object Name
 
 foreach ($moduleFile in $moduleFiles) {
@@ -270,7 +270,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 67 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 68 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "66-DefenderEndpoint.ps1"
-    Write-TestResult "Module range 00-Initialization to 66-DefenderEndpoint" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "67-WSUS.ps1"
+    Write-TestResult "Module range 00-Initialization to 67-WSUS" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 66 #region tags" ($regionStartCount -eq 66) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 66 #endregion tags" ($regionEndCount -eq 66) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 67 #region tags" ($regionStartCount -eq 67) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 67 #endregion tags" ($regionEndCount -eq 67) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 67 modules" ($readmeContent -match '67 module')
+    Write-TestResult "README: mentions 68 modules" ($readmeContent -match '68 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,18 +6898,18 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 67 modules" ($loaderContent -match '67 modules')
+    Write-TestResult "RackStack.ps1: mentions 68 modules" ($loaderContent -match '68 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 67" ($moduleCount -eq 67) "Found $moduleCount modules"
+    Write-TestResult "Module count is 68" ($moduleCount -eq 68) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
     $changelogContent = Get-Content $changelogPath -Raw
     Write-TestResult "Changelog: has v1.4.0 entry" ($changelogContent -match '## v1\.4\.0')
     Write-TestResult "Changelog: mentions Server Role Templates" ($changelogContent -match 'Server Role Templates')
-    Write-TestResult "Changelog: mentions 67 modules" ($changelogContent -match '67 modules')
+    Write-TestResult "Changelog: mentions 68 modules" ($changelogContent -match '68 modules')
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
@@ -8156,6 +8156,70 @@ try {
 
 } catch {
     Write-TestResult "Defender for Endpoint Onboarding Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 162: WSUS SERVER SETUP (Module 67)
+# ============================================================================
+Write-SectionHeader "SECTION 162: WSUS SERVER SETUP (Module 67)"
+
+try {
+    $wsusContent = Get-Content "$modulesPath\67-WSUS.ps1" -Raw
+
+    Write-TestResult "67-WSUS: function Test-WSUSConfigured exists" ($wsusContent -match 'function\s+Test-WSUSConfigured\b')
+    Write-TestResult "67-WSUS: function Test-WSUSInstalled exists" ($wsusContent -match 'function\s+Test-WSUSInstalled\b')
+    Write-TestResult "67-WSUS: function Test-WSUSPostInstalled exists" ($wsusContent -match 'function\s+Test-WSUSPostInstalled\b')
+    Write-TestResult "67-WSUS: function Get-WSUSUtilPath exists" ($wsusContent -match 'function\s+Get-WSUSUtilPath\b')
+    Write-TestResult "67-WSUS: function Get-WSUSStatus exists" ($wsusContent -match 'function\s+Get-WSUSStatus\b')
+    Write-TestResult "67-WSUS: function Install-WSUSRole exists" ($wsusContent -match 'function\s+Install-WSUSRole\b')
+    Write-TestResult "67-WSUS: function Invoke-WSUSPostInstall exists" ($wsusContent -match 'function\s+Invoke-WSUSPostInstall\b')
+    Write-TestResult "67-WSUS: function Set-WSUSDefaultConfiguration exists" ($wsusContent -match 'function\s+Set-WSUSDefaultConfiguration\b')
+    Write-TestResult "67-WSUS: function Sync-WSUSCatalog exists" ($wsusContent -match 'function\s+Sync-WSUSCatalog\b')
+    Write-TestResult "67-WSUS: function Show-WSUSManagement exists" ($wsusContent -match 'function\s+Show-WSUSManagement\b')
+
+    # Security: content path is metachar-validated before being passed to wsusutil
+    Write-TestResult "67-WSUS: validates content path for metacharacters" ($wsusContent -match 'ContentPath -match')
+    Write-TestResult "67-WSUS: requires absolute local content path" ($wsusContent -match "notmatch '\^\[A-Za-z\]")
+    Write-TestResult "67-WSUS: wsusutil args built as array" ($wsusContent -match "ArgumentList @\(")
+    Write-TestResult "67-WSUS: Test-Path uses -LiteralPath" ($wsusContent -match 'Test-Path -LiteralPath')
+    Write-TestResult "67-WSUS: checks Windows Server SKU before install" ($wsusContent -match 'Test-WindowsServer')
+
+    # Conventions
+    Write-TestResult "67-WSUS: region header present" ($wsusContent -match '#region ===== WSUS SERVER SETUP')
+    Write-TestResult "67-WSUS: region closed" ($wsusContent -match '#endregion')
+    Write-TestResult "67-WSUS: ReturnToMainMenu check" ($wsusContent -match 'ReturnToMainMenu')
+    Write-TestResult "67-WSUS: navigation support" ($wsusContent -match 'Test-NavigationCommand')
+    Write-TestResult "67-WSUS: session change tracking" ($wsusContent -match 'Add-SessionChange')
+
+    # Loader integration
+    $loaderWsus = Get-Content "$script:ModuleRoot\RackStack.ps1" -Raw
+    Write-TestResult "67-WSUS: loader includes module" ($loaderWsus -match '67-WSUS\.ps1')
+
+    # CLI action integration
+    $entryWsus = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "67-WSUS: CLI action WSUSSetup in action list" ($entryWsus -match "Action = 'WSUSSetup'")
+    Write-TestResult "67-WSUS: CLI dispatch handler for WSUSSetup" ($entryWsus -match "'WSUSSetup'\s*\{")
+
+    # Header param ValidateSet
+    $headerWsus = Get-Content "$script:ModuleRoot\Header.ps1" -Raw
+    Write-TestResult "67-WSUS: Header ValidateSet includes WSUSSetup" ($headerWsus -match "'WSUSSetup'")
+
+    # Menu integration
+    $menuWsus = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    $runnerWsus = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "67-WSUS: menu entry exists" ($menuWsus -match 'WSUS Update Server')
+    Write-TestResult "67-WSUS: menu runner dispatches Show-WSUSManagement" ($runnerWsus -match 'Show-WSUSManagement')
+
+    # Config schema
+    $initWsus = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    Write-TestResult "67-WSUS: `$script:WSUS config block defined" ($initWsus -match '\$script:WSUS\s*=\s*@\{')
+
+    # Import-Defaults merge
+    $opsWsus = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    Write-TestResult "67-WSUS: Import-Defaults merges WSUS" ($opsWsus -match '\$merged\.WSUS')
+
+} catch {
+    Write-TestResult "WSUS Server Setup Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -9424,7 +9488,12 @@ $newFunctions = @(
     "Test-DefenderEndpointConfigured",
     "Get-DefenderEndpointStatus",
     "Invoke-DefenderEndpointOnboard",
-    "Show-DefenderEndpointManagement"
+    "Show-DefenderEndpointManagement",
+    # Wave 11: WSUS server setup (module 67)
+    "Test-WSUSConfigured",
+    "Get-WSUSStatus",
+    "Install-WSUSRole",
+    "Show-WSUSManagement"
 )
 
 $newFuncPassed = 0
@@ -12104,7 +12173,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 178 entries" ($listActionCount -eq 178) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 179 entries" ($listActionCount -eq 179) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12137,7 +12206,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 178 entries" ($actionCount2 -eq 178) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 179 entries" ($actionCount2 -eq 179) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12163,7 +12232,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 178 entries" ($actionCount3 -eq 178) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 179 entries" ($actionCount3 -eq 179) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12201,7 +12270,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 178 entries" ($actionCount4 -eq 178) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 179 entries" ($actionCount4 -eq 179) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

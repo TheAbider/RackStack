@@ -381,6 +381,12 @@ function Show-RolesFeaturesMenu {
     $clusterColor = if ($clusterStatus -eq "Installed") { "Success" } else { "Warning" }
     $agentColor = if ($agentStatus -eq "Installed") { "Success" } elseif ($agentStatus -eq "Not Configured") { "Debug" } else { "Warning" }
 
+    $wsusStatusText = Get-CachedValue -Key "WSUSState" -FetchScript {
+        $w = Get-WSUSStatus
+        if ($w.PostInstalled) { "Ready" } elseif ($w.RoleInstalled) { "Post-install needed" } else { "Not Installed" }
+    } -CacheSeconds 120
+    $wsusColor = if ($wsusStatusText -eq "Ready") { "Success" } elseif ($wsusStatusText -eq "Post-install needed") { "Warning" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -392,6 +398,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[2]  Install MPIO" -Status $mpioStatus -StatusColor $mpioColor
     Write-MenuItem "[3]  Install Failover Clustering" -Status $clusterStatus -StatusColor $clusterColor
     Write-MenuItem "[4]  Install $($script:AgentInstaller.ToolName) Agent" -Status $agentStatus -StatusColor $agentColor
+    Write-MenuItem "[5]  WSUS Update Server ►" -Status $wsusStatusText -StatusColor $wsusColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

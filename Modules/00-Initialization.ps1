@@ -163,6 +163,16 @@ $script:DefenderEndpoint = @{
     OffboardingScriptPath = ""   # Path to the offboarding .cmd (expires ~30 days after generation)
 }
 
+# WSUS server setup (override via defaults.json "WSUS")
+# Empty ContentPath = WSUS setup not configured. ContentPath must be an
+# absolute local path; it holds downloaded update binaries (can grow large).
+$script:WSUS = @{
+    ContentPath     = ""                          # e.g. "D:\WSUS" — where update content is stored
+    UpdateLanguage  = "en"                        # Single update language to keep the cache lean
+    Classifications = @("Critical Updates", "Security Updates", "Definition Updates", "Update Rollups")
+    SyncHour        = 3                           # Hour (0-23) for the daily automatic catalog sync
+}
+
 # Folder file cache - keyed by folder path, each entry has Files array and CacheTime
 $script:FileCache = @{}
 
@@ -197,7 +207,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.59"
+$script:ScriptVersion = "1.98.60"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

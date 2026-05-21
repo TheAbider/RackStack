@@ -1,5 +1,27 @@
 ﻿# Changelog
 
+## v1.98.60
+
+New feature module: **WSUS server setup** (module 67 — RackStack is now 68 modules).
+
+`Modules/67-WSUS.ps1` installs and configures Windows Server Update Services (WSUS), Microsoft's on-premises update-distribution role. RackStack already configures update *clients*; this module stands up the WSUS *server* they point at.
+
+**What it does:**
+- Installs the `UpdateServices` role plus its management tools.
+- Runs the one-time WSUS post-install (`wsusutil.exe postinstall`), which provisions the content directory and the Windows Internal Database.
+- Applies a sane default configuration: a single update language (keeps the content cache lean), security-relevant update classifications (Critical / Security / Definition / Update Rollups), and a daily automatic catalog sync at a configurable hour.
+- Triggers and reports catalog synchronization; reports role/post-install state, update count, computer count, and last sync.
+- Interactive menu under **Configure Server → Roles & Features → [5] WSUS Update Server**, plus a headless CLI action: `RackStack.exe -Action WSUSSetup [-OutputFormat JSON]` which runs install + post-install + default-configure end-to-end.
+
+**Security handling:**
+- `WSUS.ContentPath` is validated before being passed to `wsusutil.exe`: rejected on shell metacharacters, and required to be an absolute local path (`X:\...`).
+- `wsusutil` is invoked via `Start-Process` with an array-form `ArgumentList` — no string concatenation.
+- The role install honors the existing `$global:RebootNeeded` flag; the CLI action stops before post-install if a restart is pending.
+
+**Config:** new `$script:WSUS` block in `00-Initialization.ps1`, overridable via the new `WSUS` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
+
+**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Roles & Features menu, and the structural test harness (new Section 162, 24 tests). Module count references (67 → 68) and CLI-action count (178 → 179) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 179 CLI actions across 68 modules.
+
 ## v1.98.59
 
 New feature module: **Microsoft Defender for Endpoint onboarding** (module 66 — RackStack is now 67 modules).
