@@ -30,7 +30,6 @@
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
   <img alt="4759 tests" src="https://img.shields.io/badge/tests-4759-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
-  <img alt="line coverage 100%" src="https://img.shields.io/badge/line%20coverage-100%25-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
 
