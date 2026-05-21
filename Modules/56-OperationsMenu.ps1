@@ -1044,6 +1044,21 @@ function Import-Defaults {
         }
     }
 
+    # Update Azure Arc onboarding settings (deep-merge from defaults.json "AzureArc")
+    $acArc = $merged.AzureArc
+    if ($acArc) {
+        if ($acArc -is [PSCustomObject]) {
+            foreach ($prop in $acArc.PSObject.Properties) {
+                if ($script:AzureArc.ContainsKey($prop.Name)) { $script:AzureArc[$prop.Name] = $prop.Value }
+            }
+        }
+        elseif ($acArc -is [hashtable]) {
+            foreach ($key in $acArc.Keys) {
+                if ($script:AzureArc.ContainsKey($key)) { $script:AzureArc[$key] = $acArc[$key] }
+            }
+        }
+    }
+
     # Import custom license keys from merged defaults (supports company + personal)
     $script:CustomKMSKeys = @{}
     $script:CustomAVMAKeys = @{}

@@ -138,6 +138,23 @@ $script:FileServer = @{
     AgentFolder    = "Agents"
 }
 
+# Azure Arc server onboarding (override via defaults.json "AzureArc" section)
+# Empty TenantId/SubscriptionId/ResourceGroup = Arc onboarding not configured.
+# ServicePrincipalSecret should be left empty in defaults.json committed to
+# source control — supply it at runtime, via an environment variable, or via
+# a secrets manager. See 65-AzureArc.ps1 Resolve-AzureArcSecret.
+$script:AzureArc = @{
+    TenantId               = ""          # Azure AD / Entra tenant ID (GUID)
+    SubscriptionId         = ""          # Azure subscription ID (GUID)
+    ResourceGroup          = ""          # Target resource group for the Arc machine resource
+    Location               = "eastus"    # Azure region (e.g. eastus, westeurope)
+    ServicePrincipalId     = ""          # App ID of a service principal with the Azure Connected Machine Onboarding role
+    ServicePrincipalSecret = ""          # SP secret — prefer leaving blank here; set RACKSTACK_ARC_SECRET env var instead
+    Cloud                  = "AzureCloud" # AzureCloud (default), AzureUSGovernment, AzureChinaCloud
+    AgentInstallerUrl      = "https://aka.ms/AzureConnectedMachineAgent"  # AzureConnectedMachineAgent MSI
+    Tags                   = ""          # Optional Arc resource tags, "key1=val1,key2=val2"
+}
+
 # Folder file cache - keyed by folder path, each entry has Files array and CacheTime
 $script:FileCache = @{}
 
@@ -172,7 +189,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.57"
+$script:ScriptVersion = "1.98.58"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

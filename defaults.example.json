@@ -75,6 +75,30 @@
         "_AgentFolder_help": "Subfolder for agent installer files. Works with any MSP agent (Kaseya, ConnectWise, Datto, etc.)."
     },
 
+    "_section_azurearc": "========== AZURE ARC SERVER ONBOARDING ==========",
+
+    "AzureArc": {
+        "_comment": "Optional. Onboard this server into Azure Arc so it appears in the Azure portal and can be governed by Azure Policy, Defender for Cloud, Update Manager, and Monitor. Leave TenantId blank to disable. The Azure Arc menu lives under Tools & Utilities > Cloud, and the CLI action is 'AzureArcEnroll'.",
+        "TenantId": "",
+        "_TenantId_help": "Azure AD / Entra tenant ID (GUID). Azure Portal > Microsoft Entra ID > Overview > Tenant ID.",
+        "SubscriptionId": "",
+        "_SubscriptionId_help": "Azure subscription ID (GUID) where the Arc machine resource is created.",
+        "ResourceGroup": "",
+        "_ResourceGroup_help": "Name of an existing Azure resource group for Arc-connected machines. Must already exist.",
+        "Location": "eastus",
+        "_Location_help": "Azure region for the Arc resource (e.g. 'eastus', 'westeurope'). Must be a region your subscription has enabled.",
+        "ServicePrincipalId": "",
+        "_ServicePrincipalId_help": "Application (client) ID of a service principal granted the 'Azure Connected Machine Onboarding' role on the resource group.",
+        "ServicePrincipalSecret": "",
+        "_ServicePrincipalSecret_help": "SP client secret. STRONGLY PREFER leaving this blank here and setting the RACKSTACK_ARC_SECRET environment variable at runtime instead, so the secret never lands in a config file. defaults.json is gitignored, but env-var injection is still the safer pattern.",
+        "Cloud": "AzureCloud",
+        "_Cloud_help": "Azure cloud instance: 'AzureCloud' (default, commercial), 'AzureUSGovernment', or 'AzureChinaCloud'.",
+        "AgentInstallerUrl": "https://aka.ms/AzureConnectedMachineAgent",
+        "_AgentInstallerUrl_help": "Download URL for the Azure Connected Machine Agent MSI. Must be HTTPS. The default is the Microsoft-hosted current release.",
+        "Tags": "",
+        "_Tags_help": "Optional Azure resource tags applied to the Arc machine, comma-separated key=value pairs (e.g. 'env=prod,owner=infra')."
+    },
+
     "_section_storage": "========== STORAGE BACKEND ==========",
 
     "StorageBackendType": "iSCSI",

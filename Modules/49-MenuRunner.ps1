@@ -299,9 +299,10 @@ function Start-Show-ToolsUtilitiesMenu {
             "12" { Show-CertificateMenu }
             "13" { Show-ScheduledTaskManager }
             "14" { Start-SystemDebloat }
+            "15" { Show-AzureArcManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-14 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-15 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }
