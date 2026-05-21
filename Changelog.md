@@ -1,115 +1,29 @@
-﻿# Changelog
+# Changelog
 
-## v1.98.62
+## v1.99.0
 
-New feature module: **Storage Migration Service** (module 69 — RackStack is now 70 modules).
+**Five new feature modules** — RackStack grows from 65 to 70 modules and from 176 to 181 CLI actions. This minor release bundles the Tier-1 feature backlog for this development cycle.
 
-`Modules/69-StorageMigration.ps1` installs Storage Migration Service (SMS), Microsoft's tool for migrating file servers — their shares, data, security, and even server identity — onto modern Windows Server.
+### Modules/65-AzureArc.ps1 — Azure Arc server onboarding
+Onboards a Windows Server into Azure Arc, Microsoft's hybrid-cloud management plane (Azure Policy, Defender for Cloud, Update Manager, Monitor). Installs the Azure Connected Machine Agent (HTTPS-only installer URL), onboards via service-principal auth, reports Arc state, supports clean disconnect. The SP secret is resolved as a `SecureString` (preferred source: the `RACKSTACK_ARC_SECRET` environment variable, so it need not live in `defaults.json`), the transcript is paused around the `azcmagent` calls, `azcmagent` arguments are built as a `[List[string]]` array (no shell re-parsing), and the plaintext secret is scrubbed from memory immediately after use. Menu: Tools & Utilities → Cloud & Security. CLI: `-Action AzureArcEnroll`.
 
-**What it does:**
-- Installs the SMS orchestrator role (`SMS`) — the role that coordinates a migration project.
-- Optionally installs the SMS proxy (`SMS-Proxy`) — run on the destination Windows Server so migration data transfers locally instead of round-tripping through the orchestrator.
-- Reports orchestrator/proxy install state, the SMS service status, and the orchestrator state from `Get-SMSState`.
-- Interactive menu under **Configure Server → Roles & Features → [7] Storage Migration Service**, plus a headless CLI action `RackStack.exe -Action StorageMigrationSetup` (installs the orchestrator, and the proxy too when `StorageMigration.InstallProxy` is set).
+### Modules/66-DefenderEndpoint.ps1 — Microsoft Defender for Endpoint onboarding
+Onboards a Windows Server into Microsoft Defender for Endpoint (MDE), Microsoft's enterprise EDR. Runs the per-tenant onboarding `.cmd` from the Defender portal idempotently, reports onboarding state / Sense service / Org ID, supports offboarding, and runs the Microsoft-documented EDR detection test. The onboarding script path is validated before execution (must exist, must be `.cmd`, rejected on shell metacharacters); launched via `Start-Process` with an array-form `ArgumentList`. Menu: Tools & Utilities → Cloud & Security. CLI: `-Action DefenderEndpointOnboard`.
 
-**Scope (deliberately honest):** this module stands up the SMS *roles*. The migration jobs themselves — Inventory → Transfer → Cutover, including source/destination pairing and the identity-swap decision — are an interactive, multi-phase, per-project workflow that Microsoft drives through Windows Admin Center. RackStack gets SMS installed and ready; the menu states plainly that job orchestration is a WAC workflow.
+### Modules/67-WSUS.ps1 — WSUS server setup
+Installs and configures Windows Server Update Services. Installs the `UpdateServices` role, runs the one-time `wsusutil postinstall`, applies a default configuration (single update language, security-relevant classifications, daily sync schedule), and triggers catalog synchronization. The content path is validated before being passed to `wsusutil` (rejected on metacharacters, required to be an absolute local path). Menu: Configure Server → Roles & Features. CLI: `-Action WSUSSetup`.
 
-**Config:** new `$script:StorageMigration` block in `00-Initialization.ps1` (single `InstallProxy` toggle), overridable via the new `StorageMigration` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
+### Modules/68-ADCS.ps1 — AD CS Certificate Authority bootstrap
+Bootstraps Active Directory Certificate Services — a Windows internal Certification Authority. Installs the AD CS role and configures a single root CA (Enterprise or Standalone) with safe defaults (4096-bit RSA, SHA-256, 10-year root validity). Because configuring a CA is hard to reverse, `Install-ADCSCertificationAuthority` requires the operator to type the CA common name exactly to confirm. CA common name is allowlist-validated; CA type restricted to root types; key length 2048/3072/4096; validity 1-25 years; `EnterpriseRootCA` refused unless domain-joined. The headless `ADCSSetup` CLI action installs the role only — CA configuration is interactive-only so the typed confirmation cannot be scripted away. Menu: Configure Server → Roles & Features. CLI: `-Action ADCSSetup`.
 
-**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Roles & Features menu, and the structural test harness (new Section 164, 22 tests). Module count references (69 → 70) and CLI-action count (180 → 181) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 181 CLI actions across 70 modules.
+### Modules/69-StorageMigration.ps1 — Storage Migration Service
+Installs Storage Migration Service (SMS), Microsoft's file-server migration tool. Installs the SMS orchestrator role and (optionally) the SMS-Proxy feature, and reports their state. The migration jobs themselves (Inventory → Transfer → Cutover) are an interactive multi-phase workflow driven through Windows Admin Center; this module stands up the roles and the menu says so plainly. Menu: Configure Server → Roles & Features. CLI: `-Action StorageMigrationSetup`.
 
-This completes the five Tier-1 feature modules planned for this development cycle: Azure Arc onboarding, Microsoft Defender for Endpoint onboarding, WSUS server setup, AD CS Certificate Authority bootstrap, and Storage Migration Service.
+### Shared
+Each module follows the established conventions: secure input handling, interactive 72-char menu, headless CLI action with JSON output, a `$script:` config block in `00-Initialization.ps1` overridable via `defaults.example.json` and deep-merged by `Import-Defaults`, and a dedicated structural test section in `Tests/Run-Tests.ps1` (Sections 160-164, 121 new tests). Role installs use the shared `Install-WindowsFeatureWithTimeout` wrapper. PSScriptAnalyzer 0 errors / 0 warnings; 4759 regex-harness tests and 312 Pester tests pass.
 
-## v1.98.61
-
-New feature module: **AD CS Certificate Authority bootstrap** (module 68 — RackStack is now 69 modules).
-
-`Modules/68-ADCS.ps1` bootstraps Active Directory Certificate Services (AD CS) — a Windows internal Certification Authority for issuing certificates for authentication, code signing, S/MIME, and TLS.
-
-**What it does:**
-- Installs the AD CS Certification Authority role (via the shared `Install-WindowsFeatureWithTimeout` wrapper).
-- Configures a single root CA — Enterprise or Standalone — with safe defaults: 4096-bit RSA, SHA-256, a 10-year root validity.
-- Reports role state, CA-configured state, CA name, CA type, and the CertSvc service status.
-- Interactive menu under **Configure Server → Roles & Features → [6] Certificate Services (AD CS)**, plus a headless CLI action `RackStack.exe -Action ADCSSetup` which installs the role only.
-
-**Scope (deliberately conservative):** this module sets up ONE root CA. A production two-tier PKI (offline root + issuing subordinate, custom CDP/AIA URLs, key ceremony) involves decisions that should be made deliberately, not automated — the module is explicit about that boundary and rejects subordinate-CA types.
-
-**Security handling:**
-- Configuring a CA is hard to reverse — the CA certificate and every certificate it issues depend on the configuration for the CA's entire multi-year lifetime. `Install-ADCSCertificationAuthority` therefore requires the operator to **type the CA common name exactly** to confirm; anything else cancels.
-- The CA common name is allowlist-validated (`^[A-Za-z0-9 _-]{1,64}$`); CA type is restricted to `EnterpriseRootCA` / `StandaloneRootCA`; key length is restricted to 2048/3072/4096; validity to 1-25 years.
-- `EnterpriseRootCA` is refused unless the machine is domain-joined.
-- The headless `ADCSSetup` CLI action installs the role only — CA configuration is intentionally interactive-only so the typed confirmation can never be bypassed in a script.
-
-**Config:** new `$script:ADCS` block in `00-Initialization.ps1`, overridable via the new `ADCS` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
-
-**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Roles & Features menu, and the structural test harness (new Section 163, 26 tests). Module count references (68 → 69) and CLI-action count (179 → 180) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 180 CLI actions across 69 modules.
-
-## v1.98.60
-
-New feature module: **WSUS server setup** (module 67 — RackStack is now 68 modules).
-
-`Modules/67-WSUS.ps1` installs and configures Windows Server Update Services (WSUS), Microsoft's on-premises update-distribution role. RackStack already configures update *clients*; this module stands up the WSUS *server* they point at.
-
-**What it does:**
-- Installs the `UpdateServices` role plus its management tools.
-- Runs the one-time WSUS post-install (`wsusutil.exe postinstall`), which provisions the content directory and the Windows Internal Database.
-- Applies a sane default configuration: a single update language (keeps the content cache lean), security-relevant update classifications (Critical / Security / Definition / Update Rollups), and a daily automatic catalog sync at a configurable hour.
-- Triggers and reports catalog synchronization; reports role/post-install state, update count, computer count, and last sync.
-- Interactive menu under **Configure Server → Roles & Features → [5] WSUS Update Server**, plus a headless CLI action: `RackStack.exe -Action WSUSSetup [-OutputFormat JSON]` which runs install + post-install + default-configure end-to-end.
-
-**Security handling:**
-- `WSUS.ContentPath` is validated before being passed to `wsusutil.exe`: rejected on shell metacharacters, and required to be an absolute local path (`X:\...`).
-- `wsusutil` is invoked via `Start-Process` with an array-form `ArgumentList` — no string concatenation.
-- The role install honors the existing `$global:RebootNeeded` flag; the CLI action stops before post-install if a restart is pending.
-
-**Config:** new `$script:WSUS` block in `00-Initialization.ps1`, overridable via the new `WSUS` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
-
-**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Roles & Features menu, and the structural test harness (new Section 162, 24 tests). Module count references (67 → 68) and CLI-action count (178 → 179) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 179 CLI actions across 68 modules.
-
-## v1.98.59
-
-New feature module: **Microsoft Defender for Endpoint onboarding** (module 66 — RackStack is now 67 modules).
-
-`Modules/66-DefenderEndpoint.ps1` onboards a Windows Server into Microsoft Defender for Endpoint (MDE), Microsoft's enterprise EDR. On modern Windows Server (2019+) and Windows 10/11 the MDE sensor (the "Sense" service) ships with the OS; onboarding activates it against the operator's tenant.
-
-**What it does:**
-- Runs the per-tenant onboarding `.cmd` package the operator downloads from the Microsoft Defender portal (security.microsoft.com → Settings → Endpoints → Onboarding). RackStack runs it idempotently and verifies the result.
-- Reports onboarding state from the registry (`HKLM:\SOFTWARE\Microsoft\Windows Advanced Threat Protection\Status`), Sense service status, sensor version, and tenant Org ID.
-- Supports clean offboarding via the operator's offboarding `.cmd`.
-- Runs the Microsoft-documented EDR detection test (creates a benign test artifact that produces a test alert in the portal — no real malware).
-- Interactive menu under **Tools & Utilities → Cloud & Security → [16] Defender for Endpoint**, plus a headless CLI action: `RackStack.exe -Action DefenderEndpointOnboard [-OutputFormat JSON]`.
-
-**Security handling:**
-- The onboarding/offboarding script path is validated before execution: must exist, must be a `.cmd`, and is rejected if it contains shell metacharacters (`Test-MDEScriptPath`).
-- The script is launched via `Start-Process` with an array-form `ArgumentList` (`cmd /c <path>`) — no string concatenation, no shell re-parsing.
-- No secret to handle: the tenant binding lives inside the Microsoft-signed onboarding package, not in RackStack config.
-
-**Config:** new `$script:DefenderEndpoint` block in `00-Initialization.ps1`, overridable via the new `DefenderEndpoint` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
-
-**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Tools & Utilities menu (the "Cloud" section is now "Cloud & Security"), and the structural test harness (new Section 161, 24 tests). Module count references (66 → 67) and CLI-action count (177 → 178) updated across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md`. RackStack now exposes 178 CLI actions across 67 modules.
-
-## v1.98.58
-
-New feature module: **Azure Arc server onboarding** (module 65 — RackStack is now 66 modules).
-
-`Modules/65-AzureArc.ps1` onboards a Windows Server into Azure Arc, Microsoft's hybrid-cloud management plane. Once Arc-connected, the server appears in the Azure portal and can be governed by Azure Policy, scanned by Defender for Cloud, patched by Azure Update Manager, and monitored by Azure Monitor — without the server living in Azure.
-
-**What it does:**
-- Installs the Azure Connected Machine Agent (`azcmagent`) from the Microsoft-hosted MSI (HTTPS-only; non-HTTPS installer URLs are refused).
-- Onboards via service-principal auth — `azcmagent connect` with tenant / subscription / resource-group / location from `defaults.json`.
-- Reports current Arc state (`azcmagent show -j`), and supports clean disconnect.
-- Interactive menu under **Tools & Utilities → Cloud → [15] Azure Arc Onboarding**, plus a headless CLI action: `RackStack.exe -Action AzureArcEnroll [-OutputFormat JSON]`.
-
-**Security handling of the service-principal secret:**
-- The SP secret is resolved as a `SecureString`. Preferred source is the `RACKSTACK_ARC_SECRET` environment variable so the secret never has to live in `defaults.json`; `defaults.json` `AzureArc.ServicePrincipalSecret` is a documented fallback but discouraged.
-- The transcript is paused around the `azcmagent connect` / `disconnect` calls so the secret never lands in the session log.
-- `azcmagent` arguments are built as a `[List[string]]` array (never string-concatenated), so there's no shell re-parsing of the secret.
-- The plaintext secret is scrubbed from memory (`Clear-SecureMemory`) immediately after the call, and the secret slot in the argument list is blanked.
-- `Write-StructuredLog`'s secret-key redaction (extended in v1.98.55) catches the `secret` key name as defense-in-depth.
-
-**Config:** new `$script:AzureArc` block in `00-Initialization.ps1`, overridable via the new `AzureArc` section in `defaults.example.json` (deep-merged by `Import-Defaults`).
-
-**Integration:** module registered in the loader, the `-Action` ValidateSet, the CLI action list + dispatch, the Tools & Utilities menu, and the structural test harness (new Section 160, 25 tests). The module count references (65 → 66) across `Run-Tests.ps1`, `sync-to-monolithic.ps1`, and `README.md` are updated. RackStack now exposes 177 CLI actions.
+### Distribution
+winget and Chocolatey publishing are now inlined into the `ci.yml` release job (they previously lived in standalone `release:`-triggered workflows that never fired — a release created with `GITHUB_TOKEN` does not trigger `release` event workflows). Both now run as part of the release flow, gated on the `WINGET_TOKEN` / `CHOCO_API_KEY` secrets.
 
 ## v1.98.57
 

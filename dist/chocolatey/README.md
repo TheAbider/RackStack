@@ -44,35 +44,25 @@ The result is `rackstack.$ver.nupkg`.
    verify URL + checksum, and ensure the package follows Chocolatey
    guidelines. Be ready to respond to comments on the package page.
 
-## Automation (optional, after first publish)
+## Automation (already wired)
 
-Once your API key is set as the `CHOCO_API_KEY` GitHub secret, a CI step
-could automate per-release builds and pushes. The Chocolatey CLI is
-installable on `windows-latest` GitHub runners. A skeleton workflow:
+Per-release Chocolatey publishing is automated as a step in
+`.github/workflows/ci.yml` — it runs inside the release job, right after
+the GitHub Release is created, gated on the `CHOCO_API_KEY` repo secret.
+It stamps this directory's templated `rackstack.nuspec` +
+`tools/chocolateyinstall.ps1` with the release version and the EXE's
+SHA-256, runs `choco pack`, and `choco push`es to
+`https://push.chocolatey.org/`.
 
-```yaml
-- name: Build and push Chocolatey package
-  if: github.event.release.tag_name
-  env:
-    CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
-  shell: pwsh
-  run: |
-    $ver = '${{ github.event.release.tag_name }}' -replace '^v',''
-    $hash = (Get-FileHash 'builds/RackStack.exe' -Algorithm SHA256).Hash.ToLower()
-    cd dist/chocolatey
-    (Get-Content tools/chocolateyinstall.ps1) `
-      -replace '__VERSION__',$ver `
-      -replace '__CHECKSUM_SHA256__',$hash `
-      | Set-Content tools/chocolateyinstall.ps1
-    (Get-Content rackstack.nuspec) -replace '<version>0\.0\.0</version>', "<version>$ver</version>" | Set-Content rackstack.nuspec
-    choco pack rackstack.nuspec
-    choco apikey --key $env:CHOCO_API_KEY --source https://push.chocolatey.org/
-    choco push "rackstack.$ver.nupkg" --source https://push.chocolatey.org/
-```
+It is inlined into ci.yml rather than a separate `release:`-triggered
+workflow because a release created with `GITHUB_TOKEN` does not trigger
+`release` event workflows (GitHub's recursion-prevention).
 
-Skipping the automation initially is fine — the first submission needs
-manual review anyway, so do it by hand the first time, then automate after
-the publisher reputation is established.
+The first submission of the `rackstack` package ID still goes through
+Chocolatey community moderation review regardless — the workflow pushes
+it, then the maintainer watches the package page and responds to any
+moderator comments. Subsequent versions from an established publisher
+are usually auto-approved.
 
 ## Verification
 
