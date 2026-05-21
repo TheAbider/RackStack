@@ -83,11 +83,6 @@ limit the impact if the maintainer becomes unavailable:
   `actions/attest-build-provenance@v2` and recorded in the GitHub
   attestation API; verifiable per-commit by any consumer with
   `gh attestation verify`.
-- **SignPath Foundation Authenticode** (in-progress) is tied to the
-  `TheAbider/RackStack` SignPath project. If continuity is needed, the
-  fork operator applies to the SignPath Foundation OSS program under
-  the fork's identity; the verifier's "signed by" expectation changes
-  but the cryptographic chain is intact.
 
 ### Repository access
 - `master` branch is protected by the `master-protection` ruleset.
@@ -104,14 +99,12 @@ If the maintainer is unavailable for >30 days and resumption is
 required:
 
 1. Fork the repository under a new maintainer's account.
-2. Update the SignPath Foundation registration (if active) to the new
-   org/account.
-3. Update the cosign verification command in release notes with the
+2. Update the cosign verification command in release notes with the
    new workflow identity URL.
-4. Republish to PowerShell Gallery under the new maintainer (or
+3. Republish to PowerShell Gallery under the new maintainer (or
    continue publishing the same `RackStack` package if PSGallery
    ownership has been transferred).
-5. Update `https://github.com/TheAbider/RackStack` README with a
+4. Update `https://github.com/TheAbider/RackStack` README with a
    pointer to the new canonical fork.
 
 No private keys, passwords, or proprietary credentials are required

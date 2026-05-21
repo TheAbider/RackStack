@@ -115,7 +115,7 @@ The package-manager installs all pull the same code-signed `RackStack.exe` from 
 
 Grab `RackStack.exe` from the [latest release](https://github.com/TheAbider/RackStack/releases/latest), drop it on your server, and run it as Administrator. That's it.
 
-Releases of `RackStack.exe` are code-signed by [SignPath Foundation](https://signpath.io) under the SignPath Foundation OSS program, signed with [Sigstore](https://www.sigstore.dev/) cosign (keyless), and carry [SLSA Level 3](https://slsa.dev/) build provenance. Each release page lists SHA-256 hashes and the verification commands.
+Every release artifact is signed with [Sigstore](https://www.sigstore.dev/) cosign (keyless) and carries [SLSA Level 3](https://slsa.dev/) build provenance; each release page lists SHA-256 hashes and the verification commands. The EXE is not Authenticode-signed, so Windows SmartScreen may show an "Unknown publisher" prompt on first run.
 
 On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `defaults.json` next to the exe. To pre-configure, download `defaults.example.json` from the release, rename it to `defaults.json`, fill in your values, and place it alongside the exe.
 
@@ -554,8 +554,6 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 ## Acknowledgments
 
 Special thanks to Ravi -- whose existence provided the spite-fueled motivation to build this entire project from scratch. Every feature is a testament to what happens when someone says "you can't automate that."
-
-Code signing for `RackStack.exe` is provided free of charge by [SignPath Foundation](https://signpath.io), and the signing infrastructure is provided by [SignPath.io](https://about.signpath.io/) under the SignPath Foundation OSS program.
 
 ## License
 
