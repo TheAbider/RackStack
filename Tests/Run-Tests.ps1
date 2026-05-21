@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.98.60
+    Automated Test Runner for RackStack v1.98.61
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
-    - Parse tests (monolithic + 68 modules)
+    - Parse tests (monolithic + 69 modules)
     - Module loading
     - PSScriptAnalyzer (Error-severity only)
     - Function existence (50+ functions)
@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 68  # 00-67 inclusive
+$expectedModuleCount = 69  # 00-68 inclusive
 
 # ============================================================================
 # BANNER
@@ -148,7 +148,7 @@ try {
 }
 } # end if (-not $Quick) — skip monolithic parse in Quick mode
 
-# 1b. All 68 module files parse
+# 1b. All 69 module files parse
 $moduleFiles = Get-ChildItem -Path $modulesPath -Filter "*.ps1" | Sort-Object Name
 
 foreach ($moduleFile in $moduleFiles) {
@@ -270,7 +270,7 @@ Write-TestResult "Script environment initialized" $true
 # SECTION 3: MODULE LOAD TEST
 # ============================================================================
 
-Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 68 modules)"
+Write-SectionHeader "SECTION 3: MODULE LOAD TEST (dot-source all 69 modules)"
 
 $loadedModules = 0
 $loadErrors = @()
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "67-WSUS.ps1"
-    Write-TestResult "Module range 00-Initialization to 67-WSUS" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "68-ADCS.ps1"
+    Write-TestResult "Module range 00-Initialization to 68-ADCS" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 67 #region tags" ($regionStartCount -eq 67) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 67 #endregion tags" ($regionEndCount -eq 67) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 68 #region tags" ($regionStartCount -eq 68) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 68 #endregion tags" ($regionEndCount -eq 68) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 68 modules" ($readmeContent -match '68 module')
+    Write-TestResult "README: mentions 69 modules" ($readmeContent -match '69 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,18 +6898,18 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 68 modules" ($loaderContent -match '68 modules')
+    Write-TestResult "RackStack.ps1: mentions 69 modules" ($loaderContent -match '69 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 68" ($moduleCount -eq 68) "Found $moduleCount modules"
+    Write-TestResult "Module count is 69" ($moduleCount -eq 69) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
     $changelogContent = Get-Content $changelogPath -Raw
     Write-TestResult "Changelog: has v1.4.0 entry" ($changelogContent -match '## v1\.4\.0')
     Write-TestResult "Changelog: mentions Server Role Templates" ($changelogContent -match 'Server Role Templates')
-    Write-TestResult "Changelog: mentions 68 modules" ($changelogContent -match '68 modules')
+    Write-TestResult "Changelog: mentions 69 modules" ($changelogContent -match '69 modules')
 
 } catch {
     Write-TestResult "Storage Backend Integration Tests" $false $_.Exception.Message
@@ -8223,6 +8223,69 @@ try {
 }
 
 # ============================================================================
+# SECTION 163: AD CS CERTIFICATE SERVICES (Module 68)
+# ============================================================================
+Write-SectionHeader "SECTION 163: AD CS CERTIFICATE SERVICES (Module 68)"
+
+try {
+    $adcsContent = Get-Content "$modulesPath\68-ADCS.ps1" -Raw
+
+    Write-TestResult "68-ADCS: function Test-ADCSConfigured exists" ($adcsContent -match 'function\s+Test-ADCSConfigured\b')
+    Write-TestResult "68-ADCS: function Test-ADCSRoleInstalled exists" ($adcsContent -match 'function\s+Test-ADCSRoleInstalled\b')
+    Write-TestResult "68-ADCS: function Test-ADCSCAConfigured exists" ($adcsContent -match 'function\s+Test-ADCSCAConfigured\b')
+    Write-TestResult "68-ADCS: function Get-ADCSStatus exists" ($adcsContent -match 'function\s+Get-ADCSStatus\b')
+    Write-TestResult "68-ADCS: function Install-ADCSRole exists" ($adcsContent -match 'function\s+Install-ADCSRole\b')
+    Write-TestResult "68-ADCS: function Install-ADCSCertificationAuthority exists" ($adcsContent -match 'function\s+Install-ADCSCertificationAuthority\b')
+    Write-TestResult "68-ADCS: function Show-ADCSManagement exists" ($adcsContent -match 'function\s+Show-ADCSManagement\b')
+
+    # Security: the hard-to-reverse CA install must require a typed confirmation
+    Write-TestResult "68-ADCS: CA install requires typed confirmation" ($adcsContent -match "Type the CA common name")
+    Write-TestResult "68-ADCS: validates CA common name with allowlist regex" ($adcsContent -match "caName -notmatch")
+    Write-TestResult "68-ADCS: restricts CA type to Root CA only" ($adcsContent -match "EnterpriseRootCA.*StandaloneRootCA|validTypes")
+    Write-TestResult "68-ADCS: validates key length" ($adcsContent -match 'keyLength -notin')
+    Write-TestResult "68-ADCS: EnterpriseRootCA checks domain membership" ($adcsContent -match 'PartOfDomain')
+    Write-TestResult "68-ADCS: uses Install-WindowsFeatureWithTimeout wrapper" ($adcsContent -match 'Install-WindowsFeatureWithTimeout')
+
+    # Conventions
+    Write-TestResult "68-ADCS: region header present" ($adcsContent -match '#region ===== ACTIVE DIRECTORY CERTIFICATE SERVICES')
+    Write-TestResult "68-ADCS: region closed" ($adcsContent -match '#endregion')
+    Write-TestResult "68-ADCS: ReturnToMainMenu check" ($adcsContent -match 'ReturnToMainMenu')
+    Write-TestResult "68-ADCS: navigation support" ($adcsContent -match 'Test-NavigationCommand')
+    Write-TestResult "68-ADCS: session change tracking" ($adcsContent -match 'Add-SessionChange')
+
+    # Loader integration
+    $loaderAdcs = Get-Content "$script:ModuleRoot\RackStack.ps1" -Raw
+    Write-TestResult "68-ADCS: loader includes module" ($loaderAdcs -match '68-ADCS\.ps1')
+
+    # CLI action integration
+    $entryAdcs = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "68-ADCS: CLI action ADCSSetup in action list" ($entryAdcs -match "Action = 'ADCSSetup'")
+    Write-TestResult "68-ADCS: CLI dispatch handler for ADCSSetup" ($entryAdcs -match "'ADCSSetup'\s*\{")
+    Write-TestResult "68-ADCS: CLI installs role only (CA config interactive)" ($entryAdcs -match 'interactive-only')
+
+    # Header param ValidateSet
+    $headerAdcs = Get-Content "$script:ModuleRoot\Header.ps1" -Raw
+    Write-TestResult "68-ADCS: Header ValidateSet includes ADCSSetup" ($headerAdcs -match "'ADCSSetup'")
+
+    # Menu integration
+    $menuAdcs = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    $runnerAdcs = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "68-ADCS: menu entry exists" ($menuAdcs -match 'Certificate Services \(AD CS\)')
+    Write-TestResult "68-ADCS: menu runner dispatches Show-ADCSManagement" ($runnerAdcs -match 'Show-ADCSManagement')
+
+    # Config schema
+    $initAdcs = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    Write-TestResult "68-ADCS: `$script:ADCS config block defined" ($initAdcs -match '\$script:ADCS\s*=\s*@\{')
+
+    # Import-Defaults merge
+    $opsAdcs = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    Write-TestResult "68-ADCS: Import-Defaults merges ADCS" ($opsAdcs -match '\$merged\.ADCS')
+
+} catch {
+    Write-TestResult "AD CS Certificate Services Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 
@@ -9493,7 +9556,12 @@ $newFunctions = @(
     "Test-WSUSConfigured",
     "Get-WSUSStatus",
     "Install-WSUSRole",
-    "Show-WSUSManagement"
+    "Show-WSUSManagement",
+    # Wave 12: AD CS certificate services (module 68)
+    "Test-ADCSConfigured",
+    "Get-ADCSStatus",
+    "Install-ADCSRole",
+    "Show-ADCSManagement"
 )
 
 $newFuncPassed = 0
@@ -12173,7 +12241,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 179 entries" ($listActionCount -eq 179) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 180 entries" ($listActionCount -eq 180) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12206,7 +12274,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 179 entries" ($actionCount2 -eq 179) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 180 entries" ($actionCount2 -eq 180) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12232,7 +12300,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 179 entries" ($actionCount3 -eq 179) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 180 entries" ($actionCount3 -eq 180) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12270,7 +12338,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 179 entries" ($actionCount4 -eq 179) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 180 entries" ($actionCount4 -eq 180) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

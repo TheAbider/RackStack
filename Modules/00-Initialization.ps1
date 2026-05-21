@@ -173,6 +173,17 @@ $script:WSUS = @{
     SyncHour        = 3                           # Hour (0-23) for the daily automatic catalog sync
 }
 
+# AD CS Certification Authority bootstrap (override via defaults.json "ADCS")
+# Empty CACommonName = AD CS setup not configured. Configuring a CA is hard
+# to reverse — the CA install requires a typed confirmation regardless.
+$script:ADCS = @{
+    CACommonName  = ""                  # Common name of the root CA certificate
+    CAType        = "StandaloneRootCA"  # StandaloneRootCA or EnterpriseRootCA (Enterprise needs domain join)
+    KeyLength     = 4096                # RSA key length: 2048, 3072, or 4096
+    HashAlgorithm = "SHA256"            # Signature hash algorithm
+    ValidityYears = 10                  # Root CA certificate validity (1-25 years)
+}
+
 # Folder file cache - keyed by folder path, each entry has Files array and CacheTime
 $script:FileCache = @{}
 
@@ -207,7 +218,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.98.60"
+$script:ScriptVersion = "1.98.61"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

@@ -1089,6 +1089,21 @@ function Import-Defaults {
         }
     }
 
+    # Update AD CS Certification Authority settings (deep-merge from defaults.json "ADCS")
+    $acAdcs = $merged.ADCS
+    if ($acAdcs) {
+        if ($acAdcs -is [PSCustomObject]) {
+            foreach ($prop in $acAdcs.PSObject.Properties) {
+                if ($script:ADCS.ContainsKey($prop.Name)) { $script:ADCS[$prop.Name] = $prop.Value }
+            }
+        }
+        elseif ($acAdcs -is [hashtable]) {
+            foreach ($key in $acAdcs.Keys) {
+                if ($script:ADCS.ContainsKey($key)) { $script:ADCS[$key] = $acAdcs[$key] }
+            }
+        }
+    }
+
     # Import custom license keys from merged defaults (supports company + personal)
     $script:CustomKMSKeys = @{}
     $script:CustomAVMAKeys = @{}

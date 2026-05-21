@@ -397,6 +397,7 @@ function Assert-Elevation {
                 @{ Action = 'AzureArcEnroll';   Description = 'Onboard this server to Azure Arc (service-principal auth; config from defaults.json AzureArc)' }
                 @{ Action = 'DefenderEndpointOnboard'; Description = 'Onboard this server to Microsoft Defender for Endpoint (runs the onboarding .cmd from defaults.json DefenderEndpoint)' }
                 @{ Action = 'WSUSSetup';        Description = 'Install + post-install + default-configure the WSUS update server (config from defaults.json WSUS)' }
+                @{ Action = 'ADCSSetup';        Description = 'Install the AD CS role (CA configuration is interactive-only — it needs a typed confirmation)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1918,6 +1919,34 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             [Environment]::Exit([int](-not $wsusOk))
+        }
+        'ADCSSetup' {
+            # Headless AD CS setup installs the role only. Configuring the
+            # Certification Authority is intentionally interactive-only — it
+            # requires a typed confirmation because it is hard to reverse and
+            # the CA lives for years. Exit 0 if the role is installed.
+            Write-OutputColor "  Installing the AD CS Certification Authority role..." -color "Info"
+            $adcsRole = Install-ADCSRole
+            if ($adcsRole) {
+                Write-OutputColor "  Role installed. Configure the CA interactively:" -color "Info"
+                Write-OutputColor "  RackStack -> Configure Server -> Roles & Features -> Certificate Services." -color "Info"
+            }
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $adcsStatus = Get-ADCSStatus
+                $jsonResult = @{
+                    Tool          = $script:ToolFullName
+                    Version       = $script:ScriptVersion
+                    Action        = 'ADCSSetup'
+                    Timestamp     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname      = $env:COMPUTERNAME
+                    Success       = [bool]$adcsRole
+                    RoleInstalled = [bool]$adcsStatus.RoleInstalled
+                    CAConfigured  = [bool]$adcsStatus.CAConfigured
+                    Note          = 'CA configuration is interactive-only (requires typed confirmation)'
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            [Environment]::Exit([int](-not $adcsRole))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
