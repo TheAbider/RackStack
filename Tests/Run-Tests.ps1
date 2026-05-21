@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.99.1
+    Automated Test Runner for RackStack v1.99.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -8058,7 +8058,9 @@ try {
     Write-TestResult "65-AzureArc: scrubs plaintext secret after use" ($arcContent -match 'Clear-SecureMemory')
     Write-TestResult "65-AzureArc: pauses transcript around connect" ($arcContent -match 'Stop-Transcript')
     Write-TestResult "65-AzureArc: prefers RACKSTACK_ARC_SECRET env var" ($arcContent -match 'RACKSTACK_ARC_SECRET')
-    Write-TestResult "65-AzureArc: rejects non-HTTPS installer URL" ($arcContent -match "notmatch '\^https://'")
+    Write-TestResult "65-AzureArc: installer URL parsed + HTTPS-checked via [uri]" ($arcContent -match '-as \[uri\]' -and $arcContent -match "Scheme -ne 'https'")
+    Write-TestResult "65-AzureArc: verifies MSI Authenticode signature before install" ($arcContent -match 'Get-AuthenticodeSignature' -and $arcContent -match 'O=Microsoft Corporation')
+    Write-TestResult "65-AzureArc: discards azcmagent output (no 2>&1 secret leak)" (-not ($arcContent -match '2>&1'))
     Write-TestResult "65-AzureArc: builds azcmagent args as array (no string concat)" ($arcContent -match 'System\.Collections\.Generic\.List\[string\]')
 
     # Conventions
@@ -8113,10 +8115,11 @@ try {
     Write-TestResult "66-MDE: function Test-DefenderEndpointSensor exists" ($mdeContent -match 'function\s+Test-DefenderEndpointSensor\b')
     Write-TestResult "66-MDE: function Show-DefenderEndpointManagement exists" ($mdeContent -match 'function\s+Show-DefenderEndpointManagement\b')
 
-    # Security: onboarding script path must be metachar-validated before execution
+    # Security: onboarding script path must be metachar-validated AND canonicalized before execution
     Write-TestResult "66-MDE: validates script path for metacharacters" ($mdeContent -match 'Test-MDEScriptPath')
     Write-TestResult "66-MDE: rejects non-.cmd script paths" ($mdeContent -match "notmatch '\\\.cmd")
-    Write-TestResult "66-MDE: Start-Process uses array ArgumentList" ($mdeContent -match "ArgumentList @\(")
+    Write-TestResult "66-MDE: canonicalizes script path with Resolve-Path" ($mdeContent -match 'Resolve-Path -LiteralPath')
+    Write-TestResult "66-MDE: launches the .cmd directly (no cmd /c re-parse)" ($mdeContent -match 'Start-Process -FilePath \$scriptPath' -and -not ($mdeContent -match '\$env:ComSpec'))
     Write-TestResult "66-MDE: Test-Path uses -LiteralPath" ($mdeContent -match 'Test-Path -LiteralPath')
     Write-TestResult "66-MDE: detection test uses GUID temp dir (not Get-Random)" ($mdeContent -match "\[guid\]::NewGuid" -and -not ($mdeContent -match 'Get-Random'))
 
@@ -8182,7 +8185,9 @@ try {
     Write-TestResult "67-WSUS: requires absolute local content path" ($wsusContent -match "notmatch '\^\[A-Za-z\]")
     Write-TestResult "67-WSUS: wsusutil args built as array" ($wsusContent -match "ArgumentList @\(")
     Write-TestResult "67-WSUS: Test-Path uses -LiteralPath" ($wsusContent -match 'Test-Path -LiteralPath')
+    Write-TestResult "67-WSUS: New-Item uses -LiteralPath" ($wsusContent -match 'New-Item -LiteralPath')
     Write-TestResult "67-WSUS: checks Windows Server SKU before install" ($wsusContent -match 'Test-WindowsServer')
+    Write-TestResult "67-WSUS: warns when no classification matches (no silent misconfig)" ($wsusContent -match 'selected\.Count -eq 0')
 
     # Conventions
     Write-TestResult "67-WSUS: region header present" ($wsusContent -match '#region ===== WSUS SERVER SETUP')
@@ -8240,9 +8245,11 @@ try {
 
     # Security: the hard-to-reverse CA install must require a typed confirmation
     Write-TestResult "68-ADCS: CA install requires typed confirmation" ($adcsContent -match "Type the CA common name")
+    Write-TestResult "68-ADCS: typed confirmation is case-sensitive (-cne)" ($adcsContent -match 'typed\.Trim\(\) -cne')
     Write-TestResult "68-ADCS: validates CA common name with allowlist regex" ($adcsContent -match "caName -notmatch")
     Write-TestResult "68-ADCS: restricts CA type to Root CA only" ($adcsContent -match "EnterpriseRootCA.*StandaloneRootCA|validTypes")
     Write-TestResult "68-ADCS: validates key length" ($adcsContent -match 'keyLength -notin')
+    Write-TestResult "68-ADCS: validates hash algorithm against allowlist" ($adcsContent -match 'hashAlgo -notin')
     Write-TestResult "68-ADCS: EnterpriseRootCA checks domain membership" ($adcsContent -match 'PartOfDomain')
     Write-TestResult "68-ADCS: uses Install-WindowsFeatureWithTimeout wrapper" ($adcsContent -match 'Install-WindowsFeatureWithTimeout')
 

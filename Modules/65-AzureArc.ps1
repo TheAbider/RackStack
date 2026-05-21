@@ -7,8 +7,12 @@
 #
 # Config comes from $script:AzureArc (see 00-Initialization.ps1, overridable
 # via defaults.json "AzureArc"). The service-principal secret is treated as
-# sensitive throughout: never written to a transcript, never structured-
-# logged in plaintext, cleared from memory after the connect call.
+# sensitive throughout: the transcript is paused around the azcmagent call,
+# azcmagent's output is discarded (not merged into any captured stream), it
+# is never structured-logged in plaintext, and the plaintext copy is
+# dereferenced + GC-collected after use (best-effort — .NET strings are
+# immutable, so the buffer is not zeroed; this matches Clear-SecureMemory's
+# documented limitation used across RackStack).
 
 # Returns $true if Arc onboarding has the minimum config to proceed.
 function Test-AzureArcConfigured {
@@ -41,12 +45,12 @@ function Resolve-AzureArcSecret {
 # Locate azcmagent.exe — the Azure Connected Machine Agent CLI. Installed by
 # the AzureConnectedMachineAgent MSI to a fixed Program Files path.
 function Get-AzureArcAgentPath {
-    $candidates = @(
-        (Join-Path $env:ProgramW6432 'AzureConnectedMachineAgent\azcmagent.exe')
-        (Join-Path ${env:ProgramFiles} 'AzureConnectedMachineAgent\azcmagent.exe')
-        (Join-Path ${env:ProgramFiles(x86)} 'AzureConnectedMachineAgent\azcmagent.exe')
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-    foreach ($c in $candidates) {
+    # Filter the base directories for null/empty BEFORE Join-Path — Join-Path
+    # throws on a $null base, which an unusual environment could otherwise hit.
+    $bases = @($env:ProgramW6432, ${env:ProgramFiles}, ${env:ProgramFiles(x86)}) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    foreach ($base in $bases) {
+        $c = Join-Path $base 'AzureConnectedMachineAgent\azcmagent.exe'
         if (Test-Path -LiteralPath $c) { return $c }
     }
     # PATH fallback
@@ -107,9 +111,11 @@ function Install-AzureArcAgent {
         'https://aka.ms/AzureConnectedMachineAgent'
     }
 
-    # Only HTTPS — never download an installer over plaintext HTTP.
-    if ($url -notmatch '^https://') {
-        Write-OutputColor "  AgentInstallerUrl must be HTTPS. Refusing to download '$url'." -color "Error"
+    # Only HTTPS — never download an installer over plaintext HTTP. Parse with
+    # [uri] rather than a regex so case and malformed schemes are handled.
+    $parsedUrl = $url -as [uri]
+    if (-not $parsedUrl -or $parsedUrl.Scheme -ne 'https') {
+        Write-OutputColor "  AgentInstallerUrl must be a valid HTTPS URL. Refusing to download '$url'." -color "Error"
         return $false
     }
 
@@ -125,6 +131,27 @@ function Install-AzureArcAgent {
     }
     if (-not (Test-Path -LiteralPath $msiPath)) {
         Write-OutputColor "  Download produced no file at $msiPath." -color "Error"
+        return $false
+    }
+
+    # Verify the downloaded MSI is Authenticode-signed by Microsoft before
+    # running it elevated/silently. Closes the gap where a tampered
+    # AgentInstallerUrl, a MITM, or a poisoned temp file would otherwise run
+    # arbitrary code as admin.
+    try {
+        $sig = Get-AuthenticodeSignature -LiteralPath $msiPath -ErrorAction Stop
+        $signer = if ($sig.SignerCertificate) { [string]$sig.SignerCertificate.Subject } else { '' }
+        if ($sig.Status -ne 'Valid' -or $signer -notmatch 'O=Microsoft Corporation') {
+            Write-OutputColor "  Downloaded MSI failed signature verification (status: $($sig.Status), signer: $signer)." -color "Error"
+            Write-OutputColor "  Refusing to install an unsigned or non-Microsoft agent package." -color "Error"
+            Remove-Item -LiteralPath $msiPath -Force -ErrorAction SilentlyContinue
+            Write-StructuredLog -Message "Azure Arc agent MSI signature verification failed" -Level "ERROR" -Category "Security" -Data @{ Status = [string]$sig.Status }
+            return $false
+        }
+    }
+    catch {
+        Write-OutputColor "  Could not verify the MSI signature: $($_.Exception.Message)" -color "Error"
+        Remove-Item -LiteralPath $msiPath -Force -ErrorAction SilentlyContinue
         return $false
     }
 
@@ -223,12 +250,16 @@ function Invoke-AzureArcOnboard {
     try {
         $plainSecret = ConvertFrom-SecureStringToPlainText -secureString $secureSecret
         $arcArgs.Add('--service-principal-secret'); $arcArgs.Add($plainSecret)
-        & $agent @arcArgs 2>&1 | Out-Null
+        # Discard azcmagent's stdout+stderr entirely (`2>$null` then `Out-Null`)
+        # — never merge it into a stream that a transcript or the console could
+        # capture, since the invocation involves the SP secret.
+        & $agent @arcArgs 2>$null | Out-Null
         $exitCode = $LASTEXITCODE
         $global:LASTEXITCODE = 0
     }
     catch {
-        Write-OutputColor "  azcmagent connect threw: $($_.Exception.Message)" -color "Error"
+        # Static message only — never interpolate $_ from a call that received the secret.
+        Write-OutputColor "  azcmagent connect could not be run." -color "Error"
     }
     finally {
         # Scrub the plaintext secret from memory and from the arg list.
@@ -309,15 +340,22 @@ function Invoke-AzureArcDisconnect {
             $plainSecret = ConvertFrom-SecureStringToPlainText -secureString $secureSecret
             $disconnectArgs.Add('--service-principal-secret'); $disconnectArgs.Add($plainSecret)
         }
-        & $agent @disconnectArgs 2>&1 | Out-Null
+        & $agent @disconnectArgs 2>$null | Out-Null
         $exitCode = $LASTEXITCODE
         $global:LASTEXITCODE = 0
     }
     catch {
-        Write-OutputColor "  azcmagent disconnect threw: $($_.Exception.Message)" -color "Error"
+        # Static message only — the disconnect args may include the SP secret.
+        Write-OutputColor "  azcmagent disconnect could not be run." -color "Error"
     }
     finally {
         if ($null -ne $plainSecret) { Clear-SecureMemory -StringRef ([ref]$plainSecret) }
+        # Blank the secret slot in the arg list (parity with the onboard path).
+        for ($i = 0; $i -lt $disconnectArgs.Count; $i++) {
+            if ($disconnectArgs[$i] -eq '--service-principal-secret' -and ($i + 1) -lt $disconnectArgs.Count) {
+                $disconnectArgs[$i + 1] = ''
+            }
+        }
         if ($transcriptWasRunning) {
             try {
                 if ($script:TranscriptPath) { Start-Transcript -Path $script:TranscriptPath -Append -ErrorAction SilentlyContinue | Out-Null }

@@ -68,25 +68,38 @@ function Get-DefenderEndpointStatus {
 }
 
 # Validate that a configured onboarding/offboarding script path is safe to
-# run: it must exist, be a .cmd, and not contain shell metacharacters.
+# run. On success it returns the CANONICAL resolved path (the exact path
+# that should be executed); on any failure it returns $null. Returning the
+# resolved path closes the validate-here / run-there gap — the caller runs
+# exactly what was checked.
 function Test-MDEScriptPath {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Path
     )
-    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
     if ($Path -match '["`&|<>^%]' -or $Path -match '\.\.[\\/]' -or $Path -match '[\x00-\x1F]') {
         Write-OutputColor "  Script path contains unsafe characters — refusing to run it." -color "Error"
-        return $false
+        return $null
     }
     if ($Path -notmatch '\.cmd$') {
         Write-OutputColor "  Onboarding scripts from the Defender portal are .cmd files. '$Path' is not." -color "Error"
-        return $false
+        return $null
     }
-    if (-not (Test-Path -LiteralPath $Path)) {
+    # Canonicalize — Resolve-Path collapses any . / .. / mixed separators so
+    # the validated path and the executed path are byte-identical.
+    $resolved = $null
+    try {
+        $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).ProviderPath
+    }
+    catch {
         Write-OutputColor "  Onboarding script not found at: $Path" -color "Error"
-        return $false
+        return $null
     }
-    return $true
+    if ($resolved -notmatch '\.cmd$') {
+        Write-OutputColor "  Resolved path is not a .cmd file: $resolved" -color "Error"
+        return $null
+    }
+    return $resolved
 }
 
 # Run the operator-supplied MDE onboarding .cmd. Returns $true on a
@@ -99,8 +112,8 @@ function Invoke-DefenderEndpointOnboard {
         return $false
     }
 
-    $scriptPath = $script:DefenderEndpoint.OnboardingScriptPath
-    if (-not (Test-MDEScriptPath -Path $scriptPath)) { return $false }
+    $scriptPath = Test-MDEScriptPath -Path $script:DefenderEndpoint.OnboardingScriptPath
+    if (-not $scriptPath) { return $false }
 
     if (Test-DefenderEndpointOnboarded) {
         Write-OutputColor "  This machine is already onboarded to Defender for Endpoint." -color "Warning"
@@ -112,10 +125,11 @@ function Invoke-DefenderEndpointOnboard {
     Write-OutputColor "  Running Defender for Endpoint onboarding script..." -color "Info"
     try {
         # The onboarding .cmd writes a registry blob and starts the Sense
-        # service. Run it elevated and wait. Array-form ArgumentList — the
-        # path was metachar-validated above.
-        $proc = Start-Process -FilePath $env:ComSpec `
-            -ArgumentList @('/c', $scriptPath) `
+        # service. Launch the .cmd directly via -FilePath (Windows runs it
+        # through cmd.exe). -FilePath takes the full path as a single value,
+        # so paths with spaces work and there is no cmd.exe argument
+        # re-tokenization / unquoted-path-search to exploit.
+        $proc = Start-Process -FilePath $scriptPath `
             -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop
         if ($proc.ExitCode -ne 0) {
             Write-OutputColor "  Onboarding script exited with code $($proc.ExitCode)." -color "Error"
@@ -129,10 +143,11 @@ function Invoke-DefenderEndpointOnboard {
     }
 
     # The Sense service can take a few seconds to flip the registry state.
+    # Check up front, then up to 5 more times at 5s intervals (~25s total).
     $onboarded = $false
     for ($i = 0; $i -lt 6; $i++) {
         if (Test-DefenderEndpointOnboarded) { $onboarded = $true; break }
-        Start-Sleep -Seconds 5
+        if ($i -lt 5) { Start-Sleep -Seconds 5 }
     }
 
     if ($onboarded) {
@@ -164,8 +179,8 @@ function Invoke-DefenderEndpointOffboard {
         return $false
     }
 
-    $scriptPath = $script:DefenderEndpoint.OffboardingScriptPath
-    if (-not (Test-MDEScriptPath -Path $scriptPath)) { return $false }
+    $scriptPath = Test-MDEScriptPath -Path $script:DefenderEndpoint.OffboardingScriptPath
+    if (-not $scriptPath) { return $false }
 
     if (-not (Confirm-UserAction -Message "  Offboard this machine from Defender for Endpoint?")) {
         Write-OutputColor "  Cancelled." -color "Info"
@@ -174,8 +189,8 @@ function Invoke-DefenderEndpointOffboard {
 
     Write-OutputColor "  Running Defender for Endpoint offboarding script..." -color "Info"
     try {
-        $proc = Start-Process -FilePath $env:ComSpec `
-            -ArgumentList @('/c', $scriptPath) `
+        # Launch the .cmd directly — see the note in Invoke-DefenderEndpointOnboard.
+        $proc = Start-Process -FilePath $scriptPath `
             -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop
         if ($proc.ExitCode -ne 0) {
             Write-OutputColor "  Offboarding script exited with code $($proc.ExitCode)." -color "Error"
@@ -203,22 +218,31 @@ function Test-DefenderEndpointSensor {
     }
     Write-OutputColor "  Running the Defender for Endpoint detection test..." -color "Info"
     Write-OutputColor "  (creates a benign test file; expect a test alert in the portal within ~10 min)" -color "Info"
+    $testDir = $null
     try {
         $testDir = Join-Path $env:TEMP ("mde-test-" + [guid]::NewGuid().ToString('N'))
-        $null = New-Item -Path $testDir -ItemType Directory -Force -ErrorAction Stop
+        $null = New-Item -LiteralPath $testDir -ItemType Directory -Force -ErrorAction Stop
         $testFile = Join-Path $testDir 'mde-detection-test.txt'
-        # Microsoft's documented EDR test invocation — a powershell.exe child
-        # process that the sensor observes. No payload, no real malware.
+        # A powershell.exe child process the sensor observes. No payload, no
+        # real malware. The test-file path is GUID-based under %TEMP%, but
+        # double any single-quote defensively before it is interpolated into
+        # the single-quoted literal in the child -Command.
+        $testFileLit = $testFile -replace "'", "''"
         Start-Process -FilePath 'powershell.exe' `
-            -ArgumentList @('-NoProfile', '-Command', "Start-Sleep -Seconds 1; Set-Content -LiteralPath '$testFile' -Value 'MDE detection test'") `
+            -ArgumentList @('-NoProfile', '-Command', "Start-Sleep -Seconds 1; Set-Content -LiteralPath '$testFileLit' -Value 'MDE detection test'") `
             -Wait -WindowStyle Hidden -ErrorAction Stop
-        Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
         Write-OutputColor "  Detection test fired. Check the Defender portal Device timeline shortly." -color "Success"
         return $true
     }
     catch {
         Write-OutputColor "  Detection test failed to run: $($_.Exception.Message)" -color "Error"
         return $false
+    }
+    finally {
+        # Clean up the temp dir even if Start-Process threw.
+        if ($testDir -and (Test-Path -LiteralPath $testDir)) {
+            Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -240,7 +264,7 @@ function Show-DefenderEndpointManagement {
         } else {
             Write-OutputColor "  │$("  State:      not onboarded".PadRight(72))│" -color "Warning"
         }
-        $svcColor = if ($status.SenseService -eq 'Running') { "Success" } elseif ($status.SenseService -eq 'Absent') { "Warning" } else { "Warning" }
+        $svcColor = if ($status.SenseService -eq 'Running') { "Success" } else { "Warning" }
         Write-OutputColor "  │$("  Sensor:     Sense service $($status.SenseService)".PadRight(72))│" -color $svcColor
         if ($status.SenseVersion) {
             Write-OutputColor "  │$("  Version:    $($status.SenseVersion)".PadRight(72))│" -color "Info"
