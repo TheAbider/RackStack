@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: TheAbider.RackStack
+PackageVersion: 1.99.1
+Platform:
+  - Windows.Desktop
+  - Windows.Server
+MinimumOSVersion: 6.1.0.0
+InstallerType: portable
+Commands:
+  - rackstack
+ReleaseDate: 2026-05-21
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/TheAbider/RackStack/releases/download/v1.99.1/RackStack.exe
+    InstallerSha256: 31C43ED5717F5A9D9D47AE151D4E68B44A0C4EAEB7BCFB6C8A8316DA1274A44C
+ManifestType: installer
+ManifestVersion: 1.6.0

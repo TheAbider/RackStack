@@ -28,21 +28,16 @@ transitive action that the repo's SHA-pinning policy rejects.
 that is automated.
 
 **Setup:**
-1. Create a Personal Access Token (classic) with `public_repo` scope at
-   https://github.com/settings/tokens/new?scopes=public_repo
-2. Save it as `WINGET_TOKEN` at
-   https://github.com/TheAbider/RackStack/settings/secrets/actions/new
-3. **First submission (one-time, manual):** on a Windows machine, install
-   wingetcreate (`winget install wingetcreate`) and run:
-   ```powershell
-   $ver = '1.99.0'   # current release
-   wingetcreate new "https://github.com/TheAbider/RackStack/releases/download/v$ver/RackStack.exe"
-   ```
-   Follow the prompts (PackageIdentifier `TheAbider.RackStack`, MIT
-   license, etc.), then submit. It opens a PR against `winget-pkgs` for
-   review.
-4. After that first PR merges, every release auto-submits via the ci.yml
-   step — no further action needed.
+1. `WINGET_TOKEN` (a Personal Access Token, classic, `public_repo` scope)
+   is already set as a repo secret — the ci.yml step uses it for the
+   automated update PRs.
+2. **First submission (one-time, manual):** the three ready-to-submit
+   manifest files are pre-authored in `dist/winget/1.99.1/`. Fork
+   `microsoft/winget-pkgs`, drop those three files into
+   `manifests/t/TheAbider/RackStack/1.99.1/`, and open a PR. Full steps
+   in `dist/winget/README.md`.
+3. After that first PR merges, every release auto-submits via the ci.yml
+   `wingetcreate update` step — no further action needed.
 
 ## Scoop
 
