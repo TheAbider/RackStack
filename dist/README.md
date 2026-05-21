@@ -8,9 +8,9 @@ and submission scaffolding.
 |---|---|---|
 | [GitHub Releases](https://github.com/TheAbider/RackStack/releases/latest) | ✅ Live (every release) | Download `RackStack.exe`, run as Administrator |
 | [PowerShell Gallery](https://www.powershellgallery.com/packages/RackStack) | ✅ Live (every release) | `Install-Module RackStack` |
-| [winget](https://github.com/microsoft/winget-pkgs) | ⏳ Pending first submission | `winget install TheAbider.RackStack` |
-| [Scoop](https://scoop.sh/) | ⏳ Pending bucket creation | `scoop bucket add rackstack https://github.com/TheAbider/scoop-bucket; scoop install rackstack` |
-| [Chocolatey](https://community.chocolatey.org/packages) | ⏳ Pending first submission | `choco install rackstack` |
+| [Scoop](https://scoop.sh/) | ✅ Live — bucket published | `scoop bucket add rackstack https://github.com/TheAbider/scoop-bucket; scoop install rackstack` |
+| [Chocolatey](https://community.chocolatey.org/packages/rackstack) | ⏳ Submitted — in community moderation review | `choco install rackstack` |
+| [winget](https://github.com/microsoft/winget-pkgs) | ⏳ First-submission manifests ready (`dist/winget/1.99.1/`); awaiting the one-time PR to winget-pkgs | `winget install TheAbider.RackStack` |
 
 ## winget
 
