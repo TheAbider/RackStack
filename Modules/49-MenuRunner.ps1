@@ -230,9 +230,10 @@ function Start-Show-RolesFeaturesMenu {
             "2" { Install-MPIOFeature; Write-PressEnter }
             "3" { Install-FailoverClusteringFeature; Write-PressEnter }
             "4" { Install-Agent }
+            "5" { Show-WSUSManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-4 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

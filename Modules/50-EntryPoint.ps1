@@ -396,6 +396,7 @@ function Assert-Elevation {
                 @{ Action = 'Replay';           Description = 'Re-run a prior invocation by index (1 = most recent; see History)' }
                 @{ Action = 'AzureArcEnroll';   Description = 'Onboard this server to Azure Arc (service-principal auth; config from defaults.json AzureArc)' }
                 @{ Action = 'DefenderEndpointOnboard'; Description = 'Onboard this server to Microsoft Defender for Endpoint (runs the onboarding .cmd from defaults.json DefenderEndpoint)' }
+                @{ Action = 'WSUSSetup';        Description = 'Install + post-install + default-configure the WSUS update server (config from defaults.json WSUS)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1884,6 +1885,39 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
             }
             [Environment]::Exit([int](-not $mdeOk))
+        }
+        'WSUSSetup' {
+            # Stand up a WSUS update server end-to-end: install the role, run
+            # post-install, and apply the default configuration. Config from
+            # defaults.json "WSUS". Exit 0 only if the server is post-installed.
+            Write-OutputColor "  Setting up WSUS update server..." -color "Info"
+            $wsusRole = Install-WSUSRole
+            $wsusPost = $false
+            $wsusCfg  = $false
+            if ($wsusRole -and -not $script:RebootNeeded) {
+                $wsusPost = Invoke-WSUSPostInstall
+                if ($wsusPost) { $wsusCfg = Set-WSUSDefaultConfiguration }
+            } elseif ($script:RebootNeeded) {
+                Write-OutputColor "  Restart required before post-install — re-run WSUSSetup after reboot." -color "Warning"
+            }
+            $wsusOk = $wsusPost
+            if ($script:CLIOutputFormat -eq 'JSON') {
+                $wsusStatus = Get-WSUSStatus
+                $jsonResult = @{
+                    Tool          = $script:ToolFullName
+                    Version       = $script:ScriptVersion
+                    Action        = 'WSUSSetup'
+                    Timestamp     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+                    Hostname      = $env:COMPUTERNAME
+                    Success       = [bool]$wsusOk
+                    RoleInstalled = [bool]$wsusStatus.RoleInstalled
+                    PostInstalled = [bool]$wsusStatus.PostInstalled
+                    Configured    = [bool]$wsusCfg
+                    RebootNeeded  = [bool]$script:RebootNeeded
+                }
+                Write-Output ($jsonResult | ConvertTo-Json -Depth 10)
+            }
+            [Environment]::Exit([int](-not $wsusOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

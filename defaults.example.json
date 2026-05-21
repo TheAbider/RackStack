@@ -109,6 +109,20 @@
         "_OffboardingScriptPath_help": "Full path to the offboarding .cmd (also from the Defender portal). Offboarding packages expire roughly 30 days after generation — download a fresh one when you need to offboard."
     },
 
+    "_section_wsus": "========== WSUS UPDATE SERVER ==========",
+
+    "WSUS": {
+        "_comment": "Optional. Stand up a Windows Server Update Services (WSUS) server for centralized update distribution. The WSUS menu lives under Configure Server > Roles & Features > WSUS Update Server, and the CLI action is 'WSUSSetup'. Leave ContentPath blank to disable.",
+        "ContentPath": "",
+        "_ContentPath_help": "Absolute local path where WSUS stores downloaded update binaries, e.g. 'D:\\WSUS'. This can grow to many GB — put it on a data volume, not C:. Required before post-install can run.",
+        "UpdateLanguage": "en",
+        "_UpdateLanguage_help": "Single update language to synchronize (e.g. 'en'). Restricting to one language keeps the content cache from ballooning with every locale.",
+        "Classifications": ["Critical Updates", "Security Updates", "Definition Updates", "Update Rollups"],
+        "_Classifications_help": "Update classifications to approve for synchronization. The default set covers security-relevant updates. Add 'Service Packs' or 'Feature Packs' if you need them.",
+        "SyncHour": 3,
+        "_SyncHour_help": "Hour of day (0-23, local time) for the daily automatic catalog synchronization. Default 3 = 03:00."
+    },
+
     "_section_storage": "========== STORAGE BACKEND ==========",
 
     "StorageBackendType": "iSCSI",

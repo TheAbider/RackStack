@@ -1074,6 +1074,21 @@ function Import-Defaults {
         }
     }
 
+    # Update WSUS server setup settings (deep-merge from defaults.json "WSUS")
+    $acWsus = $merged.WSUS
+    if ($acWsus) {
+        if ($acWsus -is [PSCustomObject]) {
+            foreach ($prop in $acWsus.PSObject.Properties) {
+                if ($script:WSUS.ContainsKey($prop.Name)) { $script:WSUS[$prop.Name] = $prop.Value }
+            }
+        }
+        elseif ($acWsus -is [hashtable]) {
+            foreach ($key in $acWsus.Keys) {
+                if ($script:WSUS.ContainsKey($key)) { $script:WSUS[$key] = $acWsus[$key] }
+            }
+        }
+    }
+
     # Import custom license keys from merged defaults (supports company + personal)
     $script:CustomKMSKeys = @{}
     $script:CustomAVMAKeys = @{}
