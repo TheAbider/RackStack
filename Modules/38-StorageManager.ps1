@@ -758,6 +758,28 @@ function Clear-DiskData {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Clear-Disk -RemoveData destroys all partition tables and zeroes the
+        # OEM section. Marked ONE-WAY because data is unrecoverable once
+        # Apply runs; no Undo scriptblock can put it back.
+        $capDiskNum = $disk.Number
+        $capDiskName = $disk.FriendlyName
+        Push-DryRunStep -Label "CLEAR Disk $capDiskNum ($capDiskName) — destroys all partitions" -Category "Storage" -OneWay $true `
+            -Params @{ DiskNumber = $capDiskNum; FriendlyName = $capDiskName } `
+            -Preflight {
+                $d = Get-Disk -Number $capDiskNum -ErrorAction SilentlyContinue
+                if (-not $d) { "Disk $capDiskNum no longer present" }
+                elseif ($d.IsBoot -or $d.IsSystem) { "Disk $capDiskNum is the system/boot disk — refusing" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                Clear-Disk -Number $capDiskNum -RemoveData -RemoveOEM -Confirm:$false -ErrorAction Stop
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): clear Disk $capDiskNum (ONE-WAY)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued clear of Disk $capDiskNum"
+        return
+    }
+
     # Pre-clear safety: refuse to clear a disk that participates in a Storage Pool or
     # is a CSV member. The operator may not realize the cluster still considers the disk
     # online, and `Clear-Disk -RemoveData` against such a disk produces a broken state
@@ -1163,6 +1185,38 @@ function Format-DiskVolume {
 
     if ($confirmation -ne "FORMAT") {
         Write-OutputColor "  Operation cancelled." -color "Info"
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Format-Volume destroys all existing data on the partition. ONE-WAY.
+        $capDisk      = $disk.Number
+        $capPartNum   = $partition.PartitionNumber
+        $capFS        = $fileSystem
+        $capLabel     = $volumeLabel
+        $capAUS       = $allocationUnitSize
+        $capQuick     = $quickFormat
+        $capDriveNew  = $newDriveLetter
+        Push-DryRunStep -Label "FORMAT Disk $capDisk partition $capPartNum as $capFS" -Category "Storage" -OneWay $true `
+            -Params @{ DiskNumber = $capDisk; PartitionNumber = $capPartNum; FileSystem = $capFS; Label = $capLabel; AllocationUnitSize = $capAUS; QuickFormat = $capQuick } `
+            -Preflight {
+                $p = Get-Partition -DiskNumber $capDisk -PartitionNumber $capPartNum -ErrorAction SilentlyContinue
+                if (-not $p) { "Disk $capDisk partition $capPartNum not found" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                if ($capDriveNew) {
+                    Set-Partition -DiskNumber $capDisk -PartitionNumber $capPartNum -NewDriveLetter $capDriveNew -ErrorAction SilentlyContinue
+                }
+                $p = Get-Partition -DiskNumber $capDisk -PartitionNumber $capPartNum -ErrorAction Stop
+                $params = @{ Partition = $p; FileSystem = $capFS; Confirm = $false; ErrorAction = "Stop" }
+                if ($capLabel) { $params.NewFileSystemLabel = $capLabel }
+                if ($capAUS)   { $params.AllocationUnitSize = $capAUS }
+                $params.Full = -not $capQuick
+                Format-Volume @params | Out-Null
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): format Disk $capDisk partition $capPartNum as $capFS (ONE-WAY)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued FORMAT of Disk $capDisk part $capPartNum as $capFS"
         return
     }
 

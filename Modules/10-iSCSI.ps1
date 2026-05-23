@@ -1016,6 +1016,31 @@ function Connect-iSCSITargets {
         [int]$TargetPortalPort = 3260
     )
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capPortals = @($TargetPortalAddresses)
+        $capPort    = $TargetPortalPort
+        Push-DryRunStep -Label "Connect to iSCSI portals: $($capPortals -join ', ') (port $capPort)" -Category "Storage" -OneWay $false `
+            -Params @{ Portals = $capPortals; Port = $capPort } `
+            -Preflight {
+                $svc = Get-Service -Name MSiSCSI -ErrorAction SilentlyContinue
+                if ($null -eq $svc) { "iSCSI Initiator service (MSiSCSI) not present on this SKU" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply { Connect-iSCSITargets -TargetPortalAddresses $capPortals -TargetPortalPort $capPort }.GetNewClosure() `
+            -Undo {
+                # Best-effort: disconnect sessions associated with the captured
+                # portals. Doesn't unregister the portals themselves so a
+                # subsequent re-connect is fast.
+                foreach ($p in $capPortals) {
+                    Get-IscsiSession -ErrorAction SilentlyContinue | Where-Object { $_.TargetNodeAddress -and $_.InitiatorPortalAddress -eq $p } |
+                        ForEach-Object { Disconnect-IscsiTarget -NodeAddress $_.TargetNodeAddress -Confirm:$false -ErrorAction SilentlyContinue }
+                }
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): connect iSCSI portals." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued iSCSI portal connect ($($capPortals.Count) portal(s))"
+        return
+    }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Connecting to iSCSI targets..." -color "Info"
 

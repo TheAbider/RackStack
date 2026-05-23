@@ -51,10 +51,19 @@ Role installs (all reversible via `Uninstall-WindowsFeature`):
 Storage:
 - `Enable-DedupVolume` (32-Deduplication.ps1) — preflight catches the "already enabled" case; Undo is `Disable-DedupVolume`
 - `New-SRPartnership` (33-StorageReplica.ps1) — `ONE-WAY` (initial seed overwrites destination volume contents; the queued Undo cannot restore the destination's prior data)
+- `Clear-DiskData` (38-StorageManager.ps1) — `ONE-WAY` (`Clear-Disk -RemoveData -RemoveOEM` zeroes the partition table; preflight refuses if the disk is now boot/system)
+- `Format-DiskVolume` (38-StorageManager.ps1) — `ONE-WAY` (`Format-Volume` destroys partition contents; captures FS, label, allocation-unit size, quick-vs-full, and drive letter so the apply matches the operator's choices exactly)
+- `Connect-iSCSITargets` (10-iSCSI.ps1) — captures portal address list + port; Undo disconnects sessions through the captured portals
 
 Updates / agents:
 - `Install-WindowsUpdates` (14-WindowsUpdates.ps1) — re-entry; captures the operator's "quality only" vs "all updates" choice and the pending-update count; the real update catalog and the install job (with the Esc-to-skip + TiWorker drain) run at Commit
 - `Install-SelectedAgent` (57-AgentInstaller.ps1) — re-entry; the FileServer download + hash check + installer Start-Process all run at Commit, no work happens at queue time
+- `Enable-ServerActivation` (21-Licensing.ps1) — captures the product key; queue label and JSON export show only the last 5 chars (`XXXXX-XXXXX-XXXXX-XXXXX-ABCDE`) so the full key never lands in operator-visible artifacts. No Undo (no portable "un-activate")
+
+Scheduled tasks (63-ScheduledTasks.ps1):
+- `Set-ScheduledTaskState` — enable/disable; Undo flips the action
+- `Invoke-ScheduledTaskNow` — one-shot start; no Undo (run-once is a side effect, not a state change)
+- `Import-ScheduledTaskXML` — register from XML; Undo is `Unregister-ScheduledTask` on the captured name/path
 
 Heavyweight one-way operations:
 - `Enable-BitLocker` (31-BitLocker.ps1) — `ONE-WAY`. All three protector paths (TPM-only, TPM+PIN, password) gate. The PIN/password `SecureString` is captured at queue time and held in the Apply closure so the operator doesn't have to re-enter it at Commit. Decryption to reverse takes hours and isn't a clean Undo.
