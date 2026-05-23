@@ -545,6 +545,26 @@ function Add-CustomVNIC {
         }
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capSwitch = $existingSwitch.Name
+        $capVnic   = $vnicName
+        Push-DryRunStep -Label "Add vNIC '$capVnic' to switch '$capSwitch'" -Category "Network" -OneWay $false `
+            -Params @{ Switch = $capSwitch; vNIC = $capVnic } `
+            -Preflight {
+                if (-not (Get-VMSwitch -Name $capSwitch -ErrorAction SilentlyContinue)) { "Switch '$capSwitch' not found" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                Add-VMNetworkAdapter -ManagementOS -SwitchName $capSwitch -Name $capVnic -ErrorAction Stop
+            }.GetNewClosure() `
+            -Undo {
+                Remove-VMNetworkAdapter -ManagementOS -Name $capVnic -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): add vNIC '$capVnic' to switch '$capSwitch'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued vNIC '$capVnic' add to '$capSwitch'"
+        return
+    }
+
     # Create the vNIC
     try {
         Write-OutputColor "`nCreating virtual NIC '$vnicName'..." -color "Info"

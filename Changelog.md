@@ -37,6 +37,11 @@ Virtual switch creation (`09-SET.ps1`, all reversible via `Remove-VMSwitch`):
 - `New-StandardVSwitch -SwitchType External` — captures the selected physical adapter; renames the management vNIC to `$script:ManagementName` after creation
 - `New-StandardVSwitch -SwitchType Internal`
 - `New-StandardVSwitch -SwitchType Private`
+- `Add-CustomVNIC` — captures the switch + vNIC names; Undo is `Remove-VMNetworkAdapter -ManagementOS`
+
+Hyper-V Replica (62-HyperVReplica.ps1):
+- `Enable-ReplicaServer` — re-entry preserves the auth-entry registration and firewall-rule configuration block; Undo disables `Set-VMReplicationServer -ReplicationEnabled $false`
+- `Enable-VMReplicationWizard` — re-entry preserves the certificate-selection and export-path collection prompts at Commit; Undo is `Remove-VMReplication` on the captured VM
 
 Role installs (all reversible via `Uninstall-WindowsFeature`):
 - `Install-HyperVRole` (25-HyperV.ps1) — Server SKU uses `Uninstall-WindowsFeature`, Client SKU uses `Disable-WindowsOptionalFeature`
