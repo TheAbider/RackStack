@@ -8433,6 +8433,7 @@ try {
         '25-HyperV.ps1'           = 'Install-HyperVRole'
         '26-MPIO.ps1'             = 'Install-MPIOFeature'
         '27-FailoverClustering.ps1' = 'Install-FailoverClusteringFeature'
+        '09-SET.ps1'              = 'New-SwitchEmbeddedTeam + New-StandardVSwitch (External/Internal/Private)'
         '31-BitLocker.ps1'        = 'Enable-BitLocker (ONE-WAY)'
         '61-ActiveDirectory.ps1'  = 'Install-NewForest + Install-AdditionalDC + Install-ReadOnlyDC (ONE-WAY)'
         '65-AzureArc.ps1'         = 'Invoke-AzureArcOnboard (ONE-WAY)'

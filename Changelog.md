@@ -31,6 +31,12 @@ System / network / security:
 - `Add-LocalAdminAccount` (23-LocalAdmin.ps1)
 - `Disable-BuiltInAdminAccount` (24-DisableAdmin.ps1)
 
+Virtual switch creation (`09-SET.ps1`, all reversible via `Remove-VMSwitch`):
+- `New-SwitchEmbeddedTeam` (SET) — captures the resolved adapter-name array and applies the `Dynamic` load-balancing algorithm at commit
+- `New-StandardVSwitch -SwitchType External` — captures the selected physical adapter; renames the management vNIC to `$script:ManagementName` after creation
+- `New-StandardVSwitch -SwitchType Internal`
+- `New-StandardVSwitch -SwitchType Private`
+
 Role installs (all reversible via `Uninstall-WindowsFeature`):
 - `Install-HyperVRole` (25-HyperV.ps1) — Server SKU uses `Uninstall-WindowsFeature`, Client SKU uses `Disable-WindowsOptionalFeature`
 - `Install-MPIOFeature` (26-MPIO.ps1)
