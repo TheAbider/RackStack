@@ -8438,7 +8438,7 @@ try {
         '38-StorageManager.ps1'   = 'Clear-DiskData + Format-DiskVolume (both ONE-WAY)'
         '62-HyperVReplica.ps1'    = 'Enable-ReplicaServer + Enable-VMReplicationWizard'
         '63-ScheduledTasks.ps1'   = 'Set-ScheduledTaskState + Invoke-ScheduledTaskNow + Import-ScheduledTaskXML'
-        '10-iSCSI.ps1'            = 'Connect-iSCSITargets'
+        '10-iSCSI.ps1'            = 'Connect-iSCSITargets + Initialize-MPIOForISCSI'
         '14-WindowsUpdates.ps1'   = 'Install-WindowsUpdates'
         '21-Licensing.ps1'        = 'Enable-ServerActivation (KMS / retail)'
         '31-BitLocker.ps1'        = 'Enable-BitLocker (ONE-WAY)'

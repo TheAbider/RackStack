@@ -54,6 +54,7 @@ Storage:
 - `Clear-DiskData` (38-StorageManager.ps1) — `ONE-WAY` (`Clear-Disk -RemoveData -RemoveOEM` zeroes the partition table; preflight refuses if the disk is now boot/system)
 - `Format-DiskVolume` (38-StorageManager.ps1) — `ONE-WAY` (`Format-Volume` destroys partition contents; captures FS, label, allocation-unit size, quick-vs-full, and drive letter so the apply matches the operator's choices exactly)
 - `Connect-iSCSITargets` (10-iSCSI.ps1) — captures portal address list + port; Undo disconnects sessions through the captured portals
+- `Initialize-MPIOForISCSI` (10-iSCSI.ps1) — added a `Confirm-UserAction` to this function (it previously had none, which was why the gate had been deferred); captures the prior global load-balance policy so Undo restores it and disables iSCSI auto-claim
 
 Updates / agents:
 - `Install-WindowsUpdates` (14-WindowsUpdates.ps1) — re-entry; captures the operator's "quality only" vs "all updates" choice and the pending-update count; the real update catalog and the install job (with the Esc-to-skip + TiWorker drain) run at Commit

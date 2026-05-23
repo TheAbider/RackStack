@@ -1155,7 +1155,43 @@ function Initialize-MPIOForISCSI {
     }
 
     Write-OutputColor "" -color "Info"
-    Write-OutputColor "  MPIO is installed. Configuring for iSCSI..." -color "Info"
+    Write-OutputColor "  MPIO is installed. About to configure for iSCSI:" -color "Info"
+    Write-OutputColor "  - Enable automatic claim for the iSCSI bus type" -color "Info"
+    Write-OutputColor "  - Set default load-balance policy to Round Robin" -color "Info"
+    Write-OutputColor "" -color "Info"
+    if (-not (Confirm-UserAction -Message "Configure MPIO for iSCSI now?" -DefaultYes)) {
+        Write-OutputColor "  MPIO-for-iSCSI configuration cancelled." -color "Info"
+        return $false
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Captures the prior load-balance policy so Undo restores it.
+        $prevLBPolicy = try { (Get-MSDSMGlobalDefaultLoadBalancePolicy -ErrorAction SilentlyContinue) } catch { $null }
+        $capPrevLB = if ($prevLBPolicy) { [string]$prevLBPolicy } else { $null }
+        Push-DryRunStep -Label "Configure MPIO for iSCSI (auto-claim + Round Robin)" -Category "Storage" -OneWay $false `
+            -Params @{ Policy = 'RR'; PreviousPolicy = $capPrevLB } `
+            -Preflight {
+                if (-not (Test-MPIOInstalled)) { "MPIO is not installed — install + reboot first" }
+                elseif (-not (Get-Command Enable-MSDSMAutomaticClaim -ErrorAction SilentlyContinue)) { "MPIO cmdlets not loaded — reboot may be required after install" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                Enable-MSDSMAutomaticClaim -BusType iSCSI -ErrorAction Stop
+                Set-MSDSMGlobalDefaultLoadBalancePolicy -Policy RR -ErrorAction Stop
+            }.GetNewClosure() `
+            -Undo {
+                Disable-MSDSMAutomaticClaim -BusType iSCSI -Confirm:$false -ErrorAction SilentlyContinue
+                if ($capPrevLB) {
+                    Set-MSDSMGlobalDefaultLoadBalancePolicy -Policy $capPrevLB -ErrorAction SilentlyContinue
+                }
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): configure MPIO for iSCSI." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued MPIO-for-iSCSI configuration"
+        return $false
+    }
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Configuring..." -color "Info"
 
     try {
         # Enable MPIO for iSCSI devices
