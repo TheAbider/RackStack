@@ -21,6 +21,7 @@ Interactive Dry-Run Mode — initial release. The framework that has lived insid
 System / network / security:
 - `Set-HostName` (11-Hostname.ps1)
 - `Set-VMIPAddress` (07-IPConfiguration.ps1) — captures the existing primary IP + default route so Undo can restore them exactly
+- `Set-AdapterVLAN` (08-VLAN.ps1) — both the Access-mode tag-set path and the untag path are gated; previous VLAN ID is captured so Undo restores the prior tag (or untagged state)
 - `Set-SelectedTimezone` (13-Timezone.ps1)
 - `Enable-RDP` core path (15-RDP.ps1) — enable + firewall rules + NLA as a single step
 - `Enable-PowerShellRemoting` (15-RDP.ps1) — WinRM service + Enable-PSRemoting + secure-config block; Undo disables PSRemoting and reverts the service to Manual startup
@@ -41,6 +42,14 @@ Role installs (all reversible via `Uninstall-WindowsFeature`):
 - `Install-HyperVRole` (25-HyperV.ps1) — Server SKU uses `Uninstall-WindowsFeature`, Client SKU uses `Disable-WindowsOptionalFeature`
 - `Install-MPIOFeature` (26-MPIO.ps1)
 - `Install-FailoverClusteringFeature` (27-FailoverClustering.ps1)
+
+Storage:
+- `Enable-DedupVolume` (32-Deduplication.ps1) — preflight catches the "already enabled" case; Undo is `Disable-DedupVolume`
+- `New-SRPartnership` (33-StorageReplica.ps1) — `ONE-WAY` (initial seed overwrites destination volume contents; the queued Undo cannot restore the destination's prior data)
+
+Updates / agents:
+- `Install-WindowsUpdates` (14-WindowsUpdates.ps1) — re-entry; captures the operator's "quality only" vs "all updates" choice and the pending-update count; the real update catalog and the install job (with the Esc-to-skip + TiWorker drain) run at Commit
+- `Install-SelectedAgent` (57-AgentInstaller.ps1) — re-entry; the FileServer download + hash check + installer Start-Process all run at Commit, no work happens at queue time
 
 Heavyweight one-way operations:
 - `Enable-BitLocker` (31-BitLocker.ps1) — `ONE-WAY`. All three protector paths (TPM-only, TPM+PIN, password) gate. The PIN/password `SecureString` is captured at queue time and held in the Apply closure so the operator doesn't have to re-enter it at Commit. Decryption to reverse takes hours and isn't a clean Undo.

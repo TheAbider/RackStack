@@ -173,8 +173,35 @@ function Set-AdapterVLAN {
                     return
                 }
             }
+            $prevVlanIdForQueue = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
+            if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                $capAdapter = $vmAdapterName
+                $capVlan    = $vlanId
+                $capPrev    = $prevVlanIdForQueue
+                Push-DryRunStep -Label "Set VLAN $capVlan on '$capAdapter' (Access mode)" -Category "Network" -OneWay $false `
+                    -Params @{ Adapter = $capAdapter; VlanId = $capVlan; PreviousVlanId = $capPrev } `
+                    -Preflight {
+                        if (-not (Get-VMNetworkAdapter -ManagementOS -Name $capAdapter -ErrorAction SilentlyContinue)) {
+                            "Management vNIC '$capAdapter' not found"
+                        } else { $true }
+                    }.GetNewClosure() `
+                    -Apply {
+                        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $capAdapter -Access -VlanId $capVlan -ErrorAction Stop
+                    }.GetNewClosure() `
+                    -Undo {
+                        if ($capPrev -gt 0) {
+                            Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $capAdapter -Access -VlanId $capPrev -ErrorAction SilentlyContinue
+                        } else {
+                            Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $capAdapter -Untagged -ErrorAction SilentlyContinue
+                        }
+                    }.GetNewClosure()
+                Write-OutputColor "  Queued (Dry-Run): set VLAN $capVlan on '$capAdapter'." -color "Warning"
+                Add-SessionChange -Category "DryRun" -Description "Queued VLAN $capVlan on $capAdapter"
+                return
+            }
+
             try {
-                $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
+                $prevVlanId = $prevVlanIdForQueue
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Access -VlanId $vlanId -ErrorAction Stop
                 Write-OutputColor "  VLAN $vlanId configured successfully on $selectedAdapterName" -color "Success"
                 Add-SessionChange -Category "Network" -Description "Set VLAN $vlanId on $selectedAdapterName"
@@ -213,8 +240,32 @@ function Set-AdapterVLAN {
                     return
                 }
             }
+            $prevVlanIdForUntagQueue = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
+            if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                $capAdapter = $vmAdapterName
+                $capPrev    = $prevVlanIdForUntagQueue
+                Push-DryRunStep -Label "Untag VLAN on '$capAdapter' (remove access VLAN)" -Category "Network" -OneWay $false `
+                    -Params @{ Adapter = $capAdapter; PreviousVlanId = $capPrev } `
+                    -Preflight {
+                        if (-not (Get-VMNetworkAdapter -ManagementOS -Name $capAdapter -ErrorAction SilentlyContinue)) {
+                            "Management vNIC '$capAdapter' not found"
+                        } else { $true }
+                    }.GetNewClosure() `
+                    -Apply {
+                        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $capAdapter -Untagged -ErrorAction Stop
+                    }.GetNewClosure() `
+                    -Undo {
+                        if ($capPrev -gt 0) {
+                            Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $capAdapter -Access -VlanId $capPrev -ErrorAction SilentlyContinue
+                        }
+                    }.GetNewClosure()
+                Write-OutputColor "  Queued (Dry-Run): untag VLAN on '$capAdapter'." -color "Warning"
+                Add-SessionChange -Category "DryRun" -Description "Queued VLAN untag on $capAdapter"
+                return
+            }
+
             try {
-                $prevVlanId = if ($null -ne $currentVlan -and $currentVlan.AccessVlanId -gt 0) { $currentVlan.AccessVlanId } else { 0 }
+                $prevVlanId = $prevVlanIdForUntagQueue
                 Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName $vmAdapterName -Untagged -ErrorAction Stop
                 Write-OutputColor "  VLAN removed. Adapter is now untagged." -color "Success"
                 Add-SessionChange -Category "Network" -Description "Removed VLAN from $selectedAdapterName"

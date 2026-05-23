@@ -498,6 +498,21 @@ function Install-SelectedAgent {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Re-entry pattern: the full download + install + verification flow
+        # (including the FileServer hash check and the Esc-to-skip wait loop)
+        # runs at commit time. The queue holds only the user's intent.
+        $capAgent = $Agent
+        $capTool  = $toolName
+        Push-DryRunStep -Label "Install $capTool Agent (download + run installer)" -Category "Roles" -OneWay $false `
+            -Params @{ AgentTool = $capTool; FileName = $capAgent.FileName } `
+            -Preflight { $true } `
+            -Apply { Install-SelectedAgent -Agent $capAgent }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): install $toolName Agent." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued $toolName Agent install"
+        return
+    }
+
     # Download using Get-FileServerFile (from FILESERVER DOWNLOAD region).
     # Pass ExpectedHash through if the agent entry supplies one — defense-in-depth
     # against FileServer tampering. -StrictVerify forces the integrity gate to refuse

@@ -264,6 +264,34 @@ function Show-StorageReplicaManagement {
                     continue
                 }
                 if (Confirm-UserAction -Message "Create Storage Replica partnership?") {
+                    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                        # Storage Replica initial seed overwrites destination data.
+                        # Marked ONE-WAY because the queued Undo can't restore the
+                        # destination volume's prior contents — those are gone the
+                        # moment the partnership begins replication.
+                        $capSrcSrv  = $srcServer
+                        $capDestSrv = $destServer
+                        $capSrcVol  = $srcVol
+                        $capSrcLog  = $srcLog
+                        $capDestVol = $destVol
+                        $capDestLog = $destLog
+                        $capRG      = $rgName
+                        $capMode    = $repMode
+                        Push-DryRunStep -Label "Storage Replica: $capSrcSrv`:$capSrcVol -> $capDestSrv`:$capDestVol ($capMode)" -Category "Storage" -OneWay $true `
+                            -Params @{ SourceServer = $capSrcSrv; DestServer = $capDestSrv; SourceVolume = $capSrcVol; DestVolume = $capDestVol; ReplicationGroup = $capRG; Mode = $capMode } `
+                            -Preflight { $true } `
+                            -Apply {
+                                New-SRPartnership -SourceComputerName $capSrcSrv -SourceRGName $capRG `
+                                    -SourceVolumeName $capSrcVol -SourceLogVolumeName $capSrcLog `
+                                    -DestinationComputerName $capDestSrv -DestinationRGName "${capRG}-Dest" `
+                                    -DestinationVolumeName $capDestVol -DestinationLogVolumeName $capDestLog `
+                                    -ReplicationMode $capMode -ErrorAction Stop
+                            }.GetNewClosure()
+                        Write-OutputColor "  Queued (Dry-Run): SR partnership $capSrcSrv -> $capDestSrv (ONE-WAY)." -color "Warning"
+                        Add-SessionChange -Category "DryRun" -Description "Queued SR partnership $capSrcSrv -> $capDestSrv"
+                        continue
+                    }
+
                     try {
                         New-SRPartnership -SourceComputerName $srcServer -SourceRGName $rgName `
                             -SourceVolumeName $srcVol -SourceLogVolumeName $srcLog `
