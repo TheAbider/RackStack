@@ -379,6 +379,27 @@ function Set-SelectedTimezone {
     # Show comparison of current vs target before applying
     Show-TimezoneComparison -TargetTimezoneId $TimezoneId
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $captured = $TimezoneId
+        $oldTzId = $currentTz.Id
+        Push-DryRunStep -Label "Set timezone to '$captured'" -Category "System" -OneWay $false `
+            -Params @{ NewTimezone = $captured; OldTimezone = $oldTzId } `
+            -Preflight {
+                if (Get-TimeZone -Id $captured -ErrorAction SilentlyContinue) { $true }
+                else { "Timezone ID '$captured' not recognized on this system" }
+            }.GetNewClosure() `
+            -Apply {
+                Microsoft.PowerShell.Management\Set-TimeZone -Id $captured -ErrorAction Stop
+            }.GetNewClosure() `
+            -Undo {
+                Microsoft.PowerShell.Management\Set-TimeZone -Id $oldTzId -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): set timezone to '$captured'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued timezone change to '$captured'"
+        Write-PressEnter
+        return
+    }
+
     try {
         # Use the full cmdlet path to avoid recursion
         $prevTzId = $currentTz.Id

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.99.2
+    Automated Test Runner for RackStack v1.99.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 70  # 00-69 inclusive
+$expectedModuleCount = 71  # 00-70 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "69-StorageMigration.ps1"
-    Write-TestResult "Module range 00-Initialization to 69-StorageMigration" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "70-DryRun.ps1"
+    Write-TestResult "Module range 00-Initialization to 70-DryRun" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 69 #region tags" ($regionStartCount -eq 69) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 69 #endregion tags" ($regionEndCount -eq 69) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 70 #region tags" ($regionStartCount -eq 70) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 70 #endregion tags" ($regionEndCount -eq 70) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -6902,7 +6902,7 @@ try {
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 70" ($moduleCount -eq 70) "Found $moduleCount modules"
+    Write-TestResult "Module count is 71" ($moduleCount -eq 71) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8346,6 +8346,91 @@ try {
 
 } catch {
     Write-TestResult "Storage Migration Service Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 165: INTERACTIVE DRY-RUN MODE (Module 70)
+# ============================================================================
+Write-SectionHeader "SECTION 165: INTERACTIVE DRY-RUN MODE (Module 70)"
+
+try {
+    $dryRunContent = Get-Content "$modulesPath\70-DryRun.ps1" -Raw
+
+    Write-TestResult "70-DryRun: function Push-DryRunStep exists"            ($dryRunContent -match 'function\s+Push-DryRunStep\b')
+    Write-TestResult "70-DryRun: function Get-DryRunQueue exists"            ($dryRunContent -match 'function\s+Get-DryRunQueue\b')
+    Write-TestResult "70-DryRun: function Clear-DryRunQueue exists"          ($dryRunContent -match 'function\s+Clear-DryRunQueue\b')
+    Write-TestResult "70-DryRun: function Update-DryRunStepPreflight exists" ($dryRunContent -match 'function\s+Update-DryRunStepPreflight\b')
+    Write-TestResult "70-DryRun: function Show-DryRunBanner exists"          ($dryRunContent -match 'function\s+Show-DryRunBanner\b')
+    Write-TestResult "70-DryRun: function Show-DryRunQueue exists"           ($dryRunContent -match 'function\s+Show-DryRunQueue\b')
+    Write-TestResult "70-DryRun: function Invoke-DryRunCommitAtomic exists"      ($dryRunContent -match 'function\s+Invoke-DryRunCommitAtomic\b')
+    Write-TestResult "70-DryRun: function Invoke-DryRunCommitStepByStep exists"  ($dryRunContent -match 'function\s+Invoke-DryRunCommitStepByStep\b')
+    Write-TestResult "70-DryRun: function Export-DryRunQueueToJson exists"       ($dryRunContent -match 'function\s+Export-DryRunQueueToJson\b')
+    Write-TestResult "70-DryRun: function Enable-DryRunMode exists"          ($dryRunContent -match 'function\s+Enable-DryRunMode\b')
+    Write-TestResult "70-DryRun: function Disable-DryRunMode exists"         ($dryRunContent -match 'function\s+Disable-DryRunMode\b')
+    Write-TestResult "70-DryRun: function Start-Show-DryRunQueue exists"     ($dryRunContent -match 'function\s+Start-Show-DryRunQueue\b')
+
+    Write-TestResult "70-DryRun: region header present" ($dryRunContent -match '#region ===== INTERACTIVE DRY-RUN MODE')
+    Write-TestResult "70-DryRun: region closed"         ($dryRunContent -match '#endregion')
+
+    # Re-entrancy guard: Commit functions set $script:ApplyingDryRunQueue so
+    # the captured Apply scriptblocks bypass the queueing gate.
+    Write-TestResult "70-DryRun: atomic commit sets ApplyingDryRunQueue"     ($dryRunContent -match '\$script:ApplyingDryRunQueue\s*=\s*\$true')
+    Write-TestResult "70-DryRun: commit clears ApplyingDryRunQueue in finally" ($dryRunContent -match 'finally\s*\{\s*\$script:ApplyingDryRunQueue\s*=\s*\$false')
+
+    # Atomic commit must refuse to start if any preflight is red.
+    Write-TestResult "70-DryRun: atomic commit blocks on red preflight"      ($dryRunContent -match 'Cannot apply.*failed preflight')
+
+    # Step status set is enumerated correctly in queue table render.
+    Write-TestResult "70-DryRun: step status Queued"  ($dryRunContent -match '"Queued"')
+    Write-TestResult "70-DryRun: step status Applied" ($dryRunContent -match '"Applied"')
+    Write-TestResult "70-DryRun: step status Failed"  ($dryRunContent -match '"Failed"')
+    Write-TestResult "70-DryRun: step status Skipped" ($dryRunContent -match '"Skipped"')
+
+    # ONE-WAY visual badge must surface in the queue view and in the
+    # atomic-commit confirmation copy.
+    Write-TestResult "70-DryRun: ONE-WAY badge rendered in queue view" ($dryRunContent -match 'ONE-WAY')
+    Write-TestResult "70-DryRun: ONE-WAY warning in commit prompt"      ($dryRunContent -match 'ONE-WAY.*cannot be reverted')
+
+    # Atomic write-then-rename for the JSON export (operator-visible artifact).
+    Write-TestResult "70-DryRun: JSON export uses atomic write-then-rename" ($dryRunContent -match 'Move-Item.*-LiteralPath\s+\$tmp')
+
+    # Loader integration
+    $loaderDr = Get-Content "$script:ModuleRoot\RackStack.ps1" -Raw
+    Write-TestResult "70-DryRun: loader includes module" ($loaderDr -match '70-DryRun\.ps1')
+
+    # State init in 00-Initialization.ps1
+    $initDr = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    Write-TestResult "70-DryRun: `$script:DryRunMode initialized"             ($initDr -match '\$script:DryRunMode\s*=\s*\$false')
+    Write-TestResult "70-DryRun: `$script:ApplyingDryRunQueue initialized"    ($initDr -match '\$script:ApplyingDryRunQueue\s*=\s*\$false')
+    Write-TestResult "70-DryRun: `$script:DryRunQueue initialized as List"    ($initDr -match '\$script:DryRunQueue\s*=\s*\[System\.Collections\.Generic\.List')
+
+    # Main menu wires the banner + the [D] / [Q] keybindings into the status line.
+    $menuDr = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "70-DryRun: main menu calls Show-DryRunBanner"    ($menuDr -match 'Show-DryRunBanner')
+    Write-TestResult "70-DryRun: main menu shows [D] in status line"    ($menuDr -match '\[D\].*Dry-Run')
+
+    # Menu runner dispatches D + Q.
+    $runnerDr = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "70-DryRun: runner toggles via Enable-DryRunMode"  ($runnerDr -match 'Enable-DryRunMode')
+    Write-TestResult "70-DryRun: runner toggles via Disable-DryRunMode" ($runnerDr -match 'Disable-DryRunMode')
+    Write-TestResult "70-DryRun: runner opens queue via Start-Show-DryRunQueue" ($runnerDr -match 'Start-Show-DryRunQueue')
+
+    # Instrumented actions for v1.99.3: hostname, RDP, timezone gate on
+    # $script:DryRunMode AND $script:ApplyingDryRunQueue (re-entrancy guard).
+    $hostnameDr = Get-Content "$modulesPath\11-Hostname.ps1" -Raw
+    Write-TestResult "70-DryRun: Set-HostName instrumented"        ($hostnameDr -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue' -and $hostnameDr -match 'Push-DryRunStep')
+    $rdpDr = Get-Content "$modulesPath\15-RDP.ps1" -Raw
+    Write-TestResult "70-DryRun: Enable-RDP instrumented"          ($rdpDr -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue' -and $rdpDr -match 'Push-DryRunStep')
+    $tzDr = Get-Content "$modulesPath\13-Timezone.ps1" -Raw
+    Write-TestResult "70-DryRun: Set-SelectedTimezone instrumented" ($tzDr -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue' -and $tzDr -match 'Push-DryRunStep')
+
+    # BOM present (PowerShell 5.1 needs UTF-8 BOM for the box-drawing chars).
+    $dryRunBytes = [System.IO.File]::ReadAllBytes("$modulesPath\70-DryRun.ps1")
+    $hasBom = ($dryRunBytes.Length -ge 3 -and $dryRunBytes[0] -eq 0xEF -and $dryRunBytes[1] -eq 0xBB -and $dryRunBytes[2] -eq 0xBF)
+    Write-TestResult "70-DryRun: UTF-8 BOM present" $hasBom
+
+} catch {
+    Write-TestResult "Interactive Dry-Run Mode Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

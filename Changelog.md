@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.99.3
+
+Interactive Dry-Run Mode — initial release. The framework that has lived inside the batch-config invoker since the start (`$script:DryRunMode` + ~50 per-action gates) is promoted to a session-wide mode that interactive operators can toggle from the main menu.
+
+**What it does:**
+- `[D]` on the main menu toggles Dry-Run on/off. A persistent yellow banner across every menu shows the mode is active and the current queue size.
+- Any instrumented action, when run with Dry-Run on, walks the operator through validation/confirmation as normal, then **queues** the change instead of applying it. The action's preflight runs immediately so the operator sees green/red status the moment the step lands in the queue.
+- `[Q]` opens the Dry-Run Queue screen — a per-step table with green/red preflight status, a `ONE-WAY` badge for irreversible operations (CA config, BitLocker, password changes, etc.), and the current `Queued` / `Applying` / `Applied` / `Failed` state.
+- Two Commit paths:
+  - **`[A]` Apply All (atomic)** — reruns every preflight, refuses to start if any are red, then executes the queue sequentially. On any apply failure, walks the already-applied steps in reverse and invokes each step's captured Undo scriptblock (skipping `ONE-WAY` entries with a warning) before halting.
+  - **`[S]` Step-by-Step** — interactively walks the queue, prompts per step with Yes/No/Quit, applies each, and continues. Failures don't roll back automatically — the operator inspects via Session History.
+- `[E]` exports the queue as JSON for archival or re-import into batch mode.
+- `[X]` discards the queue without applying.
+
+**Re-entrancy:** when Commit fires, `$script:ApplyingDryRunQueue` is set to `$true` so the captured Apply scriptblocks (which call back into the same instrumented interactive functions) bypass the queueing gate and actually run.
+
+**Instrumented in v1.99.3 (initial demo set):**
+- `Set-HostName` (11-Hostname.ps1)
+- `Enable-RDP` core path (15-RDP.ps1)
+- `Set-SelectedTimezone` (13-Timezone.ps1)
+
+The instrumentation pattern is mechanical and the remaining interactive actions (network IP/DNS, firewall, power plan, WinRM, local admin, virtual switch, the five v1.99.0 feature modules, etc.) will be wired up in follow-up patch releases. Until then, calling an un-instrumented action while Dry-Run is on simply runs the action normally and emits a session change — no silent data loss.
+
+**Module count:** 70 → 71 (added `70-DryRun.ps1`). Test harness updated to match.
+
 ## v1.99.2
 
 Security + correctness hardening of the five v1.99.0 feature modules, from a multi-agent independent audit. No behavior changes for correctly-configured environments — these close edge cases and tighten the security-sensitive paths.

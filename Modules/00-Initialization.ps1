@@ -225,7 +225,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.99.2"
+$script:ScriptVersion = "1.99.3"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.
@@ -299,6 +299,16 @@ $script:UpdateCheckLastAttempt = $null       # Throttle retries to once per 60 s
 # Track changes made during session for summary and undo
 $script:SessionChanges = [System.Collections.Generic.List[object]]::new()
 $script:UndoStack = [System.Collections.Generic.List[object]]::new()
+
+# Interactive Dry-Run state. DryRunMode was previously batch-only (set
+# by Invoke-BatchConfig when Config.DryRun = $true); promoted to a
+# session-wide flag so interactive menu paths can also queue actions
+# instead of applying them. ApplyingDryRunQueue is the re-entrancy
+# guard set during Commit so the same interactive functions bypass the
+# gate and actually execute.
+$script:DryRunMode = $false
+$script:ApplyingDryRunQueue = $false
+$script:DryRunQueue = [System.Collections.Generic.List[object]]::new()
 
 # QoL Features - Favorites and History (v2.8.0)
 $script:AppConfigDir = "$env:USERPROFILE\.$($script:ConfigDirName)"
