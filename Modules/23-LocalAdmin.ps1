@@ -109,6 +109,30 @@ function Add-LocalAdminAccount {
         $adminGroupName = 'Administrators'
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capName  = $accountName
+        $capFull  = $accountFullName
+        $capPwd   = $Password
+        $capGroup = $adminGroupName
+        Push-DryRunStep -Label "Create local admin '$capName' ($capFull)" -Category "Security" -OneWay $false `
+            -Params @{ Name = $capName; FullName = $capFull } `
+            -Preflight {
+                if (Get-LocalUser -Name $capName -ErrorAction SilentlyContinue) { "Account '$capName' already exists" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                New-LocalUser -Name $capName -FullName $capFull -Password $capPwd -PasswordNeverExpires -AccountNeverExpires -ErrorAction Stop | Out-Null
+                Add-LocalGroupMember -Group $capGroup -Member $capName -ErrorAction Stop
+            }.GetNewClosure() `
+            -Undo {
+                Remove-LocalUser -Name $capName -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): create local admin '$capName'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued create local admin '$capName'"
+        Write-PressEnter
+        return
+    }
+
     try {
         # Create the user
         New-LocalUser -Name $accountName -FullName $accountFullName -Password $Password -PasswordNeverExpires -AccountNeverExpires -ErrorAction Stop | Out-Null

@@ -190,6 +190,27 @@ function Disable-BuiltInAdminAccount {
             return
         }
 
+        if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+            Push-DryRunStep -Label "Disable built-in Administrator account" -Category "Security" -OneWay $false `
+                -Preflight {
+                    $a = Get-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue
+                    if ($null -eq $a) { "Built-in Administrator account not present" }
+                    elseif (-not $a.Enabled) { "Built-in Administrator already disabled" }
+                    else { $true }
+                } `
+                -Apply {
+                    Disable-LocalUser -Name "Administrator" -ErrorAction Stop
+                    $script:DisabledAdminReboot = $true
+                } `
+                -Undo {
+                    Enable-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue
+                }
+            Write-OutputColor "  Queued (Dry-Run): disable built-in Administrator." -color "Warning"
+            Add-SessionChange -Category "DryRun" -Description "Queued disable built-in Administrator"
+            Write-PressEnter
+            return
+        }
+
         Disable-LocalUser -Name "Administrator" -ErrorAction Stop
 
         # Verify

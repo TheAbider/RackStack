@@ -8415,14 +8415,51 @@ try {
     Write-TestResult "70-DryRun: runner toggles via Disable-DryRunMode" ($runnerDr -match 'Disable-DryRunMode')
     Write-TestResult "70-DryRun: runner opens queue via Start-Show-DryRunQueue" ($runnerDr -match 'Start-Show-DryRunQueue')
 
-    # Instrumented actions for v1.99.3: hostname, RDP, timezone gate on
-    # $script:DryRunMode AND $script:ApplyingDryRunQueue (re-entrancy guard).
-    $hostnameDr = Get-Content "$modulesPath\11-Hostname.ps1" -Raw
-    Write-TestResult "70-DryRun: Set-HostName instrumented"        ($hostnameDr -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue' -and $hostnameDr -match 'Push-DryRunStep')
-    $rdpDr = Get-Content "$modulesPath\15-RDP.ps1" -Raw
-    Write-TestResult "70-DryRun: Enable-RDP instrumented"          ($rdpDr -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue' -and $rdpDr -match 'Push-DryRunStep')
-    $tzDr = Get-Content "$modulesPath\13-Timezone.ps1" -Raw
-    Write-TestResult "70-DryRun: Set-SelectedTimezone instrumented" ($tzDr -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue' -and $tzDr -match 'Push-DryRunStep')
+    # Instrumented actions for v1.99.3 — each call site gates on
+    # $script:DryRunMode AND $script:ApplyingDryRunQueue (the re-entrancy
+    # guard) so Apply scriptblocks that call back in proceed without
+    # re-queueing.
+    $instrumentedFiles = @{
+        '11-Hostname.ps1'         = 'Set-HostName'
+        '15-RDP.ps1'              = 'Enable-RDP'
+        '13-Timezone.ps1'         = 'Set-SelectedTimezone'
+        '07-IPConfiguration.ps1'  = 'Set-VMIPAddress'
+        '12-DomainJoin.ps1'       = 'Join-Domain (ONE-WAY)'
+        '16-Firewall.ps1'         = 'Disable-WindowsFirewallDomainPrivate'
+        '17-DefenderExclusions.ps1' = 'Add-HyperVDefenderExclusions'
+        '23-LocalAdmin.ps1'       = 'Add-LocalAdminAccount'
+        '24-DisableAdmin.ps1'     = 'Disable-BuiltInAdminAccount'
+        '65-AzureArc.ps1'         = 'Invoke-AzureArcOnboard (ONE-WAY)'
+        '66-DefenderEndpoint.ps1' = 'Invoke-DefenderEndpointOnboard (ONE-WAY)'
+        '67-WSUS.ps1'             = 'Install-WSUSRole + Invoke-WSUSPostInstall'
+        '68-ADCS.ps1'             = 'Install-ADCSRole + Install-ADCSCertificationAuthority (ONE-WAY)'
+        '69-StorageMigration.ps1' = 'Install-SMSRole + Install-SMSProxy'
+    }
+    foreach ($file in $instrumentedFiles.Keys) {
+        $content = Get-Content "$modulesPath\$file" -Raw
+        $hasGate = $content -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue'
+        $hasPush = $content -match 'Push-DryRunStep'
+        Write-TestResult "70-DryRun: $($instrumentedFiles[$file]) instrumented" ($hasGate -and $hasPush)
+    }
+
+    # ONE-WAY badge must be set on the irreversible operations.
+    $oneWayChecks = @{
+        '12-DomainJoin.ps1'       = 'Domain join'
+        '65-AzureArc.ps1'         = 'Azure Arc onboarding'
+        '66-DefenderEndpoint.ps1' = 'MDE onboarding'
+        '67-WSUS.ps1'             = 'WSUS post-install'
+        '68-ADCS.ps1'             = 'ADCS CA configuration'
+    }
+    foreach ($file in $oneWayChecks.Keys) {
+        $content = Get-Content "$modulesPath\$file" -Raw
+        Write-TestResult "70-DryRun: $($oneWayChecks[$file]) flagged ONE-WAY" ($content -match '-OneWay\s+\$true')
+    }
+
+    # Firewall has TWO gates (recommended config + individual profile toggle);
+    # spot-check that both are present.
+    $fwContent = Get-Content "$modulesPath\16-Firewall.ps1" -Raw
+    $fwGateCount = ([regex]::Matches($fwContent, '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')).Count
+    Write-TestResult "70-DryRun: 16-Firewall has both gates (recommended + toggle)" ($fwGateCount -ge 2)
 
     # BOM present (PowerShell 5.1 needs UTF-8 BOM for the box-drawing chars).
     $dryRunBytes = [System.IO.File]::ReadAllBytes("$modulesPath\70-DryRun.ps1")
@@ -8575,7 +8612,7 @@ foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
     if ($modFile.Name -match '^(05-SystemCheck|45-ConfigExport|50-EntryPoint)') { continue }
     $lines = Get-Content -LiteralPath $modFile.FullName
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match 'Install-WindowsFeature\s+-Name' -and $lines[$i] -notmatch 'Install-WindowsFeatureWithTimeout') {
+        if ($lines[$i] -match '(?<!Un)Install-WindowsFeature\s+-Name' -and $lines[$i] -notmatch 'Install-WindowsFeatureWithTimeout') {
             $directInstallBugs += "$($modFile.Name):$($i+1)"
         }
     }

@@ -16,12 +16,32 @@ Interactive Dry-Run Mode — initial release. The framework that has lived insid
 
 **Re-entrancy:** when Commit fires, `$script:ApplyingDryRunQueue` is set to `$true` so the captured Apply scriptblocks (which call back into the same instrumented interactive functions) bypass the queueing gate and actually run.
 
-**Instrumented in v1.99.3 (initial demo set):**
-- `Set-HostName` (11-Hostname.ps1)
-- `Enable-RDP` core path (15-RDP.ps1)
-- `Set-SelectedTimezone` (13-Timezone.ps1)
+**Instrumented in v1.99.3:**
 
-The instrumentation pattern is mechanical and the remaining interactive actions (network IP/DNS, firewall, power plan, WinRM, local admin, virtual switch, the five v1.99.0 feature modules, etc.) will be wired up in follow-up patch releases. Until then, calling an un-instrumented action while Dry-Run is on simply runs the action normally and emits a session change — no silent data loss.
+System / network / security:
+- `Set-HostName` (11-Hostname.ps1)
+- `Set-VMIPAddress` (07-IPConfiguration.ps1) — captures the existing primary IP + default route so Undo can restore them exactly
+- `Set-SelectedTimezone` (13-Timezone.ps1)
+- `Enable-RDP` core path (15-RDP.ps1) — enable + firewall rules + NLA as a single step
+- `Join-Domain` (12-DomainJoin.ps1) — `ONE-WAY` (credentials are prompted at Commit, not stored in the queue; remote AD objects outlive a local unjoin)
+- `Disable-WindowsFirewallDomainPrivate` (16-Firewall.ps1) — both the "recommended" and the "toggle individual profile" paths
+- `Add-HyperVDefenderExclusions` (17-DefenderExclusions.ps1) — snapshots the resolved path/process/extension lists so the queue shows what will actually be added
+- `Add-LocalAdminAccount` (23-LocalAdmin.ps1)
+- `Disable-BuiltInAdminAccount` (24-DisableAdmin.ps1)
+
+Feature modules:
+- `Invoke-AzureArcOnboard` (65-AzureArc.ps1) — `ONE-WAY` (Azure resource and managed identity outlive a local `azcmagent disconnect`)
+- `Invoke-DefenderEndpointOnboard` (66-DefenderEndpoint.ps1) — `ONE-WAY` (offboarding requires a separate .cmd from the Defender portal that expires ~30 days after generation)
+- `Install-WSUSRole` (67-WSUS.ps1) — reversible (Uninstall-WindowsFeature)
+- `Invoke-WSUSPostInstall` (67-WSUS.ps1) — `ONE-WAY` (Windows Internal Database init can't cleanly revert)
+- `Install-ADCSRole` (68-ADCS.ps1) — reversible
+- `Install-ADCSCertificationAuthority` (68-ADCS.ps1) — `ONE-WAY` (every certificate the CA has issued becomes untrusted on uninstall). The typed-CN confirmation ritual fires at Commit time, not at queue time.
+- `Install-SMSRole` (69-StorageMigration.ps1) — reversible
+- `Install-SMSProxy` (69-StorageMigration.ps1) — reversible
+
+**Apply-time re-entry pattern:** for the more complex feature-module gates, the captured Apply scriptblock simply calls back into the same interactive function. The re-entrancy guard skips the queue gate so the original validation / typed-confirmation / progress UX runs at Commit time exactly as if Dry-Run had been off — no parallel-implementation drift between the queued path and the real path.
+
+Remaining interactive call sites (power plan, WinRM enable, virtual switch creation, Hyper-V Replica, BitLocker, dedup, etc.) will be wired in follow-up patch releases. Until then, calling an un-instrumented action while Dry-Run is on runs the action normally and emits a session change — no silent data loss.
 
 **Module count:** 70 → 71 (added `70-DryRun.ps1`). Test harness updated to match.
 

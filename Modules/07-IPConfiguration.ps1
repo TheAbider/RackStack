@@ -203,6 +203,45 @@ function Set-VMIPAddress {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Snapshot current state up-front so Undo can restore the primary
+        # IP + default route exactly as they were when the step was queued.
+        $capAdapter = $selectedAdapterName
+        $capIP      = $ipAddress
+        $capCIDR    = $cidr
+        $capGW      = $gateway
+        $prevIPsSnap   = @(Get-NetIPAddress -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -eq 'Manual' })
+        $prevPrimary   = $prevIPsSnap | Select-Object -First 1
+        $prevRouteSnap = Get-NetRoute -InterfaceAlias $selectedAdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' } | Select-Object -First 1
+        $prevIPAddr = if ($prevPrimary)   { $prevPrimary.IPAddress }    else { $null }
+        $prevPrefix = if ($prevPrimary)   { $prevPrimary.PrefixLength } else { $null }
+        $prevGW     = if ($prevRouteSnap) { $prevRouteSnap.NextHop }    else { $null }
+        Push-DryRunStep -Label "Set IP $capIP/$capCIDR (gw $capGW) on $capAdapter" -Category "Network" -OneWay $false `
+            -Params @{ Adapter = $capAdapter; IP = $capIP; CIDR = $capCIDR; Gateway = $capGW } `
+            -Preflight {
+                if (Get-NetAdapter -Name $capAdapter -ErrorAction SilentlyContinue) { $true }
+                else { "Adapter '$capAdapter' not found" }
+            }.GetNewClosure() `
+            -Apply {
+                if ($prevIPAddr) { Remove-NetIPAddress -InterfaceAlias $capAdapter -IPAddress $prevIPAddr -Confirm:$false -ErrorAction SilentlyContinue }
+                if ($prevRouteSnap) { Remove-NetRoute -InterfaceAlias $capAdapter -DestinationPrefix '0.0.0.0/0' -NextHop $prevRouteSnap.NextHop -Confirm:$false -ErrorAction SilentlyContinue }
+                New-NetIPAddress -InterfaceAlias $capAdapter -IPAddress $capIP -PrefixLength $capCIDR -DefaultGateway $capGW -ErrorAction Stop | Out-Null
+                Disable-NetAdapterBinding -Name $capAdapter -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+            }.GetNewClosure() `
+            -Undo {
+                Remove-NetIPAddress -InterfaceAlias $capAdapter -IPAddress $capIP -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-NetRoute -InterfaceAlias $capAdapter -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
+                if ($prevIPAddr) {
+                    $params = @{ InterfaceAlias = $capAdapter; IPAddress = $prevIPAddr; PrefixLength = $prevPrefix; ErrorAction = 'SilentlyContinue' }
+                    if ($prevGW) { $params.DefaultGateway = $prevGW }
+                    New-NetIPAddress @params | Out-Null
+                }
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): set IP $capIP/$capCIDR on $capAdapter." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued IP config $capIP/$capCIDR on $capAdapter"
+        return
+    }
+
     try {
         # Save current config for rollback. Capture ALL manual IPv4 addresses (multi-IP NICs are
         # common on Hyper-V hosts: mgmt + storage + cluster heartbeat) so we know which ones to
