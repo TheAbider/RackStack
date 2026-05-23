@@ -293,6 +293,26 @@ function Enable-PowerShellRemoting {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Enable PowerShell Remoting (WinRM + secure config)" -Category "Security" -OneWay $false `
+            -Preflight {
+                if ($null -eq (Get-Service -Name WinRM -ErrorAction SilentlyContinue)) {
+                    "WinRM service not present on this SKU"
+                } else { $true }
+            } `
+            -Apply { Enable-PowerShellRemoting } `
+            -Undo  {
+                # Best-effort revert of the secure-config block: disable PS Remoting,
+                # stop the service, set it back to manual.
+                try { Disable-PSRemoting -Force -ErrorAction SilentlyContinue } catch { }
+                Stop-Service -Name WinRM -Force -ErrorAction SilentlyContinue
+                Set-Service -Name WinRM -StartupType Manual -ErrorAction SilentlyContinue
+            }
+        Write-OutputColor "  Queued (Dry-Run): enable PowerShell Remoting." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued PowerShell Remoting enable"
+        return
+    }
+
     try {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Configuring PowerShell Remoting..." -color "Info"

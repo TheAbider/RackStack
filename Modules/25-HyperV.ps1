@@ -91,6 +91,30 @@ function Install-HyperVRole {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Install Hyper-V role (reboot required)" -Category "Roles" -OneWay $false `
+            -Preflight {
+                if (Test-HyperVInstalled) { "Hyper-V already installed" }
+                else { $true }
+            } `
+            -Apply { Install-HyperVRole } `
+            -Undo  {
+                # Server SKU: Uninstall-WindowsFeature; Client: Disable-WindowsOptionalFeature.
+                # Both require reboot. Best-effort revert.
+                try {
+                    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+                    if ($os -and $os.ProductType -ne 1) {
+                        Uninstall-WindowsFeature -Name 'Hyper-V' -IncludeManagementTools -ErrorAction SilentlyContinue | Out-Null
+                    } else {
+                        Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                    }
+                } catch { }
+            }
+        Write-OutputColor "  Queued (Dry-Run): install Hyper-V role." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued Hyper-V role install"
+        return
+    }
+
     try {
         Write-OutputColor "`nInstalling Hyper-V... This may take several minutes." -color "Info"
 

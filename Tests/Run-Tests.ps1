@@ -8421,7 +8421,7 @@ try {
     # re-queueing.
     $instrumentedFiles = @{
         '11-Hostname.ps1'         = 'Set-HostName'
-        '15-RDP.ps1'              = 'Enable-RDP'
+        '15-RDP.ps1'              = 'Enable-RDP + Enable-PowerShellRemoting'
         '13-Timezone.ps1'         = 'Set-SelectedTimezone'
         '07-IPConfiguration.ps1'  = 'Set-VMIPAddress'
         '12-DomainJoin.ps1'       = 'Join-Domain (ONE-WAY)'
@@ -8429,6 +8429,10 @@ try {
         '17-DefenderExclusions.ps1' = 'Add-HyperVDefenderExclusions'
         '23-LocalAdmin.ps1'       = 'Add-LocalAdminAccount'
         '24-DisableAdmin.ps1'     = 'Disable-BuiltInAdminAccount'
+        '05-SystemCheck.ps1'      = 'Set-ServerPowerPlan'
+        '25-HyperV.ps1'           = 'Install-HyperVRole'
+        '26-MPIO.ps1'             = 'Install-MPIOFeature'
+        '27-FailoverClustering.ps1' = 'Install-FailoverClusteringFeature'
         '65-AzureArc.ps1'         = 'Invoke-AzureArcOnboard (ONE-WAY)'
         '66-DefenderEndpoint.ps1' = 'Invoke-DefenderEndpointOnboard (ONE-WAY)'
         '67-WSUS.ps1'             = 'Install-WSUSRole + Invoke-WSUSPostInstall'
@@ -8460,6 +8464,11 @@ try {
     $fwContent = Get-Content "$modulesPath\16-Firewall.ps1" -Raw
     $fwGateCount = ([regex]::Matches($fwContent, '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')).Count
     Write-TestResult "70-DryRun: 16-Firewall has both gates (recommended + toggle)" ($fwGateCount -ge 2)
+
+    # 15-RDP has TWO gates (Enable-RDP + Enable-PowerShellRemoting).
+    $rdpContent = Get-Content "$modulesPath\15-RDP.ps1" -Raw
+    $rdpGateCount = ([regex]::Matches($rdpContent, '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')).Count
+    Write-TestResult "70-DryRun: 15-RDP has both gates (RDP + WinRM)" ($rdpGateCount -ge 2)
 
     # BOM present (PowerShell 5.1 needs UTF-8 BOM for the box-drawing chars).
     $dryRunBytes = [System.IO.File]::ReadAllBytes("$modulesPath\70-DryRun.ps1")

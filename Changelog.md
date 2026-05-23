@@ -23,11 +23,18 @@ System / network / security:
 - `Set-VMIPAddress` (07-IPConfiguration.ps1) — captures the existing primary IP + default route so Undo can restore them exactly
 - `Set-SelectedTimezone` (13-Timezone.ps1)
 - `Enable-RDP` core path (15-RDP.ps1) — enable + firewall rules + NLA as a single step
+- `Enable-PowerShellRemoting` (15-RDP.ps1) — WinRM service + Enable-PSRemoting + secure-config block; Undo disables PSRemoting and reverts the service to Manual startup
+- `Set-ServerPowerPlan` (05-SystemCheck.ps1) — preflight verifies the target GUID exists in the OS's plan list; Undo restores the prior plan GUID
 - `Join-Domain` (12-DomainJoin.ps1) — `ONE-WAY` (credentials are prompted at Commit, not stored in the queue; remote AD objects outlive a local unjoin)
 - `Disable-WindowsFirewallDomainPrivate` (16-Firewall.ps1) — both the "recommended" and the "toggle individual profile" paths
 - `Add-HyperVDefenderExclusions` (17-DefenderExclusions.ps1) — snapshots the resolved path/process/extension lists so the queue shows what will actually be added
 - `Add-LocalAdminAccount` (23-LocalAdmin.ps1)
 - `Disable-BuiltInAdminAccount` (24-DisableAdmin.ps1)
+
+Role installs (all reversible via `Uninstall-WindowsFeature`):
+- `Install-HyperVRole` (25-HyperV.ps1) — Server SKU uses `Uninstall-WindowsFeature`, Client SKU uses `Disable-WindowsOptionalFeature`
+- `Install-MPIOFeature` (26-MPIO.ps1)
+- `Install-FailoverClusteringFeature` (27-FailoverClustering.ps1)
 
 Feature modules:
 - `Invoke-AzureArcOnboard` (65-AzureArc.ps1) — `ONE-WAY` (Azure resource and managed identity outlive a local `azcmagent disconnect`)

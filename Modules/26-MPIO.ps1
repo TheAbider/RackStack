@@ -169,6 +169,19 @@ function Install-MPIOFeature {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Install MPIO (Multipath I/O) (reboot required)" -Category "Roles" -OneWay $false `
+            -Preflight {
+                if (Test-MPIOInstalled) { "MPIO already installed" }
+                else { $true }
+            } `
+            -Apply { Install-MPIOFeature | Out-Null } `
+            -Undo  { Uninstall-WindowsFeature -Name 'MultipathIO' -IncludeManagementTools -ErrorAction SilentlyContinue | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): install MPIO." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued MPIO install"
+        return
+    }
+
     try {
         Write-OutputColor "`nInstalling MPIO... This may take several minutes." -color "Info"
 
