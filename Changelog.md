@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.99.3
+## v1.100.0
 
 Interactive Dry-Run Mode — initial release. The framework that has lived inside the batch-config invoker since the start (`$script:DryRunMode` + ~50 per-action gates) is promoted to a session-wide mode that interactive operators can toggle from the main menu.
 
@@ -48,7 +48,7 @@ Feature modules:
 
 **Apply-time re-entry pattern:** for the more complex feature-module gates, the captured Apply scriptblock simply calls back into the same interactive function. The re-entrancy guard skips the queue gate so the original validation / typed-confirmation / progress UX runs at Commit time exactly as if Dry-Run had been off — no parallel-implementation drift between the queued path and the real path.
 
-Remaining interactive call sites (power plan, WinRM enable, virtual switch creation, Hyper-V Replica, BitLocker, dedup, etc.) will be wired in follow-up patch releases. Until then, calling an un-instrumented action while Dry-Run is on runs the action normally and emits a session change — no silent data loss.
+Remaining interactive call sites (virtual switch creation, Hyper-V Replica, dedup, storage replica, scheduled tasks, licensing/KMS, Defender real-time toggle, etc.) will be wired in follow-up releases. Until then, calling an un-instrumented action while Dry-Run is on runs the action normally and emits a session change — no silent data loss.
 
 **Module count:** 70 → 71 (added `70-DryRun.ps1`). Test harness updated to match.
 
