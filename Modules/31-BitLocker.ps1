@@ -220,6 +220,40 @@ function Show-BitLockerManagement {
                             }
                         }
 
+                        if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                            # BitLocker enable is ONE-WAY: turning it off triggers a
+                            # full-volume decryption that takes hours and produces no
+                            # captured Undo scriptblock that can be safely re-applied.
+                            # PIN / password is collected NOW (at queue time) so the
+                            # Apply scriptblock holds the SecureString in the queue
+                            # and the operator doesn't have to re-enter it at Commit.
+                            $capMount = $vol.MountPoint
+                            $capMethod = $method
+                            $capPin = $null
+                            $capPwd = $null
+                            if ($method -eq "2") { $capPin = Read-Host "  Enter PIN (6+ digits)" -AsSecureString }
+                            elseif ($method -eq "3") { $capPwd = Read-Host "  Enter password" -AsSecureString }
+                            Push-DryRunStep -Label "Enable BitLocker on $capMount (method $capMethod)" -Category "Security" -OneWay $true `
+                                -Params @{ MountPoint = $capMount; Method = $capMethod } `
+                                -Preflight {
+                                    $v = Get-BitLockerVolume -MountPoint $capMount -ErrorAction SilentlyContinue
+                                    if ($null -eq $v) { "Volume $capMount not BitLocker-eligible" }
+                                    elseif ($v.ProtectionStatus -eq "On") { "Volume $capMount already protected" }
+                                    else { $true }
+                                }.GetNewClosure() `
+                                -Apply {
+                                    switch ($capMethod) {
+                                        "1" { Enable-BitLocker -MountPoint $capMount -TpmProtector -ErrorAction Stop }
+                                        "2" { Enable-BitLocker -MountPoint $capMount -TpmAndPinProtector -Pin $capPin -ErrorAction Stop }
+                                        "3" { Enable-BitLocker -MountPoint $capMount -PasswordProtector -Password $capPwd -ErrorAction Stop }
+                                    }
+                                    Add-BitLockerKeyProtector -MountPoint $capMount -RecoveryPasswordProtector -ErrorAction Stop
+                                }.GetNewClosure()
+                            Write-OutputColor "  Queued (Dry-Run): enable BitLocker on $capMount (method $capMethod, ONE-WAY)." -color "Warning"
+                            Add-SessionChange -Category "DryRun" -Description "Queued BitLocker enable on $capMount"
+                            continue
+                        }
+
                         try {
                             switch ($method) {
                                 "1" {

@@ -8433,6 +8433,8 @@ try {
         '25-HyperV.ps1'           = 'Install-HyperVRole'
         '26-MPIO.ps1'             = 'Install-MPIOFeature'
         '27-FailoverClustering.ps1' = 'Install-FailoverClusteringFeature'
+        '31-BitLocker.ps1'        = 'Enable-BitLocker (ONE-WAY)'
+        '61-ActiveDirectory.ps1'  = 'Install-NewForest + Install-AdditionalDC + Install-ReadOnlyDC (ONE-WAY)'
         '65-AzureArc.ps1'         = 'Invoke-AzureArcOnboard (ONE-WAY)'
         '66-DefenderEndpoint.ps1' = 'Invoke-DefenderEndpointOnboard (ONE-WAY)'
         '67-WSUS.ps1'             = 'Install-WSUSRole + Invoke-WSUSPostInstall'
@@ -8449,6 +8451,8 @@ try {
     # ONE-WAY badge must be set on the irreversible operations.
     $oneWayChecks = @{
         '12-DomainJoin.ps1'       = 'Domain join'
+        '31-BitLocker.ps1'        = 'BitLocker enable'
+        '61-ActiveDirectory.ps1'  = 'DC promotion (forest/additional/RODC)'
         '65-AzureArc.ps1'         = 'Azure Arc onboarding'
         '66-DefenderEndpoint.ps1' = 'MDE onboarding'
         '67-WSUS.ps1'             = 'WSUS post-install'

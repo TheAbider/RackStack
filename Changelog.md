@@ -36,6 +36,12 @@ Role installs (all reversible via `Uninstall-WindowsFeature`):
 - `Install-MPIOFeature` (26-MPIO.ps1)
 - `Install-FailoverClusteringFeature` (27-FailoverClustering.ps1)
 
+Heavyweight one-way operations:
+- `Enable-BitLocker` (31-BitLocker.ps1) — `ONE-WAY`. All three protector paths (TPM-only, TPM+PIN, password) gate. The PIN/password `SecureString` is captured at queue time and held in the Apply closure so the operator doesn't have to re-enter it at Commit. Decryption to reverse takes hours and isn't a clean Undo.
+- `Install-NewForest` (61-ActiveDirectory.ps1) — `ONE-WAY`. Promotes to first DC of a new forest via `Install-ADDSForest`. Demotion is technically possible but downstream AD objects (GPOs, OUs, users, computers, trusts) become orphaned.
+- `Install-AdditionalDC` (61-ActiveDirectory.ps1) — `ONE-WAY`. Adds a DC via `Install-ADDSDomainController`. Demote leaves FRS/DFSR replicas inconsistent.
+- `Install-ReadOnlyDC` (61-ActiveDirectory.ps1) — `ONE-WAY`. Same family as above with `-ReadOnlyReplica:$true`.
+
 Feature modules:
 - `Invoke-AzureArcOnboard` (65-AzureArc.ps1) — `ONE-WAY` (Azure resource and managed identity outlive a local `azcmagent disconnect`)
 - `Invoke-DefenderEndpointOnboard` (66-DefenderEndpoint.ps1) — `ONE-WAY` (offboarding requires a separate .cmd from the Defender portal that expires ~30 days after generation)
