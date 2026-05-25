@@ -5,9 +5,12 @@ name: Dependabot auto-merge
 # Scope (deliberately narrow):
 #   * Only fires for PRs authored by `dependabot[bot]` — no other bot or
 #     human user can take this path.
-#   * Only patch + minor updates auto-merge. MAJOR bumps still surface as
-#     normal PRs for human review because they can break workflows (e.g.
-#     `actions/checkout` v4 -> v6 changes default arguments).
+#   * Only patch + minor updates auto-merge. MAJOR bumps stay open with
+#     NO action from this workflow (no approval, no comment). The reason
+#     is email-noise discipline: `pull_request_target` re-fires on every
+#     `synchronize` event (rebase, force-push) and any comment we leave
+#     would re-fire and re-email. Majors stay visible in the PR list and
+#     the operator deals with them at their own cadence.
 #
 # Trigger note: `pull_request_target` is used (NOT `pull_request`) because
 # Dependabot PRs come from a branch on the same repo BUT under the
@@ -29,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write       # enable auto-merge on the PR
-      pull-requests: write  # approve + comment
+      pull-requests: write  # approve
     steps:
       - name: Fetch Dependabot metadata
         id: meta
@@ -48,12 +51,3 @@ jobs:
           set -euo pipefail
           gh pr review "$PR_URL" --approve --body "Auto-approved by dependabot-auto-merge (patch/minor only)."
           gh pr merge "$PR_URL" --auto --squash --delete-branch
-
-      - name: Comment on major bumps (no auto-merge)
-        if: steps.meta.outputs.update-type == 'version-update:semver-major'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: |
-          set -euo pipefail
-          gh pr comment "$PR_URL" --body "Major version bump — not auto-merging. Review the changelog and merge manually if the workflow still works."
