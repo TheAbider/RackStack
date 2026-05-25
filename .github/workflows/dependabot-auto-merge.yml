@@ -1,0 +1,59 @@
+name: Dependabot auto-merge
+
+# Auto-merges Dependabot PRs that the rest of CI has already cleared.
+#
+# Scope (deliberately narrow):
+#   * Only fires for PRs authored by `dependabot[bot]` — no other bot or
+#     human user can take this path.
+#   * Only patch + minor updates auto-merge. MAJOR bumps still surface as
+#     normal PRs for human review because they can break workflows (e.g.
+#     `actions/checkout` v4 -> v6 changes default arguments).
+#
+# Trigger note: `pull_request_target` is used (NOT `pull_request`) because
+# Dependabot PRs come from a branch on the same repo BUT under the
+# dependabot[bot] author whose `GITHUB_TOKEN` is read-only under
+# `pull_request`. `pull_request_target` runs the workflow from master with
+# write privileges so we can approve + enable auto-merge. We never check
+# out the PR's tree, which keeps the script-injection risk that
+# `pull_request_target` is normally famous for out of scope.
+
+on:
+  pull_request_target:
+    branches: [master]
+
+permissions: read-all
+
+jobs:
+  auto-merge:
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # enable auto-merge on the PR
+      pull-requests: write  # approve + comment
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve + enable auto-merge (patch + minor only)
+        if: |
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          gh pr review "$PR_URL" --approve --body "Auto-approved by dependabot-auto-merge (patch/minor only)."
+          gh pr merge "$PR_URL" --auto --squash --delete-branch
+
+      - name: Comment on major bumps (no auto-merge)
+        if: steps.meta.outputs.update-type == 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          gh pr comment "$PR_URL" --body "Major version bump — not auto-merging. Review the changelog and merge manually if the workflow still works."
