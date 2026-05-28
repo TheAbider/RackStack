@@ -1317,8 +1317,13 @@ function Import-Defaults {
     Initialize-SANTargetPairs
 }
 
-# Export current defaults to defaults.json (includes custom license keys)
+# Export current defaults to a defaults file (includes custom license keys).
+# TargetPath defaults to the personal defaults.json; pass $script:CompanyDefaultsPath
+# to update the shared company baseline instead.
 function Export-Defaults {
+    param(
+        [string]$TargetPath = $script:DefaultsPath
+    )
 
     # Gather custom DNS presets (exclude built-in ones)
     $builtinDNSNames = @("Google DNS", "Cloudflare", "OpenDNS", "Quad9")
@@ -1373,16 +1378,41 @@ function Export-Defaults {
     }
 
     try {
-        $tempPath = "$($script:DefaultsPath).tmp"
+        $tempPath = "$($TargetPath).tmp"
         $defaults | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $tempPath -Encoding UTF8 -Force -ErrorAction Stop
-        Move-Item -LiteralPath $tempPath -Destination $script:DefaultsPath -Force -ErrorAction Stop
+        Move-Item -LiteralPath $tempPath -Destination $TargetPath -Force -ErrorAction Stop
         return $true
     }
     catch {
-        Remove-Item -LiteralPath "$($script:DefaultsPath).tmp" -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "$($TargetPath).tmp" -Force -ErrorAction SilentlyContinue
         Write-OutputColor "  Failed to save defaults: $_" -color "Error"
         return $false
     }
+}
+
+# Save the current defaults, letting the operator pick the personal defaults.json
+# or (when a company defaults file is active) the shared company baseline. The
+# editor already updates the in-memory $script:* values as fields are changed, so
+# the running session uses the new values immediately — this just persists them.
+function Save-DefaultsInteractive {
+    $target = $script:DefaultsPath
+    $targetLabel = "defaults.json"
+    if ($script:CompanyDefaultsPath) {
+        Write-OutputColor "  Save to which file?" -color "Info"
+        Write-OutputColor "  [1] Personal — defaults.json (this machine only)" -color "Info"
+        Write-OutputColor "  [2] Company  — $($script:CompanyDefaultsName).defaults.json (shared fleet baseline)" -color "Info"
+        $sel = Read-Host "  Select [1/2] (default 1)"
+        $navResult = Test-NavigationCommand -UserInput $sel
+        if ($navResult.ShouldReturn) { return }
+        if ("$sel".Trim() -eq "2") {
+            $target = $script:CompanyDefaultsPath
+            $targetLabel = "$($script:CompanyDefaultsName).defaults.json"
+        }
+    }
+    if (Export-Defaults -TargetPath $target) {
+        Write-OutputColor "  Saved to $targetLabel — changes are already active this session." -color "Success"
+    }
+    Start-Sleep -Seconds 1
 }
 
 # Import-CustomLicenses is handled by Import-Defaults (licenses stored in defaults.json)
@@ -1399,6 +1429,18 @@ function Export-CustomLicenses {
 
 # Settings menu: Edit Environment Defaults
 function Show-EditDefaults {
+    # Block editing while a Dry-Run queue is pending — changing a default that a
+    # queued step captured/references is a foot-gun.
+    if ($script:DryRunMode -and (Get-DryRunQueue).Count -gt 0) {
+        Clear-Host
+        Write-CenteredOutput "Environment Defaults" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Dry-Run mode has $((Get-DryRunQueue).Count) queued step(s)." -color "Warning"
+        Write-OutputColor "  Editing defaults now could change values a queued step depends on." -color "Warning"
+        Write-OutputColor "  Commit or discard the queue first ([Q] from the main menu), then re-open this editor." -color "Warning"
+        Write-PressEnter
+        return
+    }
     while ($true) {
         if ($script:ReturnToMainMenu) { return }
         Clear-Host
@@ -1440,7 +1482,7 @@ function Show-EditDefaults {
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        Write-OutputColor "  [S] Save to defaults.json" -color "Info"
+        Write-OutputColor "  [S] Save defaults (personal or company)" -color "Info"
         Write-OutputColor "  [R] Reset to generic defaults" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
         Write-OutputColor "" -color "Info"
@@ -1683,10 +1725,7 @@ function Show-EditDefaults {
                 Start-Sleep -Seconds 1
             }
             "S" {
-                if (Export-Defaults) {
-                    Write-OutputColor "  Defaults saved to $($script:DefaultsPath)" -color "Success"
-                }
-                Start-Sleep -Seconds 1
+                Save-DefaultsInteractive
             }
             "R" {
                 if (Confirm-UserAction -Message "Reset all defaults to generic values?") {
@@ -1727,6 +1766,18 @@ function Show-EditDefaults {
 
 # Settings menu: Edit Custom Licenses
 function Show-EditLicenses {
+    # Block editing while a Dry-Run queue is pending (e.g. a queued KMS activation
+    # references the very keys this editor changes).
+    if ($script:DryRunMode -and (Get-DryRunQueue).Count -gt 0) {
+        Clear-Host
+        Write-CenteredOutput "Custom Licenses" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Dry-Run mode has $((Get-DryRunQueue).Count) queued step(s)." -color "Warning"
+        Write-OutputColor "  Editing license keys now could change values a queued activation depends on." -color "Warning"
+        Write-OutputColor "  Commit or discard the queue first ([Q] from the main menu), then re-open this editor." -color "Warning"
+        Write-PressEnter
+        return
+    }
     while ($true) {
         if ($script:ReturnToMainMenu) { return }
         Clear-Host
@@ -1896,9 +1947,7 @@ function Show-EditLicenses {
                 Write-PressEnter
             }
             "S" {
-                Export-CustomLicenses
-                Write-OutputColor "  Licenses saved to $($script:DefaultsPath)" -color "Success"
-                Start-Sleep -Seconds 1
+                Save-DefaultsInteractive
             }
             "B" { return }
             default {
