@@ -269,6 +269,103 @@ function Undo-LastChange {
     }
 }
 
+# Extended (multi-step) undo. Shows the full undo history newest-first and reverts
+# the last N changes in reverse order, reusing each entry's captured UndoScript.
+# Single-step undo is just N=1 (the default), so this supersedes Undo-LastChange in
+# the Settings menu while that function stays for any direct callers.
+function Invoke-ExtendedUndo {
+    Clear-Host
+    Write-CenteredOutput "Undo Changes" -color "Info"
+
+    if ($script:UndoStack.Count -eq 0) {
+        Write-OutputColor "  No changes available to undo." -color "Warning"
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Note: undoable operations include IP/DNS/VLAN, adapter renames," -color "Info"
+        Write-OutputColor "  hostname/timezone/power plan, firewall toggles, RDP/WinRM, Defender" -color "Info"
+        Write-OutputColor "  exclusions, service changes, disk online/offline, scheduled tasks, themes." -color "Info"
+        return
+    }
+
+    $count = $script:UndoStack.Count
+    Write-OutputColor "  Undoable changes (most recent first):" -color "Info"
+    Write-OutputColor "" -color "Info"
+    for ($i = 0; $i -lt $count; $i++) {
+        $entry = $script:UndoStack[$count - 1 - $i]
+        $line = ("  [{0,2}] {1}  {2}: {3}" -f ($i + 1), $entry.Timestamp, $entry.Category, $entry.Description)
+        if ($line.Length -gt 74) { $line = $line.Substring(0, 71) + "..." }
+        Write-OutputColor $line -color "Info"
+    }
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Undo how many of the most recent changes? [1-$count], [A]ll, [B]ack (default 1)" -color "Info"
+    $choice = Read-Host "  Select"
+    $navResult = Test-NavigationCommand -UserInput $choice
+    if ($navResult.ShouldReturn) { return }
+
+    $choiceUpper = "$choice".Trim().ToUpper()
+    if ($choiceUpper -eq "B") { return }
+    $toUndo = 1
+    if ([string]::IsNullOrWhiteSpace($choice)) {
+        $toUndo = 1
+    }
+    elseif ($choiceUpper -eq "A") {
+        $toUndo = $count
+    }
+    elseif ($choice -match '^\d+$') {
+        $toUndo = [int]$choice
+        if ($toUndo -lt 1 -or $toUndo -gt $count) {
+            Write-OutputColor "  Enter a number between 1 and $count." -color "Error"
+            Start-Sleep -Seconds 1
+            return
+        }
+    }
+    else {
+        Write-OutputColor "  Invalid choice." -color "Error"
+        Start-Sleep -Seconds 1
+        return
+    }
+
+    $plural = if ($toUndo -eq 1) { "change" } else { "changes" }
+    if (-not (Confirm-UserAction -Message "Undo the $toUndo most recent $plural (newest first)?")) {
+        Write-OutputColor "  Undo cancelled." -color "Info"
+        return
+    }
+
+    $undone = 0
+    $failed = 0
+    for ($k = 0; $k -lt $toUndo; $k++) {
+        if ($script:UndoStack.Count -eq 0) { break }
+        $action = $script:UndoStack[$script:UndoStack.Count - 1]
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Undoing: $($action.Category) — $($action.Description)" -color "Info"
+        try {
+            if ($action.UndoParams.Count -gt 0) {
+                $undoParams = $action.UndoParams
+                & $action.UndoScript @undoParams
+            }
+            else {
+                & $action.UndoScript
+            }
+            # Only drop the entry once its undo succeeded, so a failure leaves it
+            # (and everything older) intact for inspection.
+            $script:UndoStack.RemoveAt($script:UndoStack.Count - 1)
+            $undone++
+            Write-OutputColor "    Reverted." -color "Success"
+            Add-SessionChange -Category "Undo" -Description "Undid: $($action.Description)"
+        }
+        catch {
+            $failed++
+            Write-OutputColor "    Failed to undo: $_" -color "Error"
+            Write-OutputColor "    Stopping — the remaining changes are left intact." -color "Warning"
+            break
+        }
+    }
+
+    Clear-MenuCache
+    Write-OutputColor "" -color "Info"
+    $resultColor = if ($failed -eq 0) { "Success" } else { "Warning" }
+    Write-OutputColor "  Undo complete: $undone reverted, $failed failed." -color $resultColor
+}
+
 # Execute batch undo stack in reverse order (called from Start-BatchMode on failure)
 function Invoke-BatchUndo {
     if (-not $script:BatchUndoStack -or $script:BatchUndoStack.Count -eq 0) {

@@ -457,7 +457,7 @@ function Show-SettingsMenu {
     Write-OutputColor "  │$("  APPEARANCE & SESSION".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[1]  Change Color Theme" -Status ("Current: " + $script:ColorTheme) -StatusColor "Info"
-    Write-MenuItem "[2]  Undo Last Change" -Status ("Available: " + $script:UndoStack.Count) -StatusColor "Info"
+    Write-MenuItem "[2]  Undo Changes" -Status ("Available: " + $script:UndoStack.Count) -StatusColor "Info"
     Write-MenuItem "[3]  View Help"
     Write-MenuItem "[4]  View Changelog" -Status ("Version: " + $script:ScriptVersion) -StatusColor "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -524,7 +524,7 @@ function Start-Show-SettingsMenu {
                 Write-PressEnter
             }
             "2" {
-                Undo-LastChange
+                Invoke-ExtendedUndo
                 Write-PressEnter
             }
             "3" {

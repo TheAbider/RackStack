@@ -8576,6 +8576,88 @@ Write-SectionHeader "SECTION 166: DRY-RUN BEHAVIORAL TESTS"
 }
 
 # ============================================================================
+# SECTION 167: v1.101.0 — EXTENDED UNDO + DEFAULTS-EDITOR GUARDS
+# ============================================================================
+Write-SectionHeader "SECTION 167: EXTENDED UNDO + DEFAULTS EDITOR"
+
+# Behavioral: dot-source 04-Navigation into an isolated scope and run the real
+# Invoke-ExtendedUndo. Shims are defined AFTER the dot-source so they override the
+# module's real Add-SessionChange/etc. (function resolution is dynamic).
+& {
+    $script:UndoStack = [System.Collections.Generic.List[object]]::new()
+    $script:ReturnToMainMenu = $false
+    $script:MenuCache = @{}
+
+    try { . (Join-Path $modulesPath "04-Navigation.ps1") } catch { }
+
+    function Write-OutputColor { param($Message, $color) }
+    function Write-CenteredOutput { param($Message, $color) }
+    function Clear-Host { }
+    function Clear-MenuCache { }
+    function Write-PressEnter { param($Message) }
+    function Add-SessionChange { param($Category, $Description) }
+    function Confirm-UserAction { param($Message) $true }
+    $script:__rhQueue = [System.Collections.Generic.Queue[string]]::new()
+    function Read-Host { param($Prompt) if ($script:__rhQueue.Count -gt 0) { $script:__rhQueue.Dequeue() } else { "" } }
+
+    try {
+        $undoLog = [System.Collections.Generic.List[string]]::new()
+        $script:UndoStack.Clear()
+        foreach ($n in 1..3) {
+            $capN = $n
+            $script:UndoStack.Add([PSCustomObject]@{
+                Timestamp = "00:00:0$capN"; Category = "Test"; Description = "step$capN"
+                UndoScript = { $undoLog.Add("u$capN") }.GetNewClosure(); UndoParams = @{}
+            })
+        }
+
+        # Undo the 2 most recent => reverts step3 then step2 (reverse), leaves step1.
+        $script:__rhQueue.Enqueue("2")
+        Invoke-ExtendedUndo
+        Write-TestResult "ExtendedUndo: undoes N most-recent in reverse order" (($undoLog -join ',') -eq 'u3,u2' -and $script:UndoStack.Count -eq 1)
+
+        # [A]ll reverts every remaining change.
+        $script:__rhQueue.Enqueue("A")
+        Invoke-ExtendedUndo
+        Write-TestResult "ExtendedUndo: [A]ll reverts every remaining change" ($script:UndoStack.Count -eq 0)
+
+        # Empty stack is a safe no-op (returns before prompting).
+        Invoke-ExtendedUndo
+        Write-TestResult "ExtendedUndo: empty stack is a no-op" ($script:UndoStack.Count -eq 0)
+
+        # A failing revert stops and leaves that entry + everything older intact.
+        $undoLog.Clear()
+        $script:UndoStack.Clear()
+        $script:UndoStack.Add([PSCustomObject]@{ Timestamp="00:00:01"; Category="Test"; Description="keep"; UndoScript={ $undoLog.Add("keep") }.GetNewClosure(); UndoParams=@{} })
+        $script:UndoStack.Add([PSCustomObject]@{ Timestamp="00:00:02"; Category="Test"; Description="boom"; UndoScript={ throw "fail" }.GetNewClosure(); UndoParams=@{} })
+        $script:__rhQueue.Enqueue("A")
+        Invoke-ExtendedUndo
+        Write-TestResult "ExtendedUndo: stops on a failed revert, leaves remaining intact" ($script:UndoStack.Count -eq 2 -and $undoLog.Count -eq 0)
+    } catch {
+        Write-TestResult "ExtendedUndo behavioral tests" $false $_.Exception.Message
+    }
+    # Restore leaked $script: state for later sections.
+    $script:UndoStack = [System.Collections.Generic.List[object]]::new()
+}
+
+# Structural: defaults-editor guards + company save target + undo wiring.
+try {
+    $opsSrc  = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
+    $navSrc  = Get-Content (Join-Path $modulesPath "04-Navigation.ps1") -Raw
+    $helpSrc = Get-Content (Join-Path $modulesPath "34-Help.ps1") -Raw
+
+    Write-TestResult "Export-Defaults: accepts a -TargetPath parameter" ($opsSrc -match 'function Export-Defaults\b[\s\S]{0,160}\[string\]\$TargetPath')
+    Write-TestResult "Save-DefaultsInteractive: defined" ($opsSrc -match 'function Save-DefaultsInteractive')
+    Write-TestResult "Show-EditDefaults: dry-run queue guard present" ($opsSrc -match 'function Show-EditDefaults[\s\S]{0,400}DryRunMode[\s\S]{0,120}Get-DryRunQueue')
+    Write-TestResult "Show-EditLicenses: dry-run queue guard present" ($opsSrc -match 'function Show-EditLicenses[\s\S]{0,400}DryRunMode[\s\S]{0,120}Get-DryRunQueue')
+    Write-TestResult "Defaults editors save via Save-DefaultsInteractive" (([regex]::Matches($opsSrc, 'Save-DefaultsInteractive')).Count -ge 3)
+    Write-TestResult "Invoke-ExtendedUndo: defined in 04-Navigation" ($navSrc -match 'function Invoke-ExtendedUndo')
+    Write-TestResult "Settings [2] dispatches Invoke-ExtendedUndo" ($helpSrc -match '"2"\s*\{\s*Invoke-ExtendedUndo')
+} catch {
+    Write-TestResult "v1.101.0 structural tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 

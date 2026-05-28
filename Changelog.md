@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.101.0
+
+Operator quality-of-life: multi-step undo and a safer in-tool defaults editor.
+
+**Extended Undo (Settings → [2] Undo Changes):**
+- The undo screen now lists the full undo history (most recent first) and lets you revert the last N changes in one go — enter a count, `[A]ll`, or just press Enter for the most recent (the previous single-step behavior). Changes are reverted newest-first, each using its captured revert action.
+- If a revert fails, it stops there and leaves that change (and everything older) intact, then reports how many were reverted.
+
+**In-program defaults editor (Settings → [11] Edit Environment Defaults, [12] Edit Custom Licenses):**
+- **Save target choice:** when a company defaults file is active, saving now asks whether to write to your personal `defaults.json` (this machine only) or the shared company baseline (`<company>.defaults.json`). Edits already apply to the running session immediately, so there's no restart.
+- **Dry-Run guard:** both editors now refuse to open while a Dry-Run queue has pending steps — changing a default that a queued step captured or references is a foot-gun. Commit or discard the queue first.
+
 ## v1.100.0
 
 Interactive Dry-Run Mode — initial release. The framework that has lived inside the batch-config invoker since the start (`$script:DryRunMode` + ~50 per-action gates) is promoted to a session-wide mode that interactive operators can toggle from the main menu.
