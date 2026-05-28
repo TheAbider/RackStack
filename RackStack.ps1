@@ -3,7 +3,7 @@
     RackStack - Modular Loader (Development)
 
 .DESCRIPTION
-    This is the MODULAR LOADER -- it dot-sources all 70 modules from the Modules/
+    This is the MODULAR LOADER -- it dot-sources all 71 modules from the Modules/
     subfolder and starts RackStack. Use this file for development and testing.
 
     This is NOT the monolithic build. The monolithic single-file version is:

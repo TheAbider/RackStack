@@ -82,7 +82,14 @@ function Push-DryRunStep {
     $preflightMsg = ""
     if ($Preflight) {
         try {
-            $result = & $Preflight
+            # Collapse the preflight's output to its LAST emitted object. A
+            # preflight that emits more than one object (a stray Write-Output,
+            # an un-suppressed cmdlet result, then the verdict) would otherwise
+            # leave an array in $result, and `$array -eq $true` is a truthy
+            # filtered array — which silently turned a red verdict GREEN
+            # (fail-open). Last-object-wins matches the "return your verdict
+            # last" convention the call sites already follow.
+            $result = @(& $Preflight) | Select-Object -Last 1
             # Preflight conventions:
             #   * No return / $null / $true   => OK
             #   * $false                       => fail with no message
@@ -145,7 +152,10 @@ function Update-DryRunStepPreflight {
         return $Step
     }
     try {
-        $result = & $Step.Preflight
+        # Last-object-wins (see Push-DryRunStep) — this is the safety-critical
+        # commit-time re-check, so it must not fail open on a multi-output
+        # preflight.
+        $result = @(& $Step.Preflight) | Select-Object -Last 1
         if ($null -eq $result -or $result -eq $true) {
             $Step.PreflightOK = $true
             $Step.PreflightMsg = ""
@@ -297,11 +307,22 @@ function Invoke-DryRunCommitAtomic {
         return
     }
 
+    # Operate only on steps that have not already been applied. A prior
+    # Step-by-Step pass can apply some steps and leave them in the queue;
+    # re-running their Apply here would double-apply — destructive for the
+    # ONE-WAY operations these commit paths support.
+    $pending = @($queue | Where-Object { $_.Status -ne "Applied" })
+    if ($pending.Count -eq 0) {
+        Write-OutputColor "  All queued steps are already applied — nothing to do." -color "Info"
+        Clear-DryRunQueue
+        return
+    }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Re-running preflights..." -color "Info"
-    foreach ($step in $queue) { Update-DryRunStepPreflight -Step $step | Out-Null }
+    foreach ($step in $pending) { Update-DryRunStepPreflight -Step $step | Out-Null }
 
-    $red = @($queue | Where-Object { -not $_.PreflightOK })
+    $red = @($pending | Where-Object { -not $_.PreflightOK })
     if ($red.Count -gt 0) {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Cannot apply — $($red.Count) step(s) failed preflight:" -color "Error"
@@ -314,19 +335,14 @@ function Invoke-DryRunCommitAtomic {
         return
     }
 
-    $oneWayCount = @($queue | Where-Object { $_.OneWay }).Count
+    $oneWayCount = @($pending | Where-Object { $_.OneWay }).Count
     if ($oneWayCount -gt 0) {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  WARNING: $oneWayCount step(s) are ONE-WAY and cannot be reverted after Commit." -color "Warning"
-        if (-not (Confirm-UserAction -Message "Apply all $($queue.Count) step(s) (atomic)?")) {
-            Write-OutputColor "  Commit cancelled." -color "Info"
-            return
-        }
-    } else {
-        if (-not (Confirm-UserAction -Message "Apply all $($queue.Count) step(s) (atomic)?")) {
-            Write-OutputColor "  Commit cancelled." -color "Info"
-            return
-        }
+    }
+    if (-not (Confirm-UserAction -Message "Apply all $($pending.Count) step(s) (atomic)?")) {
+        Write-OutputColor "  Commit cancelled." -color "Info"
+        return
     }
 
     $script:ApplyingDryRunQueue = $true
@@ -334,10 +350,10 @@ function Invoke-DryRunCommitAtomic {
     $failedStep = $null
     try {
         $i = 0
-        foreach ($step in $queue) {
+        foreach ($step in $pending) {
             $i++
             Write-OutputColor "" -color "Info"
-            Write-OutputColor "  [$i/$($queue.Count)] $($step.Label)" -color "Info"
+            Write-OutputColor "  [$i/$($pending.Count)] $($step.Label)" -color "Info"
             $step.Status = "Applying"
             try {
                 & $step.Apply
@@ -412,6 +428,7 @@ function Invoke-DryRunCommitStepByStep {
     $appliedCount = 0
     $skippedCount = 0
     $failedCount = 0
+    $quitRequested = $false
     try {
         $i = 0
         foreach ($step in $queue) {
@@ -453,8 +470,8 @@ function Invoke-DryRunCommitStepByStep {
                     }
                 }
                 '^(q|Q|quit)$' {
-                    Write-OutputColor "        Quit. Remaining $($queue.Count - $i) step(s) left in queue." -color "Warning"
-                    return
+                    Write-OutputColor "        Quit requested — stopping here. Applied steps will be committed; the rest stay in the queue." -color "Warning"
+                    $quitRequested = $true
                 }
                 default {
                     $step.Status = "Skipped"
@@ -462,6 +479,11 @@ function Invoke-DryRunCommitStepByStep {
                     Write-OutputColor "        Skipped." -color "Info"
                 }
             }
+            # Quit must NOT `return` from inside the try — that would skip the
+            # post-loop drain that removes the just-applied steps and logs the
+            # session change, leaving them in the queue to be double-applied by
+            # a later Apply-All. Break out so the finally AND the drain run.
+            if ($quitRequested) { break }
         }
     }
     finally {

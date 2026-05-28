@@ -300,15 +300,19 @@ function Enable-ReplicaServer {
     if (-not [string]::IsNullOrWhiteSpace($storagePath)) { $storagePath = $storagePath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($storagePath)) { $storagePath = $defaultStorage }
 
-    # Ensure storage directory exists
-    if (-not (Test-Path -LiteralPath $storagePath)) {
-        try {
-            New-Item -LiteralPath $storagePath -ItemType Directory -Force | Out-Null
-            Write-OutputColor "  Created directory: $storagePath" -color "Info"
-        }
-        catch {
-            Write-OutputColor "  Failed to create directory: $_" -color "Error"
-            return
+    # Ensure storage directory exists. Skip at Dry-Run queue time so queueing
+    # creates nothing on disk — the Apply re-enters this function at Commit and
+    # creates the directory then.
+    if (-not ($script:DryRunMode -and -not $script:ApplyingDryRunQueue)) {
+        if (-not (Test-Path -LiteralPath $storagePath)) {
+            try {
+                New-Item -LiteralPath $storagePath -ItemType Directory -Force | Out-Null
+                Write-OutputColor "  Created directory: $storagePath" -color "Info"
+            }
+            catch {
+                Write-OutputColor "  Failed to create directory: $_" -color "Error"
+                return
+            }
         }
     }
 

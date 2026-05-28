@@ -194,6 +194,28 @@ function Invoke-AzureArcOnboard {
         return $false
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Gate BEFORE the agent install + status probe so queueing never
+        # installs the Connected Machine Agent. Onboarding is ONE-WAY: a local
+        # `azcmagent disconnect` leaves the Azure resource + managed identity
+        # behind. The Apply re-enters this function with the re-entrancy guard
+        # set, so the real install + secret-resolve + azcmagent connect run at
+        # Commit — the queue never holds the SP secret.
+        $capRG     = $script:AzureArc.ResourceGroup
+        $capTenant = $script:AzureArc.TenantId
+        Push-DryRunStep -Label "Onboard to Azure Arc (RG: $capRG)" -Category "Cloud" -OneWay $true `
+            -Params @{ ResourceGroup = $capRG; TenantId = $capTenant } `
+            -Preflight {
+                if ((Get-AzureArcStatus).Connected) { "Already Arc-connected — disconnect first to re-onboard" }
+                elseif ($null -eq (Resolve-AzureArcSecret)) { "No SP secret available (set RACKSTACK_ARC_SECRET or AzureArc.ServicePrincipalSecret)" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply { Invoke-AzureArcOnboard | Out-Null }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): Azure Arc onboarding (RG: $capRG)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued Azure Arc onboarding"
+        return $true
+    }
+
     $agent = Get-AzureArcAgentPath
     if ($null -eq $agent) {
         Write-OutputColor "  Connected Machine Agent not installed — installing first..." -color "Info"
@@ -207,29 +229,6 @@ function Invoke-AzureArcOnboard {
     if ($status.Connected) {
         Write-OutputColor "  This machine is already Arc-connected as '$($status.ResourceName)'" -color "Warning"
         Write-OutputColor "  in resource group '$($status.ResourceGroup)'. Disconnect first to re-onboard." -color "Warning"
-        return $true
-    }
-
-    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
-        # Onboarding is ONE-WAY: a local `azcmagent disconnect` leaves the
-        # Azure resource and managed identity behind. Full reversal needs
-        # someone with portal access to delete the Arc resource. The Apply
-        # scriptblock re-enters this same function with the re-entrancy
-        # guard set, so the real onboarding (secret resolve + azcmagent
-        # connect) runs at commit time — the queue doesn't hold the SP
-        # secret.
-        $capRG     = $script:AzureArc.ResourceGroup
-        $capTenant = $script:AzureArc.TenantId
-        Push-DryRunStep -Label "Onboard to Azure Arc (RG: $capRG)" -Category "Cloud" -OneWay $true `
-            -Params @{ ResourceGroup = $capRG; TenantId = $capTenant } `
-            -Preflight {
-                if ((Get-AzureArcStatus).Connected) { "Already Arc-connected — disconnect first to re-onboard" }
-                elseif ($null -eq (Resolve-AzureArcSecret)) { "No SP secret available (set RACKSTACK_ARC_SECRET or AzureArc.ServicePrincipalSecret)" }
-                else { $true }
-            } `
-            -Apply { Invoke-AzureArcOnboard | Out-Null }
-        Write-OutputColor "  Queued (Dry-Run): Azure Arc onboarding (RG: $capRG)." -color "Warning"
-        Add-SessionChange -Category "DryRun" -Description "Queued Azure Arc onboarding"
         return $true
     }
 

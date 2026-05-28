@@ -533,7 +533,38 @@ function Add-CustomVNIC {
         if (-not (Confirm-UserAction -Message "Remove and recreate it?")) {
             return
         }
+    }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capSwitch  = $existingSwitch.Name
+        $capVnic    = $vnicName
+        $capReplace = [bool]$vnicExists
+        $replaceNote = if ($capReplace) { " (replace existing)" } else { "" }
+        Push-DryRunStep -Label "Add vNIC '$capVnic' to switch '$capSwitch'$replaceNote" -Category "Network" -OneWay $false `
+            -Params @{ Switch = $capSwitch; vNIC = $capVnic; Replace = $capReplace } `
+            -Preflight {
+                if (-not (Get-VMSwitch -Name $capSwitch -ErrorAction SilentlyContinue)) { return "Switch '$capSwitch' not found" }
+                return $true
+            }.GetNewClosure() `
+            -Apply {
+                # Removal is deferred to Commit so queueing in Dry-Run never
+                # touches a live vNIC.
+                if ($capReplace) {
+                    Remove-VMNetworkAdapter -ManagementOS -Name $capVnic -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 1
+                }
+                Add-VMNetworkAdapter -ManagementOS -SwitchName $capSwitch -Name $capVnic -ErrorAction Stop
+            }.GetNewClosure() `
+            -Undo {
+                Remove-VMNetworkAdapter -ManagementOS -Name $capVnic -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): add vNIC '$capVnic' to switch '$capSwitch'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued vNIC '$capVnic' add to '$capSwitch'"
+        return
+    }
+
+    # Non-dry-run path: perform the live removal now (if recreating).
+    if ($vnicExists) {
         Write-OutputColor "  Removing existing vNIC '$vnicName'..." -color "Info"
         Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
@@ -543,26 +574,6 @@ function Add-CustomVNIC {
             Write-OutputColor "  Could not remove existing vNIC '$vnicName' (may be in use). Aborting." -color "Error"
             return
         }
-    }
-
-    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
-        $capSwitch = $existingSwitch.Name
-        $capVnic   = $vnicName
-        Push-DryRunStep -Label "Add vNIC '$capVnic' to switch '$capSwitch'" -Category "Network" -OneWay $false `
-            -Params @{ Switch = $capSwitch; vNIC = $capVnic } `
-            -Preflight {
-                if (-not (Get-VMSwitch -Name $capSwitch -ErrorAction SilentlyContinue)) { "Switch '$capSwitch' not found" }
-                else { $true }
-            }.GetNewClosure() `
-            -Apply {
-                Add-VMNetworkAdapter -ManagementOS -SwitchName $capSwitch -Name $capVnic -ErrorAction Stop
-            }.GetNewClosure() `
-            -Undo {
-                Remove-VMNetworkAdapter -ManagementOS -Name $capVnic -ErrorAction SilentlyContinue
-            }.GetNewClosure()
-        Write-OutputColor "  Queued (Dry-Run): add vNIC '$capVnic' to switch '$capSwitch'." -color "Warning"
-        Add-SessionChange -Category "DryRun" -Description "Queued vNIC '$capVnic' add to '$capSwitch'"
-        return
     }
 
     # Create the vNIC

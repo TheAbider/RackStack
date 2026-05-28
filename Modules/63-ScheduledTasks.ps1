@@ -772,19 +772,30 @@ function Import-ScheduledTaskXML {
         $capName = $taskName
         $capPath = $taskPath
         $capXml  = $xml
-        Push-DryRunStep -Label "Import scheduled task '$capName' at '$capPath'" -Category "System" -OneWay $false `
-            -Params @{ TaskName = $capName; TaskPath = $capPath } `
+        # Snapshot any pre-existing same-named task so Undo can RESTORE it
+        # after an overwrite, instead of just unregistering (which would
+        # destroy the task the import replaced). The overwrite is disclosed in
+        # the step label so the operator sees it in the queue before Commit.
+        $capPriorXml = $null
+        $priorTask = Get-ScheduledTask -TaskName $capName -TaskPath $capPath -ErrorAction SilentlyContinue
+        if ($priorTask) {
+            try { $capPriorXml = Export-ScheduledTask -TaskName $capName -TaskPath $capPath -ErrorAction Stop } catch { $capPriorXml = $null }
+        }
+        $capOverwrite = [bool]$priorTask
+        $owNote = if ($capOverwrite) { " (overwrites existing)" } else { "" }
+        Push-DryRunStep -Label "Import scheduled task '$capName' at '$capPath'$owNote" -Category "System" -OneWay $false `
+            -Params @{ TaskName = $capName; TaskPath = $capPath; Overwrite = $capOverwrite } `
             -Preflight { $true } `
             -Apply {
-                $existing = Get-ScheduledTask -TaskName $capName -TaskPath $capPath -ErrorAction SilentlyContinue
-                if ($existing) {
-                    Register-ScheduledTask -TaskName $capName -TaskPath $capPath -Xml $capXml -Force -ErrorAction Stop | Out-Null
-                } else {
-                    Register-ScheduledTask -TaskName $capName -TaskPath $capPath -Xml $capXml -ErrorAction Stop | Out-Null
-                }
+                Register-ScheduledTask -TaskName $capName -TaskPath $capPath -Xml $capXml -Force -ErrorAction Stop | Out-Null
             }.GetNewClosure() `
             -Undo {
-                Unregister-ScheduledTask -TaskName $capName -TaskPath $capPath -Confirm:$false -ErrorAction SilentlyContinue
+                if ($capPriorXml) {
+                    # Restore the task that the import overwrote.
+                    Register-ScheduledTask -TaskName $capName -TaskPath $capPath -Xml $capPriorXml -Force -ErrorAction SilentlyContinue | Out-Null
+                } else {
+                    Unregister-ScheduledTask -TaskName $capName -TaskPath $capPath -Confirm:$false -ErrorAction SilentlyContinue
+                }
             }.GetNewClosure()
         Write-OutputColor "  Queued (Dry-Run): import task '$capName' at '$capPath'." -color "Warning"
         Add-SessionChange -Category "DryRun" -Description "Queued import of scheduled task '$capName'"

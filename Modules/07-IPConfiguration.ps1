@@ -225,7 +225,20 @@ function Set-VMIPAddress {
             -Apply {
                 if ($prevIPAddr) { Remove-NetIPAddress -InterfaceAlias $capAdapter -IPAddress $prevIPAddr -Confirm:$false -ErrorAction SilentlyContinue }
                 if ($prevRouteSnap) { Remove-NetRoute -InterfaceAlias $capAdapter -DestinationPrefix '0.0.0.0/0' -NextHop $prevRouteSnap.NextHop -Confirm:$false -ErrorAction SilentlyContinue }
-                New-NetIPAddress -InterfaceAlias $capAdapter -IPAddress $capIP -PrefixLength $capCIDR -DefaultGateway $capGW -ErrorAction Stop | Out-Null
+                try {
+                    New-NetIPAddress -InterfaceAlias $capAdapter -IPAddress $capIP -PrefixLength $capCIDR -DefaultGateway $capGW -ErrorAction Stop | Out-Null
+                }
+                catch {
+                    # Restore the prior primary IP so a failed apply doesn't
+                    # leave the NIC with no address — the failed step's own Undo
+                    # is not invoked by either commit path.
+                    if ($prevIPAddr) {
+                        $restore = @{ InterfaceAlias = $capAdapter; IPAddress = $prevIPAddr; PrefixLength = $prevPrefix; ErrorAction = 'SilentlyContinue' }
+                        if ($prevGW) { $restore.DefaultGateway = $prevGW }
+                        New-NetIPAddress @restore | Out-Null
+                    }
+                    throw
+                }
                 Disable-NetAdapterBinding -Name $capAdapter -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
             }.GetNewClosure() `
             -Undo {

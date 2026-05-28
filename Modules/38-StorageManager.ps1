@@ -768,9 +768,35 @@ function Clear-DiskData {
             -Params @{ DiskNumber = $capDiskNum; FriendlyName = $capDiskName } `
             -Preflight {
                 $d = Get-Disk -Number $capDiskNum -ErrorAction SilentlyContinue
-                if (-not $d) { "Disk $capDiskNum no longer present" }
-                elseif ($d.IsBoot -or $d.IsSystem) { "Disk $capDiskNum is the system/boot disk — refusing" }
-                else { $true }
+                if (-not $d) { return "Disk $capDiskNum no longer present" }
+                if ($d.IsBoot -or $d.IsSystem) { return "Disk $capDiskNum is the system/boot disk — refusing" }
+                # Re-run the Storage Pool / CSV-member fail-safe at queue AND
+                # commit time. The normal-path block below only runs when NOT
+                # committing from the queue, so this Preflight is the gate the
+                # atomic / step-by-step commit actually relies on.
+                $blockReason = $null
+                try {
+                    $poolPhys = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DeviceId -eq [string]$capDiskNum -and $_.CanPool -eq $false }
+                    if ($poolPhys) {
+                        $pool = Get-StoragePool -PhysicalDisks $poolPhys -ErrorAction SilentlyContinue | Where-Object { $_.IsPrimordial -eq $false } | Select-Object -First 1
+                        if ($pool) { $blockReason = "disk is a member of Storage Pool '$($pool.FriendlyName)'" }
+                    }
+                } catch {
+                    $blockReason = "could not verify Storage Pool membership ($($_.Exception.Message)); refusing as fail-safe"
+                }
+                if (-not $blockReason) {
+                    try {
+                        $csvCmd = Get-Command Get-ClusterSharedVolume -ErrorAction SilentlyContinue
+                        if ($csvCmd) {
+                            $csv = Get-ClusterSharedVolume -ErrorAction Stop | Where-Object { $_.SharedVolumeInfo.Partition.DiskNumber -eq $capDiskNum }
+                            if ($csv) { $blockReason = "disk hosts Cluster Shared Volume '$($csv.Name)'" }
+                        }
+                    } catch {
+                        $blockReason = "could not verify Cluster Shared Volume membership ($($_.Exception.Message)); refusing as fail-safe"
+                    }
+                }
+                if ($blockReason) { return "Refusing: $blockReason" }
+                return $true
             }.GetNewClosure() `
             -Apply {
                 Clear-Disk -Number $capDiskNum -RemoveData -RemoveOEM -Confirm:$false -ErrorAction Stop

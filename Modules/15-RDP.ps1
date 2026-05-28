@@ -11,6 +11,15 @@ function Enable-RDP {
 
         if ($rdpAlreadyEnabled) {
             Write-OutputColor "  Remote Desktop is already enabled." -color "Info"
+            if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                # RDP is already on, so the enable branch below (which queues the
+                # full RDP + firewall + NLA step) won't run. Don't fall through to
+                # the live firewall/NLA/subnet hardening while in Dry-Run — return
+                # so queueing stays side-effect-free. Hardening can be run outside
+                # Dry-Run mode.
+                Write-OutputColor "  Dry-Run: nothing to queue (RDP already enabled). Run firewall/NLA hardening outside Dry-Run mode." -color "Warning"
+                return
+            }
         }
         else {
             $confirmPrompt = if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {

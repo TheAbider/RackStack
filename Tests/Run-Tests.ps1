@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 70 modules" ($readmeContent -match '70 module')
+    Write-TestResult "README: mentions 71 modules" ($readmeContent -match '71 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,7 +6898,7 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 70 modules" ($loaderContent -match '70 modules')
+    Write-TestResult "RackStack.ps1: mentions 71 modules" ($loaderContent -match '71 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
@@ -8494,6 +8494,85 @@ try {
 
 } catch {
     Write-TestResult "Interactive Dry-Run Mode Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 166: INTERACTIVE DRY-RUN BEHAVIORAL TESTS (runtime, not source text)
+# ============================================================================
+Write-SectionHeader "SECTION 166: DRY-RUN BEHAVIORAL TESTS"
+
+# Section 165 proves the dry-run source LOOKS right; this section dot-sources
+# 70-DryRun.ps1 into an isolated scope and runs the real functions to prove
+# they BEHAVE right: preflight does not fail open on multi-output, Apply-All
+# does not re-run an already-Applied step, the re-entrancy guard resets after
+# an Apply throws, and each queued step's closure keeps its own captured value.
+& {
+    # Shim the module's external dependencies so the functions run in-process.
+    function Write-OutputColor { param($Message, $color) }
+    function Write-MenuItem { param($Text, $Status, $StatusColor) }
+    function Write-PressEnter { }
+    function Clear-MenuCache { }
+    function Add-SessionChange { param($Category, $Description) }
+    function Confirm-UserAction { param($Message) $true }   # auto-confirm commits
+
+    $script:DryRunMode = $true
+    $script:ApplyingDryRunQueue = $false
+    $script:DryRunQueue = $null
+    $script:ToolFullName = "RackStack"
+    $script:ScriptVersion = "1.100.0"
+
+    try {
+        . (Join-Path $modulesPath "70-DryRun.ps1")
+
+        # -- Preflight classification: must not fail OPEN on multi-output --
+        Clear-DryRunQueue
+        $sOK = Push-DryRunStep -Label "pf-ok" -Category "Test" -Preflight { $true } -Apply { }
+        Write-TestResult "DryRun preflight: true verdict => GREEN" ($sOK.PreflightOK)
+
+        $sMultiFail = Push-DryRunStep -Label "pf-multi-fail" -Category "Test" -Preflight { Write-Output "noise"; "REAL FAILURE" } -Apply { }
+        Write-TestResult "DryRun preflight: noise + fail-string => RED (no fail-open)" ((-not $sMultiFail.PreflightOK) -and $sMultiFail.PreflightMsg -eq "REAL FAILURE")
+
+        $sMultiFalse = Push-DryRunStep -Label "pf-multi-false" -Category "Test" -Preflight { Write-Output "noise"; $false } -Apply { }
+        Write-TestResult "DryRun preflight: noise + false => RED (no fail-open)" (-not $sMultiFalse.PreflightOK)
+
+        # -- Per-step closure capture (the .GetNewClosure() contract) --
+        Clear-DryRunQueue
+        $script:ApplyingDryRunQueue = $false
+        $capLog = [System.Collections.Generic.List[int]]::new()
+        foreach ($n in 1..3) {
+            $capN = $n
+            Push-DryRunStep -Label "cap$capN" -Category "Test" -Apply { $capLog.Add($capN) }.GetNewClosure() | Out-Null
+        }
+        Invoke-DryRunCommitAtomic
+        Write-TestResult "DryRun: per-step closures keep their own captured value (1,2,3)" (($capLog -join ',') -eq '1,2,3')
+
+        # -- No double-apply of an already-Applied step left in the queue --
+        Clear-DryRunQueue
+        $script:ApplyingDryRunQueue = $false
+        $applyTally = @{ n = 0 }
+        $sDone = Push-DryRunStep -Label "already-applied" -Category "Test" -Apply { $applyTally.n++ }.GetNewClosure()
+        $sDone.Status = "Applied"   # simulate a prior Step-by-Step apply left in the queue
+        Push-DryRunStep -Label "pending" -Category "Test" -Apply { $applyTally.n++ }.GetNewClosure() | Out-Null
+        Invoke-DryRunCommitAtomic
+        Write-TestResult "DryRun atomic: skips already-Applied step (no double-apply)" ($applyTally.n -eq 1)
+
+        # -- Re-entrancy guard resets even when an Apply throws --
+        Clear-DryRunQueue
+        $script:ApplyingDryRunQueue = $false
+        Push-DryRunStep -Label "boom" -Category "Test" -Apply { throw "boom" }.GetNewClosure() | Out-Null
+        Invoke-DryRunCommitAtomic
+        Write-TestResult "DryRun: re-entrancy guard reset after Apply throws" ($script:ApplyingDryRunQueue -eq $false)
+
+        Clear-DryRunQueue
+    } catch {
+        Write-TestResult "DryRun behavioral tests" $false $_.Exception.Message
+    }
+    # Restore the default state ($script: scope leaks past this block) so later
+    # sections that read $script:DryRunMode live (e.g. Section 151
+    # "DryRunMode defaults to false") see the init default, not our test state.
+    $script:DryRunMode = $false
+    $script:ApplyingDryRunQueue = $false
+    if ($null -ne $script:DryRunQueue) { $script:DryRunQueue.Clear() }
 }
 
 # ============================================================================
