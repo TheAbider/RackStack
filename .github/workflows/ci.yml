@@ -198,7 +198,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────────
       - name: Attest build provenance (SLSA Level 3)
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: |
             builds/RackStack.exe
