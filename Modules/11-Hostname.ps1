@@ -113,8 +113,35 @@ function Set-HostName {
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Changing hostname: '$currentHostname' -> '$newHostname'" -color "Warning"
 
-    if (-not (Confirm-UserAction -Message "Apply hostname change? (Requires reboot)")) {
+    $confirmPrompt = if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        "Queue this hostname change to apply later? (Dry-Run mode is ON)"
+    } else {
+        "Apply hostname change? (Requires reboot)"
+    }
+    if (-not (Confirm-UserAction -Message $confirmPrompt)) {
         Write-OutputColor "  Hostname change cancelled." -color "Info"
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $captured = $newHostname
+        $oldName = $currentHostname
+        Push-DryRunStep -Label "Rename computer to '$captured'" -Category "System" -OneWay $false `
+            -Params @{ NewName = $captured; OldName = $oldName } `
+            -Preflight {
+                if (Test-ValidHostname -Hostname $captured) { $true }
+                else { "Invalid hostname '$captured' (must be 1-15 NetBIOS-valid chars)" }
+            }.GetNewClosure() `
+            -Apply {
+                Rename-Computer -NewName $captured -Force -ErrorAction Stop
+                $script:RebootNeeded = $true
+            }.GetNewClosure() `
+            -Undo {
+                Rename-Computer -NewName $oldName -Force -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): rename '$currentHostname' -> '$newHostname'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued hostname change to '$newHostname'"
+        Write-PressEnter
         return
     }
 

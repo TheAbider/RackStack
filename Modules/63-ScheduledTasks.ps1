@@ -444,6 +444,33 @@ function Set-ScheduledTaskState {
 
     if (-not (Confirm-UserAction -Message "$action this task?")) { return }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capPath   = $selected.TaskPath
+        $capName   = $selected.TaskName
+        $capAction = $action
+        Push-DryRunStep -Label "$capAction scheduled task '$capName'" -Category "System" -OneWay $false `
+            -Params @{ TaskPath = $capPath; TaskName = $capName; Action = $capAction } `
+            -Preflight {
+                if (-not (Get-ScheduledTask -TaskPath $capPath -TaskName $capName -ErrorAction SilentlyContinue)) {
+                    "Task '$capName' not found at '$capPath'"
+                } else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                $t = Get-ScheduledTask -TaskPath $capPath -TaskName $capName -ErrorAction Stop
+                if ($capAction -eq "Enable") { $t | Enable-ScheduledTask -ErrorAction Stop | Out-Null }
+                else                         { $t | Disable-ScheduledTask -ErrorAction Stop | Out-Null }
+            }.GetNewClosure() `
+            -Undo {
+                $t = Get-ScheduledTask -TaskPath $capPath -TaskName $capName -ErrorAction SilentlyContinue
+                if ($null -eq $t) { return }
+                if ($capAction -eq "Enable") { $t | Disable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null }
+                else                         { $t | Enable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null }
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): $capAction task '$capName'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued $capAction of scheduled task '$capName'"
+        return
+    }
+
     try {
         if ($action -eq "Enable") {
             $selected | Enable-ScheduledTask -ErrorAction Stop | Out-Null
@@ -517,6 +544,25 @@ function Invoke-ScheduledTaskNow {
     Write-OutputColor "" -color "Info"
 
     if (-not (Confirm-UserAction -Message "Run this task now?")) { return }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capPath = $selected.TaskPath
+        $capName = $selected.TaskName
+        Push-DryRunStep -Label "Run scheduled task '$capName' now" -Category "System" -OneWay $false `
+            -Params @{ TaskPath = $capPath; TaskName = $capName } `
+            -Preflight {
+                if (-not (Get-ScheduledTask -TaskPath $capPath -TaskName $capName -ErrorAction SilentlyContinue)) {
+                    "Task '$capName' not found at '$capPath'"
+                } else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                Get-ScheduledTask -TaskPath $capPath -TaskName $capName -ErrorAction Stop | Start-ScheduledTask -ErrorAction Stop
+            }.GetNewClosure()
+        # No Undo — running a task is a one-shot side effect, not a state change to revert.
+        Write-OutputColor "  Queued (Dry-Run): run task '$capName'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued run of scheduled task '$capName'"
+        return
+    }
 
     try {
         $selected | Start-ScheduledTask -ErrorAction Stop
@@ -721,6 +767,40 @@ function Import-ScheduledTaskXML {
     }
 
     if (-not (Confirm-UserAction -Message "Import this task?")) { return }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capName = $taskName
+        $capPath = $taskPath
+        $capXml  = $xml
+        # Snapshot any pre-existing same-named task so Undo can RESTORE it
+        # after an overwrite, instead of just unregistering (which would
+        # destroy the task the import replaced). The overwrite is disclosed in
+        # the step label so the operator sees it in the queue before Commit.
+        $capPriorXml = $null
+        $priorTask = Get-ScheduledTask -TaskName $capName -TaskPath $capPath -ErrorAction SilentlyContinue
+        if ($priorTask) {
+            try { $capPriorXml = Export-ScheduledTask -TaskName $capName -TaskPath $capPath -ErrorAction Stop } catch { $capPriorXml = $null }
+        }
+        $capOverwrite = [bool]$priorTask
+        $owNote = if ($capOverwrite) { " (overwrites existing)" } else { "" }
+        Push-DryRunStep -Label "Import scheduled task '$capName' at '$capPath'$owNote" -Category "System" -OneWay $false `
+            -Params @{ TaskName = $capName; TaskPath = $capPath; Overwrite = $capOverwrite } `
+            -Preflight { $true } `
+            -Apply {
+                Register-ScheduledTask -TaskName $capName -TaskPath $capPath -Xml $capXml -Force -ErrorAction Stop | Out-Null
+            }.GetNewClosure() `
+            -Undo {
+                if ($capPriorXml) {
+                    # Restore the task that the import overwrote.
+                    Register-ScheduledTask -TaskName $capName -TaskPath $capPath -Xml $capPriorXml -Force -ErrorAction SilentlyContinue | Out-Null
+                } else {
+                    Unregister-ScheduledTask -TaskName $capName -TaskPath $capPath -Confirm:$false -ErrorAction SilentlyContinue
+                }
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): import task '$capName' at '$capPath'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued import of scheduled task '$capName'"
+        return
+    }
 
     try {
         # Check if task already exists and offer overwrite

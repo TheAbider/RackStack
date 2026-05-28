@@ -122,6 +122,25 @@ function Invoke-DefenderEndpointOnboard {
         return $true
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # MDE onboarding is ONE-WAY: offboarding requires a separate .cmd
+        # downloaded from the Defender portal which expires ~30 days after
+        # generation. Reversal isn't a captured scriptblock; mark the step
+        # one-way and re-enter the function at apply time.
+        $capScript = $scriptPath
+        Push-DryRunStep -Label "Onboard to Microsoft Defender for Endpoint" -Category "Security" -OneWay $true `
+            -Params @{ ScriptPath = $capScript } `
+            -Preflight {
+                if (Test-DefenderEndpointOnboarded) { "Already onboarded to MDE" }
+                elseif (-not (Test-Path -LiteralPath $capScript)) { "Onboarding script not found at '$capScript'" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply { Invoke-DefenderEndpointOnboard | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): MDE onboarding." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued MDE onboarding"
+        return $true
+    }
+
     Write-OutputColor "  Running Defender for Endpoint onboarding script..." -color "Info"
     try {
         # The onboarding .cmd writes a registry blob and starts the Sense

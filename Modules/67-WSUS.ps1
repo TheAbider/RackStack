@@ -106,6 +106,20 @@ function Install-WSUSRole {
         return $false
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Install WSUS (UpdateServices) role" -Category "Roles" -OneWay $false `
+            -Preflight {
+                if (Test-WSUSInstalled) { "WSUS role already installed" }
+                elseif (-not (Test-WindowsServer)) { "Not a Windows Server SKU" }
+                else { $true }
+            } `
+            -Apply { Install-WSUSRole | Out-Null } `
+            -Undo  { Uninstall-WindowsFeature -Name 'UpdateServices' -IncludeManagementTools -ErrorAction SilentlyContinue | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): install WSUS role." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued WSUS role install"
+        return $true
+    }
+
     Write-OutputColor "  Installing the WSUS role (UpdateServices + management tools)..." -color "Info"
     Write-OutputColor "  This can take several minutes." -color "Info"
     $install = Install-WindowsFeatureWithTimeout -FeatureName 'UpdateServices' -DisplayName 'WSUS' -IncludeManagementTools
@@ -171,6 +185,24 @@ function Invoke-WSUSPostInstall {
             Write-OutputColor "  Could not create content directory '$contentPath': $($_.Exception.Message)" -color "Error"
             return $false
         }
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # The Windows Internal Database init is partially ONE-WAY — the role
+        # can be uninstalled but the DB state and downloaded updates are
+        # destroyed alongside it, which is more than a clean revert.
+        $capContent = $contentPath
+        Push-DryRunStep -Label "Run WSUS post-install (content: $capContent)" -Category "Roles" -OneWay $true `
+            -Params @{ ContentPath = $capContent } `
+            -Preflight {
+                if (Test-WSUSPostInstalled) { "WSUS post-install already complete" }
+                elseif (-not (Test-WSUSInstalled)) { "WSUS role not installed yet" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply { Invoke-WSUSPostInstall | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): WSUS post-install (content: $contentPath)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued WSUS post-install"
+        return $true
     }
 
     Write-OutputColor "  Running WSUS post-install (content: $contentPath)..." -color "Info"

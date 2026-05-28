@@ -275,6 +275,27 @@ function Install-WindowsUpdates {
             }
         }
 
+        if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+            # Updates that are pending at queue time may differ from updates
+            # pending at commit time — the catalog and the operator's intent
+            # ("quality only" vs "all") are captured, but the actual update
+            # set is re-scanned at apply. Re-entry preserves the full job
+            # progress UI and the TiWorker poll on timeout.
+            $capFilter = $installCategoriesFilter
+            $capCount  = $updateCount
+            $filterLabel = if ($null -ne $capFilter) { "$($capFilter.Count) categor(y/ies)" } else { "all updates" }
+            Push-DryRunStep -Label "Install Windows Updates ($capCount pending, filter: $filterLabel)" -Category "System" -OneWay $false `
+                -Params @{ PendingCount = $capCount; CategoryFilter = $capFilter } `
+                -Preflight {
+                    if (-not (Test-NetworkConnectivity)) { "No network connectivity — update install will fail" }
+                    else { $true }
+                } `
+                -Apply { Install-WindowsUpdates }
+            Write-OutputColor "  Queued (Dry-Run): install Windows Updates ($filterLabel)." -color "Warning"
+            Add-SessionChange -Category "DryRun" -Description "Queued Windows Updates install"
+            return
+        }
+
         Write-OutputColor "`nInstalling updates... This may take a while." -color "Warning"
         Write-OutputColor "  Please do not restart the computer during this process." -color "Critical"
         Write-OutputColor "" -color "Info"

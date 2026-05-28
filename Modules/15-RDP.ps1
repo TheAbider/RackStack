@@ -11,10 +11,45 @@ function Enable-RDP {
 
         if ($rdpAlreadyEnabled) {
             Write-OutputColor "  Remote Desktop is already enabled." -color "Info"
+            if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                # RDP is already on, so the enable branch below (which queues the
+                # full RDP + firewall + NLA step) won't run. Don't fall through to
+                # the live firewall/NLA/subnet hardening while in Dry-Run — return
+                # so queueing stays side-effect-free. Hardening can be run outside
+                # Dry-Run mode.
+                Write-OutputColor "  Dry-Run: nothing to queue (RDP already enabled). Run firewall/NLA hardening outside Dry-Run mode." -color "Warning"
+                return
+            }
         }
         else {
-            if (-not (Confirm-UserAction -Message "Enable Remote Desktop on this server?")) {
+            $confirmPrompt = if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                "Queue Remote Desktop enable for later commit? (Dry-Run mode is ON)"
+            } else {
+                "Enable Remote Desktop on this server?"
+            }
+            if (-not (Confirm-UserAction -Message $confirmPrompt)) {
                 Write-OutputColor "  Remote Desktop configuration cancelled." -color "Info"
+                return
+            }
+
+            if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                Push-DryRunStep -Label "Enable Remote Desktop (with firewall rules + NLA)" -Category "Security" -OneWay $false `
+                    -Preflight {
+                        $svc = Get-Service -Name TermService -ErrorAction SilentlyContinue
+                        if ($null -eq $svc) { "TermService not present — RDP cannot be enabled on this SKU" }
+                        else { $true }
+                    } `
+                    -Apply {
+                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -ErrorAction Stop
+                        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1 -ErrorAction SilentlyContinue
+                    } `
+                    -Undo {
+                        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 1 -ErrorAction SilentlyContinue
+                        Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                    }
+                Write-OutputColor "  Queued (Dry-Run): Enable Remote Desktop + firewall + NLA." -color "Warning"
+                Add-SessionChange -Category "DryRun" -Description "Queued: Enable Remote Desktop"
                 return
             }
 
@@ -264,6 +299,26 @@ function Enable-PowerShellRemoting {
 
     if (-not (Confirm-UserAction -Message "Enable PowerShell Remoting with these settings?")) {
         Write-OutputColor "  PowerShell Remoting configuration cancelled." -color "Info"
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Enable PowerShell Remoting (WinRM + secure config)" -Category "Security" -OneWay $false `
+            -Preflight {
+                if ($null -eq (Get-Service -Name WinRM -ErrorAction SilentlyContinue)) {
+                    "WinRM service not present on this SKU"
+                } else { $true }
+            } `
+            -Apply { Enable-PowerShellRemoting } `
+            -Undo  {
+                # Best-effort revert of the secure-config block: disable PS Remoting,
+                # stop the service, set it back to manual.
+                try { Disable-PSRemoting -Force -ErrorAction SilentlyContinue } catch { }
+                Stop-Service -Name WinRM -Force -ErrorAction SilentlyContinue
+                Set-Service -Name WinRM -StartupType Manual -ErrorAction SilentlyContinue
+            }
+        Write-OutputColor "  Queued (Dry-Run): enable PowerShell Remoting." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued PowerShell Remoting enable"
         return
     }
 

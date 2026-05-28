@@ -329,6 +329,27 @@ function New-SwitchEmbeddedTeam {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capName     = $SwitchName
+        $capAdapters = @($selectedAdapters.Name)
+        Push-DryRunStep -Label "Create SET vSwitch '$capName' on $($capAdapters -join ', ')" -Category "Network" -OneWay $false `
+            -Params @{ SwitchName = $capName; Adapters = $capAdapters } `
+            -Preflight {
+                if (Get-VMSwitch -Name $capName -ErrorAction SilentlyContinue) { "Switch '$capName' already exists" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                New-VMSwitch -Name $capName -NetAdapterName $capAdapters -EnableEmbeddedTeaming $true -AllowManagementOS $true -ErrorAction Stop | Out-Null
+                Set-VMSwitchTeam -Name $capName -LoadBalancingAlgorithm Dynamic -ErrorAction SilentlyContinue
+            }.GetNewClosure() `
+            -Undo {
+                Remove-VMSwitch -Name $capName -Force -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): create SET vSwitch '$capName'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued SET vSwitch '$capName' creation"
+        return
+    }
+
     try {
         Write-OutputColor "  Creating VM Switch '$SwitchName'..." -color "Info"
         $adapterNames = $selectedAdapters.Name
@@ -512,7 +533,38 @@ function Add-CustomVNIC {
         if (-not (Confirm-UserAction -Message "Remove and recreate it?")) {
             return
         }
+    }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capSwitch  = $existingSwitch.Name
+        $capVnic    = $vnicName
+        $capReplace = [bool]$vnicExists
+        $replaceNote = if ($capReplace) { " (replace existing)" } else { "" }
+        Push-DryRunStep -Label "Add vNIC '$capVnic' to switch '$capSwitch'$replaceNote" -Category "Network" -OneWay $false `
+            -Params @{ Switch = $capSwitch; vNIC = $capVnic; Replace = $capReplace } `
+            -Preflight {
+                if (-not (Get-VMSwitch -Name $capSwitch -ErrorAction SilentlyContinue)) { return "Switch '$capSwitch' not found" }
+                return $true
+            }.GetNewClosure() `
+            -Apply {
+                # Removal is deferred to Commit so queueing in Dry-Run never
+                # touches a live vNIC.
+                if ($capReplace) {
+                    Remove-VMNetworkAdapter -ManagementOS -Name $capVnic -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 1
+                }
+                Add-VMNetworkAdapter -ManagementOS -SwitchName $capSwitch -Name $capVnic -ErrorAction Stop
+            }.GetNewClosure() `
+            -Undo {
+                Remove-VMNetworkAdapter -ManagementOS -Name $capVnic -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): add vNIC '$capVnic' to switch '$capSwitch'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued vNIC '$capVnic' add to '$capSwitch'"
+        return
+    }
+
+    # Non-dry-run path: perform the live removal now (if recreating).
+    if ($vnicExists) {
         Write-OutputColor "  Removing existing vNIC '$vnicName'..." -color "Info"
         Remove-VMNetworkAdapter -ManagementOS -Name $vnicName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
@@ -694,6 +746,32 @@ function New-StandardVSwitch {
                     }
                 }
 
+                if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                    $capName    = $SwitchName
+                    $capAdapter = $AdapterName
+                    $capMgmt    = $script:ManagementName
+                    Push-DryRunStep -Label "Create External vSwitch '$capName' on '$capAdapter'" -Category "Network" -OneWay $false `
+                        -Params @{ SwitchName = $capName; Adapter = $capAdapter } `
+                        -Preflight {
+                            if (Get-VMSwitch -Name $capName -ErrorAction SilentlyContinue) { "Switch '$capName' already exists" }
+                            elseif (-not (Get-NetAdapter -Name $capAdapter -ErrorAction SilentlyContinue)) { "Adapter '$capAdapter' not found" }
+                            else { $true }
+                        }.GetNewClosure() `
+                        -Apply {
+                            New-VMSwitch -Name $capName -NetAdapterName $capAdapter -AllowManagementOS $true -ErrorAction Stop | Out-Null
+                            $vnic = Get-VMNetworkAdapter -ManagementOS -Name $capName -ErrorAction SilentlyContinue
+                            if ($vnic) {
+                                Rename-VMNetworkAdapter -ManagementOS -Name $capName -NewName $capMgmt -ErrorAction SilentlyContinue
+                            }
+                        }.GetNewClosure() `
+                        -Undo {
+                            Remove-VMSwitch -Name $capName -Force -ErrorAction SilentlyContinue
+                        }.GetNewClosure()
+                    Write-OutputColor "  Queued (Dry-Run): create External vSwitch '$capName' on '$capAdapter'." -color "Warning"
+                    Add-SessionChange -Category "DryRun" -Description "Queued External vSwitch '$capName' creation"
+                    return
+                }
+
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Creating External switch '$SwitchName' on '$AdapterName'..." -color "Info"
                 New-VMSwitch -Name $SwitchName -NetAdapterName $AdapterName -AllowManagementOS $true -ErrorAction Stop
@@ -717,6 +795,20 @@ function New-StandardVSwitch {
                 Clear-MenuCache
             }
             "Internal" {
+                if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                    $capName = $SwitchName
+                    Push-DryRunStep -Label "Create Internal vSwitch '$capName'" -Category "Network" -OneWay $false `
+                        -Params @{ SwitchName = $capName; Type = 'Internal' } `
+                        -Preflight {
+                            if (Get-VMSwitch -Name $capName -ErrorAction SilentlyContinue) { "Switch '$capName' already exists" }
+                            else { $true }
+                        }.GetNewClosure() `
+                        -Apply { New-VMSwitch -Name $capName -SwitchType Internal -ErrorAction Stop | Out-Null }.GetNewClosure() `
+                        -Undo  { Remove-VMSwitch -Name $capName -Force -ErrorAction SilentlyContinue }.GetNewClosure()
+                    Write-OutputColor "  Queued (Dry-Run): create Internal vSwitch '$capName'." -color "Warning"
+                    Add-SessionChange -Category "DryRun" -Description "Queued Internal vSwitch '$capName' creation"
+                    return
+                }
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Creating Internal switch '$SwitchName'..." -color "Info"
                 New-VMSwitch -Name $SwitchName -SwitchType Internal -ErrorAction Stop
@@ -726,6 +818,20 @@ function New-StandardVSwitch {
                 Clear-MenuCache
             }
             "Private" {
+                if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                    $capName = $SwitchName
+                    Push-DryRunStep -Label "Create Private vSwitch '$capName'" -Category "Network" -OneWay $false `
+                        -Params @{ SwitchName = $capName; Type = 'Private' } `
+                        -Preflight {
+                            if (Get-VMSwitch -Name $capName -ErrorAction SilentlyContinue) { "Switch '$capName' already exists" }
+                            else { $true }
+                        }.GetNewClosure() `
+                        -Apply { New-VMSwitch -Name $capName -SwitchType Private -ErrorAction Stop | Out-Null }.GetNewClosure() `
+                        -Undo  { Remove-VMSwitch -Name $capName -Force -ErrorAction SilentlyContinue }.GetNewClosure()
+                    Write-OutputColor "  Queued (Dry-Run): create Private vSwitch '$capName'." -color "Warning"
+                    Add-SessionChange -Category "DryRun" -Description "Queued Private vSwitch '$capName' creation"
+                    return
+                }
                 Write-OutputColor "" -color "Info"
                 Write-OutputColor "  Creating Private switch '$SwitchName'..." -color "Info"
                 New-VMSwitch -Name $SwitchName -SwitchType Private -ErrorAction Stop

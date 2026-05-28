@@ -836,6 +836,43 @@ function Install-NewForest {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # New-forest promotion is ONE-WAY: demoting destroys the forest's
+        # AD database on this box. Any Group Policy objects, OUs, users,
+        # computer accounts, and trusts that get created downstream of
+        # this promotion become orphaned on demotion.
+        $capDomain  = $domainName
+        $capNetBIOS = $netbiosName
+        $capForest  = $forestMode
+        $capDomMode = $domainMode
+        $capDSRM    = $dsrmPassword
+        Push-DryRunStep -Label "Promote to first DC of new forest '$capDomain'" -Category "Roles" -OneWay $true `
+            -Params @{ DomainName = $capDomain; NetBIOSName = $capNetBIOS; ForestMode = $capForest; DomainMode = $capDomMode } `
+            -Preflight {
+                if (Test-ADDSInstalled) { "AD DS is already installed on this server" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                Import-Module ADDSDeployment -ErrorAction Stop
+                Install-ADDSForest `
+                    -DomainName $capDomain `
+                    -ForestMode $capForest `
+                    -DomainMode $capDomMode `
+                    -DomainNetbiosName $capNetBIOS `
+                    -SafeModeAdministratorPassword $capDSRM `
+                    -InstallDns:$true `
+                    -CreateDnsDelegation:$false `
+                    -NoRebootOnCompletion:$true `
+                    -Force:$true `
+                    -ErrorAction Stop
+                $script:RebootNeeded = $true
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): promote to first DC of new forest '$capDomain' (ONE-WAY)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued DC promotion (new forest '$capDomain')"
+        Write-PressEnter
+        return
+    }
+
     # Step 9: Execute
     try {
         Write-OutputColor "`n  Promoting server to Domain Controller... This will take several minutes." -color "Info"
@@ -979,6 +1016,40 @@ function Install-AdditionalDC {
     # Step 9: Confirm
     if (-not (Confirm-UserAction -Message "Promote this server as an additional Domain Controller?")) {
         Write-OutputColor "  Promotion cancelled." -color "Info"
+        Write-PressEnter
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Additional-DC promotion is ONE-WAY in the same sense as new-forest:
+        # demotion is technically possible but the replicated state (any AD
+        # objects this DC originated, FRS/DFSR membership) doesn't cleanly
+        # unwind.
+        $capDomain = $domainName
+        $capCred   = $credential
+        $capSite   = $siteName
+        $capDSRM   = $dsrmPassword
+        Push-DryRunStep -Label "Promote to additional DC in '$capDomain' (site: $capSite)" -Category "Roles" -OneWay $true `
+            -Params @{ DomainName = $capDomain; Site = $capSite } `
+            -Preflight {
+                if (Test-ADDSInstalled) { "AD DS is already installed on this server" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                Import-Module ADDSDeployment -ErrorAction Stop
+                Install-ADDSDomainController `
+                    -DomainName $capDomain `
+                    -Credential $capCred `
+                    -SiteName $capSite `
+                    -SafeModeAdministratorPassword $capDSRM `
+                    -InstallDns:$true `
+                    -NoRebootOnCompletion:$true `
+                    -Force:$true `
+                    -ErrorAction Stop
+                $script:RebootNeeded = $true
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): promote to additional DC in '$capDomain' (ONE-WAY)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued additional DC promotion in '$capDomain'"
         Write-PressEnter
         return
     }
@@ -1139,6 +1210,43 @@ function Install-ReadOnlyDC {
     # Step 10: Confirm
     if (-not (Confirm-UserAction -Message "Promote this server as a Read-Only Domain Controller?")) {
         Write-OutputColor "  Promotion cancelled." -color "Info"
+        Write-PressEnter
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capDomain = $domainName
+        $capCred   = $credential
+        $capSite   = $siteName
+        $capDSRM   = $dsrmPassword
+        $capDel    = $delegatedAdmin
+        Push-DryRunStep -Label "Promote to RODC in '$capDomain' (site: $capSite)" -Category "Roles" -OneWay $true `
+            -Params @{ DomainName = $capDomain; Site = $capSite; DelegatedAdmin = $capDel } `
+            -Preflight {
+                if (Test-ADDSInstalled) { "AD DS is already installed on this server" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply {
+                Import-Module ADDSDeployment -ErrorAction Stop
+                $rodcParams = @{
+                    DomainName                    = $capDomain
+                    Credential                    = $capCred
+                    SiteName                      = $capSite
+                    SafeModeAdministratorPassword = $capDSRM
+                    ReadOnlyReplica               = $true
+                    InstallDns                    = $true
+                    NoRebootOnCompletion          = $true
+                    Force                         = $true
+                    ErrorAction                   = "Stop"
+                }
+                if (-not [string]::IsNullOrWhiteSpace($capDel)) {
+                    $rodcParams["DelegatedAdministratorAccountName"] = $capDel
+                }
+                Install-ADDSDomainController @rodcParams
+                $script:RebootNeeded = $true
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): promote to RODC in '$capDomain' (ONE-WAY)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued RODC promotion in '$capDomain'"
         Write-PressEnter
         return
     }

@@ -89,6 +89,23 @@ function Start-Show-Mainmenu {
                 Clear-MenuCache
                 # continue will redisplay the menu with fresh data
             }
+            { $_ -eq "D" -or $_ -eq "d" -or $_ -eq "dryrun" -or $_ -eq "dry-run" } {
+                if ($script:DryRunMode) {
+                    Disable-DryRunMode
+                    Start-Sleep -Milliseconds 800
+                } else {
+                    Enable-DryRunMode
+                    Start-Sleep -Milliseconds 1500
+                }
+            }
+            { $_ -eq "Q" -or $_ -eq "q" -or $_ -eq "queue" } {
+                if (-not $script:DryRunMode -and (Get-DryRunQueue).Count -eq 0) {
+                    Write-OutputColor "  Dry-Run Mode is OFF and the queue is empty. Press [D] to enable." -color "Info"
+                    Start-Sleep -Milliseconds 1200
+                } else {
+                    Start-Show-DryRunQueue
+                }
+            }
             { $_ -eq "help" -or $_ -like "help *" } {
                 if ($choice -like "help *") {
                     $helpKeyword = $choice.Substring(5).Trim()
@@ -99,7 +116,7 @@ function Start-Show-Mainmenu {
                 Write-PressEnter
             }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-8, [U]pdate, [V]iew, or [R]efresh." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-8, [U]pdate, [V]iew, [D]ry-Run, [Q]ueue, or [R]efresh." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

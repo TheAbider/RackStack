@@ -221,6 +221,40 @@ function Add-HyperVDefenderExclusions {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Snapshot the resolved list now so the queue view shows what
+        # will actually be added, not the symbolic config-time hint.
+        $capPaths = @($script:DefenderExclusionPaths)
+        if ($script:HostVMStoragePath -and (Test-Path -LiteralPath $script:HostVMStoragePath)) {
+            $capPaths += $script:HostVMStoragePath
+        }
+        foreach ($vmPath in $script:DefenderCommonVMPaths) {
+            if (Test-Path -LiteralPath $vmPath) { $capPaths += $vmPath }
+        }
+        $capPaths = @($capPaths | Select-Object -Unique)
+        $capProcs = @("vmms.exe", "vmwp.exe", "vmsp.exe", "vmcompute.exe")
+        $capExts  = @(".vhd", ".vhdx", ".avhd", ".avhdx", ".vsv", ".iso", ".vhds")
+        Push-DryRunStep -Label "Add Hyper-V Defender exclusions ($($capPaths.Count) paths, $($capProcs.Count) processes, $($capExts.Count) extensions)" -Category "Security" -OneWay $false `
+            -Params @{ Paths = $capPaths; Processes = $capProcs; Extensions = $capExts } `
+            -Preflight {
+                if (Get-Command Add-MpPreference -ErrorAction SilentlyContinue) { $true }
+                else { "Add-MpPreference cmdlet unavailable — Defender module not present" }
+            } `
+            -Apply {
+                foreach ($p in $capPaths) { Add-MpPreference -ExclusionPath $p -ErrorAction SilentlyContinue }
+                foreach ($p in $capProcs) { Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue }
+                foreach ($e in $capExts)  { Add-MpPreference -ExclusionExtension $e -ErrorAction SilentlyContinue }
+            }.GetNewClosure() `
+            -Undo {
+                foreach ($p in $capPaths) { Remove-MpPreference -ExclusionPath $p -ErrorAction SilentlyContinue }
+                foreach ($p in $capProcs) { Remove-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue }
+                foreach ($e in $capExts)  { Remove-MpPreference -ExclusionExtension $e -ErrorAction SilentlyContinue }
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): Hyper-V Defender exclusions ($($capPaths.Count) paths)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued Hyper-V Defender exclusions"
+        return
+    }
+
     $added = 0
     $errors = 0
     $addedPaths = @()

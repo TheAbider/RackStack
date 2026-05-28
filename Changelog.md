@@ -1,8 +1,96 @@
 # Changelog
 
+## v1.100.0
+
+Interactive Dry-Run Mode — initial release. The framework that has lived inside the batch-config invoker since the start (`$script:DryRunMode` + ~50 per-action gates) is promoted to a session-wide mode that interactive operators can toggle from the main menu.
+
+**What it does:**
+- `[D]` on the main menu toggles Dry-Run on/off. A persistent yellow banner across every menu shows the mode is active and the current queue size.
+- Any instrumented action, when run with Dry-Run on, walks the operator through validation/confirmation as normal, then **queues** the change instead of applying it. The action's preflight runs immediately so the operator sees green/red status the moment the step lands in the queue.
+- `[Q]` opens the Dry-Run Queue screen — a per-step table with green/red preflight status, a `ONE-WAY` badge for irreversible operations (CA config, BitLocker, password changes, etc.), and the current `Queued` / `Applying` / `Applied` / `Failed` state.
+- Two Commit paths:
+  - **`[A]` Apply All (atomic)** — reruns every preflight, refuses to start if any are red, then executes the queue sequentially. On any apply failure, walks the already-applied steps in reverse and invokes each step's captured Undo scriptblock (skipping `ONE-WAY` entries with a warning) before halting.
+  - **`[S]` Step-by-Step** — interactively walks the queue, prompts per step with Yes/No/Quit, applies each, and continues. Failures don't roll back automatically — the operator inspects via Session History.
+- `[E]` exports the queue as JSON for archival or re-import into batch mode.
+- `[X]` discards the queue without applying.
+
+**Re-entrancy:** when Commit fires, `$script:ApplyingDryRunQueue` is set to `$true` so the captured Apply scriptblocks (which call back into the same instrumented interactive functions) bypass the queueing gate and actually run.
+
+**Instrumented in this release:**
+
+System / network / security:
+- `Set-HostName` (11-Hostname.ps1)
+- `Set-VMIPAddress` (07-IPConfiguration.ps1) — captures the existing primary IP + default route so Undo can restore them exactly
+- `Set-AdapterVLAN` (08-VLAN.ps1) — both the Access-mode tag-set path and the untag path are gated; previous VLAN ID is captured so Undo restores the prior tag (or untagged state)
+- `Set-SelectedTimezone` (13-Timezone.ps1)
+- `Enable-RDP` core path (15-RDP.ps1) — enable + firewall rules + NLA as a single step
+- `Enable-PowerShellRemoting` (15-RDP.ps1) — WinRM service + Enable-PSRemoting + secure-config block; Undo disables PSRemoting and reverts the service to Manual startup
+- `Set-ServerPowerPlan` (05-SystemCheck.ps1) — preflight verifies the target GUID exists in the OS's plan list; Undo restores the prior plan GUID
+- `Join-Domain` (12-DomainJoin.ps1) — `ONE-WAY` (credentials are prompted at Commit, not stored in the queue; remote AD objects outlive a local unjoin)
+- `Disable-WindowsFirewallDomainPrivate` (16-Firewall.ps1) — both the "recommended" and the "toggle individual profile" paths
+- `Add-HyperVDefenderExclusions` (17-DefenderExclusions.ps1) — snapshots the resolved path/process/extension lists so the queue shows what will actually be added
+- `Add-LocalAdminAccount` (23-LocalAdmin.ps1)
+- `Disable-BuiltInAdminAccount` (24-DisableAdmin.ps1)
+
+Virtual switch creation (`09-SET.ps1`, all reversible via `Remove-VMSwitch`):
+- `New-SwitchEmbeddedTeam` (SET) — captures the resolved adapter-name array and applies the `Dynamic` load-balancing algorithm at commit
+- `New-StandardVSwitch -SwitchType External` — captures the selected physical adapter; renames the management vNIC to `$script:ManagementName` after creation
+- `New-StandardVSwitch -SwitchType Internal`
+- `New-StandardVSwitch -SwitchType Private`
+- `Add-CustomVNIC` — captures the switch + vNIC names; Undo is `Remove-VMNetworkAdapter -ManagementOS`
+
+Hyper-V Replica (62-HyperVReplica.ps1):
+- `Enable-ReplicaServer` — re-entry preserves the auth-entry registration and firewall-rule configuration block; Undo disables `Set-VMReplicationServer -ReplicationEnabled $false`
+- `Enable-VMReplicationWizard` — re-entry preserves the certificate-selection and export-path collection prompts at Commit; Undo is `Remove-VMReplication` on the captured VM
+
+Role installs (all reversible via `Uninstall-WindowsFeature`):
+- `Install-HyperVRole` (25-HyperV.ps1) — Server SKU uses `Uninstall-WindowsFeature`, Client SKU uses `Disable-WindowsOptionalFeature`
+- `Install-MPIOFeature` (26-MPIO.ps1)
+- `Install-FailoverClusteringFeature` (27-FailoverClustering.ps1)
+
+Storage:
+- `Enable-DedupVolume` (32-Deduplication.ps1) — preflight catches the "already enabled" case; Undo is `Disable-DedupVolume`
+- `New-SRPartnership` (33-StorageReplica.ps1) — `ONE-WAY` (initial seed overwrites destination volume contents; the queued Undo cannot restore the destination's prior data)
+- `Clear-DiskData` (38-StorageManager.ps1) — `ONE-WAY` (`Clear-Disk -RemoveData -RemoveOEM` zeroes the partition table; preflight refuses if the disk is now boot/system, a Storage Pool member, or a Cluster Shared Volume — re-checked at commit, not just queue time)
+- `Format-DiskVolume` (38-StorageManager.ps1) — `ONE-WAY` (`Format-Volume` destroys partition contents; captures FS, label, allocation-unit size, quick-vs-full, and drive letter so the apply matches the operator's choices exactly)
+- `Connect-iSCSITargets` (10-iSCSI.ps1) — captures portal address list + port; Undo disconnects sessions through the captured portals
+- `Initialize-MPIOForISCSI` (10-iSCSI.ps1) — added a `Confirm-UserAction` to this function (it previously had none, which was why the gate had been deferred); captures the prior global load-balance policy so Undo restores it and disables iSCSI auto-claim
+
+Updates / agents:
+- `Install-WindowsUpdates` (14-WindowsUpdates.ps1) — re-entry; captures the operator's "quality only" vs "all updates" choice and the pending-update count; the real update catalog and the install job (with the Esc-to-skip + TiWorker drain) run at Commit
+- `Install-SelectedAgent` (57-AgentInstaller.ps1) — re-entry; the FileServer download + hash check + installer Start-Process all run at Commit, no work happens at queue time
+- `Enable-ServerActivation` (21-Licensing.ps1) — `ONE-WAY`. Captures the product key; queue label and JSON export show only the last 5 chars (`XXXXX-XXXXX-XXXXX-XXXXX-ABCDE`) so the full key never lands in operator-visible artifacts. No Undo (no portable "un-activate")
+
+Scheduled tasks (63-ScheduledTasks.ps1):
+- `Set-ScheduledTaskState` — enable/disable; Undo flips the action
+- `Invoke-ScheduledTaskNow` — one-shot start; no Undo (run-once is a side effect, not a state change)
+- `Import-ScheduledTaskXML` — register from XML; if a same-named task already exists it is snapshotted at queue time and the step label discloses the overwrite, so Undo restores the prior task definition (falling back to `Unregister-ScheduledTask` when there was none)
+
+Heavyweight one-way operations:
+- `Enable-BitLocker` (31-BitLocker.ps1) — `ONE-WAY`. All three protector paths (TPM-only, TPM+PIN, password) gate. The PIN/password `SecureString` is captured at queue time and held in the Apply closure so the operator doesn't have to re-enter it at Commit. Decryption to reverse takes hours and isn't a clean Undo.
+- `Install-NewForest` (61-ActiveDirectory.ps1) — `ONE-WAY`. Promotes to first DC of a new forest via `Install-ADDSForest`. Demotion is technically possible but downstream AD objects (GPOs, OUs, users, computers, trusts) become orphaned.
+- `Install-AdditionalDC` (61-ActiveDirectory.ps1) — `ONE-WAY`. Adds a DC via `Install-ADDSDomainController`. Demote leaves FRS/DFSR replicas inconsistent.
+- `Install-ReadOnlyDC` (61-ActiveDirectory.ps1) — `ONE-WAY`. Same family as above with `-ReadOnlyReplica:$true`.
+
+Feature modules:
+- `Invoke-AzureArcOnboard` (65-AzureArc.ps1) — `ONE-WAY` (Azure resource and managed identity outlive a local `azcmagent disconnect`)
+- `Invoke-DefenderEndpointOnboard` (66-DefenderEndpoint.ps1) — `ONE-WAY` (offboarding requires a separate .cmd from the Defender portal that expires ~30 days after generation)
+- `Install-WSUSRole` (67-WSUS.ps1) — reversible (Uninstall-WindowsFeature)
+- `Invoke-WSUSPostInstall` (67-WSUS.ps1) — `ONE-WAY` (Windows Internal Database init can't cleanly revert)
+- `Install-ADCSRole` (68-ADCS.ps1) — reversible
+- `Install-ADCSCertificationAuthority` (68-ADCS.ps1) — `ONE-WAY` (every certificate the CA has issued becomes untrusted on uninstall). The typed-CN confirmation ritual fires at Commit time, not at queue time.
+- `Install-SMSRole` (69-StorageMigration.ps1) — reversible
+- `Install-SMSProxy` (69-StorageMigration.ps1) — reversible
+
+**Apply-time re-entry pattern:** for the more complex feature-module gates, the captured Apply scriptblock simply calls back into the same interactive function. The re-entrancy guard skips the queue gate so the original validation / typed-confirmation / progress UX runs at Commit time exactly as if Dry-Run had been off — no parallel-implementation drift between the queued path and the real path.
+
+All high-traffic interactive configuration paths are instrumented (48 call sites). The one operation that is **not** gated is the Microsoft Defender real-time-protection toggle — RackStack only ever *reads* that state for status display and exposes no interactive setter for it, so there is nothing to queue. Calling any un-instrumented action while Dry-Run is on runs it normally and emits a session change — no silent data loss.
+
+**Module count:** 70 → 71 (added `70-DryRun.ps1`). Test harness updated to match.
+
 ## v1.99.2
 
-Security + correctness hardening of the five v1.99.0 feature modules, from a multi-agent independent audit. No behavior changes for correctly-configured environments — these close edge cases and tighten the security-sensitive paths.
+Security + correctness hardening of the five v1.99.0 feature modules, from an independent security audit. No behavior changes for correctly-configured environments — these close edge cases and tighten the security-sensitive paths.
 
 **65-AzureArc.ps1:**
 - The downloaded Connected Machine Agent MSI is now Authenticode-verified (`Get-AuthenticodeSignature`, signer must be `O=Microsoft Corporation`) before `msiexec` runs it — closes the gap where a tampered `AgentInstallerUrl`, a MITM, or a poisoned temp file could run arbitrary code as admin.
@@ -335,7 +423,7 @@ Tier-2 (resource leaks):
 
 ## v1.98.35
 
-Round 26 — VM-name path-traversal sweep + error-swallowing on destructive ops (agent findings from round 25 parallel sweep).
+Round 26 — VM-name path-traversal sweep + error-swallowing on destructive ops (findings from the round-25 parallel sweep).
 
 Pattern A — VM-name / hostname path traversal in filename construction:
 - **Fix (DESTRUCTIVE):** 53-VMExportImport `Export-VMWizard` Remove-Item-Recurse-Force regression. My round 15 fix at line 162 deleted `$targetFolder = Join-Path $exportPath $selectedVM.Name` — but Hyper-V allows backslash / forward-slash / `..` in VM `.Name` property, so a maliciously-imported VM named `..\..\System32` would cause Remove-Item to nuke whatever lives at that resolved path. Now rejects VM names containing path separators or `..`, plus verifies the resolved $targetFolder is actually under $exportPath using `[System.IO.Path]::GetFullPath` (53-VMExportImport).
@@ -458,7 +546,7 @@ Cross-module sweep (Tier-1 partial — Pattern 3 + Pattern 9):
 - **Fix:** 45-ConfigExport Import path and 50-EntryPoint CLI admin-creation both resolve the Administrators group by SID `S-1-5-32-544` instead of hardcoded literal. Same locale-neutral fix as 23-LocalAdmin / 24-DisableAdmin in v1.98.24 — these two sites were the remaining un-fixed instances (45-ConfigExport, 50-EntryPoint).
 - **Fix:** 46-SessionSummary `.txt` and `.json` export paths and 35-Utilities Software-Inventory CSV path now sanitize `$env:COMPUTERNAME` via `-replace '[^\w\-]', '_'` before embedding in filenames. The env var is process-writable (a local admin can call `[Environment]::SetEnvironmentVariable("COMPUTERNAME", "..\..\evil", "Process")`) — without sanitization, `..\` characters in the value would escape Desktop / TempPath and overwrite arbitrary operator-writable files (46-SessionSummary, 35-Utilities).
 
-Remaining sweep backlog (deferred to future rounds; agent flagged ~60 additional instances):
+Remaining sweep backlog (deferred to future rounds; ~60 additional instances flagged):
 - Pattern 1 (unscoped Remove-NetIPAddress / Remove-NetRoute): 12 remaining sites in 10-iSCSI, 09-SET, 50-EntryPoint.
 - Pattern 4 (storage cmdlets without Start-Job timeout): 30+ sites in 38-StorageManager rest, 32-Deduplication, 40-HostStorage, 41-VHDManagement, 43-OfflineVHD, 59-StorageBackends, 37-HealthCheck, 20-DiskCleanup.
 - Pattern 5 (non-atomic Out-File): 11 sites in 35-Utilities, 29-EventLogViewer, 45-ConfigExport, 54-HTMLReports (×4), 47-ExitCleanup, 55-QoLFeatures.
@@ -601,7 +689,7 @@ Tier-2:
 
 ## v1.98.13
 
-- **Anonymity / Content rule:** Removed hardcoded `linac-workstations` token from the agent-installer filename parser. This was a customer-specific keyword baked into the regex in `ConvertFrom-AgentFilename` and shipped in every public release. Replaced with a generic `$script:AgentInstallerSuffixesToStrip` config setting that defaults to the two generic tokens (`staging`, `workstations`); site-specific suffixes now live in `defaults.json` and never reach the public repo (57-AgentInstaller).
+- **Config:** Removed a hardcoded site-specific token from the agent-installer filename parser (`ConvertFrom-AgentFilename`) and replaced it with a configurable `$script:AgentInstallerSuffixesToStrip` setting that defaults to two generic tokens (`staging`, `workstations`); site-specific suffixes now live in `defaults.json` (57-AgentInstaller).
 - **Security (CRITICAL):** `Test-FileIntegrity` (39-FileServer) used to default `Valid = $true` and return that unchanged when both verification signals were absent — HEAD returned 0 Content-Length AND no `.sha256` sidecar published. The agent installer download path (`Get-FileServerFile` → `Start-Process` as SYSTEM) trusted that result. A tampered EXE on the FileServer with the sidecar deleted would pass the gate and run. Now fails-closed when there's zero verifiable signal, and adds a `-StrictVerify` switch (threaded through `Get-FileServerFile` and passed by the agent installer) that refuses size-only verification — size match alone is insufficient for executor callers so a forged Content-Length on a tampered file still has to forge a matching `.sha256` sidecar to reach Start-Process (39-FileServer, 57-AgentInstaller).
 - **Fix:** 57-AgentInstaller `InstallArgs` string-form fallback used `-split '\s+'` which shred quoted whitespace-containing arguments. Token-style installers (Datto RMM, NinjaOne) commonly use `/token "GUID-with-spaces"` — the prior split turned that into `['/token', '"GUID', 'with-spaces"']` and the agent registered with the wrong / no tenant. Replaced with a quoted-aware regex tokenizer (57-AgentInstaller).
 - **Fix:** 57-AgentInstaller `[Console]::KeyAvailable` Escape-check now guarded by `[Environment]::UserInteractive -and -not [Console]::IsInputRedirected` + a try/catch. Without the guard, calling Install-Agent from a scheduled task host or piped batch wrapper threw InvalidOperationException, which propagated to the outer finally and killed the running installer mid-stream — leaving a partial install on disk (57-AgentInstaller).
@@ -2948,7 +3036,7 @@ Tier-2:
 ## v1.9.7
 
 - **Edit Defaults Expanded:** Settings > Edit Environment Defaults now includes Auto-Update toggle [10], Temp Path [11], and Timezone Region selector [12]. Reset also covers the new fields.
-- **Release Validation:** Moved `Validate-Release.ps1` from `Tests/` to `local/` (gitignored) — content integrity scan methodology is no longer exposed in the public repo.
+- **Release Validation:** Moved `Validate-Release.ps1` from `Tests/` to `local/` (gitignored) — release-validation tooling now lives outside the public repo.
 - 63 modules, 1856 tests
 
 ## v1.9.6

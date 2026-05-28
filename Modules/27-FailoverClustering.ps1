@@ -44,6 +44,19 @@ function Install-FailoverClusteringFeature {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Install Failover Clustering (reboot may be required)" -Category "Roles" -OneWay $false `
+            -Preflight {
+                if (Test-FailoverClusteringInstalled) { "Failover Clustering already installed" }
+                else { $true }
+            } `
+            -Apply { Install-FailoverClusteringFeature | Out-Null } `
+            -Undo  { Uninstall-WindowsFeature -Name 'Failover-Clustering' -IncludeManagementTools -ErrorAction SilentlyContinue | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): install Failover Clustering." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued Failover Clustering install"
+        return
+    }
+
     try {
         Write-OutputColor "`nInstalling Failover Clustering... This may take several minutes." -color "Info"
 

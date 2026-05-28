@@ -28,6 +28,10 @@ function Show-MainMenu {
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
+    # Dry-Run mode banner. The function no-ops when $script:DryRunMode is $false.
+    Show-DryRunBanner
+    if ($script:DryRunMode) { Write-OutputColor "" -color "Info" }
+
     # Quick Health Dashboard
     $dashHost = $env:COMPUTERNAME
     if ($dashHost.Length -gt 15) { $dashHost = $dashHost.Substring(0, 12) + "..." }
@@ -143,7 +147,12 @@ function Show-MainMenu {
     $statusParts += "Theme: $($script:ColorTheme)"
 
     Write-OutputColor "  $($statusParts -join '  |  ')" -color "Info"
-    Write-OutputColor "  [R]efresh dashboard" -color "Info"
+    if ($script:DryRunMode) {
+        $qSize = (Get-DryRunQueue).Count
+        Write-OutputColor "  [D] Dry-Run: ON ($qSize queued)   [Q]ueue   [R]efresh dashboard" -color "Warning"
+    } else {
+        Write-OutputColor "  [D] Dry-Run Mode   [R]efresh dashboard" -color "Info"
+    }
     Write-OutputColor "" -color "Info"
 
     $choice = Read-Host "  Select"
@@ -197,6 +206,9 @@ function Show-ConfigureServerMenu {
     Write-OutputColor "  ║$(("                            CONFIGURE SERVER").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
+
+    Show-DryRunBanner
+    if ($script:DryRunMode) { Write-OutputColor "" -color "Info" }
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  CONFIGURATION".PadRight(72))│" -color "Info"

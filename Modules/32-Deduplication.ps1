@@ -192,6 +192,27 @@ function Show-DeduplicationManagement {
                         continue
                     }
 
+                    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                        $capDrive = $vol.DriveLetter
+                        $capUsage = $usage
+                        Push-DryRunStep -Label "Enable Dedup on $capDrive`: ($capUsage profile)" -Category "Storage" -OneWay $false `
+                            -Params @{ Drive = $capDrive; Usage = $capUsage } `
+                            -Preflight {
+                                $v = Get-DedupVolume -Volume "$capDrive`:" -ErrorAction SilentlyContinue
+                                if ($v) { "Dedup already enabled on $capDrive`:" }
+                                else { $true }
+                            }.GetNewClosure() `
+                            -Apply {
+                                Enable-DedupVolume -Volume "$capDrive`:" -UsageType $capUsage -ErrorAction Stop
+                            }.GetNewClosure() `
+                            -Undo {
+                                Disable-DedupVolume -Volume "$capDrive`:" -ErrorAction SilentlyContinue
+                            }.GetNewClosure()
+                        Write-OutputColor "  Queued (Dry-Run): enable Dedup on $capDrive`: ($capUsage)." -color "Warning"
+                        Add-SessionChange -Category "DryRun" -Description "Queued Dedup enable on $capDrive`:"
+                        continue
+                    }
+
                     try {
                         Enable-DedupVolume -Volume "$($vol.DriveLetter):" -UsageType $usage -ErrorAction Stop
                         Write-OutputColor "  Deduplication enabled on $($vol.DriveLetter): with $usage profile." -color "Success"

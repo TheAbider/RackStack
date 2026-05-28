@@ -88,6 +88,20 @@ function Install-SMSRole {
         return $false
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Install Storage Migration Service orchestrator role" -Category "Roles" -OneWay $false `
+            -Preflight {
+                if (Test-SMSInstalled) { "SMS orchestrator already installed" }
+                elseif (-not (Test-WindowsServer)) { "Not a Windows Server SKU" }
+                else { $true }
+            } `
+            -Apply { Install-SMSRole | Out-Null } `
+            -Undo  { Uninstall-WindowsFeature -Name 'SMS' -IncludeManagementTools -ErrorAction SilentlyContinue | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): install SMS orchestrator role." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued SMS orchestrator role install"
+        return $true
+    }
+
     Write-OutputColor "  Installing the Storage Migration Service orchestrator role..." -color "Info"
     Write-OutputColor "  This can take several minutes." -color "Info"
     $install = Install-WindowsFeatureWithTimeout -FeatureName 'SMS' -DisplayName 'Storage Migration Service' -IncludeManagementTools
@@ -120,6 +134,20 @@ function Install-SMSProxy {
     if (-not (Test-WindowsServer)) {
         Write-OutputColor "  SMS-Proxy is a Windows Server feature — this OS is not a server SKU." -color "Error"
         return $false
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Install Storage Migration Service proxy" -Category "Roles" -OneWay $false `
+            -Preflight {
+                if (Test-SMSProxyInstalled) { "SMS-Proxy already installed" }
+                elseif (-not (Test-WindowsServer)) { "Not a Windows Server SKU" }
+                else { $true }
+            } `
+            -Apply { Install-SMSProxy | Out-Null } `
+            -Undo  { Uninstall-WindowsFeature -Name 'SMS-Proxy' -ErrorAction SilentlyContinue | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): install SMS-Proxy feature." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued SMS-Proxy install"
+        return $true
     }
 
     Write-OutputColor "  Installing the Storage Migration Service proxy..." -color "Info"

@@ -497,6 +497,29 @@ function Set-ServerPowerPlan {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capNew  = $selectedPlan.GUID
+        $capName = $selectedPlan.Name
+        $capOld  = $currentPlan.GUID
+        Push-DryRunStep -Label "Set power plan to '$capName'" -Category "System" -OneWay $false `
+            -Params @{ NewPlan = $capName; NewGuid = $capNew; OldGuid = $capOld } `
+            -Preflight {
+                # Verify the target GUID exists in this OS's plan list.
+                $available = (powercfg /list) 2>&1
+                if ($LASTEXITCODE -eq 0 -and ($available -join "`n") -match [regex]::Escape($capNew)) { $true }
+                else { "Power plan GUID '$capNew' not available on this OS" }
+            }.GetNewClosure() `
+            -Apply {
+                $null = powercfg /setactive $capNew 2>&1
+            }.GetNewClosure() `
+            -Undo {
+                $null = powercfg /setactive $capOld 2>&1
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): set power plan to '$capName'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued power plan change to '$capName'"
+        return
+    }
+
     try {
         # Set the power plan
         $null = powercfg /setactive $selectedPlan.GUID 2>&1

@@ -42,6 +42,26 @@ function Disable-WindowsFirewallDomainPrivate {
                 return
             }
 
+            if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                $capStates = $previousStates.Clone()
+                Push-DryRunStep -Label "Firewall: Domain=Off, Private=Off, Public=On" -Category "Security" -OneWay $false `
+                    -Params @{ PreviousStates = $capStates } `
+                    -Preflight { $true } `
+                    -Apply {
+                        Set-NetFirewallProfile -Profile Domain -Enabled False -ErrorAction Stop
+                        Set-NetFirewallProfile -Profile Private -Enabled False -ErrorAction Stop
+                        Set-NetFirewallProfile -Profile Public -Enabled True -ErrorAction Stop
+                    }.GetNewClosure() `
+                    -Undo {
+                        foreach ($p in $capStates.Keys) {
+                            Set-NetFirewallProfile -Profile $p -Enabled $capStates[$p] -ErrorAction SilentlyContinue
+                        }
+                    }.GetNewClosure()
+                Write-OutputColor "  Queued (Dry-Run): firewall Domain/Private off, Public on." -color "Warning"
+                Add-SessionChange -Category "DryRun" -Description "Queued firewall recommended configuration"
+                return
+            }
+
             try {
                 Set-NetFirewallProfile -Profile Domain -Enabled False -ErrorAction Stop
                 Write-OutputColor "  Domain firewall: Disabled" -color "Success"
@@ -99,6 +119,25 @@ function Disable-WindowsFirewallDomainPrivate {
             Write-OutputColor "  Rules on $selectedProfile profile: $($profileRules.Count) total, $activeRules active" -color "Info"
 
             if (-not (Confirm-UserAction -Message "$action $selectedProfile firewall profile?")) {
+                return
+            }
+
+            if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+                $capProf = $selectedProfile
+                $capNew = $newState
+                $capOld = $currentState
+                $stateLabel = if ($newState) { "Enable" } else { "Disable" }
+                Push-DryRunStep -Label "Firewall: $stateLabel $capProf profile" -Category "Security" -OneWay $false `
+                    -Params @{ Profile = $capProf; NewState = $capNew; OldState = $capOld } `
+                    -Preflight { $true } `
+                    -Apply {
+                        Set-NetFirewallProfile -Profile $capProf -Enabled $capNew -ErrorAction Stop
+                    }.GetNewClosure() `
+                    -Undo {
+                        Set-NetFirewallProfile -Profile $capProf -Enabled $capOld -ErrorAction SilentlyContinue
+                    }.GetNewClosure()
+                Write-OutputColor "  Queued (Dry-Run): $stateLabel $capProf firewall profile." -color "Warning"
+                Add-SessionChange -Category "DryRun" -Description "Queued firewall $capProf toggle"
                 return
             }
 

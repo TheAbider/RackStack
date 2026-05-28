@@ -98,6 +98,20 @@ function Install-ADCSRole {
         return $false
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Install AD CS Certification Authority role" -Category "Roles" -OneWay $false `
+            -Preflight {
+                if (Test-ADCSRoleInstalled) { "AD CS role already installed" }
+                elseif (-not (Test-WindowsServer)) { "Not a Windows Server SKU" }
+                else { $true }
+            } `
+            -Apply { Install-ADCSRole | Out-Null } `
+            -Undo  { Uninstall-WindowsFeature -Name 'ADCS-Cert-Authority' -IncludeManagementTools -ErrorAction SilentlyContinue | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): install AD CS role." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued AD CS role install"
+        return $true
+    }
+
     Write-OutputColor "  Installing the AD CS Certification Authority role..." -color "Info"
     Write-OutputColor "  This can take several minutes." -color "Info"
     $install = Install-WindowsFeatureWithTimeout -FeatureName 'ADCS-Cert-Authority' -DisplayName 'AD CS Certification Authority' -IncludeManagementTools
@@ -195,6 +209,26 @@ function Install-ADCSCertificationAuthority {
     Write-OutputColor "  This is hard to undo. The CA certificate and every certificate it issues" -color "Warning"
     Write-OutputColor "  depend on this configuration for its entire $validity-year lifetime." -color "Warning"
     Write-OutputColor "" -color "Info"
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # CA configuration is ONE-WAY — removing a configured CA invalidates
+        # every certificate it issued. The re-entry Apply path re-runs the
+        # typed-CN confirmation prompt at commit time so the safety ritual
+        # still fires at the moment of real apply.
+        $capCN  = $caName
+        $capTyp = $caType
+        Push-DryRunStep -Label "Configure CA '$capCN' ($capTyp, $hashAlgo, ${keyLength}b, ${validity}y)" -Category "Roles" -OneWay $true `
+            -Params @{ CACommonName = $capCN; CAType = $capTyp; KeyLength = $keyLength; HashAlgorithm = $hashAlgo; ValidityYears = $validity } `
+            -Preflight {
+                if (Test-ADCSCAConfigured) { "A CA is already configured on this machine" }
+                elseif (-not (Test-ADCSRoleInstalled)) { "AD CS role not installed yet" }
+                else { $true }
+            } `
+            -Apply { Install-ADCSCertificationAuthority | Out-Null }
+        Write-OutputColor "  Queued (Dry-Run): configure CA '$caName' (typed confirmation deferred to Commit)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued AD CS CA configuration ($caName)"
+        return $true
+    }
 
     # Typed confirmation — operator must enter the CA common name exactly.
     # Case-SENSITIVE (`-cne`): the whole point of the ritual is to prove the

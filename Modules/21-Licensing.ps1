@@ -138,6 +138,33 @@ function Test-ValidLicenseKey {
 function Enable-ServerActivation {
     param ([string]$productKey)
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # KMS / retail activation is captured here regardless of which
+        # menu path called in — the Apply re-enters Enable-ServerActivation
+        # with the same key so the real slmgr /ipk + /ato sequence and the
+        # error-code parsing run at Commit. The full key lives ONLY inside the
+        # Apply closure; the queue label and the JSON export expose just the
+        # last 5 characters (KeyTail), never the whole key.
+        $capKey = $productKey
+        # Show only the last 5 chars in the queue label — never the whole key.
+        $maskedKey = if ($capKey.Length -ge 5) { "XXXXX-XXXXX-XXXXX-XXXXX-" + $capKey.Substring($capKey.Length - 5) } else { 'XXXXX' }
+        # ONE-WAY: there is no portable way to "un-activate" Windows, so no Undo
+        # is captured and the queue surfaces the irreversible badge.
+        Push-DryRunStep -Label "Activate Windows with key $maskedKey" -Category "System" -OneWay $true `
+            -Params @{ KeyTail = if ($capKey.Length -ge 5) { $capKey.Substring($capKey.Length - 5) } else { '' } } `
+            -Preflight {
+                if (-not (Test-ValidLicenseKey $capKey)) { "Product key format invalid (must be XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply { Enable-ServerActivation -productKey $capKey }.GetNewClosure()
+        # No Undo — there's no portable way to "un-activate" a Windows
+        # install short of installing a different key, which would itself
+        # be a separate dry-run step.
+        Write-OutputColor "  Queued (Dry-Run): activate Windows with key $maskedKey." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued Windows activation"
+        return
+    }
+
     try {
         # Pre-flight: check Software Protection service
         $sppsvc = Get-Service -Name sppsvc -ErrorAction SilentlyContinue

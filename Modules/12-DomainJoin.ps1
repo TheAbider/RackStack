@@ -180,6 +180,29 @@ function Join-Domain {
         return
     }
 
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capDomain = $targetDomain
+        # Domain join is flagged ONE-WAY because the captured Undo can't
+        # auto-leave the domain without credentials, and any AD objects
+        # provisioned remotely (computer account, group memberships, GPO
+        # links) outlive a local unjoin anyway.
+        Push-DryRunStep -Label "Join domain '$capDomain' (credentials prompted at Commit)" -Category "System" -OneWay $true `
+            -Params @{ Domain = $capDomain } `
+            -Preflight {
+                if (Test-NetworkConnectivity) { $true }
+                else { "No network connectivity — domain join will fail" }
+            }.GetNewClosure() `
+            -Apply {
+                $cred = Get-Credential -Message "Enter domain admin credentials for $capDomain"
+                if ($null -eq $cred) { throw "Credential prompt cancelled — domain join aborted" }
+                Add-Computer -DomainName $capDomain -Credential $cred -ErrorAction Stop
+                $script:RebootNeeded = $true
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): join domain '$targetDomain'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued domain join to '$targetDomain'"
+        return
+    }
+
     $maxAttempts = $script:MaxRetryAttempts
     $attempt = 0
     $lastError = $null  # preserve last exception across retries so the final summary can include it

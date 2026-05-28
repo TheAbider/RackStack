@@ -300,15 +300,19 @@ function Enable-ReplicaServer {
     if (-not [string]::IsNullOrWhiteSpace($storagePath)) { $storagePath = $storagePath.Trim('"') }
     if ([string]::IsNullOrWhiteSpace($storagePath)) { $storagePath = $defaultStorage }
 
-    # Ensure storage directory exists
-    if (-not (Test-Path -LiteralPath $storagePath)) {
-        try {
-            New-Item -LiteralPath $storagePath -ItemType Directory -Force | Out-Null
-            Write-OutputColor "  Created directory: $storagePath" -color "Info"
-        }
-        catch {
-            Write-OutputColor "  Failed to create directory: $_" -color "Error"
-            return
+    # Ensure storage directory exists. Skip at Dry-Run queue time so queueing
+    # creates nothing on disk — the Apply re-enters this function at Commit and
+    # creates the directory then.
+    if (-not ($script:DryRunMode -and -not $script:ApplyingDryRunQueue)) {
+        if (-not (Test-Path -LiteralPath $storagePath)) {
+            try {
+                New-Item -LiteralPath $storagePath -ItemType Directory -Force | Out-Null
+                Write-OutputColor "  Created directory: $storagePath" -color "Info"
+            }
+            catch {
+                Write-OutputColor "  Failed to create directory: $_" -color "Error"
+                return
+            }
         }
     }
 
@@ -334,6 +338,30 @@ function Enable-ReplicaServer {
 
     if (-not (Confirm-UserAction -Message "Enable Hyper-V Replica Server with these settings?")) {
         Write-OutputColor "  Cancelled." -color "Info"
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Re-entry: the full Set-VMReplicationServer + auth-entry registration
+        # + firewall-rule configuration block runs at Commit. Operator state
+        # (auth type, storage path, allowed-server list) is captured by
+        # virtue of re-entering the function — those are read off
+        # $script:ReplicaAllowedServers and the locals derived at the top.
+        $capAuth    = $authType
+        $capStorage = $storagePath
+        $capAllowed = @($script:ReplicaAllowedServers)
+        Push-DryRunStep -Label "Enable Hyper-V Replica Server ($capAuth, $capStorage)" -Category "Roles" -OneWay $false `
+            -Params @{ AuthType = $capAuth; StoragePath = $capStorage; AllowedServers = $capAllowed } `
+            -Preflight {
+                if (-not (Test-HyperVInstalled)) { "Hyper-V not installed" }
+                else { $true }
+            } `
+            -Apply { Enable-ReplicaServer } `
+            -Undo  {
+                Set-VMReplicationServer -ReplicationEnabled $false -ErrorAction SilentlyContinue
+            }
+        Write-OutputColor "  Queued (Dry-Run): enable Hyper-V Replica Server." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued Hyper-V Replica Server enable"
         return
     }
 
@@ -591,6 +619,29 @@ function Enable-VMReplicationWizard {
 
     if (-not (Confirm-UserAction -Message "Enable replication for VM '$vmName'?")) {
         Write-OutputColor "  Cancelled." -color "Info"
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        # Re-entry: certificate selection + export path collection re-fire
+        # at Commit. The queue captures the operator's intent (which VM,
+        # which replica server, frequency, init method) but the per-step
+        # interactive prompts run again at apply time. That preserves the
+        # "no half-configured state on nav-return" guarantee already
+        # documented in the apply path.
+        $capVM      = $vmName
+        $capReplica = $replicaServer
+        $capFreq    = $freqDisplay
+        Push-DryRunStep -Label "Enable replication for VM '$capVM' (replica: $capReplica, every $capFreq)" -Category "Roles" -OneWay $false `
+            -Params @{ VM = $capVM; ReplicaServer = $capReplica; Frequency = $capFreq } `
+            -Preflight {
+                if (-not (Get-VM -Name $capVM -ErrorAction SilentlyContinue)) { "VM '$capVM' not found on this host" }
+                else { $true }
+            }.GetNewClosure() `
+            -Apply { Enable-VMReplicationWizard } `
+            -Undo  { Remove-VMReplication -VMName $capVM -ErrorAction SilentlyContinue }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): enable replication for VM '$capVM'." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued VM replication for '$capVM'"
         return
     }
 
