@@ -154,7 +154,7 @@ threat.
 | Action-history file moved out of `C:\Temp` to ACL-locked `%ProgramData%\<Tool>\state\` | v1.98.55 fix; see `Get-RackStackSecureStateDir` helper. |
 | Batch-undo state file ACL-verified on load | `Modules/50-EntryPoint.ps1` `Invoke-BatchMode` — `Test-RackStackStateFileAcl` refuses to deserialize if any non-admin SID has write access. |
 | File-server downloads use HTTPS only; no http:// scheme allowed | `Modules/39-FileServer.ps1` — `BaseURL` is operator-set and documented as HTTPS-only. |
-| All `Start-Process -ArgumentList` use array form when arguments could come from any input that's not maintainer-controlled | Audited across all 65 modules in round 33. |
+| All `Start-Process -ArgumentList` use array form when arguments could come from any input that's not maintainer-controlled | Audited across all 77 modules (rounds 33+ include the NPS, Always-On VPN, Compliance, and SIEM-Forwarder modules). |
 
 **Counter-argument considered.** An attacker who's already an admin
 could write to HKLM. **Response:** correct — but they already won.
@@ -240,13 +240,13 @@ following are acknowledged and tracked:
 
 ### CR-3: Pester coverage is measured on a subset of modules
 - 96.18% coverage applies to 3 modules (03-InputValidation,
-  22-Password, 02-Logging). The other 62 modules are covered by the
+  22-Password, 02-Logging). The other 74 modules are covered by the
   regex-pattern harness, which is structural rather than line-based.
 - Mitigation: expanding measured coverage is a tracked roadmap item
   (`ROADMAP.md` Next quarter).
 - Honest scope statement: a Pester-measured 96% is not the same as a
   whole-codebase 96%; readers should weight the regex harness's
-  4598-pattern coverage alongside.
+  4990-pattern coverage alongside.
 
 ### CR-4: ps2exe PE timestamp non-determinism
 - The compiled EXE has a PE COFF timestamp field that's set by ps2exe
