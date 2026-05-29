@@ -416,6 +416,11 @@ function Show-RolesFeaturesMenu {
     } -CacheSeconds 120
     $gpoColor = if ($gpoStatusText -eq "Available") { "Success" } else { "Warning" }
 
+    $jeaStatusText = Get-CachedValue -Key "JEAState" -FetchScript {
+        if ((Get-JEAManagerStatus).Available) { "Available" } else { "Unavailable" }
+    } -CacheSeconds 120
+    $jeaColor = if ($jeaStatusText -eq "Available") { "Success" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -431,6 +436,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[6]  Certificate Services (AD CS) ►" -Status $adcsStatusText -StatusColor $adcsColor
     Write-MenuItem "[7]  Storage Migration Service ►" -Status $smsStatusText -StatusColor $smsColor
     Write-MenuItem "[8]  Group Policy Manager ►" -Status $gpoStatusText -StatusColor $gpoColor
+    Write-MenuItem "[9]  Just Enough Administration (JEA) ►" -Status $jeaStatusText -StatusColor $jeaColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

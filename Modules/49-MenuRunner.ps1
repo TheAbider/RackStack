@@ -251,9 +251,10 @@ function Start-Show-RolesFeaturesMenu {
             "6" { Show-ADCSManagement }
             "7" { Show-StorageMigrationManagement }
             "8" { Show-GPOManagerManagement }
+            "9" { Show-JEAManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-9 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

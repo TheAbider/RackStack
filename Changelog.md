@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.103.0
+
+Just Enough Administration (JEA) — new module (72-JEA.ps1), reachable from **Roles & Features → [9] Just Enough Administration (JEA)** and via the `JEAList` CLI action.
+
+JEA lets you delegate a **curated set of commands** to a group (help desk, operators) over PowerShell remoting, run as an audited temporary virtual account — so they can do their job **without being local administrators**, and nothing outside the allowed set is reachable.
+
+**What it does:**
+- **Create endpoint** (interactive): pick a name, a role, the allowed group (`DOMAIN\Group`), and a command set — **ReadOnly**, **HelpDesk**, **ServiceOperator** presets, or a custom cmdlet list. RackStack scaffolds the role-capability (`.psrc`) and session-configuration (`.pssc`) files using the in-box JEA cmdlets, validates the config, and registers a `RestrictedRemoteServer` endpoint with `RunAsVirtualAccount` and transcript logging. Registration restarts WinRM, so it's confirmed and Dry-Run-aware (with an unregister + cleanup Undo).
+- **List endpoints** (`-Action JEAList`): show the registered constrained endpoints — JSON-aware for fleet auditing.
+- **Remove endpoint** (interactive): unregister + clean up the generated files. Confirmed + Dry-Run-aware.
+- **Validate a `.pssc`**: run `Test-PSSessionConfigurationFile` against a config file.
+
+Connect with `Enter-PSSession -ComputerName <host> -ConfigurationName <endpoint>`. Requires WMF 5.0+ (Server 2016 / Win10+) and WinRM; the menu surfaces availability up front.
+
+Module count: 72 → 73.
+
 ## v1.102.0
 
 Group Policy Manager — new module (71-GPOManager.ps1), reachable from **Roles & Features → [8] Group Policy Manager** and via two CLI actions for fleet automation.

@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 72  # 00-71 inclusive
+$expectedModuleCount = 73  # 00-72 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "71-GPOManager.ps1"
-    Write-TestResult "Module range 00-Initialization to 71-GPOManager" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "72-JEA.ps1"
+    Write-TestResult "Module range 00-Initialization to 72-JEA" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 71 #region tags" ($regionStartCount -eq 71) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 71 #endregion tags" ($regionEndCount -eq 71) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 72 #region tags" ($regionStartCount -eq 72) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 72 #endregion tags" ($regionEndCount -eq 72) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 72 modules" ($readmeContent -match '72 module')
+    Write-TestResult "README: mentions 73 modules" ($readmeContent -match '73 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 72 modules" ($loaderContent -match '72 modules')
+    Write-TestResult "RackStack.ps1: mentions 73 modules" ($loaderContent -match '73 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 72" ($moduleCount -eq 72) "Found $moduleCount modules"
+    Write-TestResult "Module count is 73" ($moduleCount -eq 73) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8707,6 +8707,57 @@ try {
 }
 catch {
     Write-TestResult "GPO Manager Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 169: JEA — JUST ENOUGH ADMINISTRATION (Module 72)
+# ============================================================================
+Write-SectionHeader "SECTION 169: JEA (Module 72)"
+
+try {
+    $jeaPath = "$modulesPath\72-JEA.ps1"
+    if (Test-Path $jeaPath) {
+        $jeaContent = Get-Content $jeaPath -Raw
+        Write-TestResult "72-JEA: region header present" ($jeaContent -match '#region ===== JEA')
+        Write-TestResult "72-JEA: Test-JEAAvailable exists" ($jeaContent -match 'function\s+Test-JEAAvailable\b')
+        Write-TestResult "72-JEA: New-JEAEndpoint exists" ($jeaContent -match 'function\s+New-JEAEndpoint\b')
+        Write-TestResult "72-JEA: Invoke-JEAEndpointBuild exists" ($jeaContent -match 'function\s+Invoke-JEAEndpointBuild\b')
+        Write-TestResult "72-JEA: Remove-JEAEndpointInteractive exists" ($jeaContent -match 'function\s+Remove-JEAEndpointInteractive\b')
+        Write-TestResult "72-JEA: Start-JEAList exists" ($jeaContent -match 'function\s+Start-JEAList\b')
+        Write-TestResult "72-JEA: Show-JEAManagement exists" ($jeaContent -match 'function\s+Show-JEAManagement\b')
+        # Built on the in-box JEA cmdlets (not hand-written .pssc/.psrc).
+        Write-TestResult "72-JEA: uses New-PSRoleCapabilityFile" ($jeaContent -match 'New-PSRoleCapabilityFile')
+        Write-TestResult "72-JEA: uses New-PSSessionConfigurationFile" ($jeaContent -match 'New-PSSessionConfigurationFile')
+        # Least-privilege defaults: RestrictedRemoteServer + RunAsVirtualAccount + transcript.
+        Write-TestResult "72-JEA: endpoint is RestrictedRemoteServer" ($jeaContent -match 'RestrictedRemoteServer')
+        Write-TestResult "72-JEA: endpoint uses RunAsVirtualAccount" ($jeaContent -match 'RunAsVirtualAccount')
+        Write-TestResult "72-JEA: endpoint sets TranscriptDirectory" ($jeaContent -match 'TranscriptDirectory')
+        # Validate the generated .pssc before registering.
+        Write-TestResult "72-JEA: validates config before registering" ($jeaContent -match 'Test-PSSessionConfigurationFile')
+        # Registration is Dry-Run gated.
+        Write-TestResult "72-JEA: registration has a Dry-Run gate" ($jeaContent -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')
+        $jeaBytes = [System.IO.File]::ReadAllBytes($jeaPath)
+        $jeaBom = ($jeaBytes.Length -ge 3 -and $jeaBytes[0] -eq 0xEF -and $jeaBytes[1] -eq 0xBB -and $jeaBytes[2] -eq 0xBF)
+        Write-TestResult "72-JEA: UTF-8 BOM present" $jeaBom
+    }
+    else {
+        Write-TestResult "72-JEA: module file exists" $false "File not found"
+    }
+
+    # Integration wiring
+    $jeaLoader = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 72-JEA.ps1" ($jeaLoader -match '72-JEA\.ps1')
+    $jeaHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: JEAList in -Action ValidateSet" ($jeaHeader -match "'JEAList'")
+    $jeaEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: JEAList dispatch case" ($jeaEntry -match "'JEAList'\s*\{")
+    $jeaMenu = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: JEA menu item" ($jeaMenu -match 'Just Enough Administration')
+    $jeaRunner = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: routes [9] to Show-JEAManagement" ($jeaRunner -match '"9"\s*\{\s*Show-JEAManagement')
+}
+catch {
+    Write-TestResult "JEA Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -12670,7 +12721,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 183 entries" ($listActionCount -eq 183) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 184 entries" ($listActionCount -eq 184) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12703,7 +12754,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 183 entries" ($actionCount2 -eq 183) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 184 entries" ($actionCount2 -eq 184) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12729,7 +12780,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 183 entries" ($actionCount3 -eq 183) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 184 entries" ($actionCount3 -eq 184) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12767,7 +12818,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 183 entries" ($actionCount4 -eq 183) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 184 entries" ($actionCount4 -eq 184) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
