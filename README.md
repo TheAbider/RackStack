@@ -28,7 +28,7 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="5045 structural tests" src="https://img.shields.io/badge/structural%20tests-5045-brightgreen">
+  <img alt="5048 structural tests" src="https://img.shields.io/badge/structural%20tests-5048-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
@@ -487,7 +487,7 @@ RackStack/
 │   ├── ...                     # 75 more modules
 │   └── 77-WindowsAdminCenter.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 5,045 automated tests
+│   ├── Run-Tests.ps1           # 5,048 automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -525,7 +525,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (5,045 tests, ~4 minutes)
+# Full test suite (5,048 tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 78 modules + monolithic)

@@ -9090,6 +9090,21 @@ catch {
 }
 
 # ============================================================================
+# SECTION 179: VM INVENTORY ENRICHMENT (v1.112.0, VMInventoryExport)
+# ============================================================================
+Write-SectionHeader "SECTION 179: VM INVENTORY ENRICHMENT (VMInventoryExport)"
+
+try {
+    $epVmi = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "VMInventoryExport: maps Cluster Shared Volume ownership" ($epVmi -match 'Get-ClusterSharedVolume' -and $epVmi -match 'CSVOwner')
+    Write-TestResult "VMInventoryExport: includes the checkpoint chain" ($epVmi -match 'CheckpointChain')
+    Write-TestResult "VMInventoryExport: includes replication health + last time" ($epVmi -match 'ReplicationHealth' -and $epVmi -match 'LastReplication')
+}
+catch {
+    Write-TestResult "VM Inventory Enrichment Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked

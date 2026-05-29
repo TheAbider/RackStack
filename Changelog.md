@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.112.0
+
+Richer VM inventory — the existing `VMInventoryExport` action now captures more per-VM detail for fleet auditing:
+
+- **Cluster Shared Volume ownership** — for each virtual disk on a CSV, which node currently owns that CSV (so you can see where a VM's storage actually lives in a cluster).
+- **Checkpoint chain** — the ordered list of checkpoint names, not just the count.
+- **Replication health** — the replica health and last successful replication time alongside the replication state.
+
+Read-only enrichment of an existing action — no new CLI action, no menu change. The added fields appear in both the console summary's underlying data and the `-OutputFormat JSON` export.
+
 ## v1.111.0
 
 Failover Cluster validation report — new `ClusterValidationReport` CLI action. Runs a **non-disruptive** failover-cluster validation (Inventory + Network + System Configuration categories) against the cluster's nodes (or this node if it isn't yet clustered), archives the native HTML report to an admin-only path, and reports a best-effort overall result (pass / warning / failed counts).
