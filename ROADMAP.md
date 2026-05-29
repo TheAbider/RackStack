@@ -9,12 +9,12 @@ time.
 The roadmap is intentionally narrow. RackStack is a single-maintainer
 project; commitments here are realistic, not aspirational.
 
-Last updated: **2026-05-28** (v1.100.0).
+Last updated: **2026-05-29** (v1.107.0).
 
 Recently shipped: the five hybrid-cloud / server-role feature modules
 (Azure Arc, Microsoft Defender for Endpoint, WSUS, AD CS, Storage
 Migration — v1.99.0) and session-wide **Interactive Dry-Run Mode**
-(v1.100.0). RackStack is now 71 modules.
+(v1.100.0). The security-operations arc followed in v1.102-v1.107: GPO Manager (71), JEA (72), NPS/RADIUS (73), Always-On VPN (74), CIS compliance scanner (75), and SIEM log forwarder (76). RackStack is now 77 modules.
 
 ---
 
@@ -48,7 +48,7 @@ Migration — v1.99.0) and session-wide **Interactive Dry-Run Mode**
 | Item | Why not |
 |---|---|
 | Cross-platform port (Linux, macOS) | RackStack's entire purpose is Windows Server configuration. Hyper-V, BitLocker, Failover Clustering, MPIO, AD DS, iSCSI initiator — none of these have a meaningful Linux/macOS equivalent in the same workflow. A port would be a different project. |
-| Switch from PowerShell to C# / Go / Rust | The existing 71 modules + 4,800+ regression tests would be lost. Rewrite cost-benefit is not justifiable. |
+| Switch from PowerShell to C# / Go / Rust | The existing 77 modules + 4,990 regression tests would be lost. Rewrite cost-benefit is not justifiable. |
 | GUI front-end | The 72-char box-drawing console UI is intentional; it works over RDP, SSH-tunneled PowerShell, and emergency console-only scenarios where a GUI cannot. |
 | Web dashboard | Out of scope. Operators integrate via the `-OutputFormat JSON` CLI surface and route into their own dashboards. |
 | External REST API | Same as above — `-OutputFormat JSON` is the integration surface. |

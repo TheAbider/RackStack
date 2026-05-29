@@ -8971,6 +8971,56 @@ catch {
 }
 
 # ============================================================================
+# SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
+# ============================================================================
+# Pre-release guard: every user-facing CLI-action count and module count baked
+# into documentation must equal the live value computed from the source. This
+# is what kept drifting (181 vs 189 actions; 65/71 vs 77 modules) across docs,
+# the README badge, the in-tool help, and the package manifests. The harness is
+# the right enforcement point — it already knows the ground truth.
+Write-SectionHeader "SECTION 174: DOCUMENTATION FRESHNESS (counts match codebase)"
+
+try {
+    # Live ground truth.
+    $epRaw = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    $epListBlock = [regex]::Match($epRaw, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
+    $liveActionCount = @([regex]::Matches($epListBlock, "Action\s*=\s*'")).Count
+    $liveModuleCount = $expectedModuleCount   # 77 (00-76), asserted earlier
+    Write-TestResult "DocFreshness: live action count resolved ($liveActionCount)" ($liveActionCount -gt 0) "Found $liveActionCount"
+
+    # Doc files that quote a CLI-action count. (Wiki is a separate clone — not checked here.)
+    $docFiles = @('README.md', 'CONTRIBUTING.md', 'ROADMAP.md', 'Modules\34-Help.ps1',
+        'dist\chocolatey\rackstack.nuspec', 'dist\scoop\rackstack.json')
+    $wingetDir = Join-Path $script:ModuleRoot 'dist\winget'
+    if (Test-Path $wingetDir) { $docFiles += @(Get-ChildItem -Path $wingetDir -Recurse -Filter '*.yaml' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) }
+
+    foreach ($rel in $docFiles) {
+        $df = if ([System.IO.Path]::IsPathRooted($rel)) { $rel } else { Join-Path $script:ModuleRoot $rel }
+        $label = [System.IO.Path]::GetFileName($df)
+        if (-not (Test-Path -LiteralPath $df)) { continue }
+        $dt = Get-Content -LiteralPath $df -Raw
+        # Any "NNN [structured ]CLI action(s)" or "NNN available actions" must equal the live count.
+        $actionHits = @([regex]::Matches($dt, '(\d{2,4})\s+(?:structured\s+)?(?:CLI|available)\s+actions?'))
+        $staleAction = @($actionHits | Where-Object { [int]$_.Groups[1].Value -ne $liveActionCount })
+        Write-TestResult "DocFreshness: $label CLI-action count == $liveActionCount" ($staleAction.Count -eq 0) $(if ($staleAction.Count) { "stale: $(($staleAction | ForEach-Object { $_.Value }) -join ', ')" } else { "" })
+    }
+
+    # README module count: every ADJACENT "NNN modules" must equal the live module
+    # count. "NN more modules" (the directory-tree elision) has a word between the
+    # number and "modules", so the adjacency regex correctly skips it.
+    $readmeRaw = Get-Content (Join-Path $script:ModuleRoot 'README.md') -Raw
+    $modHits = @([regex]::Matches($readmeRaw, '(\d{2,4})\s+modules\b'))
+    $staleMod = @($modHits | Where-Object { [int]$_.Groups[1].Value -ne $liveModuleCount })
+    Write-TestResult "DocFreshness: README module count == $liveModuleCount" ($staleMod.Count -eq 0) $(if ($staleMod.Count) { "stale: $(($staleMod | ForEach-Object { $_.Value }) -join ', ')" } else { "" })
+
+    # README test badge label is the specific 'structural tests' (distinct from the Pester badge).
+    Write-TestResult "DocFreshness: README test badge uses a specific label" ($readmeRaw -match 'structural%20tests|structural tests')
+}
+catch {
+    Write-TestResult "Documentation Freshness Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 
