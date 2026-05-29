@@ -28,7 +28,7 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="4944 tests" src="https://img.shields.io/badge/tests-4944-brightgreen">
+  <img alt="4966 tests" src="https://img.shields.io/badge/tests-4966-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
@@ -137,7 +137,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\RackStack.ps1
 ```
 
-> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 75 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
+> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 76 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
 
 ### Single-File Deployment (Production)
 
@@ -148,7 +148,7 @@ For production use, generate a monolithic single-file script (~66K lines) that y
 .\sync-to-monolithic.ps1
 ```
 
-The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 75 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
+The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 76 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
 > **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v{version}.ps1` = monolithic build for deployment/compilation.
 
@@ -471,7 +471,7 @@ Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JS
 
 ```
 RackStack/
-├── RackStack.ps1               # Modular loader -- dot-sources 75 modules (dev use)
+├── RackStack.ps1               # Modular loader -- dot-sources 76 modules (dev use)
 ├── RackStack v{version}.ps1    # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
@@ -483,7 +483,7 @@ RackStack/
 │   ├── ...                     # 67 more modules
 │   └── 69-StorageMigration.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 4,944 automated tests
+│   ├── Run-Tests.ps1           # 4,966 automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -492,7 +492,7 @@ RackStack/
 
 ### Module Architecture
 
-75 modules numbered for load order. Dependencies flow downward.
+76 modules numbered for load order. Dependencies flow downward.
 
 | Range | Category | Highlights |
 |---|---|---|
@@ -513,10 +513,10 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (4,944 tests, ~4 minutes)
+# Full test suite (4,966 tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
-# PSScriptAnalyzer (0 errors on all 75 modules + monolithic)
+# PSScriptAnalyzer (0 errors on all 76 modules + monolithic)
 powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 # Pre-release validation (parse + PSSA + structure + sync + version + tests)
@@ -533,7 +533,7 @@ Tests cover parsing, module loading, function existence (615 functions), version
 4. Test: `.\Tests\Run-Tests.ps1`
 5. Compile: `Invoke-PS2EXE -InputFile 'RackStack v{ver}.ps1' -OutputFile 'RackStack.exe'`
 
-The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 74 region pairs are flat (non-nested). Use `-DryRun` to preview.
+The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 75 region pairs are flat (non-nested). Use `-DryRun` to preview.
 
 > **File summary:** `RackStack.ps1` = modular loader (for dev). `RackStack v{version}.ps1` = monolithic build (for deployment). `RackStack.exe` = compiled from monolithic (for end users).
 
