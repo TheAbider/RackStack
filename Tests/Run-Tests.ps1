@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 76  # 00-75 inclusive
+$expectedModuleCount = 77  # 00-76 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "75-Compliance.ps1"
-    Write-TestResult "Module range 00-Initialization to 75-Compliance" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "76-SIEMForwarder.ps1"
+    Write-TestResult "Module range 00-Initialization to 76-SIEMForwarder" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 75 #region tags" ($regionStartCount -eq 75) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 75 #endregion tags" ($regionEndCount -eq 75) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 76 #region tags" ($regionStartCount -eq 76) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 76 #endregion tags" ($regionEndCount -eq 76) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 76 modules" ($readmeContent -match '76 module')
+    Write-TestResult "README: mentions 77 modules" ($readmeContent -match '77 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 76 modules" ($loaderContent -match '76 modules')
+    Write-TestResult "RackStack.ps1: mentions 77 modules" ($loaderContent -match '77 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 76" ($moduleCount -eq 76) "Found $moduleCount modules"
+    Write-TestResult "Module count is 77" ($moduleCount -eq 77) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8913,6 +8913,61 @@ try {
 }
 catch {
     Write-TestResult "CIS Compliance Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 173: SIEM LOG FORWARDER (Module 76)
+# ============================================================================
+Write-SectionHeader "SECTION 173: SIEM LOG FORWARDER (Module 76)"
+
+try {
+    $siemPath = "$modulesPath\76-SIEMForwarder.ps1"
+    if (Test-Path $siemPath) {
+        $siemContent = Get-Content $siemPath -Raw
+        Write-TestResult "76-SIEMForwarder: region header present" ($siemContent -match '#region ===== SIEM LOG FORWARDER')
+        Write-TestResult "76-SIEMForwarder: Get-SIEMForwarderStatus exists" ($siemContent -match 'function\s+Get-SIEMForwarderStatus\b')
+        Write-TestResult "76-SIEMForwarder: Set-WEFCollector exists" ($siemContent -match 'function\s+Set-WEFCollector\b')
+        Write-TestResult "76-SIEMForwarder: Set-SplunkForwarderOutputs exists" ($siemContent -match 'function\s+Set-SplunkForwarderOutputs\b')
+        Write-TestResult "76-SIEMForwarder: Set-WinlogbeatConfig exists" ($siemContent -match 'function\s+Set-WinlogbeatConfig\b')
+        Write-TestResult "76-SIEMForwarder: Start-SIEMSetup exists" ($siemContent -match 'function\s+Start-SIEMSetup\b')
+        Write-TestResult "76-SIEMForwarder: Start-SIEMStatus exists" ($siemContent -match 'function\s+Start-SIEMStatus\b')
+        Write-TestResult "76-SIEMForwarder: Show-SIEMForwarderManagement exists" ($siemContent -match 'function\s+Show-SIEMForwarderManagement\b')
+        # Secret (HEC token / API key) handled via SecureString, kept out of queue Params.
+        Write-TestResult "76-SIEMForwarder: secret kept out of queue Params" (($siemContent -match 'ConvertFrom-SIEMSecure') -and ($siemContent -notmatch '-Params @\{[^}]*[Tt]oken') -and ($siemContent -notmatch '-Params @\{[^}]*[Aa]piKey'))
+        # Secret BSTR is zeroed.
+        Write-TestResult "76-SIEMForwarder: secret BSTR is zeroed" ($siemContent -match 'ZeroFreeBSTR')
+        # State changes are Dry-Run gated.
+        Write-TestResult "76-SIEMForwarder: state changes have a Dry-Run gate" ($siemContent -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')
+        # No third-party binary download/install (supply-chain discipline): no Invoke-WebRequest / Start-Process of an installer.
+        Write-TestResult "76-SIEMForwarder: does not download/run agent binaries" (-not ($siemContent -match 'Invoke-WebRequest|Start-BitsTransfer|Start-Process'))
+        # Token-bearing config backups use the hardened secure state dir.
+        Write-TestResult "76-SIEMForwarder: config staging uses the hardened secure state dir" ($siemContent -match 'Get-RackStackSecureStateDir')
+        # Path-traversal guard for operator-supplied agent paths.
+        Write-TestResult "76-SIEMForwarder: validates operator-supplied paths" ($siemContent -match 'function\s+Test-SIEMSafeDir\b')
+        $siemBytes = [System.IO.File]::ReadAllBytes($siemPath)
+        $siemBom = ($siemBytes.Length -ge 3 -and $siemBytes[0] -eq 0xEF -and $siemBytes[1] -eq 0xBB -and $siemBytes[2] -eq 0xBF)
+        Write-TestResult "76-SIEMForwarder: UTF-8 BOM present" $siemBom
+    }
+    else {
+        Write-TestResult "76-SIEMForwarder: module file exists" $false "File not found"
+    }
+
+    # Integration wiring
+    $siemLoader = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 76-SIEMForwarder.ps1" ($siemLoader -match '76-SIEMForwarder\.ps1')
+    $siemHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: SIEMSetup in -Action ValidateSet" ($siemHeader -match "'SIEMSetup'")
+    Write-TestResult "Header.ps1: SIEMStatus in -Action ValidateSet" ($siemHeader -match "'SIEMStatus'")
+    $siemEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: SIEMSetup dispatch case" ($siemEntry -match "'SIEMSetup'\s*\{")
+    Write-TestResult "50-EntryPoint: SIEMStatus dispatch case" ($siemEntry -match "'SIEMStatus'\s*\{")
+    $siemMenu = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: SIEM Log Forwarder menu item" ($siemMenu -match 'SIEM Log Forwarder')
+    $siemRunner = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: routes [12] to Show-SIEMForwarderManagement" ($siemRunner -match '"12"\s*\{\s*Show-SIEMForwarderManagement')
+}
+catch {
+    Write-TestResult "SIEM Forwarder Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -12876,7 +12931,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 187 entries" ($listActionCount -eq 187) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 189 entries" ($listActionCount -eq 189) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12909,7 +12964,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 187 entries" ($actionCount2 -eq 187) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 189 entries" ($actionCount2 -eq 189) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12935,7 +12990,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 187 entries" ($actionCount3 -eq 187) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 189 entries" ($actionCount3 -eq 189) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12973,7 +13028,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 187 entries" ($actionCount4 -eq 187) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 189 entries" ($actionCount4 -eq 189) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

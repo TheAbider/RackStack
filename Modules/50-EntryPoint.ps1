@@ -405,6 +405,8 @@ function Assert-Elevation {
                 @{ Action = 'NPSSetup';         Description = 'Install the Network Policy Server (NPAS / RADIUS) role' }
                 @{ Action = 'AlwaysOnVPNSetup'; Description = 'Install the Remote Access role and configure RRAS as a VPN server' }
                 @{ Action = 'CISScan';          Description = 'Read-only CIS Windows Server L1 benchmark scan (scored subset; HTML + JSON report)' }
+                @{ Action = 'SIEMSetup';        Description = 'Configure SIEM log forwarding (WEF / Splunk / Winlogbeat); interactive, JSON-aware status' }
+                @{ Action = 'SIEMStatus';       Description = 'Show SIEM log-forwarder readiness (WEF / WinRM / agents / Arc)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2016,6 +2018,16 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Read-only CIS L1 (subset) compliance scan; exit 1 when grade < C (pct < 70).
             $cisPct = Start-CISScan
             [Environment]::Exit([int]($cisPct -lt 70))
+        }
+        'SIEMStatus' {
+            # Read-only SIEM forwarder readiness (JSON-aware).
+            $siemOk = Start-SIEMStatus
+            [Environment]::Exit([int](-not $siemOk))
+        }
+        'SIEMSetup' {
+            # Configure SIEM log forwarding (interactive console; JSON status headless).
+            $siemOk = Start-SIEMSetup
+            [Environment]::Exit([int](-not $siemOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
