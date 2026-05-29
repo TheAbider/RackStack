@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 71  # 00-70 inclusive
+$expectedModuleCount = 72  # 00-71 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "70-DryRun.ps1"
-    Write-TestResult "Module range 00-Initialization to 70-DryRun" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "71-GPOManager.ps1"
+    Write-TestResult "Module range 00-Initialization to 71-GPOManager" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 70 #region tags" ($regionStartCount -eq 70) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 70 #endregion tags" ($regionEndCount -eq 70) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 71 #region tags" ($regionStartCount -eq 71) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 71 #endregion tags" ($regionEndCount -eq 71) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 71 modules" ($readmeContent -match '71 module')
+    Write-TestResult "README: mentions 72 modules" ($readmeContent -match '72 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 71 modules" ($loaderContent -match '71 modules')
+    Write-TestResult "RackStack.ps1: mentions 72 modules" ($loaderContent -match '72 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 71" ($moduleCount -eq 71) "Found $moduleCount modules"
+    Write-TestResult "Module count is 72" ($moduleCount -eq 72) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8662,6 +8662,51 @@ try {
     Write-TestResult "Settings [2] dispatches Invoke-ExtendedUndo" ($helpSrc -match '"2"\s*\{\s*Invoke-ExtendedUndo')
 } catch {
     Write-TestResult "v1.101.0 structural tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 168: GROUP POLICY MANAGER (Module 71)
+# ============================================================================
+Write-SectionHeader "SECTION 168: GROUP POLICY MANAGER (Module 71)"
+
+try {
+    $gpoPath = "$modulesPath\71-GPOManager.ps1"
+    if (Test-Path $gpoPath) {
+        $gpoContent = Get-Content $gpoPath -Raw
+        Write-TestResult "71-GPOManager: region header present" ($gpoContent -match '#region ===== GROUP POLICY MANAGER')
+        Write-TestResult "71-GPOManager: Test-GPOAvailable exists" ($gpoContent -match 'function\s+Test-GPOAvailable\b')
+        Write-TestResult "71-GPOManager: Invoke-GPOBackupAll exists" ($gpoContent -match 'function\s+Invoke-GPOBackupAll\b')
+        Write-TestResult "71-GPOManager: Start-GPOBackup exists" ($gpoContent -match 'function\s+Start-GPOBackup\b')
+        Write-TestResult "71-GPOManager: Start-GPODrift exists" ($gpoContent -match 'function\s+Start-GPODrift\b')
+        Write-TestResult "71-GPOManager: Compare-GPODriftAgainst exists" ($gpoContent -match 'function\s+Compare-GPODriftAgainst\b')
+        Write-TestResult "71-GPOManager: Restore-GPOInteractive exists" ($gpoContent -match 'function\s+Restore-GPOInteractive\b')
+        Write-TestResult "71-GPOManager: Show-GPOManagerManagement exists" ($gpoContent -match 'function\s+Show-GPOManagerManagement\b')
+        # Restore is Dry-Run gated and snapshots the current GPO first (undoable).
+        Write-TestResult "71-GPOManager: restore has a Dry-Run gate" ($gpoContent -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')
+        Write-TestResult "71-GPOManager: restore snapshots current GPO (pre-restore) for undo" (($gpoContent -match 'pre-restore') -and ($gpoContent -match 'Backup-GPO'))
+        Write-TestResult "71-GPOManager: drift normalizes report XML (strips volatile timestamps)" ($gpoContent -match 'function\s+Get-NormalizedGPOXml\b')
+        $gpoBytes = [System.IO.File]::ReadAllBytes($gpoPath)
+        $hasBom = ($gpoBytes.Length -ge 3 -and $gpoBytes[0] -eq 0xEF -and $gpoBytes[1] -eq 0xBB -and $gpoBytes[2] -eq 0xBF)
+        Write-TestResult "71-GPOManager: UTF-8 BOM present" $hasBom
+    }
+    else {
+        Write-TestResult "71-GPOManager: module file exists" $false "File not found"
+    }
+
+    # Integration wiring
+    $gpoLoader = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 71-GPOManager.ps1" ($gpoLoader -match '71-GPOManager\.ps1')
+    $gpoHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: GPOBackup + GPODrift in -Action ValidateSet" (($gpoHeader -match "'GPOBackup'") -and ($gpoHeader -match "'GPODrift'"))
+    $gpoEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: GPOBackup + GPODrift dispatch cases" (($gpoEntry -match "'GPOBackup'\s*\{") -and ($gpoEntry -match "'GPODrift'\s*\{"))
+    $gpoMenu = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: Group Policy Manager menu item" ($gpoMenu -match 'Group Policy Manager')
+    $gpoRunner = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: routes [8] to Show-GPOManagerManagement" ($gpoRunner -match '"8"\s*\{\s*Show-GPOManagerManagement')
+}
+catch {
+    Write-TestResult "GPO Manager Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -12625,7 +12670,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 181 entries" ($listActionCount -eq 181) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 183 entries" ($listActionCount -eq 183) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12658,7 +12703,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 181 entries" ($actionCount2 -eq 181) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 183 entries" ($actionCount2 -eq 183) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12684,7 +12729,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 181 entries" ($actionCount3 -eq 181) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 183 entries" ($actionCount3 -eq 183) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12722,7 +12767,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 181 entries" ($actionCount4 -eq 181) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 183 entries" ($actionCount4 -eq 183) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.102.0
+
+Group Policy Manager — new module (71-GPOManager.ps1), reachable from **Roles & Features → [8] Group Policy Manager** and via two CLI actions for fleet automation.
+
+**What it does:**
+- **Back up all GPOs** (`-Action GPOBackup [-Config <folder>]`): exports every GPO to a timestamped folder with a per-GPO HTML + XML report and a `manifest.json`, so the set can be archived and later diffed. Defaults to `<TempPath>\GPOBackups` when no folder is given.
+- **Drift detection** (`-Action GPODrift -Config <baseline-folder>`): compares the live GPOs against a baseline backup and reports which GPOs were **added**, **removed**, or **changed** since — comparing normalized report XML so cosmetic timestamp churn doesn't register as drift. Ideal for a scheduled fleet check.
+- **Restore a GPO** (interactive): pick a GPO from a backup and restore it. The current GPO is snapshotted first, so the restore is undoable — via the Undo Changes screen, or via the Dry-Run queue's Undo when the restore was queued. The restore is Dry-Run-aware and confirmed before it touches anything.
+
+Requires the GroupPolicy module (RSAT-GPMC / GPMC) and a domain environment; the menu surfaces availability up front.
+
+Module count: 71 → 72.
+
 ## v1.101.1
 
 Test-suite cleanup. The v1.101.0 Extended-Undo behavioral test drives the interactive count prompt by shimming a built-in cmdlet; that deliberate test shim now carries an inline analyzer suppression with a justification, so the static-analysis scan reports the test runner clean again. No change to the shipped tool.
