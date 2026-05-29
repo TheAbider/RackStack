@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.113.0
+
+SMB signing + encryption enforcement — two new CLI actions plus an Operations-menu item for hardening the SMB server on this host.
+
+- **`SmbSecurityCheck`** (read-only) — reports the current SMB server posture: required/enabled signing, `EncryptData`, `RejectUnencryptedAccess`, and whether SMBv1 is still enabled. `-OutputFormat JSON` emits the posture for fleet auditing; no changes are made.
+- **`SmbEnforce`** (reversible) — requires SMB signing **and** encryption for every share served by this host (`Set-SmbServerConfiguration -RequireSecuritySignature $true -EncryptData $true`). The prior signing/encryption state is captured first and registered as a session undo action, and the change is fully Dry-Run aware (queued with an `Undo` closure that restores the prior values).
+
+Operations Menu gains **[35] SMB Signing & Encryption Enforcement** (interactive, with a confirmation prompt and a heads-up that very old clients that cannot sign/encrypt SMB may lose access). Addition to 56-OperationsMenu (no new module). CLI actions: 194 → 196.
+
 ## v1.112.0
 
 Richer VM inventory — the existing `VMInventoryExport` action now captures more per-VM detail for fleet auditing:
