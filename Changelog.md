@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.106.0
+
+CIS Benchmark compliance scanning — new module (75-Compliance.ps1), reachable from **Operations → [34] CIS Compliance Scan** and via the `CISScan` CLI action. Scores this server against a subset of the CIS Microsoft Windows Server **Level 1** benchmark and writes a graded HTML + JSON report.
+
+**What it does:**
+- **Scan** (`-Action CISScan`, or menu): probes current state — local security policy (password/lockout), security options (UAC, LSA anonymous restrictions, NTLM level), Windows Firewall profiles, RDP NLA, audit policy, SMB signing/SMBv1, TLS protocol versions, Secure Boot, BitLocker, and Defender real-time protection — and grades each control **Pass / Fail / Manual / Unavailable**.
+- **Severity-weighted score**: Critical/High/Medium/Low controls are weighted, and the overall percentage maps to the same A+/A/B/C/D/F grade as ServerScore. Manual (needs human judgement) and Unavailable (feature absent or probe blocked) controls are reported separately and excluded from the score, so a server isn't penalised for a control it can't run.
+- **Reports**: a per-section HTML report (with a control table and remediation hints) and a JSON report are written to an admin-only path; `-OutputFormat JSON` also streams the result for fleet ingestion.
+- **Read-only**: scanning and scoring only — it never changes a setting. Remediation stays in the existing **Harden** / **Remediate** workflow, and each failing control names the setting that fixes it.
+
+The control set is data-driven (a control table), so coverage extends by adding rows. Coverage is a **labelled subset** of CIS L1 — it does not claim full benchmark coverage. The existing `Compliance` action (health + readiness + drift roll-up) is unchanged; `CISScan` is the distinct CIS benchmark check.
+
+Module count: 75 → 76.
+
 ## v1.105.0
 
 Remote Access / Always-On VPN — new module (74-AlwaysOnVPN.ps1), reachable from **Roles & Features → [11] Remote Access / Always-On VPN** and via the `AlwaysOnVPNSetup` CLI action. This is the VPN-gateway half of the remote-access stack whose RADIUS auth back end is the NPS module (73): RRAS forwards authentication to NPS, NPS applies the network policy.

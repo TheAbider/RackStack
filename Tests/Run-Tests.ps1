@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 75  # 00-74 inclusive
+$expectedModuleCount = 76  # 00-75 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "74-AlwaysOnVPN.ps1"
-    Write-TestResult "Module range 00-Initialization to 74-AlwaysOnVPN" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "75-Compliance.ps1"
+    Write-TestResult "Module range 00-Initialization to 75-Compliance" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 74 #region tags" ($regionStartCount -eq 74) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 74 #endregion tags" ($regionEndCount -eq 74) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 75 #region tags" ($regionStartCount -eq 75) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 75 #endregion tags" ($regionEndCount -eq 75) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 75 modules" ($readmeContent -match '75 module')
+    Write-TestResult "README: mentions 76 modules" ($readmeContent -match '76 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 75 modules" ($loaderContent -match '75 modules')
+    Write-TestResult "RackStack.ps1: mentions 76 modules" ($loaderContent -match '76 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 75" ($moduleCount -eq 75) "Found $moduleCount modules"
+    Write-TestResult "Module count is 76" ($moduleCount -eq 76) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8861,6 +8861,58 @@ try {
 }
 catch {
     Write-TestResult "Always-On VPN Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 172: CIS COMPLIANCE SCANNER (Module 75)
+# ============================================================================
+Write-SectionHeader "SECTION 172: CIS COMPLIANCE SCANNER (Module 75)"
+
+try {
+    $cisPath = "$modulesPath\75-Compliance.ps1"
+    if (Test-Path $cisPath) {
+        $cisContent = Get-Content $cisPath -Raw
+        Write-TestResult "75-Compliance: region header present" ($cisContent -match '#region ===== CIS BENCHMARK COMPLIANCE SCANNER')
+        Write-TestResult "75-Compliance: Get-CISControlTable exists" ($cisContent -match 'function\s+Get-CISControlTable\b')
+        Write-TestResult "75-Compliance: Invoke-CISComplianceScan exists" ($cisContent -match 'function\s+Invoke-CISComplianceScan\b')
+        Write-TestResult "75-Compliance: Get-CISGrade exists" ($cisContent -match 'function\s+Get-CISGrade\b')
+        Write-TestResult "75-Compliance: Export-CISComplianceHTML exists" ($cisContent -match 'function\s+Export-CISComplianceHTML\b')
+        Write-TestResult "75-Compliance: Show-CISComplianceReport exists" ($cisContent -match 'function\s+Show-CISComplianceReport\b')
+        Write-TestResult "75-Compliance: Start-CISScan exists" ($cisContent -match 'function\s+Start-CISScan\b')
+        Write-TestResult "75-Compliance: Invoke-CISScanInteractive exists" ($cisContent -match 'function\s+Invoke-CISScanInteractive\b')
+        # Data-driven control table (not hand-written if-blocks) — must define control rows.
+        Write-TestResult "75-Compliance: data-driven control rows" ($cisContent -match "Id\s*=\s*[`"']CIS-")
+        # Severity-weighted scoring uses the standard grade ladder.
+        Write-TestResult "75-Compliance: severity-weighted scorer" ($cisContent -match 'Get-CISSeverityWeight' -and $cisContent -match 'EvaluableWeight')
+        # READ-ONLY: no system mutators (Set-/New- system state, Enable-/Disable-) beyond file writes.
+        Write-TestResult "75-Compliance: read-only (no Set-/Enable-/Disable- mutators)" (-not ($cisContent -match '(?m)^\s*(Set-Smb|Set-Net|Enable-|Disable-|New-NetFirewall|Set-ItemProperty|Remove-ItemProperty)'))
+        # Reports land in the hardened Admins/SYSTEM-only state dir.
+        Write-TestResult "75-Compliance: reports use the hardened secure state dir" ($cisContent -match 'Get-RackStackSecureStateDir')
+        # HTML report escapes every interpolated value (no XML/HTML injection).
+        Write-TestResult "75-Compliance: HTML report uses ConvertTo-HtmlSafe" ($cisContent -match 'ConvertTo-HtmlSafe')
+        # Coverage is labelled as a subset — never claims full CIS coverage.
+        Write-TestResult "75-Compliance: labels coverage as a subset" ($cisContent -match 'subset')
+        $cisBytes = [System.IO.File]::ReadAllBytes($cisPath)
+        $cisBom = ($cisBytes.Length -ge 3 -and $cisBytes[0] -eq 0xEF -and $cisBytes[1] -eq 0xBB -and $cisBytes[2] -eq 0xBF)
+        Write-TestResult "75-Compliance: UTF-8 BOM present" $cisBom
+    }
+    else {
+        Write-TestResult "75-Compliance: module file exists" $false "File not found"
+    }
+
+    # Integration wiring
+    $cisLoader = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 75-Compliance.ps1" ($cisLoader -match '75-Compliance\.ps1')
+    $cisHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: CISScan in -Action ValidateSet" ($cisHeader -match "'CISScan'")
+    $cisEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: CISScan dispatch case" ($cisEntry -match "'CISScan'\s*\{")
+    $cisOps = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    Write-TestResult "56-OperationsMenu: CIS Compliance menu item" ($cisOps -match 'CIS Compliance Scan')
+    Write-TestResult "56-OperationsMenu: routes [34] to Invoke-CISScanInteractive" ($cisOps -match '"34"\s*\{\s*Invoke-CISScanInteractive')
+}
+catch {
+    Write-TestResult "CIS Compliance Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -12824,7 +12876,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 186 entries" ($listActionCount -eq 186) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 187 entries" ($listActionCount -eq 187) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12857,7 +12909,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 186 entries" ($actionCount2 -eq 186) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 187 entries" ($actionCount2 -eq 187) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12883,7 +12935,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 186 entries" ($actionCount3 -eq 186) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 187 entries" ($actionCount3 -eq 187) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12921,7 +12973,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 186 entries" ($actionCount4 -eq 186) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 187 entries" ($actionCount4 -eq 187) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

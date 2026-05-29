@@ -404,6 +404,7 @@ function Assert-Elevation {
                 @{ Action = 'JEAList';          Description = 'List the registered JEA (Just Enough Administration) constrained endpoints on this host' }
                 @{ Action = 'NPSSetup';         Description = 'Install the Network Policy Server (NPAS / RADIUS) role' }
                 @{ Action = 'AlwaysOnVPNSetup'; Description = 'Install the Remote Access role and configure RRAS as a VPN server' }
+                @{ Action = 'CISScan';          Description = 'Read-only CIS Windows Server L1 benchmark scan (scored subset; HTML + JSON report)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2010,6 +2011,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Install the Remote Access role and configure RRAS as a VPN server.
             $aovpnOk = Start-AlwaysOnVPNSetup
             [Environment]::Exit([int](-not $aovpnOk))
+        }
+        'CISScan' {
+            # Read-only CIS L1 (subset) compliance scan; exit 1 when grade < C (pct < 70).
+            $cisPct = Start-CISScan
+            [Environment]::Exit([int]($cisPct -lt 70))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

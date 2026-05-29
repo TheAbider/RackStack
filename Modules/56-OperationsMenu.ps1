@@ -69,6 +69,7 @@ function Show-OperationsMenu {
         Write-MenuItem "[28] Firewall Rule Summary"
         Write-MenuItem "[29] Reboot Pending Details"
         Write-MenuItem "[30] Memory Pressure Diagnostics"
+        Write-MenuItem "[34] CIS Compliance Scan (CIS L1)"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -101,7 +102,7 @@ function Show-OperationsMenu {
                 @{Num="27"; Name="Scheduled Task Overview"};   @{Num="28"; Name="Firewall Rule Summary"}
                 @{Num="29"; Name="Reboot Pending Details"};    @{Num="30"; Name="Memory Pressure Diagnostics"}
                 @{Num="31"; Name="Batch VM Cleanup"};          @{Num="32"; Name="VM Migration Pre-Flight"}
-                @{Num="33"; Name="Logged-On Users"}
+                @{Num="33"; Name="Logged-On Users"};           @{Num="34"; Name="CIS Compliance Scan (CIS L1)"}
             )
             $matched = @($opsItems | Where-Object { $_.Name -match [regex]::Escape($searchTerm) })
             Write-OutputColor "" -color "Info"
@@ -267,10 +268,14 @@ function Show-OperationsMenu {
                 Show-LoggedOnUsers
                 Write-PressEnter
             }
+            "34" {
+                Invoke-CISScanInteractive
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-33, [/] to search, or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-34, [/] to search, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
