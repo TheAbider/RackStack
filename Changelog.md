@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.107.0
+
+SIEM log forwarder — new module (76-SIEMForwarder.ps1), reachable from **Roles & Features → [12] SIEM Log Forwarder** and via the `SIEMSetup` / `SIEMStatus` CLI actions. This completes the security-operations workflow (NPS authentication → Always-On VPN gateway → CIS compliance scan → **log shipping**).
+
+**What it does:**
+- **Windows Event Forwarding (WEF)** — the built-in, vendor-neutral path with no agent and no token: enable WinRM (reversible) and point this server at a WEC collector (`Set-WEF Collector`); WEF uses machine/Kerberos auth. Reversible teardown included.
+- **Splunk Universal Forwarder** — for an **already-installed** forwarder, write `outputs.conf` / `inputs.conf` (HTTP Event Collector + Windows event log inputs). The HEC token is collected as a SecureString and written only at the moment of the config write.
+- **Elastic Winlogbeat** — for an **already-installed** beat, write `winlogbeat.yml` (event logs + Elasticsearch output). The API key is handled as a SecureString.
+- **Microsoft Sentinel** — a read-only readiness check (is this host Azure Arc-connected?) plus the exact `az` commands to deploy the Azure Monitor Agent and associate a Data Collection Rule.
+- **Status** (`-Action SIEMStatus`): JSON-aware readiness across WEF / WinRM / Splunk / Winlogbeat / Arc.
+
+**Supply chain & secrets:** RackStack installs **no** third-party agent binaries — for Splunk/Elastic it only writes config for software the operator already installed. Secrets never land in the Dry-Run queue, its JSON export, or any log; token-bearing config is staged under an admin-only path and the on-disk config that embeds a token is flagged sensitive. All state changes are Dry-Run-aware and reversible.
+
+Module count: 76 → 77.
+
 ## v1.106.0
 
 CIS Benchmark compliance scanning — new module (75-Compliance.ps1), reachable from **Operations → [34] CIS Compliance Scan** and via the `CISScan` CLI action. Scores this server against a subset of the CIS Microsoft Windows Server **Level 1** benchmark and writes a graded HTML + JSON report.

@@ -254,9 +254,10 @@ function Start-Show-RolesFeaturesMenu {
             "9" { Show-JEAManagement }
             "10" { Show-NPSManagement }
             "11" { Show-RemoteAccessManagement }
+            "12" { Show-SIEMForwarderManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-11 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-12 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }
