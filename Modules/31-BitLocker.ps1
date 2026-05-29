@@ -178,6 +178,7 @@ function Show-BitLockerManagement {
         Write-MenuItem -Text "[4]  Show Recovery Key"
         Write-MenuItem -Text "[5]  Check Encryption Progress"
         Write-MenuItem -Text "[6]  Verify Recovery Key Backup"
+        Write-MenuItem -Text "[7]  VHDX Encryption-at-Rest Audit"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -492,11 +493,81 @@ function Show-BitLockerManagement {
                 Write-OutputColor "" -color "Info"
                 Test-BitLockerRecoveryBackup
             }
+            "7" { Show-VHDXEncryptionAudit }
             { $_ -eq "b" -or $_ -eq "B" } { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
     }
+}
+
+# Read-only encryption-at-rest verification: report whether each VHD/VHDX
+# backing a Hyper-V VM sits on a BitLocker-protected volume. No changes made.
+function Get-VHDXEncryptionStatus {
+    $paths = New-Object System.Collections.Generic.List[string]
+    try {
+        if (Get-Command -Name Get-VM -ErrorAction SilentlyContinue) {
+            foreach ($d in (Get-VM -ErrorAction SilentlyContinue | Get-VMHardDiskDrive -ErrorAction SilentlyContinue)) {
+                if (-not [string]::IsNullOrWhiteSpace($d.Path)) { $paths.Add($d.Path) }
+            }
+        }
+    }
+    catch { }
+    $unique = @($paths | Sort-Object -Unique)
+    # Cache volume -> protection status from BitLocker once.
+    $blByMount = @{}
+    try { foreach ($v in (Get-BitLockerVolume -ErrorAction SilentlyContinue)) { $blByMount["$($v.MountPoint)"] = "$($v.ProtectionStatus)" } } catch { }
+    $results = @()
+    foreach ($p in $unique) {
+        $root = $null
+        try { $root = ([System.IO.Path]::GetPathRoot($p)).TrimEnd('\') } catch { }
+        $prot = if ($root -and $blByMount.ContainsKey($root)) { $blByMount[$root] } else { "Unknown" }
+        $results += [PSCustomObject]@{
+            Path = $p; Volume = $root; Protection = $prot; Encrypted = ($prot -eq 'On')
+        }
+    }
+    return $results
+}
+
+# Interactive display of the VHDX encryption-at-rest audit.
+function Show-VHDXEncryptionAudit {
+    Clear-Host
+    Write-CenteredOutput "VHDX Encryption-at-Rest Audit" -color "Info"
+    if ($null -eq (Get-Command -Name Get-BitLockerVolume -ErrorAction SilentlyContinue)) {
+        Write-OutputColor "  BitLocker is not available on this system." -color "Warning"; return
+    }
+    $r = @(Get-VHDXEncryptionStatus)
+    if ($r.Count -eq 0) {
+        Write-OutputColor "  No VHD/VHDX virtual disks found (no Hyper-V VMs, or none attached)." -color "Info"; return
+    }
+    Write-OutputColor "" -color "Info"
+    foreach ($item in $r) {
+        $label = if ($item.Encrypted) { "ENCRYPTED" } elseif ($item.Protection -eq 'Off') { "UNENCRYPTED" } else { "UNKNOWN" }
+        $c = if ($item.Encrypted) { "Success" } elseif ($item.Protection -eq 'Off') { "Error" } else { "Warning" }
+        Write-OutputColor ("  [{0}] {1}" -f $label, $item.Path) -color $c
+        Write-OutputColor ("           volume: $(if ($item.Volume) { $item.Volume } else { 'unresolved (CSV/UNC/remote)' })") -color "Debug"
+    }
+    $enc = @($r | Where-Object { $_.Encrypted }).Count
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  $enc of $($r.Count) virtual disk(s) sit on BitLocker-protected volumes." -color "Info"
+    Write-OutputColor "  'Unknown' volumes (CSV / UNC / remote storage) are not enumerable by Get-BitLockerVolume." -color "Debug"
+}
+
+# CLI entry: VHDXEncryptionAudit — read-only, JSON-aware.
+function Start-VHDXEncryptionAudit {
+    $r = @(Get-VHDXEncryptionStatus)
+    if ($script:CLIOutputFormat -eq 'JSON') {
+        Write-Output (@{
+            Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'VHDXEncryptionAudit'
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            TotalDisks = $r.Count; EncryptedDisks = @($r | Where-Object { $_.Encrypted }).Count
+            Disks = @($r | ForEach-Object { @{ Path = $_.Path; Volume = $_.Volume; Protection = $_.Protection; Encrypted = $_.Encrypted } })
+        } | ConvertTo-Json -Depth 5)
+    }
+    else {
+        Show-VHDXEncryptionAudit
+    }
+    return $true
 }
 #endregion

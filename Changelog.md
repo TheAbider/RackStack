@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.109.0
+
+VHDX encryption-at-rest verification — added to **BitLocker Management** (`[7] VHDX Encryption-at-Rest Audit`) and via the `VHDXEncryptionAudit` CLI action. A **read-only** check that reports whether each Hyper-V VM's virtual disk (VHD/VHDX) sits on a BitLocker-protected volume — so you can confirm VM storage is encrypted at rest.
+
+It enumerates the virtual disks attached to the host's VMs, resolves the volume each one lives on, and reports **encrypted / unencrypted / unknown** per disk plus a summary count. Volumes that BitLocker can't enumerate (Cluster Shared Volumes, UNC, remote storage) are reported as "unknown" rather than guessed. `-Action VHDXEncryptionAudit -OutputFormat JSON` emits the per-disk result for fleet auditing. Makes no changes.
+
 ## v1.108.0
 
 Windows Admin Center — new module (77-WindowsAdminCenter.ps1), reachable from **Roles & Features → [13] Windows Admin Center (WAC)** and via the `WACSetup` / `WACStatus` CLI actions. Installs and configures the WAC gateway on this host.

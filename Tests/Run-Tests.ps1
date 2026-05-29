@@ -9024,6 +9024,28 @@ catch {
 }
 
 # ============================================================================
+# SECTION 176: VHDX ENCRYPTION-AT-REST AUDIT (v1.109.0, addition to 31-BitLocker)
+# ============================================================================
+Write-SectionHeader "SECTION 176: VHDX ENCRYPTION-AT-REST AUDIT (31-BitLocker)"
+
+try {
+    $blC = Get-Content "$modulesPath\31-BitLocker.ps1" -Raw
+    Write-TestResult "31-BitLocker: Get-VHDXEncryptionStatus exists" ($blC -match 'function\s+Get-VHDXEncryptionStatus\b')
+    Write-TestResult "31-BitLocker: Start-VHDXEncryptionAudit exists" ($blC -match 'function\s+Start-VHDXEncryptionAudit\b')
+    Write-TestResult "31-BitLocker: Show-VHDXEncryptionAudit exists" ($blC -match 'function\s+Show-VHDXEncryptionAudit\b')
+    # Read-only: the audit path must not mutate (no Enable-BitLocker / Set- / Remove-).
+    Write-TestResult "31-BitLocker: VHDX audit is read-only" (-not ($blC -match 'function\s+Get-VHDXEncryptionStatus[\s\S]{0,800}(Enable-BitLocker|Set-ItemProperty|Remove-Item)'))
+    $vhdxEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: VHDXEncryptionAudit dispatch case" ($vhdxEntry -match "'VHDXEncryptionAudit'\s*\{")
+    $vhdxHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: VHDXEncryptionAudit in -Action ValidateSet" ($vhdxHeader -match "'VHDXEncryptionAudit'")
+    Write-TestResult "31-BitLocker: menu routes [7] to Show-VHDXEncryptionAudit" ($blC -match '"7"\s*\{\s*Show-VHDXEncryptionAudit')
+}
+catch {
+    Write-TestResult "VHDX Encryption Audit Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -9303,7 +9325,7 @@ Write-TestResult "31-BitLocker: decrypt volume nav check" ($blContent -match 'nu
 # All bare "Enter volume number" Read-Hosts (options 3,4) should have nav checks
 $blBareVolNum = ([regex]::Matches($blContent, 'Read-Host "  Enter volume number"\s+\$navResult')).Count
 Write-TestResult "31-BitLocker: bare volume number nav checks ($blBareVolNum/2)" ($blBareVolNum -ge 2)
-Write-TestResult "31-BitLocker: specific invalid msg" ($blContent -match 'Enter 1-6 or B')
+Write-TestResult "31-BitLocker: specific invalid msg" ($blContent -match 'Enter 1-7 or B')
 
 # Deduplication sub-prompt nav checks
 $ddContent = Get-Content -LiteralPath "$modulesPath\32-Deduplication.ps1" -Raw
@@ -13034,7 +13056,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 191 entries" ($listActionCount -eq 191) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 192 entries" ($listActionCount -eq 192) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13067,7 +13089,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 191 entries" ($actionCount2 -eq 191) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 192 entries" ($actionCount2 -eq 192) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13093,7 +13115,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 191 entries" ($actionCount3 -eq 191) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 192 entries" ($actionCount3 -eq 192) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13131,7 +13153,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 191 entries" ($actionCount4 -eq 191) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 192 entries" ($actionCount4 -eq 192) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

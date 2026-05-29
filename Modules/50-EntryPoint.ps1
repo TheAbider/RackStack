@@ -409,6 +409,7 @@ function Assert-Elevation {
                 @{ Action = 'SIEMStatus';       Description = 'Show SIEM log-forwarder readiness (WEF / WinRM / agents / Arc)' }
                 @{ Action = 'WACSetup';         Description = 'Install + configure the Windows Admin Center gateway (verified MSI, port, certificate)' }
                 @{ Action = 'WACStatus';        Description = 'Show Windows Admin Center gateway status (service, port, listening)' }
+                @{ Action = 'VHDXEncryptionAudit'; Description = 'Read-only: report whether each VM virtual disk sits on a BitLocker-protected volume' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2040,6 +2041,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Install/configure the WAC gateway (interactive console; JSON status headless).
             $wacOk = Start-WACSetup
             [Environment]::Exit([int](-not $wacOk))
+        }
+        'VHDXEncryptionAudit' {
+            # Read-only: which VM virtual disks sit on BitLocker-protected volumes (JSON-aware).
+            $vhdxOk = Start-VHDXEncryptionAudit
+            [Environment]::Exit([int](-not $vhdxOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
