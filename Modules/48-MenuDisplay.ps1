@@ -426,6 +426,12 @@ function Show-RolesFeaturesMenu {
     } -CacheSeconds 120
     $npsColor = if ($npsStatusText -eq "Installed") { "Success" } else { "Warning" }
 
+    $aovpnStatusText = Get-CachedValue -Key "RemoteAccessState" -FetchScript {
+        $r = Get-RemoteAccessStatus
+        if ($r.VpnConfigured) { "VPN configured" } elseif ($r.Installed) { "Role installed" } else { "Not Installed" }
+    } -CacheSeconds 120
+    $aovpnColor = if ($aovpnStatusText -eq "VPN configured") { "Success" } elseif ($aovpnStatusText -eq "Role installed") { "Warning" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -443,6 +449,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[8]  Group Policy Manager ►" -Status $gpoStatusText -StatusColor $gpoColor
     Write-MenuItem "[9]  Just Enough Administration (JEA) ►" -Status $jeaStatusText -StatusColor $jeaColor
     Write-MenuItem "[10] Network Policy Server (RADIUS) ►" -Status $npsStatusText -StatusColor $npsColor
+    Write-MenuItem "[11] Remote Access / Always-On VPN ►" -Status $aovpnStatusText -StatusColor $aovpnColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

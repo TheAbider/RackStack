@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.105.0
+
+Remote Access / Always-On VPN — new module (74-AlwaysOnVPN.ps1), reachable from **Roles & Features → [11] Remote Access / Always-On VPN** and via the `AlwaysOnVPNSetup` CLI action. This is the VPN-gateway half of the remote-access stack whose RADIUS auth back end is the NPS module (73): RRAS forwards authentication to NPS, NPS applies the network policy.
+
+**What it does:**
+- **Install the Remote Access role** (`-Action AlwaysOnVPNSetup`, or menu): installs the DirectAccess and VPN (RAS) role with management tools. Reversible / Dry-Run-aware.
+- **Configure the VPN server** (interactive or CLI): enables RRAS as a VPN server (SSTP + IKEv2). Undo tears the VPN configuration back down.
+- **Point authentication at NPS/RADIUS** (interactive): register an NPS server as the VPN's RADIUS authentication source. The shared secret is collected as a SecureString and held only long enough for the registration — it never lands in the Dry-Run queue, its JSON export, or any file. Undo removes the RADIUS server.
+- **Generate Always-On VPN profiles** (interactive): build a device-tunnel (machine-cert) or user-tunnel (EAP-TLS) ProfileXML from a few prompts — server FQDN, protocol (IKEv2/SSTP/Automatic), split- vs force-tunnel, DNS suffix, and split-tunnel routes. The generated profile is written to an admin-only path, ready to deploy via the VPNv2 CSP (Intune) or PowerShell.
+- **Show the current Remote Access / VPN configuration.**
+
+Requires the Remote Access role; the menu surfaces install + VPN-configured status. Connection-request and network policies are authored in the NPS module / console.
+
+Module count: 74 → 75.
+
 ## v1.104.0
 
 Network Policy Server (NPS / RADIUS) — new module (73-NPS.ps1), reachable from **Roles & Features → [10] Network Policy Server (RADIUS)** and via the `NPSSetup` CLI action. NPS is Windows' RADIUS server for 802.1X (wired/wireless NAC), VPN authentication, and as the auth back end for Always-On VPN.
