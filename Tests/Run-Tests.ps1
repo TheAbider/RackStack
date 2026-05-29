@@ -9105,6 +9105,37 @@ catch {
 }
 
 # ============================================================================
+# SECTION 180: SMB SIGNING + ENCRYPTION ENFORCEMENT (v1.113.0, 56-OperationsMenu)
+# ============================================================================
+Write-SectionHeader "SECTION 180: SMB SIGNING + ENCRYPTION ENFORCEMENT (56-OperationsMenu)"
+
+try {
+    $smbC = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    Write-TestResult "56-Ops: Get-SMBServerSecurityStatus exists" ($smbC -match 'function\s+Get-SMBServerSecurityStatus\b')
+    Write-TestResult "56-Ops: Set-SMBServerSecurity exists" ($smbC -match 'function\s+Set-SMBServerSecurity\b')
+    Write-TestResult "56-Ops: Start-SmbSecurityCheck exists" ($smbC -match 'function\s+Start-SmbSecurityCheck\b')
+    Write-TestResult "56-Ops: Start-SmbEnforce exists" ($smbC -match 'function\s+Start-SmbEnforce\b')
+    # Reversible: enforce captures prior state and registers an undo action.
+    Write-TestResult "56-Ops: SMB enforce registers an undo action" ($smbC -match 'function\s+Set-SMBServerSecurity[\s\S]{0,3000}Add-UndoAction')
+    # Dry-Run aware: queues with an Undo closure (no -OneWay enforcement, it's reversible).
+    Write-TestResult "56-Ops: SMB enforce is Dry-Run aware (reversible)" ($smbC -match 'Set-SMBServerSecurity[\s\S]{0,1200}Push-DryRunStep[\s\S]{0,400}-OneWay \$false')
+    # Read-only check makes no Set call before the JSON emit.
+    Write-TestResult "56-Ops: SmbSecurityCheck JSON-aware" ($smbC -match "Start-SmbSecurityCheck[\s\S]{0,400}CLIOutputFormat -eq 'JSON'")
+    $smbMenu = $smbC -match '\[35\]\s*SMB Signing'
+    Write-TestResult "56-Ops: menu item [35] SMB Signing present" $smbMenu
+    Write-TestResult "56-Ops: Operations invalid msg bumped to 1-35" ($smbC -match 'Enter 1-35, \[/\] to search')
+    $smbEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: SmbSecurityCheck dispatch case" ($smbEntry -match "'SmbSecurityCheck'\s*\{")
+    Write-TestResult "50-EntryPoint: SmbEnforce dispatch case" ($smbEntry -match "'SmbEnforce'\s*\{")
+    $smbHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: SmbSecurityCheck in -Action ValidateSet" ($smbHeader -match "'SmbSecurityCheck'")
+    Write-TestResult "Header.ps1: SmbEnforce in -Action ValidateSet" ($smbHeader -match "'SmbEnforce'")
+}
+catch {
+    Write-TestResult "SMB Security Enforcement Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -13115,7 +13146,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 194 entries" ($listActionCount -eq 194) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 196 entries" ($listActionCount -eq 196) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13148,7 +13179,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 194 entries" ($actionCount2 -eq 194) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 196 entries" ($actionCount2 -eq 196) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13174,7 +13205,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 194 entries" ($actionCount3 -eq 194) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 196 entries" ($actionCount3 -eq 196) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13212,7 +13243,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 194 entries" ($actionCount4 -eq 194) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 196 entries" ($actionCount4 -eq 196) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
@@ -13518,5 +13549,35 @@ if ($runnableTests -gt 0) {
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Cyan
 Write-Host ""
+
+# ----------------------------------------------------------------------------
+# Structural-test badge self-heal: the README "structural tests" badge number
+# is sourced from this run's live $script:TotalTests rather than hand-edited,
+# so it can never drift. Local-only — skipped under CI so the checkout stays
+# clean (CI must not produce working-tree changes), and best-effort so a
+# read-only tree never fails the run.
+# ----------------------------------------------------------------------------
+if (-not $env:CI -and -not $env:GITHUB_ACTIONS) {
+    try {
+        $readmePath = Join-Path $script:ModuleRoot 'README.md'
+        if (Test-Path -LiteralPath $readmePath) {
+            $readmeText = [System.IO.File]::ReadAllText($readmePath)
+            $badgePattern = '(structural%20tests-)(\d{2,5})(-brightgreen)'
+            $m = [regex]::Match($readmeText, $badgePattern)
+            if ($m.Success -and [int]$m.Groups[2].Value -ne $script:TotalTests) {
+                $oldCount = $m.Groups[2].Value
+                $updated = [regex]::Replace($readmeText, $badgePattern, "`${1}$script:TotalTests`${3}")
+                $altPattern = '(\d{2,5})( structural tests")'
+                $updated = [regex]::Replace($updated, $altPattern, "$script:TotalTests`${2}")
+                [System.IO.File]::WriteAllText($readmePath, $updated, (New-Object System.Text.UTF8Encoding $false))
+                Write-Host "  [badge] Synced README structural-tests badge: $oldCount -> $script:TotalTests" -ForegroundColor Cyan
+                Write-Host ""
+            }
+        }
+    }
+    catch {
+        # Non-fatal: badge sync is cosmetic and must never break the suite.
+    }
+}
 
 exit $exitCode

@@ -412,6 +412,8 @@ function Assert-Elevation {
                 @{ Action = 'VHDXEncryptionAudit'; Description = 'Read-only: report whether each VM virtual disk sits on a BitLocker-protected volume' }
                 @{ Action = 'ADRecycleBin';     Description = 'Show AD Recycle Bin status (JSON) or enable it interactively (irreversible)' }
                 @{ Action = 'ClusterValidationReport'; Description = 'Run a non-disruptive failover-cluster validation and archive the HTML report (JSON-aware)' }
+                @{ Action = 'SmbSecurityCheck'; Description = 'Read-only: report SMB server signing/encryption posture (JSON-aware)' }
+                @{ Action = 'SmbEnforce';       Description = 'Enforce SMB server signing + encryption (reversible)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2058,6 +2060,16 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Non-disruptive cluster validation + archived HTML report (JSON-aware).
             $cvrOk = Start-ClusterValidationReport
             [Environment]::Exit([int](-not $cvrOk))
+        }
+        'SmbSecurityCheck' {
+            # Read-only SMB signing/encryption posture (JSON-aware).
+            $smbChkOk = Start-SmbSecurityCheck
+            [Environment]::Exit([int](-not $smbChkOk))
+        }
+        'SmbEnforce' {
+            # Enforce SMB signing + encryption (reversible; headless applies, console interactive).
+            $smbEnfOk = Start-SmbEnforce
+            [Environment]::Exit([int](-not $smbEnfOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

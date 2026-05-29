@@ -70,6 +70,7 @@ function Show-OperationsMenu {
         Write-MenuItem "[29] Reboot Pending Details"
         Write-MenuItem "[30] Memory Pressure Diagnostics"
         Write-MenuItem "[34] CIS Compliance Scan (CIS L1)"
+        Write-MenuItem "[35] SMB Signing & Encryption Enforcement"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -103,6 +104,7 @@ function Show-OperationsMenu {
                 @{Num="29"; Name="Reboot Pending Details"};    @{Num="30"; Name="Memory Pressure Diagnostics"}
                 @{Num="31"; Name="Batch VM Cleanup"};          @{Num="32"; Name="VM Migration Pre-Flight"}
                 @{Num="33"; Name="Logged-On Users"};           @{Num="34"; Name="CIS Compliance Scan (CIS L1)"}
+                @{Num="35"; Name="SMB Signing & Encryption Enforcement"}
             )
             $matched = @($opsItems | Where-Object { $_.Name -match [regex]::Escape($searchTerm) })
             Write-OutputColor "" -color "Info"
@@ -272,10 +274,14 @@ function Show-OperationsMenu {
                 Invoke-CISScanInteractive
                 Write-PressEnter
             }
+            "35" {
+                Set-SMBServerSecurity
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-34, [/] to search, or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-35, [/] to search, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -2282,5 +2288,105 @@ function Test-VMMigrationReadiness {
     }
 
     Write-OutputColor "`n  Pre-flight check complete" -color "Success"
+}
+
+# Read-only: current SMB server signing / encryption posture.
+function Get-SMBServerSecurityStatus {
+    try {
+        $c = Get-SmbServerConfiguration -ErrorAction Stop
+        return [PSCustomObject]@{
+            Available                = $true
+            RequireSecuritySignature = [bool]$c.RequireSecuritySignature
+            EnableSecuritySignature  = [bool]$c.EnableSecuritySignature
+            EncryptData              = [bool]$c.EncryptData
+            RejectUnencryptedAccess  = [bool]$c.RejectUnencryptedAccess
+            SMB1Enabled              = [bool]$c.EnableSMB1Protocol
+        }
+    }
+    catch { return [PSCustomObject]@{ Available = $false } }
+}
+
+# Interactive: require SMB signing + encryption on this server (reversible).
+function Set-SMBServerSecurity {
+    Clear-Host
+    Write-CenteredOutput "SMB Signing & Encryption Enforcement" -color "Info"
+    $s = Get-SMBServerSecurityStatus
+    if (-not $s.Available) { Write-OutputColor "  SMB server configuration is not available." -color "Error"; return }
+    Write-OutputColor "  Current: RequireSigning=$($s.RequireSecuritySignature)  EncryptData=$($s.EncryptData)  SMBv1=$($s.SMB1Enabled)" -color "Info"
+    Write-OutputColor "  Enforcing requires SMB signing AND encryption for all shares served by this host." -color "Info"
+    Write-OutputColor "  NOTE: very old clients that cannot sign/encrypt SMB may lose access." -color "Warning"
+    if (-not (Confirm-UserAction -Message "Require SMB signing + encryption on this server?")) { Write-OutputColor "  Cancelled." -color "Info"; return }
+    $priorSign = $s.RequireSecuritySignature; $priorEnc = $s.EncryptData
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $cs = $priorSign; $ce = $priorEnc
+        Push-DryRunStep -Label "Enforce SMB signing + encryption" -Category "Security" -OneWay $false `
+            -Params @{ RequireSigning = $true; EncryptData = $true } `
+            -Preflight { $true }.GetNewClosure() `
+            -Apply { Set-SmbServerConfiguration -RequireSecuritySignature $true -EncryptData $true -Force -ErrorAction SilentlyContinue }.GetNewClosure() `
+            -Undo { Set-SmbServerConfiguration -RequireSecuritySignature $cs -EncryptData $ce -Force -ErrorAction SilentlyContinue }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): enforce SMB signing + encryption." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued SMB signing+encryption enforcement"
+        return
+    }
+
+    try {
+        Set-SmbServerConfiguration -RequireSecuritySignature $true -EncryptData $true -Force -ErrorAction Stop
+        Write-OutputColor "  SMB signing + encryption are now required." -color "Success"
+        Add-SessionChange -Category "Security" -Description "Enforced SMB signing + encryption"
+        Add-UndoAction -Category "Security" -Description "Enforced SMB signing + encryption" -UndoScript {
+            param($Sign, $Enc)
+            Set-SmbServerConfiguration -RequireSecuritySignature $Sign -EncryptData $Enc -Force -ErrorAction SilentlyContinue
+        } -UndoParams @{ Sign = $priorSign; Enc = $priorEnc }
+        Clear-MenuCache
+    }
+    catch {
+        Write-OutputColor "  Failed to apply SMB security: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# Submenu: SMB signing / encryption.
+function Show-SMBSecurityManagement {
+    Clear-Host
+    Write-CenteredOutput "SMB Signing & Encryption" -color "Info"
+    $s = Get-SMBServerSecurityStatus
+    if ($s.Available) {
+        Write-OutputColor "  RequireSigning : $($s.RequireSecuritySignature)" -color "Info"
+        Write-OutputColor "  EncryptData    : $($s.EncryptData)" -color "Info"
+        Write-OutputColor "  SMBv1 enabled  : $($s.SMB1Enabled)" -color $(if ($s.SMB1Enabled) { "Warning" } else { "Info" })
+    }
+    Write-OutputColor "" -color "Info"
+    if (Confirm-UserAction -Message "Enforce SMB signing + encryption now?") { Set-SMBServerSecurity }
+}
+
+# CLI: SmbSecurityCheck — read-only JSON status.
+function Start-SmbSecurityCheck {
+    $s = Get-SMBServerSecurityStatus
+    if ($script:CLIOutputFormat -eq 'JSON') {
+        Write-Output (@{
+            Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SmbSecurityCheck'
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            Available = $s.Available; RequireSigning = $s.RequireSecuritySignature; EncryptData = $s.EncryptData; SMB1Enabled = $s.SMB1Enabled
+        } | ConvertTo-Json)
+    }
+    else { Show-SMBSecurityManagement }
+    return $true
+}
+
+# CLI: SmbEnforce — apply signing+encryption (headless applies; console is interactive).
+function Start-SmbEnforce {
+    if ($script:CLIOutputFormat -eq 'JSON') {
+        $ok = $true
+        try { Set-SmbServerConfiguration -RequireSecuritySignature $true -EncryptData $true -Force -ErrorAction Stop } catch { $ok = $false }
+        $s = Get-SMBServerSecurityStatus
+        Write-Output (@{
+            Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'SmbEnforce'
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            Success = $ok; RequireSigning = $s.RequireSecuritySignature; EncryptData = $s.EncryptData
+        } | ConvertTo-Json)
+        return $ok
+    }
+    Set-SMBServerSecurity
+    return $true
 }
 #endregion
