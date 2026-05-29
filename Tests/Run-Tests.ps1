@@ -8598,7 +8598,14 @@ Write-SectionHeader "SECTION 167: EXTENDED UNDO + DEFAULTS EDITOR"
     function Add-SessionChange { param($Category, $Description) }
     function Confirm-UserAction { param($Message) $true }
     $script:__rhQueue = [System.Collections.Generic.Queue[string]]::new()
-    function Read-Host { param($Prompt) if ($script:__rhQueue.Count -gt 0) { $script:__rhQueue.Dequeue() } else { "" } }
+    function Read-Host {
+        # Intentional, test-scoped shim so the interactive count prompt in
+        # Invoke-ExtendedUndo can be driven non-interactively. Overriding the
+        # built-in is deliberate here, so the rule is suppressed for this shim only.
+        [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Justification = 'Test shim for the Invoke-ExtendedUndo count prompt')]
+        param($Prompt)
+        if ($script:__rhQueue.Count -gt 0) { $script:__rhQueue.Dequeue() } else { "" }
+    }
 
     try {
         $undoLog = [System.Collections.Generic.List[string]]::new()

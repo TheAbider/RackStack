@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.101.1
+
+Test-suite cleanup. The v1.101.0 Extended-Undo behavioral test drives the interactive count prompt by shimming a built-in cmdlet; that deliberate test shim now carries an inline analyzer suppression with a justification, so the static-analysis scan reports the test runner clean again. No change to the shipped tool.
+
 ## v1.101.0
 
 Operator quality-of-life: multi-step undo and a safer in-tool defaults editor.
