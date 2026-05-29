@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.104.0
+
+Network Policy Server (NPS / RADIUS) — new module (73-NPS.ps1), reachable from **Roles & Features → [10] Network Policy Server (RADIUS)** and via the `NPSSetup` CLI action. NPS is Windows' RADIUS server for 802.1X (wired/wireless NAC), VPN authentication, and as the auth back end for Always-On VPN.
+
+**What it does:**
+- **Install the NPS role** (`-Action NPSSetup`, or menu): installs Network Policy and Access Services (NPAS) with management tools. Reversible / Dry-Run-aware.
+- **Add a RADIUS client** (interactive): register a switch / AP / VPN gateway by name + address + shared secret. The secret is collected as a SecureString and held only long enough for the registration — it never lands in the Dry-Run queue or its JSON export. Undo removes the client.
+- **Export / Import the NPS configuration** (interactive): back up the full NPS config (clients + policies) to XML and restore it. Secrets are excluded from the export by default (opt-in), and backups go to an admin-only ProgramData path. Import snapshots the current config first so it can be rolled back, and is Dry-Run-aware.
+- **Show the current NPS configuration.**
+
+Connection-request / network policies are authored in the NPS console or via a restored config backup. Requires the NPAS role; the menu surfaces install status.
+
+Module count: 73 → 74.
+
 ## v1.103.0
 
 Just Enough Administration (JEA) — new module (72-JEA.ps1), reachable from **Roles & Features → [9] Just Enough Administration (JEA)** and via the `JEAList` CLI action.

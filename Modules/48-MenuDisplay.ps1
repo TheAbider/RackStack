@@ -421,6 +421,11 @@ function Show-RolesFeaturesMenu {
     } -CacheSeconds 120
     $jeaColor = if ($jeaStatusText -eq "Available") { "Success" } else { "Warning" }
 
+    $npsStatusText = Get-CachedValue -Key "NPSState" -FetchScript {
+        if ((Get-NPSStatus).Installed) { "Installed" } else { "Not Installed" }
+    } -CacheSeconds 120
+    $npsColor = if ($npsStatusText -eq "Installed") { "Success" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -437,6 +442,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[7]  Storage Migration Service ►" -Status $smsStatusText -StatusColor $smsColor
     Write-MenuItem "[8]  Group Policy Manager ►" -Status $gpoStatusText -StatusColor $gpoColor
     Write-MenuItem "[9]  Just Enough Administration (JEA) ►" -Status $jeaStatusText -StatusColor $jeaColor
+    Write-MenuItem "[10] Network Policy Server (RADIUS) ►" -Status $npsStatusText -StatusColor $npsColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"
