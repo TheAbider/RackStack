@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.110.0
+
+Enable AD Recycle Bin — added to **AD DS Domain Controller Promotion** (`[6] Enable AD Recycle Bin`) and via the `ADRecycleBin` CLI action. Turns on Active Directory object recovery so deleted users/groups/OUs can be restored with their attributes intact.
+
+It checks the forest, warns that enabling is **permanent** (the AD Recycle Bin cannot be disabled once on) and requires a forest functional level of 2008 R2 or higher, confirms, then runs `Enable-ADOptionalFeature`. The action is Dry-Run-aware and queued as **one-way** (no undo, matching the irreversibility). `-Action ADRecycleBin -OutputFormat JSON` reports the current enabled state without changing anything.
+
+Addition to 61-ActiveDirectory (no new module). CLI actions: 192 → 193.
+
 ## v1.109.0
 
 VHDX encryption-at-rest verification — added to **BitLocker Management** (`[7] VHDX Encryption-at-Rest Audit`) and via the `VHDXEncryptionAudit` CLI action. A **read-only** check that reports whether each Hyper-V VM's virtual disk (VHD/VHDX) sits on a BitLocker-protected volume — so you can confirm VM storage is encrypted at rest.

@@ -9046,6 +9046,29 @@ catch {
 }
 
 # ============================================================================
+# SECTION 177: AD DS RECYCLE BIN (v1.110.0, addition to 61-ActiveDirectory)
+# ============================================================================
+Write-SectionHeader "SECTION 177: AD DS RECYCLE BIN (61-ActiveDirectory)"
+
+try {
+    $adC = Get-Content "$modulesPath\61-ActiveDirectory.ps1" -Raw
+    Write-TestResult "61-AD: Test-ADRecycleBinStatus exists" ($adC -match 'function\s+Test-ADRecycleBinStatus\b')
+    Write-TestResult "61-AD: Enable-ADRecycleBinFeature exists" ($adC -match 'function\s+Enable-ADRecycleBinFeature\b')
+    Write-TestResult "61-AD: Start-ADRecycleBin exists" ($adC -match 'function\s+Start-ADRecycleBin\b')
+    # Enabling the Recycle Bin is irreversible -> dry-run step must be OneWay.
+    Write-TestResult "61-AD: AD Recycle Bin enable is OneWay in Dry-Run" ($adC -match 'Enable AD Recycle Bin[\s\S]{0,200}-OneWay \$true')
+    Write-TestResult "61-AD: uses Enable-ADOptionalFeature" ($adC -match "Enable-ADOptionalFeature -Identity 'Recycle Bin Feature'")
+    Write-TestResult "61-AD: menu routes [6] to Enable-ADRecycleBinFeature" ($adC -match '"6"\s*\{\s*Enable-ADRecycleBinFeature')
+    $adEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: ADRecycleBin dispatch case" ($adEntry -match "'ADRecycleBin'\s*\{")
+    $adHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: ADRecycleBin in -Action ValidateSet" ($adHeader -match "'ADRecycleBin'")
+}
+catch {
+    Write-TestResult "AD Recycle Bin Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -9391,7 +9414,7 @@ Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -matc
 # AD DS promotion menu — no double Write-PressEnter (sub-functions have their own)
 $adContent = Get-Content -LiteralPath "$modulesPath\61-ActiveDirectory.ps1" -Raw
 Write-TestResult "61-AD: no inline Write-PressEnter on sub-function calls" (-not ($adContent -match 'Install-NewForest;\s*Write-PressEnter'))
-Write-TestResult "61-AD: specific invalid msg" ($adContent -match 'Enter 1-5 or B')
+Write-TestResult "61-AD: specific invalid msg" ($adContent -match 'Enter 1-6 or B')
 
 # No generic "Invalid choice." left in codebase
 $genericInvalidCount = 0
@@ -13056,7 +13079,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 192 entries" ($listActionCount -eq 192) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 193 entries" ($listActionCount -eq 193) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13089,7 +13112,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 192 entries" ($actionCount2 -eq 192) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 193 entries" ($actionCount2 -eq 193) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13115,7 +13138,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 192 entries" ($actionCount3 -eq 192) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 193 entries" ($actionCount3 -eq 193) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13153,7 +13176,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 192 entries" ($actionCount4 -eq 192) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 193 entries" ($actionCount4 -eq 193) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

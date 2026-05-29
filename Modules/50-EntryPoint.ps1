@@ -410,6 +410,7 @@ function Assert-Elevation {
                 @{ Action = 'WACSetup';         Description = 'Install + configure the Windows Admin Center gateway (verified MSI, port, certificate)' }
                 @{ Action = 'WACStatus';        Description = 'Show Windows Admin Center gateway status (service, port, listening)' }
                 @{ Action = 'VHDXEncryptionAudit'; Description = 'Read-only: report whether each VM virtual disk sits on a BitLocker-protected volume' }
+                @{ Action = 'ADRecycleBin';     Description = 'Show AD Recycle Bin status (JSON) or enable it interactively (irreversible)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2046,6 +2047,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Read-only: which VM virtual disks sit on BitLocker-protected volumes (JSON-aware).
             $vhdxOk = Start-VHDXEncryptionAudit
             [Environment]::Exit([int](-not $vhdxOk))
+        }
+        'ADRecycleBin' {
+            # AD Recycle Bin status (JSON) / interactive enable (console).
+            $adrbOk = Start-ADRecycleBin
+            [Environment]::Exit([int](-not $adrbOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

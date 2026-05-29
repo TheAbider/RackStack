@@ -717,6 +717,7 @@ function Show-ADDSPromotionMenu {
         Write-MenuItem -Text "[3]  Read-Only Domain Controller (RODC)"
         Write-MenuItem -Text "[4]  Check AD DS Status"
         Write-MenuItem -Text "[5]  Replication Health Monitor"
+        Write-MenuItem -Text "[6]  Enable AD Recycle Bin"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -732,8 +733,9 @@ function Show-ADDSPromotionMenu {
             "3" { Install-ReadOnlyDC }
             "4" { Show-ADDSStatus }
             "5" { Show-ReplicationMonitor }
+            "6" { Enable-ADRecycleBinFeature }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-5 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-6 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -1471,5 +1473,79 @@ function Show-ADDSStatus {
 
     Write-OutputColor "" -color "Info"
     Write-PressEnter
+}
+
+# Read-only: is the AD Recycle Bin optional feature enabled in this forest?
+function Test-ADRecycleBinStatus {
+    try {
+        if ($null -eq (Get-Command -Name Get-ADOptionalFeature -ErrorAction SilentlyContinue)) {
+            return [PSCustomObject]@{ Available = $false; Enabled = $false; Forest = ''; ForestMode = '' }
+        }
+        $forest = Get-ADForest -ErrorAction Stop
+        $feat = Get-ADOptionalFeature -Filter "Name -eq 'Recycle Bin Feature'" -ErrorAction Stop
+        $enabled = ($null -ne $feat -and @($feat.EnabledScopes).Count -gt 0)
+        return [PSCustomObject]@{ Available = $true; Enabled = $enabled; Forest = "$($forest.Name)"; ForestMode = "$($forest.ForestMode)" }
+    }
+    catch {
+        return [PSCustomObject]@{ Available = $false; Enabled = $false; Forest = ''; ForestMode = '' }
+    }
+}
+
+# Interactive: enable the AD Recycle Bin. IRREVERSIBLE once enabled.
+function Enable-ADRecycleBinFeature {
+    Clear-Host
+    Write-CenteredOutput "Enable AD Recycle Bin" -color "Info"
+    $s = Test-ADRecycleBinStatus
+    if (-not $s.Available) {
+        Write-OutputColor "  Active Directory module unavailable (not a DC, or RSAT-AD-PowerShell missing)." -color "Error"; return
+    }
+    if ($s.Enabled) {
+        Write-OutputColor "  AD Recycle Bin is already enabled for forest '$($s.Forest)'." -color "Info"; return
+    }
+    Write-OutputColor "  Forest: $($s.Forest)  (functional level: $($s.ForestMode))" -color "Info"
+    Write-OutputColor "  WARNING: Enabling the AD Recycle Bin is PERMANENT — it cannot be disabled" -color "Warning"
+    Write-OutputColor "  afterward, and requires a forest functional level of 2008 R2 or higher." -color "Warning"
+    if (-not (Confirm-UserAction -Message "Enable the AD Recycle Bin for '$($s.Forest)' (irreversible)?")) {
+        Write-OutputColor "  Cancelled." -color "Info"; return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capForest = $s.Forest
+        Push-DryRunStep -Label "Enable AD Recycle Bin ($capForest)" -Category "ActiveDirectory" -OneWay $true `
+            -Params @{ Forest = $capForest } `
+            -Preflight { if ((Test-ADRecycleBinStatus).Enabled) { "AD Recycle Bin already enabled" } else { $true } }.GetNewClosure() `
+            -Apply {
+                Enable-ADOptionalFeature -Identity 'Recycle Bin Feature' -Scope ForestOrConfigurationSet -Target $capForest -Confirm:$false -ErrorAction Stop | Out-Null
+            }.GetNewClosure() `
+            -Undo { Write-OutputColor "  AD Recycle Bin cannot be disabled once enabled — no undo." -color "Info" }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run, ONE-WAY): enable AD Recycle Bin." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued AD Recycle Bin enable ($capForest)"
+        return
+    }
+
+    try {
+        Enable-ADOptionalFeature -Identity 'Recycle Bin Feature' -Scope ForestOrConfigurationSet -Target $s.Forest -Confirm:$false -ErrorAction Stop | Out-Null
+        Write-OutputColor "  AD Recycle Bin enabled for forest '$($s.Forest)'." -color "Success"
+        Add-SessionChange -Category "ActiveDirectory" -Description "Enabled AD Recycle Bin ($($s.Forest))"
+        Clear-MenuCache
+    }
+    catch {
+        Write-OutputColor "  Failed to enable AD Recycle Bin: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# CLI: ADRecycleBin — JSON status (read-only); interactive enable on console.
+function Start-ADRecycleBin {
+    if ($script:CLIOutputFormat -eq 'JSON') {
+        $s = Test-ADRecycleBinStatus
+        Write-Output (@{
+            Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ADRecycleBin'
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            Available = $s.Available; Enabled = $s.Enabled; Forest = $s.Forest; ForestMode = $s.ForestMode
+        } | ConvertTo-Json)
+        return $true
+    }
+    Enable-ADRecycleBinFeature
+    return $true
 }
 #endregion
