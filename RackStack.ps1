@@ -3,7 +3,7 @@
     RackStack - Modular Loader (Development)
 
 .DESCRIPTION
-    This is the MODULAR LOADER -- it dot-sources all 77 modules from the Modules/
+    This is the MODULAR LOADER -- it dot-sources all 78 modules from the Modules/
     subfolder and starts RackStack. Use this file for development and testing.
 
     This is NOT the monolithic build. The monolithic single-file version is:
@@ -13,7 +13,7 @@
     Environment-specific settings are configured via defaults.json.
 
 .VERSION
-    1.107.0
+    1.108.0
 
 .NOTES
     - Requires Windows Server 2012 R2 or later (or Windows 10/11 for testing)
@@ -114,6 +114,7 @@ $moduleFiles = @(
     "74-AlwaysOnVPN.ps1"
     "75-Compliance.ps1"
     "76-SIEMForwarder.ps1"
+    "77-WindowsAdminCenter.ps1"
 )
 
 # Load all modules

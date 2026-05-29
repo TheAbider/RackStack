@@ -28,7 +28,7 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="5002 structural tests" src="https://img.shields.io/badge/structural%20tests-5002-brightgreen">
+  <img alt="5025 structural tests" src="https://img.shields.io/badge/structural%20tests-5025-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
@@ -37,7 +37,7 @@
 
 ---
 
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Where sconfig gives you 15 options, RackStack gives you 189 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, cloud onboarding, and batch automation, all with undo, transaction rollback, and audit logging.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." Where sconfig gives you 15 options, RackStack gives you 191 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, cloud onboarding, and batch automation, all with undo, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
 
@@ -61,11 +61,13 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Automation** -- JSON-driven batch mode (24 idempotent steps with transaction rollback), Quick Setup Wizard, configuration export/import, HTML reports, JSON audit logging with rotation
 
-**Monitoring** -- 189 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
+**Monitoring** -- 191 CLI actions with JSON output for fleet automation, `ServerScore` (unified 0-100 health grade), `HealthDashboard` (all-in-one monitoring endpoint), `ClusterHealthScore`, `StorageHealthScore`, System Center (SCCM/SCOM/WAC) + Azure AD/Intune integration
 
 **Cloud & Security** -- Azure Arc server onboarding (install the Connected Machine Agent, connect the host to Azure's hybrid management plane via service-principal auth); Microsoft Defender for Endpoint onboarding (activate the built-in EDR sensor against your tenant, with a built-in detection test)
 
 **Security Operations** -- Network Policy Server (RADIUS) for 802.1X / VPN authentication, Always-On VPN (RRAS gateway + device/user-tunnel ProfileXML generation), CIS Windows Server L1 compliance scanning (read-only, severity-weighted score + HTML/JSON report), and SIEM log forwarding (Windows Event Forwarding plus Splunk Universal Forwarder / Elastic Winlogbeat config); plus Group Policy backup/restore/drift and Just Enough Administration (JEA) constrained endpoints
+
+**Windows Admin Center** -- Install and configure the WAC gateway (Authenticode-verified MSI, gateway port + TLS certificate selection, firewall), with status and reversible uninstall
 
 **Monitoring & Diagnostics** -- Health dashboard (disk I/O latency, NIC errors, memory pressure, Hyper-V guest health, top CPU processes), performance snapshots with trend reports and "days until full" estimates, event log viewer, service manager, network diagnostics (ping, traceroute, port test, subnet sweep, DNS, ARP)
 
@@ -139,7 +141,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\RackStack.ps1
 ```
 
-> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 77 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
+> **`RackStack.ps1`** is the **modular loader** (~130 lines). It dot-sources all 78 modules from `Modules/` and starts the tool. Use this for development -- edit individual module files, then run.
 
 ### Single-File Deployment (Production)
 
@@ -150,7 +152,7 @@ For production use, generate a monolithic single-file script (~66K lines) that y
 .\sync-to-monolithic.ps1
 ```
 
-The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 77 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
+The output is **`RackStack v{version}.ps1`** -- a self-contained single file with all 78 modules baked in (version from `00-Initialization.ps1`). This is the file used to compile the `.exe`.
 
 > **Don't confuse the two:** `RackStack.ps1` = modular loader for development. `RackStack v{version}.ps1` = monolithic build for deployment/compilation.
 
@@ -437,7 +439,7 @@ $report.Issues
 
 **Tiers:** `Light` (minimal, safe for prod), `Standard` (recommended), `Aggressive` (maximum cleanup/debloat).
 
-### 189 CLI Actions
+### 191 CLI Actions
 
 | Category | Actions |
 |----------|---------|
@@ -473,7 +475,7 @@ Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JS
 
 ```
 RackStack/
-├── RackStack.ps1               # Modular loader -- dot-sources 77 modules (dev use)
+├── RackStack.ps1               # Modular loader -- dot-sources 78 modules (dev use)
 ├── RackStack v{version}.ps1    # Monolithic build -- all modules in one file (deploy/compile)
 ├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
 ├── defaults.json               # Your environment config (gitignored)
@@ -482,10 +484,10 @@ RackStack/
 ├── Modules/
 │   ├── 00-Initialization.ps1   # Constants, variables, config loading
 │   ├── 01-Console.ps1          # Console window management
-│   ├── ...                     # 74 more modules
-│   └── 76-SIEMForwarder.ps1
+│   ├── ...                     # 75 more modules
+│   └── 77-WindowsAdminCenter.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 5,002 automated tests
+│   ├── Run-Tests.ps1           # 5,025 automated tests
 │   ├── Validate-Release.ps1    # Pre-release validation suite
 │   └── ...
 └── docs/
@@ -494,7 +496,7 @@ RackStack/
 
 ### Module Architecture
 
-77 modules numbered for load order. Dependencies flow downward.
+78 modules numbered for load order. Dependencies flow downward.
 
 | Range | Category | Highlights |
 |---|---|---|
@@ -518,14 +520,15 @@ RackStack/
 | 74    | **Always-On VPN** | Remote Access (RRAS) VPN gateway + ProfileXML generation |
 | 75    | **Compliance** | CIS Windows Server L1 benchmark scanner (read-only, scored) |
 | 76    | **SIEM Forwarder** | WEF / Splunk / Winlogbeat log forwarding + Sentinel readiness |
+| 77    | **Windows Admin Center** | WAC gateway install (verified MSI) + port / TLS cert config |
 
 ## Testing
 
 ```powershell
-# Full test suite (5,002 tests, ~4 minutes)
+# Full test suite (5,025 tests, ~4 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
-# PSScriptAnalyzer (0 errors on all 77 modules + monolithic)
+# PSScriptAnalyzer (0 errors on all 78 modules + monolithic)
 powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 # Pre-release validation (parse + PSSA + structure + sync + version + tests)

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.108.0
+
+Windows Admin Center — new module (77-WindowsAdminCenter.ps1), reachable from **Roles & Features → [13] Windows Admin Center (WAC)** and via the `WACSetup` / `WACStatus` CLI actions. Installs and configures the WAC gateway on this host.
+
+**What it does:**
+- **Install the gateway**: provide the WAC MSI (operator-staged path, or — opt-in and confirmed — download from Microsoft's official `aka.ms` URL). In **both** cases the MSI must pass an Authenticode check (signature valid **and** signed by Microsoft) before it runs, with an optional SHA-256 pin. The install binds the gateway to a port (443 by default; 6516 offered) and a TLS certificate — pick an existing LocalMachine certificate by thumbprint, or let the installer generate a self-signed one — and opens the chosen port in the firewall.
+- **Status** (`-Action WACStatus`): JSON-aware — service state, port, and whether the gateway is listening.
+- **Uninstall**: reversible removal (resolves the product code and runs `msiexec /x`).
+
+All state changes are Dry-Run-aware and reversible (install registers an `msiexec /x` undo; the firewall rule undo removes only the rule RackStack created). RackStack installs **no** unverified binary — the Authenticode-Microsoft check is mandatory regardless of source. WAC extension management and Azure-connected WAC are out of scope for this release.
+
+Module count: 77 → 78.
+
 ## v1.107.0
 
 SIEM log forwarder — new module (76-SIEMForwarder.ps1), reachable from **Roles & Features → [12] SIEM Log Forwarder** and via the `SIEMSetup` / `SIEMStatus` CLI actions. This completes the security-operations workflow (NPS authentication → Always-On VPN gateway → CIS compliance scan → **log shipping**).

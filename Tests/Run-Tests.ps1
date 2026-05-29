@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 77  # 00-76 inclusive
+$expectedModuleCount = 78  # 00-77 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "76-SIEMForwarder.ps1"
-    Write-TestResult "Module range 00-Initialization to 76-SIEMForwarder" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "77-WindowsAdminCenter.ps1"
+    Write-TestResult "Module range 00-Initialization to 77-WindowsAdminCenter" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 76 #region tags" ($regionStartCount -eq 76) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 76 #endregion tags" ($regionEndCount -eq 76) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 77 #region tags" ($regionStartCount -eq 77) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 77 #endregion tags" ($regionEndCount -eq 77) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 77 modules" ($readmeContent -match '77 module')
+    Write-TestResult "README: mentions 78 modules" ($readmeContent -match '78 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 77 modules" ($loaderContent -match '77 modules')
+    Write-TestResult "RackStack.ps1: mentions 78 modules" ($loaderContent -match '78 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 77" ($moduleCount -eq 77) "Found $moduleCount modules"
+    Write-TestResult "Module count is 78" ($moduleCount -eq 78) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8968,6 +8968,59 @@ try {
 }
 catch {
     Write-TestResult "SIEM Forwarder Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 175: WINDOWS ADMIN CENTER (Module 77)
+# ============================================================================
+Write-SectionHeader "SECTION 175: WINDOWS ADMIN CENTER (Module 77)"
+
+try {
+    $wacPath = "$modulesPath\77-WindowsAdminCenter.ps1"
+    if (Test-Path $wacPath) {
+        $wacContent = Get-Content $wacPath -Raw
+        Write-TestResult "77-WAC: region header present" ($wacContent -match '#region ===== WINDOWS ADMIN CENTER')
+        Write-TestResult "77-WAC: Test-WACInstalled exists" ($wacContent -match 'function\s+Test-WACInstalled\b')
+        Write-TestResult "77-WAC: Get-WACStatus exists" ($wacContent -match 'function\s+Get-WACStatus\b')
+        Write-TestResult "77-WAC: Install-WAC exists" ($wacContent -match 'function\s+Install-WAC\b')
+        Write-TestResult "77-WAC: Uninstall-WAC exists" ($wacContent -match 'function\s+Uninstall-WAC\b')
+        Write-TestResult "77-WAC: Start-WACSetup exists" ($wacContent -match 'function\s+Start-WACSetup\b')
+        Write-TestResult "77-WAC: Start-WACStatus exists" ($wacContent -match 'function\s+Start-WACStatus\b')
+        Write-TestResult "77-WAC: Show-WindowsAdminCenterManagement exists" ($wacContent -match 'function\s+Show-WindowsAdminCenterManagement\b')
+        # MSI is Authenticode-verified (Microsoft signer) before install — fail-closed.
+        Write-TestResult "77-WAC: verifies Authenticode before install" (($wacContent -match 'Get-AuthenticodeSignature') -and ($wacContent -match 'O=Microsoft Corporation'))
+        # Operator-supplied MSI path is validated (rooted, no traversal/reparse).
+        Write-TestResult "77-WAC: validates operator MSI path" ($wacContent -match 'function\s+Test-WACSafeMsiPath\b')
+        # State changes are Dry-Run gated.
+        Write-TestResult "77-WAC: state changes have a Dry-Run gate" ($wacContent -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')
+        # Reversible: install registers an msiexec /x undo.
+        Write-TestResult "77-WAC: install is reversible (msiexec /x undo)" (($wacContent -match 'Add-UndoAction') -and ($wacContent -match "'/x'"))
+        # Feature installs (if any) use the timeout wrapper, never a bare Install-WindowsFeature.
+        Write-TestResult "77-WAC: no bare Install-WindowsFeature" (-not ($wacContent -match '(?<!Un)Install-WindowsFeature\s+-Name'))
+        $wacBytes = [System.IO.File]::ReadAllBytes($wacPath)
+        $wacBom = ($wacBytes.Length -ge 3 -and $wacBytes[0] -eq 0xEF -and $wacBytes[1] -eq 0xBB -and $wacBytes[2] -eq 0xBF)
+        Write-TestResult "77-WAC: UTF-8 BOM present" $wacBom
+    }
+    else {
+        Write-TestResult "77-WAC: module file exists" $false "File not found"
+    }
+
+    # Integration wiring
+    $wacLoader = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 77-WindowsAdminCenter.ps1" ($wacLoader -match '77-WindowsAdminCenter\.ps1')
+    $wacHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: WACSetup in -Action ValidateSet" ($wacHeader -match "'WACSetup'")
+    Write-TestResult "Header.ps1: WACStatus in -Action ValidateSet" ($wacHeader -match "'WACStatus'")
+    $wacEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: WACSetup dispatch case" ($wacEntry -match "'WACSetup'\s*\{")
+    Write-TestResult "50-EntryPoint: WACStatus dispatch case" ($wacEntry -match "'WACStatus'\s*\{")
+    $wacMenu = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: Windows Admin Center menu item" ($wacMenu -match 'Windows Admin Center \(WAC\)')
+    $wacRunner = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: routes [13] to Show-WindowsAdminCenterManagement" ($wacRunner -match '"13"\s*\{\s*Show-WindowsAdminCenterManagement')
+}
+catch {
+    Write-TestResult "Windows Admin Center Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -12981,7 +13034,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 189 entries" ($listActionCount -eq 189) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 191 entries" ($listActionCount -eq 191) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13014,7 +13067,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 189 entries" ($actionCount2 -eq 189) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 191 entries" ($actionCount2 -eq 191) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13040,7 +13093,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 189 entries" ($actionCount3 -eq 189) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 191 entries" ($actionCount3 -eq 191) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13078,7 +13131,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 189 entries" ($actionCount4 -eq 189) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 191 entries" ($actionCount4 -eq 191) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
