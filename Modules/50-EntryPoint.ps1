@@ -411,6 +411,7 @@ function Assert-Elevation {
                 @{ Action = 'WACStatus';        Description = 'Show Windows Admin Center gateway status (service, port, listening)' }
                 @{ Action = 'VHDXEncryptionAudit'; Description = 'Read-only: report whether each VM virtual disk sits on a BitLocker-protected volume' }
                 @{ Action = 'ADRecycleBin';     Description = 'Show AD Recycle Bin status (JSON) or enable it interactively (irreversible)' }
+                @{ Action = 'ClusterValidationReport'; Description = 'Run a non-disruptive failover-cluster validation and archive the HTML report (JSON-aware)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2052,6 +2053,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # AD Recycle Bin status (JSON) / interactive enable (console).
             $adrbOk = Start-ADRecycleBin
             [Environment]::Exit([int](-not $adrbOk))
+        }
+        'ClusterValidationReport' {
+            # Non-disruptive cluster validation + archived HTML report (JSON-aware).
+            $cvrOk = Start-ClusterValidationReport
+            [Environment]::Exit([int](-not $cvrOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

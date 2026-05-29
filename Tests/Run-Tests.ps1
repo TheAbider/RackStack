@@ -9069,6 +9069,27 @@ catch {
 }
 
 # ============================================================================
+# SECTION 178: CLUSTER VALIDATION REPORT (v1.111.0, addition to 27-FailoverClustering)
+# ============================================================================
+Write-SectionHeader "SECTION 178: CLUSTER VALIDATION REPORT (27-FailoverClustering)"
+
+try {
+    $fcC = Get-Content "$modulesPath\27-FailoverClustering.ps1" -Raw
+    Write-TestResult "27-Cluster: Start-ClusterValidationReport exists" ($fcC -match 'function\s+Start-ClusterValidationReport\b')
+    # Non-disruptive: only the safe Inventory/Network/System categories headlessly.
+    Write-TestResult "27-Cluster: validation report uses non-disruptive categories" ($fcC -match "Test-Cluster -Node[\s\S]{0,80}-Include 'Inventory', 'Network', 'System Configuration'")
+    # Report archived to the hardened state dir.
+    Write-TestResult "27-Cluster: validation report uses hardened state dir" ($fcC -match 'Start-ClusterValidationReport[\s\S]{0,1500}Get-RackStackSecureStateDir')
+    $cvrEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: ClusterValidationReport dispatch case" ($cvrEntry -match "'ClusterValidationReport'\s*\{")
+    $cvrHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: ClusterValidationReport in -Action ValidateSet" ($cvrHeader -match "'ClusterValidationReport'")
+}
+catch {
+    Write-TestResult "Cluster Validation Report Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -13079,7 +13100,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 193 entries" ($listActionCount -eq 193) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 194 entries" ($listActionCount -eq 194) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13112,7 +13133,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 193 entries" ($actionCount2 -eq 193) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 194 entries" ($actionCount2 -eq 194) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13138,7 +13159,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 193 entries" ($actionCount3 -eq 193) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 194 entries" ($actionCount3 -eq 194) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13176,7 +13197,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 193 entries" ($actionCount4 -eq 193) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 194 entries" ($actionCount4 -eq 194) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
