@@ -10973,6 +10973,17 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 else {
                     Write-OutputColor "  VMs: $($vms.Count)" -color "Info"
                     Write-OutputColor "" -color "Info"
+                    # Build a Cluster Shared Volume owner map once (friendly path -> owning node).
+                    $csvMap = @{}
+                    try {
+                        if (Get-Command -Name Get-ClusterSharedVolume -ErrorAction SilentlyContinue) {
+                            foreach ($csv in (Get-ClusterSharedVolume -ErrorAction SilentlyContinue)) {
+                                $fv = "$($csv.SharedVolumeInfo.FriendlyVolumeName)"
+                                if ($fv) { $csvMap[$fv] = "$($csv.OwnerNode.Name)" }
+                            }
+                        }
+                    }
+                    catch { }
                     $vmData = @()
                     foreach ($vm in $vms) {
                         $vmName = $vm.Name
@@ -10987,11 +10998,18 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                             $vhds = @(Get-VMHardDiskDrive -VM $vm -ErrorAction SilentlyContinue)
                             foreach ($vhd in $vhds) {
                                 $vhdInfo = try { Get-VHD -Path $vhd.Path -ErrorAction SilentlyContinue } catch { $null }
+                                # CSV ownership: if the disk path lives under a Cluster Shared
+                                # Volume, record which node currently owns that CSV.
+                                $csvOwner = ""
+                                foreach ($csvPath in $csvMap.Keys) {
+                                    if ("$($vhd.Path)".StartsWith($csvPath, [System.StringComparison]::OrdinalIgnoreCase)) { $csvOwner = $csvMap[$csvPath]; break }
+                                }
                                 $disks += @{
                                     Path = "$($vhd.Path)"
                                     SizeGB = if ($vhdInfo) { [math]::Round($vhdInfo.Size / 1GB, 1) } else { 0 }
                                     UsedGB = if ($vhdInfo -and $vhdInfo.FileSize) { [math]::Round($vhdInfo.FileSize / 1GB, 1) } else { 0 }
                                     Type = if ($vhdInfo) { "$($vhdInfo.VhdType)" } else { "Unknown" }
+                                    CSVOwner = $csvOwner
                                 }
                             }
                         } catch { }
@@ -11009,10 +11027,17 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                                 }
                             }
                         } catch { }
-                        # Checkpoints
-                        $snapCount = @(Get-VMCheckpoint -VM $vm -ErrorAction SilentlyContinue).Count
-                        # Replication
-                        $replState = try { $r = Get-VMReplication -VM $vm -ErrorAction SilentlyContinue; if ($r) { "$($r.State)" } else { "None" } } catch { "None" }
+                        # Checkpoints — count + the chain (ordered by creation time).
+                        $chkpts = @(Get-VMCheckpoint -VM $vm -ErrorAction SilentlyContinue | Sort-Object CreationTime)
+                        $snapCount = $chkpts.Count
+                        $chkChain = @($chkpts | ForEach-Object { "$($_.Name)" })
+                        # Replication — state + health + last successful replication time.
+                        $replState = "None"; $replHealth = "None"; $replLast = ""
+                        try {
+                            $r = Get-VMReplication -VM $vm -ErrorAction SilentlyContinue
+                            if ($r) { $replState = "$($r.State)"; $replHealth = "$($r.Health)"; if ($r.LastReplicationTime) { $replLast = "$($r.LastReplicationTime)" } }
+                        }
+                        catch { }
                         $vmData += @{
                             Name = $vm.Name
                             State = "$($vm.State)"
@@ -11026,7 +11051,10 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                             Disks = $disks
                             NICs = $nics
                             Checkpoints = $snapCount
+                            CheckpointChain = $chkChain
                             Replication = $replState
+                            ReplicationHealth = $replHealth
+                            LastReplication = $replLast
                             Path = "$($vm.Path)"
                             Notes = "$($vm.Notes)" -replace "`r`n|`n", " "
                         }
