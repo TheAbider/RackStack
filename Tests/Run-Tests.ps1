@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 74  # 00-73 inclusive
+$expectedModuleCount = 75  # 00-74 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "73-NPS.ps1"
-    Write-TestResult "Module range 00-Initialization to 73-NPS" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "74-AlwaysOnVPN.ps1"
+    Write-TestResult "Module range 00-Initialization to 74-AlwaysOnVPN" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 73 #region tags" ($regionStartCount -eq 73) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 73 #endregion tags" ($regionEndCount -eq 73) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 74 #region tags" ($regionStartCount -eq 74) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 74 #endregion tags" ($regionEndCount -eq 74) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 74 modules" ($readmeContent -match '74 module')
+    Write-TestResult "README: mentions 75 modules" ($readmeContent -match '75 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 74 modules" ($loaderContent -match '74 modules')
+    Write-TestResult "RackStack.ps1: mentions 75 modules" ($loaderContent -match '75 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 74" ($moduleCount -eq 74) "Found $moduleCount modules"
+    Write-TestResult "Module count is 75" ($moduleCount -eq 75) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8808,6 +8808,59 @@ try {
 }
 catch {
     Write-TestResult "NPS Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 171: REMOTE ACCESS / ALWAYS-ON VPN (Module 74)
+# ============================================================================
+Write-SectionHeader "SECTION 171: REMOTE ACCESS / ALWAYS-ON VPN (Module 74)"
+
+try {
+    $aovpnPath = "$modulesPath\74-AlwaysOnVPN.ps1"
+    if (Test-Path $aovpnPath) {
+        $aovpnContent = Get-Content $aovpnPath -Raw
+        Write-TestResult "74-AlwaysOnVPN: region header present" ($aovpnContent -match '#region ===== REMOTE ACCESS / ALWAYS-ON VPN')
+        Write-TestResult "74-AlwaysOnVPN: Test-RemoteAccessRoleInstalled exists" ($aovpnContent -match 'function\s+Test-RemoteAccessRoleInstalled\b')
+        Write-TestResult "74-AlwaysOnVPN: Install-RemoteAccessRole exists" ($aovpnContent -match 'function\s+Install-RemoteAccessRole\b')
+        Write-TestResult "74-AlwaysOnVPN: Enable-VpnServer exists" ($aovpnContent -match 'function\s+Enable-VpnServer\b')
+        Write-TestResult "74-AlwaysOnVPN: Set-VpnRadiusAuth exists" ($aovpnContent -match 'function\s+Set-VpnRadiusAuth\b')
+        Write-TestResult "74-AlwaysOnVPN: New-AlwaysOnVpnProfile exists" ($aovpnContent -match 'function\s+New-AlwaysOnVpnProfile\b')
+        Write-TestResult "74-AlwaysOnVPN: Start-AlwaysOnVPNSetup exists" ($aovpnContent -match 'function\s+Start-AlwaysOnVPNSetup\b')
+        Write-TestResult "74-AlwaysOnVPN: Show-RemoteAccessManagement exists" ($aovpnContent -match 'function\s+Show-RemoteAccessManagement\b')
+        # Role install via the RemoteAccess feature, reversible (Uninstall-WindowsFeature undo).
+        Write-TestResult "74-AlwaysOnVPN: installs the RemoteAccess role" ($aovpnContent -match 'Install-WindowsFeature\s+-Name\s+RemoteAccess')
+        # Role installs go through the timeout wrapper, not a bare Install-WindowsFeature.
+        Write-TestResult "74-AlwaysOnVPN: uses Install-WindowsFeatureWithTimeout" ($aovpnContent -match 'Install-WindowsFeatureWithTimeout')
+        # RADIUS shared secret stays out of the queue/JSON — only the server in -Params.
+        Write-TestResult "74-AlwaysOnVPN: RADIUS secret kept out of queue Params" (($aovpnContent -match 'ConvertFrom-RAVpnSecure') -and ($aovpnContent -notmatch '-Params @\{[^}]*[Ss]ecret'))
+        # Secret is freed via ZeroFreeBSTR.
+        Write-TestResult "74-AlwaysOnVPN: secret BSTR is zeroed" ($aovpnContent -match 'ZeroFreeBSTR')
+        # State-changing ops are Dry-Run gated.
+        Write-TestResult "74-AlwaysOnVPN: state changes have a Dry-Run gate" ($aovpnContent -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')
+        # Generated ProfileXML lands in the hardened Admins/SYSTEM-only state dir.
+        Write-TestResult "74-AlwaysOnVPN: profiles use the hardened secure state dir" ($aovpnContent -match 'Get-RackStackSecureStateDir')
+        $aovpnBytes = [System.IO.File]::ReadAllBytes($aovpnPath)
+        $aovpnBom = ($aovpnBytes.Length -ge 3 -and $aovpnBytes[0] -eq 0xEF -and $aovpnBytes[1] -eq 0xBB -and $aovpnBytes[2] -eq 0xBF)
+        Write-TestResult "74-AlwaysOnVPN: UTF-8 BOM present" $aovpnBom
+    }
+    else {
+        Write-TestResult "74-AlwaysOnVPN: module file exists" $false "File not found"
+    }
+
+    # Integration wiring
+    $aovpnLoader = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 74-AlwaysOnVPN.ps1" ($aovpnLoader -match '74-AlwaysOnVPN\.ps1')
+    $aovpnHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: AlwaysOnVPNSetup in -Action ValidateSet" ($aovpnHeader -match "'AlwaysOnVPNSetup'")
+    $aovpnEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: AlwaysOnVPNSetup dispatch case" ($aovpnEntry -match "'AlwaysOnVPNSetup'\s*\{")
+    $aovpnMenu = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: Always-On VPN menu item" ($aovpnMenu -match 'Always-On VPN')
+    $aovpnRunner = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: routes [11] to Show-RemoteAccessManagement" ($aovpnRunner -match '"11"\s*\{\s*Show-RemoteAccessManagement')
+}
+catch {
+    Write-TestResult "Always-On VPN Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -12771,7 +12824,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 185 entries" ($listActionCount -eq 185) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 186 entries" ($listActionCount -eq 186) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12804,7 +12857,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 185 entries" ($actionCount2 -eq 185) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 186 entries" ($actionCount2 -eq 186) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12830,7 +12883,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 185 entries" ($actionCount3 -eq 185) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 186 entries" ($actionCount3 -eq 186) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12868,7 +12921,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 185 entries" ($actionCount4 -eq 185) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 186 entries" ($actionCount4 -eq 186) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

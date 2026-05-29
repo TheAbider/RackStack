@@ -403,6 +403,7 @@ function Assert-Elevation {
                 @{ Action = 'GPODrift';         Description = 'Compare live GPOs against a baseline backup folder given in -Config <folder>' }
                 @{ Action = 'JEAList';          Description = 'List the registered JEA (Just Enough Administration) constrained endpoints on this host' }
                 @{ Action = 'NPSSetup';         Description = 'Install the Network Policy Server (NPAS / RADIUS) role' }
+                @{ Action = 'AlwaysOnVPNSetup'; Description = 'Install the Remote Access role and configure RRAS as a VPN server' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2004,6 +2005,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Install the Network Policy Server (NPAS / RADIUS) role.
             $npsOk = Start-NPSSetup
             [Environment]::Exit([int](-not $npsOk))
+        }
+        'AlwaysOnVPNSetup' {
+            # Install the Remote Access role and configure RRAS as a VPN server.
+            $aovpnOk = Start-AlwaysOnVPNSetup
+            [Environment]::Exit([int](-not $aovpnOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
