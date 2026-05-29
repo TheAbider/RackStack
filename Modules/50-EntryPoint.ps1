@@ -401,6 +401,7 @@ function Assert-Elevation {
                 @{ Action = 'StorageMigrationSetup'; Description = 'Install the Storage Migration Service orchestrator role (+proxy if StorageMigration.InstallProxy is set)' }
                 @{ Action = 'GPOBackup';        Description = 'Back up all GPOs (+reports +manifest) to -Config <folder> (default: <TempPath>\GPOBackups)' }
                 @{ Action = 'GPODrift';         Description = 'Compare live GPOs against a baseline backup folder given in -Config <folder>' }
+                @{ Action = 'JEAList';          Description = 'List the registered JEA (Just Enough Administration) constrained endpoints on this host' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1992,6 +1993,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # -Config and print the drift summary. Exit 0 when the compare ran.
             $gpoOk = Start-GPODrift -ConfigPath $script:CLIConfig
             [Environment]::Exit([int](-not $gpoOk))
+        }
+        'JEAList' {
+            # List the registered JEA constrained endpoints (JSON-aware).
+            $jeaOk = Start-JEAList
+            [Environment]::Exit([int](-not $jeaOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
