@@ -407,6 +407,8 @@ function Assert-Elevation {
                 @{ Action = 'CISScan';          Description = 'Read-only CIS Windows Server L1 benchmark scan (scored subset; HTML + JSON report)' }
                 @{ Action = 'SIEMSetup';        Description = 'Configure SIEM log forwarding (WEF / Splunk / Winlogbeat); interactive, JSON-aware status' }
                 @{ Action = 'SIEMStatus';       Description = 'Show SIEM log-forwarder readiness (WEF / WinRM / agents / Arc)' }
+                @{ Action = 'WACSetup';         Description = 'Install + configure the Windows Admin Center gateway (verified MSI, port, certificate)' }
+                @{ Action = 'WACStatus';        Description = 'Show Windows Admin Center gateway status (service, port, listening)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2028,6 +2030,16 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Configure SIEM log forwarding (interactive console; JSON status headless).
             $siemOk = Start-SIEMSetup
             [Environment]::Exit([int](-not $siemOk))
+        }
+        'WACStatus' {
+            # Read-only Windows Admin Center gateway status (JSON-aware).
+            $wacOk = Start-WACStatus
+            [Environment]::Exit([int](-not $wacOk))
+        }
+        'WACSetup' {
+            # Install/configure the WAC gateway (interactive console; JSON status headless).
+            $wacOk = Start-WACSetup
+            [Environment]::Exit([int](-not $wacOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

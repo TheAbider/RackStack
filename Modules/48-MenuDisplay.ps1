@@ -438,6 +438,12 @@ function Show-RolesFeaturesMenu {
     } -CacheSeconds 120
     $siemColor = if ($siemStatusText -eq "WEF configured") { "Success" } elseif ($siemStatusText -eq "Agent present") { "Warning" } else { "Warning" }
 
+    $wacStatusText = Get-CachedValue -Key "WACState" -FetchScript {
+        $w = Get-WACStatus
+        if (-not $w.Installed) { "Not Installed" } elseif ($w.ServiceStatus -eq 'Running') { "Running" } else { "Installed (stopped)" }
+    } -CacheSeconds 120
+    $wacColor = if ($wacStatusText -eq "Running") { "Success" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -457,6 +463,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[10] Network Policy Server (RADIUS) ►" -Status $npsStatusText -StatusColor $npsColor
     Write-MenuItem "[11] Remote Access / Always-On VPN ►" -Status $aovpnStatusText -StatusColor $aovpnColor
     Write-MenuItem "[12] SIEM Log Forwarder ►" -Status $siemStatusText -StatusColor $siemColor
+    Write-MenuItem "[13] Windows Admin Center (WAC) ►" -Status $wacStatusText -StatusColor $wacColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"
