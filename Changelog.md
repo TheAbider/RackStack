@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.111.0
+
+Failover Cluster validation report — new `ClusterValidationReport` CLI action. Runs a **non-disruptive** failover-cluster validation (Inventory + Network + System Configuration categories) against the cluster's nodes (or this node if it isn't yet clustered), archives the native HTML report to an admin-only path, and reports a best-effort overall result (pass / warning / failed counts).
+
+It complements the interactive **Cluster Management → [3] Validate Configuration** (which can run the full, potentially disruptive suite). Read-only — it makes no changes. `-Action ClusterValidationReport -OutputFormat JSON` emits the overall result + report path for fleet pre-flight checks; the saved HTML report is authoritative for per-test detail. Storage and Hyper-V validation categories (which need shared storage / offline VMs) stay in the interactive validator.
+
+Addition to 27-FailoverClustering (no new module). CLI actions: 193 → 194.
+
 ## v1.110.0
 
 Enable AD Recycle Bin — added to **AD DS Domain Controller Promotion** (`[6] Enable AD Recycle Bin`) and via the `ADRecycleBin` CLI action. Turns on Active Directory object recovery so deleted users/groups/OUs can be restored with their attributes intact.

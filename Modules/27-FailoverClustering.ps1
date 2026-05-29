@@ -1354,4 +1354,78 @@ function Test-ClusterQuorumHealth {
 
     Write-PressEnter
 }
+
+# CLI: ClusterValidationReport — run a non-disruptive cluster validation
+# headlessly, archive the HTML report to the hardened state dir, and report a
+# best-effort overall result. Read-only (validation makes no changes). The HTML
+# report is the authoritative artifact; the tally is a best-effort scan.
+function Start-ClusterValidationReport {
+    $jsonOut = ($script:CLIOutputFormat -eq 'JSON')
+    if (-not (Test-FailoverClusteringInstalled)) {
+        if ($jsonOut) { Write-Output (@{ Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ClusterValidationReport'; Hostname = $env:COMPUTERNAME; Available = $false } | ConvertTo-Json) }
+        else { Write-OutputColor "  Failover Clustering is not installed." -color "Error" }
+        return $false
+    }
+    # Validate the existing cluster's nodes if clustered, else this node.
+    $nodes = @($env:COMPUTERNAME)
+    try {
+        if (Get-Command -Name Get-Cluster -ErrorAction SilentlyContinue) {
+            if (Get-Cluster -ErrorAction SilentlyContinue) {
+                $cn = @(Get-ClusterNode -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name)" })
+                if ($cn.Count -gt 0) { $nodes = $cn }
+            }
+        }
+    }
+    catch { }
+
+    $secureDir = Get-RackStackSecureStateDir
+    if ([string]::IsNullOrWhiteSpace($secureDir)) { $secureDir = $script:TempPath }
+    $reportDir = Join-Path $secureDir "ClusterValidation"
+    if (-not (Test-Path -LiteralPath $reportDir)) { $null = New-Item -LiteralPath $reportDir -ItemType Directory -Force -ErrorAction SilentlyContinue }
+    $base = Join-Path $reportDir "ClusterValidation_$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+
+    if (-not $jsonOut) {
+        Clear-Host
+        Write-CenteredOutput "Cluster Validation Report" -color "Info"
+        Write-OutputColor "  Validating: $($nodes -join ', ')  (non-disruptive: Inventory + Network + System Config)" -color "Info"
+        Write-OutputColor "  This may take a few minutes..." -color "Info"
+    }
+
+    $reportFile = "$base.htm"; $failed = 0; $warned = 0; $overall = 'Unknown'
+    try {
+        # Non-disruptive categories only — storage/Hyper-V tests can disrupt and
+        # need shared storage / offline VMs; those stay in the interactive validator.
+        $r = Test-Cluster -Node $nodes -Include 'Inventory', 'Network', 'System Configuration' -ReportName $base -ErrorAction Stop
+        if ($r -and $r.FullName) { $reportFile = "$($r.FullName)" }
+        if (Test-Path -LiteralPath $reportFile) {
+            $html = Get-Content -LiteralPath $reportFile -Raw -ErrorAction SilentlyContinue
+            $failed = @([regex]::Matches($html, '>\s*Failed\s*<')).Count
+            $warned = @([regex]::Matches($html, '>\s*Warning\s*<')).Count
+            $overall = if ($failed -gt 0) { 'Failed' } elseif ($warned -gt 0) { 'Warning' } else { 'Pass' }
+        }
+        else { $overall = 'Completed' }
+    }
+    catch {
+        $overall = 'Error'
+        if (-not $jsonOut) { Write-OutputColor "  Validation error: $($_.Exception.Message)" -color "Error" }
+    }
+
+    if ($jsonOut) {
+        Write-Output (@{
+            Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'ClusterValidationReport'
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            Available = $true; Nodes = $nodes; OverallResult = $overall
+            FailedCount = $failed; WarningCount = $warned; ReportPath = $reportFile
+        } | ConvertTo-Json)
+    }
+    else {
+        $c = switch ($overall) { 'Pass' { 'Success' } 'Warning' { 'Warning' } default { 'Error' } }
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Overall result: $overall  (failed: $failed, warnings: $warned)" -color $c
+        Write-OutputColor "  Report: $reportFile" -color "Info"
+        Write-OutputColor "  The HTML report is authoritative — open it for per-test detail." -color "Debug"
+        Add-SessionChange -Category "Cluster" -Description "Ran cluster validation report ($overall)"
+    }
+    return ($overall -ne 'Error')
+}
 #endregion
