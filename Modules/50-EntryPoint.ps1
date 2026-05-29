@@ -402,6 +402,7 @@ function Assert-Elevation {
                 @{ Action = 'GPOBackup';        Description = 'Back up all GPOs (+reports +manifest) to -Config <folder> (default: <TempPath>\GPOBackups)' }
                 @{ Action = 'GPODrift';         Description = 'Compare live GPOs against a baseline backup folder given in -Config <folder>' }
                 @{ Action = 'JEAList';          Description = 'List the registered JEA (Just Enough Administration) constrained endpoints on this host' }
+                @{ Action = 'NPSSetup';         Description = 'Install the Network Policy Server (NPAS / RADIUS) role' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1998,6 +1999,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # List the registered JEA constrained endpoints (JSON-aware).
             $jeaOk = Start-JEAList
             [Environment]::Exit([int](-not $jeaOk))
+        }
+        'NPSSetup' {
+            # Install the Network Policy Server (NPAS / RADIUS) role.
+            $npsOk = Start-NPSSetup
+            [Environment]::Exit([int](-not $npsOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

@@ -3,7 +3,7 @@
     RackStack - Modular Loader (Development)
 
 .DESCRIPTION
-    This is the MODULAR LOADER -- it dot-sources all 73 modules from the Modules/
+    This is the MODULAR LOADER -- it dot-sources all 74 modules from the Modules/
     subfolder and starts RackStack. Use this file for development and testing.
 
     This is NOT the monolithic build. The monolithic single-file version is:
@@ -13,7 +13,7 @@
     Environment-specific settings are configured via defaults.json.
 
 .VERSION
-    1.103.0
+    1.104.0
 
 .NOTES
     - Requires Windows Server 2012 R2 or later (or Windows 10/11 for testing)
@@ -110,6 +110,7 @@ $moduleFiles = @(
     "70-DryRun.ps1"
     "71-GPOManager.ps1"
     "72-JEA.ps1"
+    "73-NPS.ps1"
 )
 
 # Load all modules

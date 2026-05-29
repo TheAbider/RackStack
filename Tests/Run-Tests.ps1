@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 73  # 00-72 inclusive
+$expectedModuleCount = 74  # 00-73 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "72-JEA.ps1"
-    Write-TestResult "Module range 00-Initialization to 72-JEA" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "73-NPS.ps1"
+    Write-TestResult "Module range 00-Initialization to 73-NPS" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 72 #region tags" ($regionStartCount -eq 72) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 72 #endregion tags" ($regionEndCount -eq 72) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 73 #region tags" ($regionStartCount -eq 73) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 73 #endregion tags" ($regionEndCount -eq 73) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 73 modules" ($readmeContent -match '73 module')
+    Write-TestResult "README: mentions 74 modules" ($readmeContent -match '74 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 73 modules" ($loaderContent -match '73 modules')
+    Write-TestResult "RackStack.ps1: mentions 74 modules" ($loaderContent -match '74 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 73" ($moduleCount -eq 73) "Found $moduleCount modules"
+    Write-TestResult "Module count is 74" ($moduleCount -eq 74) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -8758,6 +8758,56 @@ try {
 }
 catch {
     Write-TestResult "JEA Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 170: NETWORK POLICY SERVER (NPS / RADIUS) (Module 73)
+# ============================================================================
+Write-SectionHeader "SECTION 170: NPS / RADIUS (Module 73)"
+
+try {
+    $npsPath = "$modulesPath\73-NPS.ps1"
+    if (Test-Path $npsPath) {
+        $npsContent = Get-Content $npsPath -Raw
+        Write-TestResult "73-NPS: region header present" ($npsContent -match '#region ===== NETWORK POLICY SERVER')
+        Write-TestResult "73-NPS: Test-NPSRoleInstalled exists" ($npsContent -match 'function\s+Test-NPSRoleInstalled\b')
+        Write-TestResult "73-NPS: Install-NPSRole exists" ($npsContent -match 'function\s+Install-NPSRole\b')
+        Write-TestResult "73-NPS: Add-NPSRadiusClient exists" ($npsContent -match 'function\s+Add-NPSRadiusClient\b')
+        Write-TestResult "73-NPS: Export-NPSConfig exists" ($npsContent -match 'function\s+Export-NPSConfig\b')
+        Write-TestResult "73-NPS: Import-NPSConfig exists" ($npsContent -match 'function\s+Import-NPSConfig\b')
+        Write-TestResult "73-NPS: Start-NPSSetup exists" ($npsContent -match 'function\s+Start-NPSSetup\b')
+        Write-TestResult "73-NPS: Show-NPSManagement exists" ($npsContent -match 'function\s+Show-NPSManagement\b')
+        # Role install via Install-WindowsFeature NPAS, reversible.
+        Write-TestResult "73-NPS: installs the NPAS role" ($npsContent -match 'Install-WindowsFeature\s+-Name\s+NPAS')
+        # Shared secret stays out of the queue/JSON — only Name/Address in -Params.
+        Write-TestResult "73-NPS: RADIUS client secret kept out of queue Params" (($npsContent -match 'ConvertFrom-NPSSecure') -and ($npsContent -notmatch '-Params @\{[^}]*[Ss]ecret'))
+        # State-changing ops are Dry-Run gated.
+        Write-TestResult "73-NPS: state changes have a Dry-Run gate" ($npsContent -match '\$script:DryRunMode\s+-and\s+-not\s+\$script:ApplyingDryRunQueue')
+        # Config backups (which can hold clear-text PSKs) land in the hardened
+        # Admins/SYSTEM-only state dir, not a world-readable ProgramData/temp path.
+        Write-TestResult "73-NPS: backups use the hardened secure state dir" ($npsContent -match 'Get-RackStackSecureStateDir')
+        $npsBytes = [System.IO.File]::ReadAllBytes($npsPath)
+        $npsBom = ($npsBytes.Length -ge 3 -and $npsBytes[0] -eq 0xEF -and $npsBytes[1] -eq 0xBB -and $npsBytes[2] -eq 0xBF)
+        Write-TestResult "73-NPS: UTF-8 BOM present" $npsBom
+    }
+    else {
+        Write-TestResult "73-NPS: module file exists" $false "File not found"
+    }
+
+    # Integration wiring
+    $npsLoader = Get-Content $loaderPath -Raw
+    Write-TestResult "RackStack.ps1: loads 73-NPS.ps1" ($npsLoader -match '73-NPS\.ps1')
+    $npsHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: NPSSetup in -Action ValidateSet" ($npsHeader -match "'NPSSetup'")
+    $npsEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: NPSSetup dispatch case" ($npsEntry -match "'NPSSetup'\s*\{")
+    $npsMenu = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: NPS menu item" ($npsMenu -match 'Network Policy Server')
+    $npsRunner = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: routes [10] to Show-NPSManagement" ($npsRunner -match '"10"\s*\{\s*Show-NPSManagement')
+}
+catch {
+    Write-TestResult "NPS Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -12721,7 +12771,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 184 entries" ($listActionCount -eq 184) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 185 entries" ($listActionCount -eq 185) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -12754,7 +12804,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 184 entries" ($actionCount2 -eq 184) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 185 entries" ($actionCount2 -eq 185) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -12780,7 +12830,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 184 entries" ($actionCount3 -eq 184) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 185 entries" ($actionCount3 -eq 185) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -12818,7 +12868,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 184 entries" ($actionCount4 -eq 184) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 185 entries" ($actionCount4 -eq 185) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
