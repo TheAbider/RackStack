@@ -256,9 +256,10 @@ function Start-Show-RolesFeaturesMenu {
             "11" { Show-RemoteAccessManagement }
             "12" { Show-SIEMForwarderManagement }
             "13" { Show-WindowsAdminCenterManagement }
+            "14" { Show-DFSManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-14 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

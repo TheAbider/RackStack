@@ -417,6 +417,7 @@ function Assert-Elevation {
                 @{ Action = 'PrintServerAudit'; Description = 'Read-only: report print-spooler posture, queue depth, orphaned ports + unused drivers (JSON-aware)' }
                 @{ Action = 'NtpHardeningAudit'; Description = 'Read-only: report W32Time clock-tamper posture (phase-correction limits, auth mode) (JSON-aware)' }
                 @{ Action = 'CertBindingAudit'; Description = 'Read-only: report RDP/WinRM listener certificate bindings + expiry (JSON-aware)' }
+                @{ Action = 'DFSAudit';         Description = 'Read-only: report DFS namespace/replication role state, namespaces + replication groups (JSON-aware)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2088,6 +2089,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Read-only RDP/WinRM listener certificate bindings (JSON-aware).
             $certAuditOk = Start-CertBindingAudit
             [Environment]::Exit([int](-not $certAuditOk))
+        }
+        'DFSAudit' {
+            # Read-only DFS namespace/replication posture (JSON-aware).
+            $dfsAuditOk = Start-DFSAudit
+            [Environment]::Exit([int](-not $dfsAuditOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

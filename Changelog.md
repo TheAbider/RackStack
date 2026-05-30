@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.118.0
+
+DFS Namespaces & Replication — a new module (**79-DFS**) surfaced under **Roles & Features → [14] DFS Namespaces & Replication**, plus a read-only CLI action.
+
+- **`DFSAudit`** (read-only) — reports whether the DFS Namespace (`FS-DFS-Namespace`) and Replication (`FS-DFS-Replication`) roles are installed, the namespaces this server knows, and the DFS-R replication groups and replicated-folder count. JSON-aware; makes no changes. Backlog measurement is left to the DFS Management console (it needs a specific member pair + folder and can be slow).
+- **DFS role install** (reversible) — installs the missing DFS server role(s) plus management tools via the timeout-guarded feature installer, capturing which features were already present so the session undo removes only the ones it added. Dry-Run aware. Server-SKU gated.
+
+The Roles & Features menu shows a live DFS status indicator (Installed / Partial / Not Installed / Tools N/A). Namespace and replication-group creation remains in the DFS Management console (`dfsmgmt.msc`); this module covers the role lifecycle and an at-a-glance audit.
+
+New module 79-DFS. Modules: 79 → 80. CLI actions: 199 → 200.
+
 ## v1.117.0
 
 Service certificate binding audit — a new module (**78-CertificateAudit**) surfaced under **Security & Access → [12] Certificate Binding Audit**, plus a read-only CLI action.
