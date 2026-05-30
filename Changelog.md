@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.119.1
+
+CI maintenance — clears the two non-blocking annotations the release workflow was emitting, ahead of GitHub's deadlines.
+
+- **`actions/attest-sbom` → `actions/attest`** — the SBOM-attestation action was deprecated. `actions/attest` exposes a native `sbom-path` input (SPDX/CycloneDX, auto-detected) that maps 1:1 from the old action and produces an **identical** SBOM attestation, still verifiable via `gh attestation verify`. The migration also adds the `artifact-metadata: write` job permission that `actions/attest` v4 now requires.
+- **`windows-latest` → `windows-2025`** — GitHub is redirecting `windows-latest` to the Windows Server 2025 image by 2026-06-15. Pinning `ci.yml` and `powershell-scan.yml` to `windows-2025` now makes the runtime explicit and validates the build against the target image early. `windows-2025` ships Windows PowerShell 5.1, .NET Framework 4.8, and PowerShell 7 — everything the build/test pipeline needs (it never invokes the Visual Studio toolchain, so the concurrent VS2026 image change does not affect it).
+
+CI-only changes; no functional change to the tool. Modules and CLI actions unchanged (81 modules, 201 actions).
+
 ## v1.119.0
 
 Remote Desktop Services — a new module (**80-RemoteDesktopServices**) surfaced under **Roles & Features → [15] Remote Desktop Services (RDS)**, plus a read-only CLI action.

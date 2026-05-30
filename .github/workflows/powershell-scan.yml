@@ -24,9 +24,10 @@ jobs:
     permissions:
       issues: write   # the github-script step creates / updates "Scan Results:" issues
       contents: read  # checkout
-    # windows-latest (GitHub-hosted) — see ci.yml for the security rationale
-    # (public repo + self-hosted runner = arbitrary fork code execution).
-    runs-on: windows-latest
+    # windows-2025 (GitHub-hosted) — see ci.yml for the security rationale
+    # (public repo + self-hosted runner = arbitrary fork code execution) and
+    # for why we pin the image explicitly ahead of the 2026-06-15 migration.
+    runs-on: windows-2025
 
     steps:
       - name: Checkout repository
