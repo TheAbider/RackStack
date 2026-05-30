@@ -31,6 +31,10 @@ function Show-NetworkDiagnostics {
         Write-MenuItem "[11] Path MTU Discovery"
         Write-MenuItem "[12] Gateway Connectivity Test"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  PERFORMANCE".PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-MenuItem "[14] Network Throughput Benchmark (file copy)"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-OutputColor "  │$("  REPAIR".PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-MenuItem "[13] Reset Network Stack"
@@ -58,12 +62,13 @@ function Show-NetworkDiagnostics {
             "11" { Invoke-PathMtuDiscovery }
             "12" { Test-GatewayConnectivity }
             "13" { Invoke-NetworkStackReset }
+            "14" { Invoke-NetworkThroughputBenchmark }
             "b" { return }
             "B" { return }
             "m" { $script:ReturnToMainMenu = $true; return }
             "M" { $script:ReturnToMainMenu = $true; return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-13 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-14 or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
@@ -1094,6 +1099,99 @@ function Invoke-NetworkStackReset {
         }
     }
 
+    Write-PressEnter
+}
+
+# In-box network throughput benchmark: copies a generated test file to a target
+# path and back, timing each transfer. Measures the combined network + remote
+# storage path (not pure wire speed) using only built-in cmdlets — no external
+# binary (ntttcp/iperf are not in-box and are not auto-downloaded). All temp
+# files (local source, remote copy, local read-back) are removed in a finally.
+function Invoke-NetworkThroughputBenchmark {
+    Clear-Host
+    Write-CenteredOutput "Network Throughput Benchmark" -color "Info"
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Measures real write + read throughput by copying a test file to a target" -color "Info"
+    Write-OutputColor "  folder and back. This reflects the full network + remote storage path," -color "Info"
+    Write-OutputColor "  not a pure wire-speed figure. A UNC share (\\server\share) is the typical" -color "Info"
+    Write-OutputColor "  target; a local path measures the local disk." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    $target = Read-Host "  Enter target folder (UNC or local path)"
+    $navResult = Test-NavigationCommand -UserInput $target
+    if ($navResult.ShouldReturn) { return }
+    if ([string]::IsNullOrWhiteSpace($target)) { return }
+    $target = $target.Trim('"').TrimEnd('\')
+
+    if (-not (Test-Path -LiteralPath $target -PathType Container)) {
+        Write-OutputColor "  Target folder not found or not accessible: $target" -color "Error"
+        Write-PressEnter; return
+    }
+
+    $sizeMB = 256
+    $sizeInput = Read-Host "  Test file size in MB (default 256, 16-4096)"
+    if (-not [string]::IsNullOrWhiteSpace($sizeInput)) {
+        $parsed = 0
+        if ([int]::TryParse($sizeInput.Trim(), [ref]$parsed)) {
+            $sizeMB = [math]::Max(16, [math]::Min(4096, $parsed))
+        }
+    }
+
+    $localTemp  = Join-Path $env:TEMP ("rs_thrput_src_{0}.tmp" -f $PID)
+    $remoteFile = Join-Path $target  ("rs_thrput_{0}.tmp" -f $PID)
+    $readBack   = Join-Path $env:TEMP ("rs_thrput_dst_{0}.tmp" -f $PID)
+    $writeMBps = 0; $readMBps = 0; $ok = $false
+
+    try {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Generating ${sizeMB} MB test file..." -color "Info"
+        # Fill a 4 MB buffer with pseudo-random bytes (so the payload is not
+        # trivially compressible) and write it enough times to reach the size.
+        $bufSize = 4MB
+        $buffer = New-Object byte[] $bufSize
+        (New-Object System.Random).NextBytes($buffer)
+        $iterations = [math]::Ceiling(($sizeMB * 1MB) / $bufSize)
+        $fs = [System.IO.File]::Create($localTemp)
+        try { for ($i = 0; $i -lt $iterations; $i++) { $fs.Write($buffer, 0, $bufSize) } }
+        finally { $fs.Close() }
+        $bytes = (Get-Item -LiteralPath $localTemp).Length
+
+        Write-OutputColor "  Measuring WRITE throughput (local -> target)..." -color "Info"
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        Copy-Item -LiteralPath $localTemp -Destination $remoteFile -Force -ErrorAction Stop
+        $sw.Stop()
+        $writeMBps = [math]::Round(($bytes / 1MB) / [math]::Max($sw.Elapsed.TotalSeconds, 0.001), 1)
+
+        Write-OutputColor "  Measuring READ throughput (target -> local)..." -color "Info"
+        $sw.Restart()
+        Copy-Item -LiteralPath $remoteFile -Destination $readBack -Force -ErrorAction Stop
+        $sw.Stop()
+        $readMBps = [math]::Round(($bytes / 1MB) / [math]::Max($sw.Elapsed.TotalSeconds, 0.001), 1)
+        $ok = $true
+    }
+    catch {
+        Write-OutputColor "  Throughput test failed: $($_.Exception.Message)" -color "Error"
+    }
+    finally {
+        foreach ($p in @($localTemp, $remoteFile, $readBack)) {
+            if ($p -and (Test-Path -LiteralPath $p)) { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    if ($ok) {
+        $writeMbps = [math]::Round($writeMBps * 8, 0)
+        $readMbps  = [math]::Round($readMBps * 8, 0)
+        $title = "  THROUGHPUT: $target"
+        if ($title.Length -gt 69) { $title = $title.Substring(0, 69) + "..." }
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+        Write-OutputColor "  │$($title.PadRight(72))│" -color "Info"
+        Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
+        Write-OutputColor "  │$("  Test size:  ${sizeMB} MB".PadRight(72))│" -color "Info"
+        Write-OutputColor "  │$("  Write:      ${writeMBps} MB/s  (${writeMbps} Mbps)".PadRight(72))│" -color "Success"
+        Write-OutputColor "  │$("  Read:       ${readMBps} MB/s  (${readMbps} Mbps)".PadRight(72))│" -color "Success"
+        Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    }
     Write-PressEnter
 }
 #endregion

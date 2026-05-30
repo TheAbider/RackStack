@@ -9170,6 +9170,35 @@ catch {
 }
 
 # ============================================================================
+# SECTION 182: NETWORK THROUGHPUT BENCHMARK (v1.115.0, 58-NetworkDiagnostics)
+# ============================================================================
+Write-SectionHeader "SECTION 182: NETWORK THROUGHPUT BENCHMARK (58-NetworkDiagnostics)"
+
+try {
+    $ntC = Get-Content "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
+    Write-TestResult "58-NetDiag: Invoke-NetworkThroughputBenchmark exists" ($ntC -match 'function\s+Invoke-NetworkThroughputBenchmark\b')
+    # In-box only: must not actually invoke ntttcp / iperf (mentions in comments are fine;
+    # what matters is that no external benchmark binary is executed).
+    Write-TestResult "58-NetDiag: throughput test is in-box (no ntttcp/iperf invocation)" (-not ($ntC -match 'ntttcp\.exe|iperf\.exe|&\s*[''"]?\.?\\?ntttcp|Start-Process[^\r\n]*ntttcp'))
+    # Measures both directions with a stopwatch.
+    Write-TestResult "58-NetDiag: measures write + read throughput" ($ntC -match 'Measuring WRITE throughput' -and $ntC -match 'Measuring READ throughput')
+    Write-TestResult "58-NetDiag: uses a stopwatch for timing" ($ntC -match '\[System\.Diagnostics\.Stopwatch\]')
+    # Temp files are always cleaned up in a finally (local source, remote copy, read-back).
+    Write-TestResult "58-NetDiag: cleans up temp files in finally" ($ntC -match 'finally\s*\{[\s\S]{0,200}foreach \(\$p in[\s\S]{0,250}Remove-Item -LiteralPath \$p')
+    # Validates the target folder before writing.
+    Write-TestResult "58-NetDiag: validates target folder exists" ($ntC -match 'Test-Path -LiteralPath \$target -PathType Container')
+    # Follows the menu navigation convention.
+    Write-TestResult "58-NetDiag: throughput prompt has nav check" ($ntC -match 'Enter target folder[\s\S]{0,120}Test-NavigationCommand')
+    # Menu wiring.
+    Write-TestResult "58-NetDiag: menu item [14] present" ($ntC -match '\[14\]\s*Network Throughput Benchmark')
+    Write-TestResult "58-NetDiag: dispatch case 14 wired" ($ntC -match '"14"\s*\{\s*Invoke-NetworkThroughputBenchmark')
+    Write-TestResult "58-NetDiag: invalid msg bumped to 1-14" ($ntC -match 'Enter 1-14 or B')
+}
+catch {
+    Write-TestResult "Network Throughput Benchmark Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -9510,7 +9539,7 @@ Write-TestResult "45-Config: baseline second number nav check" ($ceContent2 -mat
 $dcContent = Get-Content -LiteralPath "$modulesPath\20-DiskCleanup.ps1" -Raw
 Write-TestResult "20-DiskCleanup: specific invalid msg" ($dcContent -match 'Enter 1-13 or B')
 $ndContent = Get-Content -LiteralPath "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
-Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-13 or B')
+Write-TestResult "58-NetworkDiagnostics: specific invalid msg" ($ndContent -match 'Enter 1-14 or B')
 
 # AD DS promotion menu — no double Write-PressEnter (sub-functions have their own)
 $adContent = Get-Content -LiteralPath "$modulesPath\61-ActiveDirectory.ps1" -Raw
@@ -9873,7 +9902,7 @@ Write-TestResult "58-NetDiag: network reset uses netsh winsock reset" ($ndConten
 Write-TestResult "58-NetDiag: network reset uses netsh int ip reset" ($ndContent3 -match 'netsh int ip reset')
 Write-TestResult "58-NetDiag: network reset sets RebootNeeded flag" ($ndContent3 -match 'RebootNeeded.*=.*\$true')
 Write-TestResult "58-NetDiag: network reset has confirmation prompt" ($ndContent3 -match 'Are you sure')
-Write-TestResult "58-NetDiag: menu has 13 options" ($ndContent3 -match 'Enter 1-13 or B')
+Write-TestResult "58-NetDiag: menu has 14 options" ($ndContent3 -match 'Enter 1-14 or B')
 Write-TestResult "58-NetDiag: menu has REPAIR section" ($ndContent3 -match 'REPAIR')
 
 # 48-MenuDisplay: Invoke-WithTimeout function existence (critical helper)
