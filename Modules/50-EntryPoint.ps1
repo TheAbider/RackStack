@@ -418,6 +418,7 @@ function Assert-Elevation {
                 @{ Action = 'NtpHardeningAudit'; Description = 'Read-only: report W32Time clock-tamper posture (phase-correction limits, auth mode) (JSON-aware)' }
                 @{ Action = 'CertBindingAudit'; Description = 'Read-only: report RDP/WinRM listener certificate bindings + expiry (JSON-aware)' }
                 @{ Action = 'DFSAudit';         Description = 'Read-only: report DFS namespace/replication role state, namespaces + replication groups (JSON-aware)' }
+                @{ Action = 'RDSAudit';         Description = 'Read-only: report RDS role state + licensing mode/servers (JSON-aware)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2094,6 +2095,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Read-only DFS namespace/replication posture (JSON-aware).
             $dfsAuditOk = Start-DFSAudit
             [Environment]::Exit([int](-not $dfsAuditOk))
+        }
+        'RDSAudit' {
+            # Read-only RDS role + licensing posture (JSON-aware).
+            $rdsAuditOk = Start-RDSAudit
+            [Environment]::Exit([int](-not $rdsAuditOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

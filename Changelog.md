@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.119.0
+
+Remote Desktop Services — a new module (**80-RemoteDesktopServices**) surfaced under **Roles & Features → [15] Remote Desktop Services (RDS)**, plus a read-only CLI action.
+
+- **`RDSAudit`** (read-only) — reports whether the RD Session Host (`RDS-RD-Server`) and RD Licensing (`RDS-Licensing`) roles are installed, and the configured licensing mode + license server(s). JSON-aware; makes no changes.
+- **RDS role install** (reversible) — installs the RD Session Host + RD Licensing roles via the timeout-guarded feature installer, capturing which were missing so the session undo removes only the ones it added. Dry-Run aware; server-SKU gated.
+- **Licensing-mode configuration** (reversible) — sets Per-Device / Per-User mode and the license-server name via the policy registry (the same values the licensing GPOs write). Prior values are captured for the session undo; Dry-Run aware. The license-server name is format-validated.
+
+Scope and safety: full **session-collection deployment** (`New-RDSessionDeployment`) and **CAL / license-key activation** are intentionally **deferred** — the deployment reconfigures the server and needs a reboot, and CAL activation is done against a license agreement in RD Licensing Manager (`licmgr`), where that key material belongs. This module therefore handles **no license key and holds no secret**; it lands the role lifecycle, the licensing **mode** (which has a 120-day grace period before CALs are required), and an at-a-glance audit. The Roles & Features menu shows a live RDS status indicator.
+
+New module 80-RemoteDesktopServices. Modules: 80 → 81. CLI actions: 200 → 201.
+
+This completes the v1.109.0 → v1.119.0 feature roadmap.
+
 ## v1.118.0
 
 DFS Namespaces & Replication — a new module (**79-DFS**) surfaced under **Roles & Features → [14] DFS Namespaces & Replication**, plus a read-only CLI action.

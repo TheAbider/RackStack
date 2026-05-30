@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 80  # 00-79 inclusive
+$expectedModuleCount = 81  # 00-80 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "79-DFS.ps1"
-    Write-TestResult "Module range 00-Initialization to 79-DFS" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "80-RemoteDesktopServices.ps1"
+    Write-TestResult "Module range 00-Initialization to 80-RemoteDesktopServices" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 79 #region tags" ($regionStartCount -eq 79) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 79 #endregion tags" ($regionEndCount -eq 79) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 80 #region tags" ($regionStartCount -eq 80) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 80 #endregion tags" ($regionEndCount -eq 80) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 78 modules" ($readmeContent -match '80 module')
+    Write-TestResult "README: mentions 78 modules" ($readmeContent -match '81 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 78 modules" ($loaderContent -match '80 modules')
+    Write-TestResult "RackStack.ps1: mentions 78 modules" ($loaderContent -match '81 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 80" ($moduleCount -eq 80) "Found $moduleCount modules"
+    Write-TestResult "Module count is 81" ($moduleCount -eq 81) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -9313,7 +9313,7 @@ try {
     Write-TestResult "48-MenuDisplay: Roles menu [14] DFS" ($menuD -match '\[14\]\s*DFS Namespaces')
     $runnerD = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
     Write-TestResult "49-MenuRunner: Roles menu case 14 wired" ($runnerD -match '"14"\s*\{\s*Show-DFSManagement')
-    Write-TestResult "49-MenuRunner: Roles invalid msg bumped to 1-14" ($runnerD -match 'Enter 1-14 or B')
+    Write-TestResult "49-MenuRunner: Roles invalid msg uses numeric range format" ($runnerD -match 'Enter 1-\d+ or B')
     $dfsEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
     Write-TestResult "50-EntryPoint: DFSAudit dispatch case" ($dfsEntry -match "'DFSAudit'\s*\{")
     $dfsHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
@@ -9321,6 +9321,53 @@ try {
 }
 catch {
     Write-TestResult "DFS Namespaces & Replication Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 186: REMOTE DESKTOP SERVICES (v1.119.0, NEW module 80)
+# ============================================================================
+Write-SectionHeader "SECTION 186: REMOTE DESKTOP SERVICES (80-RemoteDesktopServices)"
+
+try {
+    $rdsPath = "$modulesPath\80-RemoteDesktopServices.ps1"
+    Write-TestResult "80-RDS: module file exists" (Test-Path $rdsPath)
+    $rdsC = Get-Content $rdsPath -Raw
+    Write-TestResult "80-RDS: Test-RDSRoleInstalled exists" ($rdsC -match 'function\s+Test-RDSRoleInstalled\b')
+    Write-TestResult "80-RDS: Get-RDSStatus exists" ($rdsC -match 'function\s+Get-RDSStatus\b')
+    Write-TestResult "80-RDS: Install-RDSRoles exists" ($rdsC -match 'function\s+Install-RDSRoles\b')
+    Write-TestResult "80-RDS: Set-RDSLicenseMode exists" ($rdsC -match 'function\s+Set-RDSLicenseMode\b')
+    Write-TestResult "80-RDS: Show-RDSManagement exists" ($rdsC -match 'function\s+Show-RDSManagement\b')
+    Write-TestResult "80-RDS: Start-RDSAudit exists" ($rdsC -match 'function\s+Start-RDSAudit\b')
+    # Targets the real RDS role features.
+    Write-TestResult "80-RDS: targets RDS role features" ($rdsC -match 'RDS-RD-Server' -and $rdsC -match 'RDS-Licensing')
+    # Role install uses the mandated timeout wrapper.
+    Write-TestResult "80-RDS: role install uses timeout wrapper" ($rdsC -match 'Install-WindowsFeatureWithTimeout')
+    Write-TestResult "80-RDS: role install is reversible (undo)" ($rdsC -match 'function\s+Install-RDSRoles[\s\S]{0,3000}Add-UndoAction[\s\S]{0,400}Uninstall-WindowsFeature')
+    Write-TestResult "80-RDS: role install is server-SKU gated" ($rdsC -match 'Test-WindowsServer')
+    # Licensing mode is reversible (captures prior + undo).
+    Write-TestResult "80-RDS: license-mode change is reversible (undo)" ($rdsC -match 'function\s+Set-RDSLicenseMode[\s\S]{0,3500}Add-UndoAction[\s\S]{0,400}LicensingMode')
+    Write-TestResult "80-RDS: license-mode change is Dry-Run aware (reversible)" ($rdsC -match 'Set-RDSLicenseMode[\s\S]{0,2000}Push-DryRunStep[\s\S]{0,400}-OneWay \$false')
+    # Validates the license-server name before writing it.
+    Write-TestResult "80-RDS: validates license server name" ($rdsC -match 'LicenseServer[\s\S]{0,200}-notmatch')
+    # SECURITY: no license key / secret handling (deferred to RD Licensing Manager).
+    Write-TestResult "80-RDS: no license-key / secret handling" (-not ($rdsC -match 'AsSecureString|ConvertTo-SecureString|-Password|ProductKey|LicenseKey'))
+    Write-TestResult "80-RDS: documents deferred deployment + CAL activation" ($rdsC -match 'deferred' -and $rdsC -match 'New-RDSessionDeployment')
+    Write-TestResult "80-RDS: RDSAudit JSON-aware" ($rdsC -match "Start-RDSAudit[\s\S]{0,300}CLIOutputFormat -eq 'JSON'")
+    # Module + menu + CLI wiring.
+    $loaderE = Get-Content (Join-Path $script:ModuleRoot "RackStack.ps1") -Raw
+    Write-TestResult "RackStack.ps1: loads 80-RemoteDesktopServices" ($loaderE -match '80-RemoteDesktopServices\.ps1')
+    $menuE = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: Roles menu [15] RDS" ($menuE -match '\[15\]\s*Remote Desktop Services')
+    $runnerE = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: Roles menu case 15 wired" ($runnerE -match '"15"\s*\{\s*Show-RDSManagement')
+    Write-TestResult "49-MenuRunner: Roles invalid msg bumped to 1-15" ($runnerE -match 'Enter 1-15 or B')
+    $rdsEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: RDSAudit dispatch case" ($rdsEntry -match "'RDSAudit'\s*\{")
+    $rdsHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: RDSAudit in -Action ValidateSet" ($rdsHeader -match "'RDSAudit'")
+}
+catch {
+    Write-TestResult "Remote Desktop Services Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -13334,7 +13381,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 200 entries" ($listActionCount -eq 200) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 201 entries" ($listActionCount -eq 201) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13367,7 +13414,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 200 entries" ($actionCount2 -eq 200) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 201 entries" ($actionCount2 -eq 201) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13393,7 +13440,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 200 entries" ($actionCount3 -eq 200) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 201 entries" ($actionCount3 -eq 201) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13431,7 +13478,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 200 entries" ($actionCount4 -eq 200) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 201 entries" ($actionCount4 -eq 201) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
