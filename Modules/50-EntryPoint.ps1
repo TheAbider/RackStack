@@ -416,6 +416,7 @@ function Assert-Elevation {
                 @{ Action = 'SmbEnforce';       Description = 'Enforce SMB server signing + encryption (reversible)' }
                 @{ Action = 'PrintServerAudit'; Description = 'Read-only: report print-spooler posture, queue depth, orphaned ports + unused drivers (JSON-aware)' }
                 @{ Action = 'NtpHardeningAudit'; Description = 'Read-only: report W32Time clock-tamper posture (phase-correction limits, auth mode) (JSON-aware)' }
+                @{ Action = 'CertBindingAudit'; Description = 'Read-only: report RDP/WinRM listener certificate bindings + expiry (JSON-aware)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2082,6 +2083,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Read-only W32Time clock-tamper / auth posture (JSON-aware).
             $ntpAuditOk = Start-NtpHardeningAudit
             [Environment]::Exit([int](-not $ntpAuditOk))
+        }
+        'CertBindingAudit' {
+            # Read-only RDP/WinRM listener certificate bindings (JSON-aware).
+            $certAuditOk = Start-CertBindingAudit
+            [Environment]::Exit([int](-not $certAuditOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
