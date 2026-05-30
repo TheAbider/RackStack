@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.116.0
+
+NTP clock-tamper protection + time-authentication audit — a new **NTP Configuration → [8] Clock-Tamper Protection** item plus a read-only CLI action.
+
+Windows Time (W32Time) bounds how far a single sync may move the clock with `MaxPosPhaseCorrection` / `MaxNegPhaseCorrection`. On domain members these default to `0xFFFFFFFF` (**unbounded**) — so a wrong or hostile time source can jump the clock arbitrarily, which breaks Kerberos (auth fails past ~5 min skew) and can enable ticket/replay and certificate-validity attacks.
+
+- **`NtpHardeningAudit`** (read-only) — reports the sync type (NT5DS / NTP / NoSync), whether the time source is authenticated (domain hierarchy = MS-SNTP) or unauthenticated (manual external NTP), the current phase-correction limits (decoding `0xFFFFFFFF` as "Unbounded"), and `RequireSecureTimeSyncRequests` when the NTP server is enabled. JSON-aware; makes no changes.
+- **Clock-Tamper Protection** (reversible) — bounds `MaxPos/MaxNegPhaseCorrection` to a chosen cap (default 48 h, matching the domain-controller default; never trips on a normally-running server, only closes the unbounded default). Prior values are captured for the session undo and the change is Dry-Run aware. Corrections beyond the cap are logged instead of applied — run **Force Time Sync** to recover after a legitimate large jump.
+
+A note on terminology: Windows has **no standalone symmetric-key/`ntp.keys` file** like Unix `ntpd`. Authenticated NTP on Windows is **MS-SNTP**, keyed automatically from the machine account through the domain hierarchy (legacy MD5-derived crypto). The audit surfaces whether that authenticated path is in use rather than exposing a keys file that does not exist on the platform.
+
+Addition to 19-NTPConfiguration (no new module). CLI actions: 197 → 198.
+
 ## v1.115.0
 
 Network throughput benchmark — a new interactive diagnostic under **Network Diagnostics → [14] Network Throughput Benchmark (file copy)**.

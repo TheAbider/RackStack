@@ -9199,6 +9199,41 @@ catch {
 }
 
 # ============================================================================
+# SECTION 183: NTP CLOCK-TAMPER PROTECTION (v1.116.0, 19-NTPConfiguration)
+# ============================================================================
+Write-SectionHeader "SECTION 183: NTP CLOCK-TAMPER PROTECTION (19-NTPConfiguration)"
+
+try {
+    $ntpHC = Get-Content "$modulesPath\19-NTPConfiguration.ps1" -Raw
+    Write-TestResult "19-NTP: Get-NtpHardeningStatus exists" ($ntpHC -match 'function\s+Get-NtpHardeningStatus\b')
+    Write-TestResult "19-NTP: Set-NtpClockTamperProtection exists" ($ntpHC -match 'function\s+Set-NtpClockTamperProtection\b')
+    Write-TestResult "19-NTP: Show-NtpClockHardening exists" ($ntpHC -match 'function\s+Show-NtpClockHardening\b')
+    Write-TestResult "19-NTP: Start-NtpHardeningAudit exists" ($ntpHC -match 'function\s+Start-NtpHardeningAudit\b')
+    # Targets the real W32Time phase-correction knobs.
+    Write-TestResult "19-NTP: bounds MaxPos/MaxNegPhaseCorrection" ($ntpHC -match 'MaxPosPhaseCorrection' -and $ntpHC -match 'MaxNegPhaseCorrection')
+    # Decodes the unbounded 0xFFFFFFFF default.
+    Write-TestResult "19-NTP: decodes unbounded (0xFFFFFFFF) limit" ($ntpHC -match '\[uint32\]::MaxValue' -and $ntpHC -match 'Unbounded')
+    # Reversible: captures prior values and registers an undo.
+    Write-TestResult "19-NTP: clock-tamper protection is reversible (undo)" ($ntpHC -match 'function\s+Set-NtpClockTamperProtection[\s\S]{0,3500}Add-UndoAction')
+    # Dry-Run aware, not one-way (it is reversible).
+    Write-TestResult "19-NTP: clock-tamper protection is Dry-Run aware (reversible)" ($ntpHC -match 'Set-NtpClockTamperProtection[\s\S]{0,1500}Push-DryRunStep[\s\S]{0,400}-OneWay \$false')
+    # Honest platform note: no standalone symmetric-key file on Windows.
+    Write-TestResult "19-NTP: notes no standalone keys file (MS-SNTP/domain)" ($ntpHC -match 'no standalone symmetric-key file' -or $ntpHC -match 'MS-SNTP')
+    # Audit CLI is JSON-aware.
+    Write-TestResult "19-NTP: NtpHardeningAudit JSON-aware" ($ntpHC -match "Start-NtpHardeningAudit[\s\S]{0,300}CLIOutputFormat -eq 'JSON'")
+    # Menu wiring.
+    Write-TestResult "19-NTP: menu item [8] present" ($ntpHC -match '\[8\]\s*Clock-Tamper Protection')
+    Write-TestResult "19-NTP: dispatch case 8 wired" ($ntpHC -match '"8"\s*\{\s*Show-NtpClockHardening')
+    $ntpEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: NtpHardeningAudit dispatch case" ($ntpEntry -match "'NtpHardeningAudit'\s*\{")
+    $ntpHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: NtpHardeningAudit in -Action ValidateSet" ($ntpHeader -match "'NtpHardeningAudit'")
+}
+catch {
+    Write-TestResult "NTP Clock-Tamper Protection Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -9491,7 +9526,7 @@ Write-TestResult "32-Dedup: specific invalid msg" ($ddContent -match 'Enter 1-5 
 # NTP nav check and error message
 $ntpContent = Get-Content -LiteralPath "$modulesPath\19-NTPConfiguration.ps1" -Raw
 Write-TestResult "19-NTP: custom server nav check" ($ntpContent -match 'NTP server address[\s\S]{0,80}Test-NavigationCommand')
-Write-TestResult "19-NTP: specific invalid msg" ($ntpContent -match 'Enter 1-7 or B')
+Write-TestResult "19-NTP: specific invalid msg" ($ntpContent -match 'Enter 1-8 or B')
 
 # StorageReplica nav checks
 $srContent = Get-Content -LiteralPath "$modulesPath\33-StorageReplica.ps1" -Raw
@@ -13209,7 +13244,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 197 entries" ($listActionCount -eq 197) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 198 entries" ($listActionCount -eq 198) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13242,7 +13277,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 197 entries" ($actionCount2 -eq 197) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 198 entries" ($actionCount2 -eq 198) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13268,7 +13303,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 197 entries" ($actionCount3 -eq 197) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 198 entries" ($actionCount3 -eq 198) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13306,7 +13341,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 197 entries" ($actionCount4 -eq 197) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 198 entries" ($actionCount4 -eq 198) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

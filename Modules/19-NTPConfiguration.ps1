@@ -67,6 +67,7 @@ function Set-NTPConfiguration {
         Write-MenuItem "[5]  Force Time Sync Now"
         Write-MenuItem "[6]  Show Detailed Time Status"
         Write-MenuItem "[7]  View NTP Status"
+        Write-MenuItem "[8]  Clock-Tamper Protection (phase-correction limits)"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  [B] ◄ Back" -color "Info"
@@ -117,9 +118,12 @@ function Set-NTPConfiguration {
             "7" {
                 Show-NTPStatus
             }
+            "8" {
+                Show-NtpClockHardening
+            }
             "b" { return }
             "B" { return }
-            default { Write-OutputColor "  Invalid choice. Enter 1-7 or B." -color "Error"; Start-Sleep -Seconds 1 }
+            default { Write-OutputColor "  Invalid choice. Enter 1-8 or B." -color "Error"; Start-Sleep -Seconds 1 }
         }
 
         Write-PressEnter
@@ -330,5 +334,165 @@ function Show-NTPStatus {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Could not test time accuracy" -color "Warning"
     }
+}
+
+# Read-only: report W32Time tamper-protection posture. MaxPos/MaxNegPhaseCorrection
+# bound how far a single sync may move the clock; on domain members they default to
+# 0xFFFFFFFF (UNBOUNDED) — any time source can jump the clock arbitrarily. SyncType
+# NT5DS means time comes authenticated from the domain hierarchy (MS-SNTP); NTP
+# (manual peers) is UNauthenticated. Windows has no standalone symmetric-key file —
+# NTP authentication is domain-based (machine account / MS-SNTP), not a keys file.
+function Get-NtpHardeningStatus {
+    $cfgPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config'
+    $parPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters'
+    $srvPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders\NtpServer'
+    $result = [PSCustomObject]@{
+        Available             = $false
+        SyncType              = 'Unknown'
+        AuthenticatedSource   = $false
+        MaxPosPhaseCorrection = $null
+        MaxNegPhaseCorrection = $null
+        NtpServerEnabled      = $false
+        RequireSecureSyncReqs = $null
+    }
+    try {
+        $cfg = Get-ItemProperty -Path $cfgPath -ErrorAction Stop
+        $result.Available = $true
+        $mp = $cfg.MaxPosPhaseCorrection
+        $mn = $cfg.MaxNegPhaseCorrection
+        $result.MaxPosPhaseCorrection = if ($null -eq $mp) { $null } elseif ([uint32]$mp -eq [uint32]::MaxValue) { 'Unbounded' } else { [int64][uint32]$mp }
+        $result.MaxNegPhaseCorrection = if ($null -eq $mn) { $null } elseif ([uint32]$mn -eq [uint32]::MaxValue) { 'Unbounded' } else { [int64][uint32]$mn }
+    } catch { return $result }
+    try {
+        $par = Get-ItemProperty -Path $parPath -ErrorAction SilentlyContinue
+        if ($par -and $par.Type) { $result.SyncType = "$($par.Type)"; $result.AuthenticatedSource = ($par.Type -eq 'NT5DS') }
+    } catch {}
+    try {
+        $srv = Get-ItemProperty -Path $srvPath -ErrorAction SilentlyContinue
+        if ($srv) {
+            $result.NtpServerEnabled = ([int]$srv.Enabled -eq 1)
+            if ($null -ne $srv.RequireSecureTimeSyncRequests) { $result.RequireSecureSyncReqs = [int]$srv.RequireSecureTimeSyncRequests }
+        }
+    } catch {}
+    return $result
+}
+
+# Reversible: bound the clock phase-correction limits so a wrong or hostile time
+# source cannot apply an arbitrarily large clock jump. Beyond the cap W32Time logs
+# an event instead of moving the clock. The default cap (48h) matches the domain
+# controller default and never trips on a normally-running server; it only closes
+# the UNBOUNDED (0xFFFFFFFF) default that domain members ship with.
+function Set-NtpClockTamperProtection {
+    param([int]$CapSeconds = 172800)
+    $cfgPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config'
+    if (-not (Test-Path -Path $cfgPath)) {
+        Write-OutputColor "  W32Time Config registry key not found — is the Windows Time service installed?" -color "Error"; return
+    }
+    $priorPos = (Get-ItemProperty -Path $cfgPath -Name MaxPosPhaseCorrection -ErrorAction SilentlyContinue).MaxPosPhaseCorrection
+    $priorNeg = (Get-ItemProperty -Path $cfgPath -Name MaxNegPhaseCorrection -ErrorAction SilentlyContinue).MaxNegPhaseCorrection
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $cp = $priorPos; $cn = $priorNeg; $cap = $CapSeconds; $path = $cfgPath
+        Push-DryRunStep -Label "Bound NTP clock phase-correction to ${CapSeconds}s" -Category "Security" -OneWay $false `
+            -Params @{ CapSeconds = $CapSeconds } `
+            -Preflight { Test-Path -Path $path }.GetNewClosure() `
+            -Apply {
+                Set-ItemProperty -Path $path -Name MaxPosPhaseCorrection -Value $cap -Type DWord -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $path -Name MaxNegPhaseCorrection -Value $cap -Type DWord -ErrorAction SilentlyContinue
+                $null = w32tm /config /update 2>&1
+                Restart-Service w32time -Force -ErrorAction SilentlyContinue
+            }.GetNewClosure() `
+            -Undo {
+                if ($null -ne $cp) { Set-ItemProperty -Path $path -Name MaxPosPhaseCorrection -Value $cp -Type DWord -ErrorAction SilentlyContinue }
+                if ($null -ne $cn) { Set-ItemProperty -Path $path -Name MaxNegPhaseCorrection -Value $cn -Type DWord -ErrorAction SilentlyContinue }
+                $null = w32tm /config /update 2>&1
+                Restart-Service w32time -Force -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): bound clock phase-correction to ${CapSeconds}s." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued NTP clock-tamper protection (${CapSeconds}s cap)"
+        return
+    }
+
+    try {
+        Set-ItemProperty -Path $cfgPath -Name MaxPosPhaseCorrection -Value $CapSeconds -Type DWord -ErrorAction Stop
+        Set-ItemProperty -Path $cfgPath -Name MaxNegPhaseCorrection -Value $CapSeconds -Type DWord -ErrorAction Stop
+        $null = w32tm /config /update 2>&1
+        Restart-Service w32time -Force -ErrorAction SilentlyContinue
+        Write-OutputColor "  Clock phase-correction bounded to ${CapSeconds}s (was Pos=$priorPos / Neg=$priorNeg)." -color "Success"
+        Write-OutputColor "  Corrections larger than the cap are now logged instead of applied; run Force Time Sync after a legitimate large jump." -color "Info"
+        Add-SessionChange -Category "Security" -Description "Bounded NTP clock phase-correction to ${CapSeconds}s"
+        Clear-MenuCache
+        Add-UndoAction -Category "Security" -Description "Bounded NTP clock phase-correction to ${CapSeconds}s" -UndoScript {
+            param($Path, $Pos, $Neg)
+            if ($null -ne $Pos) { Set-ItemProperty -Path $Path -Name MaxPosPhaseCorrection -Value $Pos -Type DWord -ErrorAction SilentlyContinue }
+            if ($null -ne $Neg) { Set-ItemProperty -Path $Path -Name MaxNegPhaseCorrection -Value $Neg -Type DWord -ErrorAction SilentlyContinue }
+            $null = w32tm /config /update 2>&1
+            Restart-Service w32time -Force -ErrorAction SilentlyContinue
+        } -UndoParams @{ Path = $cfgPath; Pos = $priorPos; Neg = $priorNeg }
+    }
+    catch {
+        Write-OutputColor "  Failed to apply clock-tamper protection: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# Interactive: clock-tamper protection audit + offer to bound phase-correction.
+function Show-NtpClockHardening {
+    Clear-Host
+    Write-CenteredOutput "Clock-Tamper Protection" -color "Info"
+    $s = Get-NtpHardeningStatus
+    if (-not $s.Available) { Write-OutputColor "  W32Time configuration is not available on this host." -color "Error"; return }
+
+    $posStr = if ($s.MaxPosPhaseCorrection -eq 'Unbounded') { "Unbounded (0xFFFFFFFF)" } else { "$($s.MaxPosPhaseCorrection)s" }
+    $negStr = if ($s.MaxNegPhaseCorrection -eq 'Unbounded') { "Unbounded (0xFFFFFFFF)" } else { "$($s.MaxNegPhaseCorrection)s" }
+    $posColor = if ($s.MaxPosPhaseCorrection -eq 'Unbounded') { "Warning" } else { "Success" }
+    $negColor = if ($s.MaxNegPhaseCorrection -eq 'Unbounded') { "Warning" } else { "Success" }
+
+    Write-OutputColor "  Sync type            : $($s.SyncType)" -color "Info"
+    if ($s.AuthenticatedSource) {
+        Write-OutputColor "  Time authentication  : Domain hierarchy (MS-SNTP, authenticated)" -color "Success"
+    } else {
+        Write-OutputColor "  Time authentication  : Manual / external NTP (UNauthenticated)" -color "Warning"
+    }
+    Write-OutputColor "  Max +correction      : $posStr" -color $posColor
+    Write-OutputColor "  Max -correction      : $negStr" -color $negColor
+    if ($s.NtpServerEnabled -and $null -ne $s.RequireSecureSyncReqs) {
+        $rsColor = if ($s.RequireSecureSyncReqs -eq 1) { "Success" } else { "Warning" }
+        Write-OutputColor "  Secure sync requests : $($s.RequireSecureSyncReqs) (NTP server)" -color $rsColor
+    }
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  NOTE: Windows authenticated NTP (MS-SNTP) is domain-based and uses legacy" -color "Info"
+    Write-OutputColor "  MD5-derived crypto. There is no standalone symmetric-key file on Windows;" -color "Info"
+    Write-OutputColor "  authentication comes from the domain hierarchy (NT5DS), not a keys file." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    if ($s.MaxPosPhaseCorrection -eq 'Unbounded' -or $s.MaxNegPhaseCorrection -eq 'Unbounded') {
+        Write-OutputColor "  This host accepts UNBOUNDED clock corrections — a wrong or hostile time" -color "Warning"
+        Write-OutputColor "  source could jump the clock arbitrarily (breaking Kerberos / enabling replay)." -color "Warning"
+    }
+    if (-not (Confirm-UserAction -Message "Bound the clock phase-correction limits now?")) { Write-OutputColor "  No changes made." -color "Info"; return }
+
+    $capSeconds = 172800
+    $capInput = Read-Host "  Cap in seconds (default 172800 = 48h; e.g. 3600 = 1h)"
+    if (-not [string]::IsNullOrWhiteSpace($capInput)) {
+        $parsed = 0
+        if ([int]::TryParse($capInput.Trim(), [ref]$parsed) -and $parsed -gt 0) { $capSeconds = $parsed }
+    }
+    Set-NtpClockTamperProtection -CapSeconds $capSeconds
+}
+
+# CLI: NtpHardeningAudit — read-only clock-tamper / auth posture (JSON-aware).
+function Start-NtpHardeningAudit {
+    $s = Get-NtpHardeningStatus
+    if ($script:CLIOutputFormat -eq 'JSON') {
+        Write-Output (@{
+            Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'NtpHardeningAudit'
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            Available = $s.Available; SyncType = $s.SyncType; AuthenticatedSource = $s.AuthenticatedSource
+            MaxPosPhaseCorrection = "$($s.MaxPosPhaseCorrection)"; MaxNegPhaseCorrection = "$($s.MaxNegPhaseCorrection)"
+            NtpServerEnabled = $s.NtpServerEnabled; RequireSecureSyncRequests = $s.RequireSecureSyncReqs
+        } | ConvertTo-Json)
+    }
+    else { Show-NtpClockHardening }
+    return $true
 }
 #endregion

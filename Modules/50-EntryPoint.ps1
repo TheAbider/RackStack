@@ -415,6 +415,7 @@ function Assert-Elevation {
                 @{ Action = 'SmbSecurityCheck'; Description = 'Read-only: report SMB server signing/encryption posture (JSON-aware)' }
                 @{ Action = 'SmbEnforce';       Description = 'Enforce SMB server signing + encryption (reversible)' }
                 @{ Action = 'PrintServerAudit'; Description = 'Read-only: report print-spooler posture, queue depth, orphaned ports + unused drivers (JSON-aware)' }
+                @{ Action = 'NtpHardeningAudit'; Description = 'Read-only: report W32Time clock-tamper posture (phase-correction limits, auth mode) (JSON-aware)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2076,6 +2077,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Read-only print-server posture (JSON-aware).
             $psAuditOk = Start-PrintServerAudit
             [Environment]::Exit([int](-not $psAuditOk))
+        }
+        'NtpHardeningAudit' {
+            # Read-only W32Time clock-tamper / auth posture (JSON-aware).
+            $ntpAuditOk = Start-NtpHardeningAudit
+            [Environment]::Exit([int](-not $ntpAuditOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {
