@@ -444,6 +444,15 @@ function Show-RolesFeaturesMenu {
     } -CacheSeconds 120
     $wacColor = if ($wacStatusText -eq "Running") { "Success" } else { "Warning" }
 
+    $dfsStatusText = Get-CachedValue -Key "DFSState" -FetchScript {
+        $d = Get-DFSStatus
+        if (-not $d.Available) { "Tools N/A" }
+        elseif ($d.NamespaceRoleInstalled -and $d.ReplicationRoleInstalled) { "Installed" }
+        elseif ($d.NamespaceRoleInstalled -or $d.ReplicationRoleInstalled) { "Partial" }
+        else { "Not Installed" }
+    } -CacheSeconds 120
+    $dfsColor = if ($dfsStatusText -eq "Installed") { "Success" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -464,6 +473,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[11] Remote Access / Always-On VPN ►" -Status $aovpnStatusText -StatusColor $aovpnColor
     Write-MenuItem "[12] SIEM Log Forwarder ►" -Status $siemStatusText -StatusColor $siemColor
     Write-MenuItem "[13] Windows Admin Center (WAC) ►" -Status $wacStatusText -StatusColor $wacColor
+    Write-MenuItem "[14] DFS Namespaces & Replication ►" -Status $dfsStatusText -StatusColor $dfsColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"
