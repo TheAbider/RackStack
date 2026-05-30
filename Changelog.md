@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.115.0
+
+Network throughput benchmark — a new interactive diagnostic under **Network Diagnostics → [14] Network Throughput Benchmark (file copy)**.
+
+It generates a test file (default 256 MB, 16–4096 MB), copies it to a target folder and back, and times each transfer to report **write and read throughput** in MB/s and Mbps. A UNC share (`\\server\share`) is the typical target; a local path measures the local disk. The figure reflects the full network + remote storage path, not pure wire speed.
+
+The benchmark is **in-box only** — it uses built-in cmdlets and a stopwatch, with no external binary (`ntttcp`/`iperf` are not shipped with Windows and are not auto-downloaded). The payload buffer is filled with pseudo-random bytes so it is not trivially compressible, the target folder is validated before any write, and all three temp files (local source, remote copy, local read-back) are removed in a `finally` even if a transfer fails.
+
+Interactive diagnostic (needs a target path), so no new CLI action. Addition to 58-NetworkDiagnostics. CLI actions: unchanged at 197.
+
 ## v1.114.0
 
 Print server cleanup — a new Operations-menu utility for maintaining the local print spooler, plus a read-only CLI action.
