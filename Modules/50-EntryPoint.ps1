@@ -414,6 +414,7 @@ function Assert-Elevation {
                 @{ Action = 'ClusterValidationReport'; Description = 'Run a non-disruptive failover-cluster validation and archive the HTML report (JSON-aware)' }
                 @{ Action = 'SmbSecurityCheck'; Description = 'Read-only: report SMB server signing/encryption posture (JSON-aware)' }
                 @{ Action = 'SmbEnforce';       Description = 'Enforce SMB server signing + encryption (reversible)' }
+                @{ Action = 'PrintServerAudit'; Description = 'Read-only: report print-spooler posture, queue depth, orphaned ports + unused drivers (JSON-aware)' }
                 @{ Action = 'Batch';            Description = 'JSON-driven full configuration' }
             )
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -2070,6 +2071,11 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             # Enforce SMB signing + encryption (reversible; headless applies, console interactive).
             $smbEnfOk = Start-SmbEnforce
             [Environment]::Exit([int](-not $smbEnfOk))
+        }
+        'PrintServerAudit' {
+            # Read-only print-server posture (JSON-aware).
+            $psAuditOk = Start-PrintServerAudit
+            [Environment]::Exit([int](-not $psAuditOk))
         }
         'Batch' {
             if (-not $script:CLIConfig) {

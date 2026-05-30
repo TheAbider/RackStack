@@ -71,6 +71,7 @@ function Show-OperationsMenu {
         Write-MenuItem "[30] Memory Pressure Diagnostics"
         Write-MenuItem "[34] CIS Compliance Scan (CIS L1)"
         Write-MenuItem "[35] SMB Signing & Encryption Enforcement"
+        Write-MenuItem "[36] Print Server Cleanup"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"
 
@@ -105,6 +106,7 @@ function Show-OperationsMenu {
                 @{Num="31"; Name="Batch VM Cleanup"};          @{Num="32"; Name="VM Migration Pre-Flight"}
                 @{Num="33"; Name="Logged-On Users"};           @{Num="34"; Name="CIS Compliance Scan (CIS L1)"}
                 @{Num="35"; Name="SMB Signing & Encryption Enforcement"}
+                @{Num="36"; Name="Print Server Cleanup"}
             )
             $matched = @($opsItems | Where-Object { $_.Name -match [regex]::Escape($searchTerm) })
             Write-OutputColor "" -color "Info"
@@ -278,10 +280,14 @@ function Show-OperationsMenu {
                 Set-SMBServerSecurity
                 Write-PressEnter
             }
+            "36" {
+                Show-PrintServerCleanup
+                Write-PressEnter
+            }
             "b" { return }
             "B" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-35, [/] to search, or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-36, [/] to search, or B." -color "Error"
                 Start-Sleep -Seconds 1
             }
         }
