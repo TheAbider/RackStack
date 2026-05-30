@@ -18,7 +18,7 @@
     <tags>windows-server hyper-v iscsi clustering powershell sysadmin automation msp admin-tools</tags>
     <summary>PowerShell automation toolkit for configuring Windows Server hosts</summary>
     <description>
-RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." 198 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, and batch automation, all with undo, transaction rollback, and audit logging.
+RackStack is a menu-driven PowerShell tool that automates everything between "Windows is installed" and "server is in production." 199 CLI actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI, clustering, VM deployment, and batch automation, all with undo, transaction rollback, and audit logging.
 
 Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly and want it done right every time.
 

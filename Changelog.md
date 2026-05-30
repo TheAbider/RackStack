@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.117.0
+
+Service certificate binding audit — a new module (**78-CertificateAudit**) surfaced under **Security & Access → [12] Certificate Binding Audit**, plus a read-only CLI action.
+
+- **`CertBindingAudit`** (read-only) — reports which certificate is actually bound to the **RDP-Tcp** listener and the **WinRM HTTPS** listener, with subject, days-to-expiry, and whether the certificate has a usable private key. JSON-aware; makes no changes. This is binding-aware — unlike the generic certificate-expiry check, it tells you which cert each service is presenting, so you can catch an expiring RDP/WinRM binding before clients see TLS failures.
+
+A note on scope: automated **rotation** of the RDP listener was prototyped for this release but **deferred** after an adversarial security review. Re-binding RDP safely requires the target certificate's private key to be readable by the RDP service account (`NETWORK SERVICE`) — a freshly generated self-signed cert is not, by default — and getting that wrong can break RDP TLS and lock an administrator out of the only remote-access path. Combined with inconsistent CIM writability of `SSLCertificateSHA1Hash` across Windows builds, that mutation needs validation on a live, elevated, RDP-enabled server before it ships. The audit surfaces exactly what to rotate manually and when, and the rotation will follow once it can be verified safely.
+
+New module 78-CertificateAudit. Modules: 78 → 79. CLI actions: 198 → 199.
+
 ## v1.116.0
 
 NTP clock-tamper protection + time-authentication audit — a new **NTP Configuration → [8] Clock-Tamper Protection** item plus a read-only CLI action.

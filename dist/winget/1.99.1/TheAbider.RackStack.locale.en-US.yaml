@@ -13,7 +13,7 @@ Copyright: Copyright (c) 2026 TheAbider
 ShortDescription: PowerShell automation toolkit for configuring Windows Server hosts.
 Description: |-
   RackStack is a menu-driven PowerShell tool that automates everything between
-  "Windows is installed" and "server is in production." It provides 198 CLI
+  "Windows is installed" and "server is in production." It provides 199 CLI
   actions and 60+ interactive menus covering networking, Hyper-V, SAN/iSCSI,
   clustering, VM deployment, cloud onboarding, and batch automation, all with
   undo, transaction rollback, and audit logging. Built for MSPs, sysadmins,

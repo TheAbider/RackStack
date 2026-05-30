@@ -116,7 +116,7 @@ if (Test-Path $_testInitFile) {
     }
 }
 $monolithicPath = Join-Path (Join-Path $script:ModuleRoot "builds") "$_testToolFullName v$_testScriptVersion.ps1"
-$expectedModuleCount = 78  # 00-77 inclusive
+$expectedModuleCount = 79  # 00-78 inclusive
 
 # ============================================================================
 # BANNER
@@ -742,8 +742,8 @@ try {
 try {
     $firstName = $moduleFiles[0].Name
     $lastName = $moduleFiles[-1].Name
-    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "77-WindowsAdminCenter.ps1"
-    Write-TestResult "Module range 00-Initialization to 77-WindowsAdminCenter" $pass "First=$firstName, Last=$lastName"
+    $pass = $firstName -eq "00-Initialization.ps1" -and $lastName -eq "78-CertificateAudit.ps1"
+    Write-TestResult "Module range 00-Initialization to 78-CertificateAudit" $pass "First=$firstName, Last=$lastName"
 } catch {
     Write-TestResult "Module range verification" $false $_.Exception.Message
 }
@@ -2158,8 +2158,8 @@ try {
         if ($line -match '^\s*#region\s') { $regionStartCount++ }
         if ($line -match '^\s*#endregion') { $regionEndCount++ }
     }
-    Write-TestResult "Monolithic has 77 #region tags" ($regionStartCount -eq 77) "Found: $regionStartCount"
-    Write-TestResult "Monolithic has 77 #endregion tags" ($regionEndCount -eq 77) "Found: $regionEndCount"
+    Write-TestResult "Monolithic has 78 #region tags" ($regionStartCount -eq 78) "Found: $regionStartCount"
+    Write-TestResult "Monolithic has 78 #endregion tags" ($regionEndCount -eq 78) "Found: $regionEndCount"
     Write-TestResult "Region start/end counts match" ($regionStartCount -eq $regionEndCount) "Starts=$regionStartCount, Ends=$regionEndCount"
 } catch {
     Write-TestResult "Region count verification" $false $_.Exception.Message
@@ -4490,7 +4490,7 @@ Write-TestResult "README.md exists" (Test-Path $readmePath)
 
 try {
     $readmeContent = Get-Content $readmePath -Raw
-    Write-TestResult "README: mentions 78 modules" ($readmeContent -match '78 module')
+    Write-TestResult "README: mentions 78 modules" ($readmeContent -match '79 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
     Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
@@ -6898,11 +6898,11 @@ try {
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
     $loaderContent = Get-Content $loaderPath -Raw
     Write-TestResult "RackStack.ps1: loads 62-HyperVReplica.ps1" ($loaderContent -match '62-HyperVReplica\.ps1')
-    Write-TestResult "RackStack.ps1: mentions 78 modules" ($loaderContent -match '78 modules')
+    Write-TestResult "RackStack.ps1: mentions 78 modules" ($loaderContent -match '79 modules')
 
     # Module count verification
     $moduleCount = (Get-ChildItem -Path $modulesPath -Filter "*.ps1").Count
-    Write-TestResult "Module count is 78" ($moduleCount -eq 78) "Found $moduleCount modules"
+    Write-TestResult "Module count is 79" ($moduleCount -eq 79) "Found $moduleCount modules"
 
     # Changelog mentions v1.4.0
     $changelogPath = Join-Path $script:ModuleRoot "Changelog.md"
@@ -9231,6 +9231,54 @@ try {
 }
 catch {
     Write-TestResult "NTP Clock-Tamper Protection Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 184: CERTIFICATE BINDING AUDIT (v1.117.0, NEW module 78)
+# ============================================================================
+# Read-only audit module. Automated rotation was deliberately deferred after an
+# adversarial review surfaced an RDP lock-out risk (a self-signed cert's private
+# key is not readable by NETWORK SERVICE by default) plus uncertain CIM
+# writability of SSLCertificateSHA1Hash — neither testable without a live RDP
+# server. This section therefore asserts the module is genuinely READ-ONLY.
+Write-SectionHeader "SECTION 184: CERTIFICATE BINDING AUDIT (78-CertificateAudit)"
+
+try {
+    $crPath = "$modulesPath\78-CertificateAudit.ps1"
+    Write-TestResult "78-CertAudit: module file exists" (Test-Path $crPath)
+    $crC = Get-Content $crPath -Raw
+    Write-TestResult "78-CertAudit: Get-ServiceCertificateBindings exists" ($crC -match 'function\s+Get-ServiceCertificateBindings\b')
+    Write-TestResult "78-CertAudit: Get-CertSummaryByThumbprint exists" ($crC -match 'function\s+Get-CertSummaryByThumbprint\b')
+    Write-TestResult "78-CertAudit: Show-CertificateBindings exists" ($crC -match 'function\s+Show-CertificateBindings\b')
+    Write-TestResult "78-CertAudit: Start-CertBindingAudit exists" ($crC -match 'function\s+Start-CertBindingAudit\b')
+    # Reports both RDP and WinRM listener bindings.
+    Write-TestResult "78-CertAudit: reports RDP + WinRM bindings" ($crC -match 'Win32_TSGeneralSetting' -and $crC -match "WSMan:\\localhost\\Listener")
+    # Surfaces HasPrivateKey (the lock-out signal that justified deferring rotation).
+    Write-TestResult "78-CertAudit: reports HasPrivateKey" ($crC -match 'HasPrivateKey')
+    # Thumbprints validated as 40 hex before use as a cert-store path.
+    Write-TestResult "78-CertAudit: validates thumbprint (40 hex)" ($crC -match "match '\^\[0-9A-Fa-f\]\{40\}\`$'")
+    # READ-ONLY: no privileged writes anywhere in the module.
+    Write-TestResult "78-CertAudit: is read-only (no Set-CimInstance)" (-not ($crC -match 'Set-CimInstance'))
+    Write-TestResult "78-CertAudit: is read-only (no New-SelfSignedCertificate)" (-not ($crC -match 'New-SelfSignedCertificate'))
+    Write-TestResult "78-CertAudit: does not mutate WinRM listener" (-not ($crC -match 'New-Item[^\r\n]*WSMan|Set-Item[^\r\n]*WSMan|Remove-Item[^\r\n]*Listener'))
+    Write-TestResult "78-CertAudit: no PFX/password handling" (-not ($crC -match 'Import-PfxCertificate|AsSecureString|-Password'))
+    Write-TestResult "78-CertAudit: documents deferred rotation" ($crC -match 'rotation is deferred|deferred to a future release')
+    Write-TestResult "78-CertAudit: CertBindingAudit JSON-aware" ($crC -match "Start-CertBindingAudit[\s\S]{0,300}CLIOutputFormat -eq 'JSON'")
+    # Module + menu + CLI wiring.
+    $loaderC = Get-Content (Join-Path $script:ModuleRoot "RackStack.ps1") -Raw
+    Write-TestResult "RackStack.ps1: loads 78-CertificateAudit" ($loaderC -match '78-CertificateAudit\.ps1')
+    $menuC = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    Write-TestResult "48-MenuDisplay: Security menu [12] Certificate Binding Audit" ($menuC -match '\[12\]\s*Certificate Binding Audit')
+    $runnerC = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    Write-TestResult "49-MenuRunner: Security menu case 12 wired" ($runnerC -match '"12"\s*\{\s*Show-CertificateBindings')
+    Write-TestResult "49-MenuRunner: Security invalid msg bumped to 1-12" ($runnerC -match 'Enter 1-12 or B')
+    $crEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: CertBindingAudit dispatch case" ($crEntry -match "'CertBindingAudit'\s*\{")
+    $crHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: CertBindingAudit in -Action ValidateSet" ($crHeader -match "'CertBindingAudit'")
+}
+catch {
+    Write-TestResult "Certificate Binding Audit Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -13244,7 +13292,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 198 entries" ($listActionCount -eq 198) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 199 entries" ($listActionCount -eq 199) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13277,7 +13325,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 198 entries" ($actionCount2 -eq 198) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 199 entries" ($actionCount2 -eq 199) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13303,7 +13351,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 198 entries" ($actionCount3 -eq 198) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 199 entries" ($actionCount3 -eq 199) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13341,7 +13389,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 198 entries" ($actionCount4 -eq 198) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 199 entries" ($actionCount4 -eq 199) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }
