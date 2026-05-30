@@ -70,8 +70,8 @@ limit the impact if the maintainer becomes unavailable:
   `.\sync-to-monolithic.ps1` + `Invoke-PS2EXE`. The same source produces
   byte-identical output up to ps2exe's PE timestamp.
 - **CI is fully automated and GitHub-hosted.** No self-hosted
-  infrastructure is on the critical path; `windows-latest` runners are
-  free for public repos.
+  infrastructure is on the critical path; GitHub-hosted `windows-2025`
+  runners are free for public repos.
 
 ### Signing-key continuity
 - **Sigstore cosign keyless signing** uses GitHub Actions OIDC, not a

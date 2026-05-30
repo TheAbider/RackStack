@@ -12,16 +12,19 @@ permissions: read-all
 jobs:
   test:
     permissions:
-      contents: write       # needed for the auto-release step (gh release create)
-      id-token: write       # needed for actions/attest-build-provenance (SLSA Level 3)
-      attestations: write   # needed for actions/attest-build-provenance
-      actions: read         # explicit; needed for run metadata in attestations
-    # windows-latest (GitHub-hosted) for both push and PR. RackStack is a public
+      contents: write          # needed for the auto-release step (gh release create)
+      id-token: write          # needed for actions/attest-* (SLSA L3 provenance + SBOM)
+      attestations: write      # needed for actions/attest-* (persist the attestation)
+      artifact-metadata: write # needed by actions/attest v4 (create the artifact storage record)
+      actions: read            # explicit; needed for run metadata in attestations
+    # windows-2025 (GitHub-hosted) for both push and PR. RackStack is a public
     # repo — running on a self-hosted runner means anyone can fork, open a PR,
-    # and execute arbitrary code on the runner host. windows-latest is free and
-    # unlimited for public repos, has PowerShell 7 + pwsh + Git pre-installed,
-    # and avoids the security exposure entirely.
-    runs-on: windows-latest
+    # and execute arbitrary code on the runner host. windows-2025 is free and
+    # unlimited for public repos, ships Windows PowerShell 5.1 + pwsh 7 + .NET
+    # Framework 4.8 + Git, and avoids the security exposure entirely. Pinned
+    # explicitly (rather than windows-latest) ahead of the 2026-06-15 image
+    # migration so the build runs against a deterministic, validated image.
+    runs-on: windows-2025
     # Prevents a hung test from tying up the runner — full suite normally runs in ~3 min
     timeout-minutes: 20
     defaults:
@@ -269,9 +272,14 @@ jobs:
           upload-artifact: true
           upload-release-assets: false
 
+      # actions/attest-sbom was deprecated; actions/attest exposes a native
+      # `sbom-path` input (SPDX/CycloneDX, auto-detected) that maps 1:1 from the
+      # old action and produces an identical SBOM attestation — verifiable via
+      # `gh attestation verify`. Do NOT add predicate-* here: sbom-path is
+      # mutually exclusive with them.
       - name: Attest SBOM
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false' && hashFiles(format('builds/RackStack-{0}-sbom.cyclonedx.json', steps.vercheck.outputs.version)) != ''
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
           subject-path: builds/RackStack.exe
           sbom-path: builds/RackStack-${{ steps.vercheck.outputs.version }}-sbom.cyclonedx.json
