@@ -9123,7 +9123,7 @@ try {
     Write-TestResult "56-Ops: SmbSecurityCheck JSON-aware" ($smbC -match "Start-SmbSecurityCheck[\s\S]{0,400}CLIOutputFormat -eq 'JSON'")
     $smbMenu = $smbC -match '\[35\]\s*SMB Signing'
     Write-TestResult "56-Ops: menu item [35] SMB Signing present" $smbMenu
-    Write-TestResult "56-Ops: Operations invalid msg bumped to 1-35" ($smbC -match 'Enter 1-35, \[/\] to search')
+    Write-TestResult "56-Ops: Operations invalid msg uses searchable range format" ($smbC -match 'Enter 1-\d+, \[/\] to search')
     $smbEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
     Write-TestResult "50-EntryPoint: SmbSecurityCheck dispatch case" ($smbEntry -match "'SmbSecurityCheck'\s*\{")
     Write-TestResult "50-EntryPoint: SmbEnforce dispatch case" ($smbEntry -match "'SmbEnforce'\s*\{")
@@ -9133,6 +9133,40 @@ try {
 }
 catch {
     Write-TestResult "SMB Security Enforcement Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 181: PRINT SERVER CLEANUP (v1.114.0, 35-Utilities)
+# ============================================================================
+Write-SectionHeader "SECTION 181: PRINT SERVER CLEANUP (35-Utilities)"
+
+try {
+    $psC = Get-Content "$modulesPath\35-Utilities.ps1" -Raw
+    Write-TestResult "35-Utils: Get-PrintServerStatus exists" ($psC -match 'function\s+Get-PrintServerStatus\b')
+    Write-TestResult "35-Utils: Clear-StuckPrintQueue exists" ($psC -match 'function\s+Clear-StuckPrintQueue\b')
+    Write-TestResult "35-Utils: Remove-OrphanedPrinterPorts exists" ($psC -match 'function\s+Remove-OrphanedPrinterPorts\b')
+    Write-TestResult "35-Utils: Show-PrintServerCleanup exists" ($psC -match 'function\s+Show-PrintServerCleanup\b')
+    Write-TestResult "35-Utils: Start-PrintServerAudit exists" ($psC -match 'function\s+Start-PrintServerAudit\b')
+    # Audit is read-only: status reader makes no Set/Remove/Stop calls.
+    Write-TestResult "35-Utils: Get-PrintServerStatus is read-only" (-not ($psC -match 'function\s+Get-PrintServerStatus[\s\S]{0,1400}(Remove-Printer|Stop-Service|Set-Printer)'))
+    # Queue flush is ONE-WAY in Dry-Run (jobs are unrecoverable).
+    Write-TestResult "35-Utils: queue flush is ONE-WAY in Dry-Run" ($psC -match 'function\s+Clear-StuckPrintQueue[\s\S]{0,1600}Push-DryRunStep[\s\S]{0,300}-OneWay \$true')
+    # Flush always restarts the spooler even on failure.
+    Write-TestResult "35-Utils: queue flush restarts spooler on failure" ($psC -match 'catch\s*\{[\s\S]{0,200}Start-Service -Name Spooler')
+    # Orphaned-port removal is reversible: captures config + registers undo that re-adds.
+    Write-TestResult "35-Utils: orphaned-port removal is reversible (re-add undo)" ($psC -match 'function\s+Remove-OrphanedPrinterPorts[\s\S]{0,2600}Add-UndoAction[\s\S]{0,300}Add-PrinterPort')
+    # Audit CLI is JSON-aware.
+    Write-TestResult "35-Utils: PrintServerAudit JSON-aware" ($psC -match "Start-PrintServerAudit[\s\S]{0,300}CLIOutputFormat -eq 'JSON'")
+    $psMenu = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    Write-TestResult "56-Ops: menu item [36] Print Server Cleanup present" ($psMenu -match '\[36\]\s*Print Server Cleanup')
+    Write-TestResult "56-Ops: Operations invalid msg covers item [36] (1-36)" ($psMenu -match 'Enter 1-36, \[/\] to search')
+    $psEntry = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "50-EntryPoint: PrintServerAudit dispatch case" ($psEntry -match "'PrintServerAudit'\s*\{")
+    $psHeader = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    Write-TestResult "Header.ps1: PrintServerAudit in -Action ValidateSet" ($psHeader -match "'PrintServerAudit'")
+}
+catch {
+    Write-TestResult "Print Server Cleanup Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -13146,7 +13180,7 @@ try {
     # Action list in -ListActions block has 160 entries
     $listBlock = [regex]::Match($ep5, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $listActionCount = @([regex]::Matches($listBlock, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 196 entries" ($listActionCount -eq 196) "Found $listActionCount"
+    Write-TestResult "50-EntryPoint: action list has 197 entries" ($listActionCount -eq 197) "Found $listActionCount"
 } catch {
     Write-TestResult "v1.91.0 Tests" $false $_.Exception.Message
 }
@@ -13179,7 +13213,7 @@ try {
     # Action list count (should be 167 now)
     $listBlock2 = [regex]::Match($ep6, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount2 = @([regex]::Matches($listBlock2, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 196 entries" ($actionCount2 -eq 196) "Found $actionCount2"
+    Write-TestResult "50-EntryPoint: action list has 197 entries" ($actionCount2 -eq 197) "Found $actionCount2"
 } catch {
     Write-TestResult "v1.92.0 Tests" $false $_.Exception.Message
 }
@@ -13205,7 +13239,7 @@ try {
     # Action count updated
     $listBlock3 = [regex]::Match($ep7, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount3 = @([regex]::Matches($listBlock3, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 196 entries" ($actionCount3 -eq 196) "Found $actionCount3"
+    Write-TestResult "50-EntryPoint: action list has 197 entries" ($actionCount3 -eq 197) "Found $actionCount3"
 } catch {
     Write-TestResult "v1.93.0 Tests" $false $_.Exception.Message
 }
@@ -13243,7 +13277,7 @@ try {
     # Action list count
     $listBlock4 = [regex]::Match($ep8, '\$actionList = @\([\s\S]*?\)[\s\S]{0,50}CLIOutputFormat').Value
     $actionCount4 = @([regex]::Matches($listBlock4, "Action\s*=\s*'")).Count
-    Write-TestResult "50-EntryPoint: action list has 196 entries" ($actionCount4 -eq 196) "Found $actionCount4"
+    Write-TestResult "50-EntryPoint: action list has 197 entries" ($actionCount4 -eq 197) "Found $actionCount4"
 } catch {
     Write-TestResult "v1.94.1 Tests" $false $_.Exception.Message
 }

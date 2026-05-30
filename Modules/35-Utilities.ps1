@@ -2694,4 +2694,181 @@ function Show-SystemBanner {
 
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
 }
+
+# Read-only print-server posture: spooler state, per-printer queue depth, orphaned
+# TCP/IP ports (no printer references them) and drivers no printer uses.
+function Get-PrintServerStatus {
+    $result = [PSCustomObject]@{
+        Available       = $false
+        SpoolerStatus   = 'Unknown'
+        Printers        = @()
+        TotalQueuedJobs = 0
+        OrphanedPorts   = @()
+        UnusedDrivers   = @()
+    }
+    if (-not (Get-Command Get-Printer -ErrorAction SilentlyContinue)) { return $result }
+    $result.Available = $true
+    $svc = Get-Service -Name Spooler -ErrorAction SilentlyContinue
+    if ($svc) { $result.SpoolerStatus = "$($svc.Status)" }
+
+    $printers = @(Get-Printer -ErrorAction SilentlyContinue)
+    $printerInfo = foreach ($p in $printers) {
+        $jobs = @(Get-PrintJob -PrinterName $p.Name -ErrorAction SilentlyContinue)
+        [PSCustomObject]@{ Name = $p.Name; PortName = $p.PortName; DriverName = $p.DriverName; QueuedJobs = $jobs.Count }
+    }
+    $result.Printers = @($printerInfo)
+    $sum = ($printerInfo | Measure-Object -Property QueuedJobs -Sum).Sum
+    $result.TotalQueuedJobs = if ($sum) { [int]$sum } else { 0 }
+
+    # Orphaned TCP/IP ports: a port referenced by no printer.
+    $usedPorts = @($printers | ForEach-Object { $_.PortName })
+    $tcpPorts = @(Get-PrinterPort -ErrorAction SilentlyContinue | Where-Object { $_.Description -match 'TCP/IP' -or $_.Name -match '^IP_' })
+    $result.OrphanedPorts = @($tcpPorts | Where-Object { $usedPorts -notcontains $_.Name } | ForEach-Object { $_.Name })
+
+    # Unused drivers (informational only — removal is risky and not automated here).
+    $usedDrivers = @($printers | ForEach-Object { $_.DriverName })
+    $allDrivers = @(Get-PrinterDriver -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    $result.UnusedDrivers = @($allDrivers | Where-Object { $usedDrivers -notcontains $_ })
+
+    return $result
+}
+
+# OneWay: stop the spooler, purge the spool directory, restart. Abandoned/stuck
+# jobs are discarded — there is no undo for a flushed queue.
+function Clear-StuckPrintQueue {
+    if (-not (Get-Service -Name Spooler -ErrorAction SilentlyContinue)) {
+        Write-OutputColor "  Print Spooler service is not present on this host." -color "Error"; return
+    }
+    Write-OutputColor "  This stops the spooler, deletes ALL queued print jobs on this host, and restarts it." -color "Warning"
+    Write-OutputColor "  Discarded jobs cannot be recovered." -color "Warning"
+    if (-not (Confirm-UserAction -Message "Flush the print queue now?")) { Write-OutputColor "  Cancelled." -color "Info"; return }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        Push-DryRunStep -Label "Flush stuck print queue (purge spooler)" -Category "Maintenance" -OneWay $true `
+            -Params @{ SpoolDir = "$env:SystemRoot\System32\spool\PRINTERS" } `
+            -Preflight { $null -ne (Get-Service -Name Spooler -ErrorAction SilentlyContinue) }.GetNewClosure() `
+            -Apply {
+                Stop-Service -Name Spooler -Force -ErrorAction SilentlyContinue
+                Get-ChildItem -LiteralPath "$env:SystemRoot\System32\spool\PRINTERS" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+                Start-Service -Name Spooler -ErrorAction SilentlyContinue
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): flush print queue (ONE-WAY — jobs are lost)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued print-queue flush (one-way)"
+        return
+    }
+
+    try {
+        Stop-Service -Name Spooler -Force -ErrorAction Stop
+        Get-ChildItem -LiteralPath "$env:SystemRoot\System32\spool\PRINTERS" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        Start-Service -Name Spooler -ErrorAction Stop
+        Write-OutputColor "  Print queue flushed; spooler restarted." -color "Success"
+        Add-SessionChange -Category "Maintenance" -Description "Flushed stuck print queue"
+    }
+    catch {
+        # Best-effort: make sure the spooler comes back even if the purge failed.
+        Start-Service -Name Spooler -ErrorAction SilentlyContinue
+        Write-OutputColor "  Failed to flush print queue: $($_.Exception.Message)" -color "Error"
+    }
+}
+
+# Reversible: remove TCP/IP printer ports that no printer references. Each removed
+# port's address config is captured so the session undo can re-create it.
+function Remove-OrphanedPrinterPorts {
+    $status = Get-PrintServerStatus
+    if (-not $status.Available) { Write-OutputColor "  Print management is not available on this host." -color "Error"; return }
+    $orphans = @($status.OrphanedPorts)
+    if (-not $orphans.Count) { Write-OutputColor "  No orphaned printer ports found." -color "Success"; return }
+
+    Write-OutputColor "  Orphaned TCP/IP ports (referenced by no printer):" -color "Info"
+    $orphans | ForEach-Object { Write-OutputColor "    - $_" -color "Info" }
+    if (-not (Confirm-UserAction -Message "Remove these $($orphans.Count) orphaned port(s)?")) { Write-OutputColor "  Cancelled." -color "Info"; return }
+
+    # Capture each port's config for a faithful re-add on undo.
+    $portConfigs = @(foreach ($name in $orphans) {
+        Get-PrinterPort -Name $name -ErrorAction SilentlyContinue |
+            Select-Object Name, PrinterHostAddress, PortNumber, SNMPEnabled, SNMPCommunity
+    })
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $caps = $portConfigs
+        Push-DryRunStep -Label "Remove $($orphans.Count) orphaned printer port(s)" -Category "Maintenance" -OneWay $false `
+            -Params @{ Ports = ($orphans -join ', ') } `
+            -Preflight { $true }.GetNewClosure() `
+            -Apply { foreach ($n in $orphans) { Remove-PrinterPort -Name $n -ErrorAction SilentlyContinue } }.GetNewClosure() `
+            -Undo {
+                foreach ($c in $caps) {
+                    if ($c.PrinterHostAddress) {
+                        Add-PrinterPort -Name $c.Name -PrinterHostAddress $c.PrinterHostAddress -ErrorAction SilentlyContinue
+                    }
+                }
+            }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): remove $($orphans.Count) orphaned port(s)." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued removal of $($orphans.Count) orphaned printer port(s)"
+        return
+    }
+
+    $removed = 0
+    foreach ($name in $orphans) {
+        try { Remove-PrinterPort -Name $name -ErrorAction Stop; $removed++ }
+        catch { Write-OutputColor "  Could not remove $name`: $($_.Exception.Message)" -color "Warning" }
+    }
+    if ($removed -gt 0) {
+        Write-OutputColor "  Removed $removed orphaned printer port(s)." -color "Success"
+        Add-SessionChange -Category "Maintenance" -Description "Removed $removed orphaned printer port(s)"
+        Add-UndoAction -Category "Maintenance" -Description "Removed $removed orphaned printer port(s)" -UndoScript {
+            param($Configs)
+            foreach ($c in $Configs) {
+                if ($c.PrinterHostAddress) { Add-PrinterPort -Name $c.Name -PrinterHostAddress $c.PrinterHostAddress -ErrorAction SilentlyContinue }
+            }
+        } -UndoParams @{ Configs = $portConfigs }
+    }
+}
+
+# Interactive submenu: print-server cleanup.
+function Show-PrintServerCleanup {
+    while ($true) {
+        if ($script:ReturnToMainMenu) { return }
+        Clear-Host
+        Write-CenteredOutput "Print Server Cleanup" -color "Info"
+        $s = Get-PrintServerStatus
+        if (-not $s.Available) {
+            Write-OutputColor "  Print management is not available on this host (no Print-Services role / RSAT)." -color "Error"
+            return
+        }
+        Write-OutputColor "  Spooler        : $($s.SpoolerStatus)" -color $(if ($s.SpoolerStatus -eq 'Running') { "Success" } else { "Warning" })
+        Write-OutputColor "  Printers       : $($s.Printers.Count)" -color "Info"
+        Write-OutputColor "  Queued jobs    : $($s.TotalQueuedJobs)" -color $(if ($s.TotalQueuedJobs -gt 0) { "Warning" } else { "Info" })
+        Write-OutputColor "  Orphaned ports : $($s.OrphanedPorts.Count)" -color $(if ($s.OrphanedPorts.Count -gt 0) { "Warning" } else { "Info" })
+        Write-OutputColor "  Unused drivers : $($s.UnusedDrivers.Count) (informational)" -color "Info"
+        Write-OutputColor "" -color "Info"
+        Write-MenuItem "[1] Flush stuck print queue (one-way)"
+        Write-MenuItem "[2] Remove orphaned printer ports (reversible)"
+        Write-OutputColor "" -color "Info"
+        $choice = Read-Host "  Select an option (or B to go back)"
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return }
+        switch ($choice) {
+            "1" { Clear-StuckPrintQueue; Write-PressEnter }
+            "2" { Remove-OrphanedPrinterPorts; Write-PressEnter }
+            "B" { return }
+            default { Write-OutputColor "  Invalid selection. Enter 1-2 or B." -color "Error"; Start-Sleep -Seconds 1 }
+        }
+    }
+}
+
+# CLI: PrintServerAudit — read-only print-server posture (JSON-aware).
+function Start-PrintServerAudit {
+    $s = Get-PrintServerStatus
+    if ($script:CLIOutputFormat -eq 'JSON') {
+        Write-Output (@{
+            Tool = $script:ToolFullName; Version = $script:ScriptVersion; Action = 'PrintServerAudit'
+            Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss"); Hostname = $env:COMPUTERNAME
+            Available = $s.Available; SpoolerStatus = $s.SpoolerStatus
+            PrinterCount = $s.Printers.Count; TotalQueuedJobs = $s.TotalQueuedJobs
+            OrphanedPorts = $s.OrphanedPorts; UnusedDrivers = $s.UnusedDrivers
+        } | ConvertTo-Json -Depth 4)
+    }
+    else { Show-PrintServerCleanup }
+    return $true
+}
 #endregion

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.114.0
+
+Print server cleanup — a new Operations-menu utility for maintaining the local print spooler, plus a read-only CLI action.
+
+- **`PrintServerAudit`** (read-only) — reports the spooler service state, printer count, total queued jobs, orphaned TCP/IP printer ports (ports no printer references), and unused printer drivers. `-OutputFormat JSON` emits the full posture for fleet auditing; makes no changes.
+- Operations Menu gains **[36] Print Server Cleanup** with two maintenance actions:
+  - **Flush stuck print queue** (one-way) — stops the spooler, purges `%SystemRoot%\System32\spool\PRINTERS`, and restarts it. Discarded jobs cannot be recovered, so it is confirmation-gated and marked ONE-WAY in Dry-Run; the spooler is always restarted even if the purge fails.
+  - **Remove orphaned printer ports** (reversible) — removes TCP/IP ports that no printer references, capturing each port's host address first so the session undo (and the Dry-Run `Undo` closure) can re-create it.
+
+Unused drivers are reported for visibility but not auto-removed (driver removal is failure-prone and out of scope). Addition to 35-Utilities (no new module). CLI actions: 196 → 197.
+
 ## v1.113.0
 
 SMB signing + encryption enforcement — two new CLI actions plus an Operations-menu item for hardening the SMB server on this host.
