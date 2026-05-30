@@ -453,6 +453,14 @@ function Show-RolesFeaturesMenu {
     } -CacheSeconds 120
     $dfsColor = if ($dfsStatusText -eq "Installed") { "Success" } else { "Warning" }
 
+    $rdsStatusText = Get-CachedValue -Key "RDSState" -FetchScript {
+        $rd = Get-RDSStatus
+        if ($rd.SessionHostInstalled -and $rd.LicensingInstalled) { "Installed" }
+        elseif ($rd.SessionHostInstalled -or $rd.LicensingInstalled) { "Partial" }
+        else { "Not Installed" }
+    } -CacheSeconds 120
+    $rdsColor = if ($rdsStatusText -eq "Installed") { "Success" } else { "Warning" }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
     Write-OutputColor "  ║$(("                           ROLES & FEATURES").PadRight(72))║" -color "Info"
@@ -474,6 +482,7 @@ function Show-RolesFeaturesMenu {
     Write-MenuItem "[12] SIEM Log Forwarder ►" -Status $siemStatusText -StatusColor $siemColor
     Write-MenuItem "[13] Windows Admin Center (WAC) ►" -Status $wacStatusText -StatusColor $wacColor
     Write-MenuItem "[14] DFS Namespaces & Replication ►" -Status $dfsStatusText -StatusColor $dfsColor
+    Write-MenuItem "[15] Remote Desktop Services (RDS) ►" -Status $rdsStatusText -StatusColor $rdsColor
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Server Config" -color "Info"

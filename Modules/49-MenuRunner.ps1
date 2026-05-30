@@ -257,9 +257,10 @@ function Start-Show-RolesFeaturesMenu {
             "12" { Show-SIEMForwarderManagement }
             "13" { Show-WindowsAdminCenterManagement }
             "14" { Show-DFSManagement }
+            "15" { Show-RDSManagement }
             "back" { return }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-14 or B." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-15 or B." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

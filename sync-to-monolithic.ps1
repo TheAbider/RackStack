@@ -42,7 +42,7 @@ if (-not (Test-Path $monoPath)) {
     $initModuleFiles = Get-ChildItem $modulesDir -Filter "*.ps1" | Sort-Object Name
 
     # Verify expected module count
-    $expectedModuleCount = 80
+    $expectedModuleCount = 81
     $actualModuleCount = @($initModuleFiles).Count
     if ($actualModuleCount -ne $expectedModuleCount) {
         Write-Warning "Expected $expectedModuleCount modules but found $actualModuleCount"
@@ -120,7 +120,7 @@ Write-Host "Monolithic: $($monoLines.Count) lines"
 $moduleFiles = Get-ChildItem $modulesDir -Filter "*.ps1" | Sort-Object Name
 
 # Verify expected module count
-$expectedModuleCount = 80
+$expectedModuleCount = 81
 $actualModuleCount = @($moduleFiles).Count
 if ($actualModuleCount -ne $expectedModuleCount) {
     Write-Warning "Expected $expectedModuleCount modules but found $actualModuleCount"
