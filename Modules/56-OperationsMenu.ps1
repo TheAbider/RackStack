@@ -669,7 +669,9 @@ function Import-CompanyDefaults {
         $companyData = Get-Content -LiteralPath $CompanyFilePath -Raw | ConvertFrom-Json
         foreach ($prop in $companyData.PSObject.Properties) {
             if ($prop.Name -like "_*") { continue }  # Skip metadata fields
-            if ($null -ne $prop.Value -and $prop.Value -ne "") {
+            # Skip only null/empty-string values — not a boolean $false (see the personal-merge
+            # note below: "" coerces to [bool]$false, so the old `-ne ""` dropped false flags).
+            if ($null -ne $prop.Value -and -not ($prop.Value -is [string] -and [string]::IsNullOrEmpty($prop.Value))) {
                 $Merged[$prop.Name] = $prop.Value
             }
         }
@@ -790,14 +792,17 @@ function Import-Defaults {
                 # When company defaults are active, don't let personal defaults override agent config
                 # (old defaults.json files may have stale AgentInstaller with ToolName="MSP")
                 if ($script:CompanyDefaultsPath -and $prop.Name -in @('AgentInstaller', 'AdditionalAgents')) { continue }
-                if ($null -ne $prop.Value -and $prop.Value -ne "") {
+                # Skip ONLY null and empty STRINGS — not falsy values. `$prop.Value -ne ""`
+                # silently dropped a boolean $false (PowerShell coerces "" to [bool]$false, so
+                # `$false -ne ""` is $false), so a config flag set to false never took effect.
+                if ($null -ne $prop.Value -and -not ($prop.Value -is [string] -and [string]::IsNullOrEmpty($prop.Value))) {
                     # Deep-merge nested objects (FileServer, AgentInstaller, etc.)
                     # so empty sub-properties in personal defaults don't overwrite
                     # non-empty values from company defaults
                     if ($prop.Value -is [PSCustomObject] -and $merged.ContainsKey($prop.Name) -and $null -ne $merged[$prop.Name]) {
                         $existing = $merged[$prop.Name]
                         foreach ($subProp in $prop.Value.PSObject.Properties) {
-                            if ($null -ne $subProp.Value -and $subProp.Value -ne "") {
+                            if ($null -ne $subProp.Value -and -not ($subProp.Value -is [string] -and [string]::IsNullOrEmpty($subProp.Value))) {
                                 if ($existing -is [hashtable]) {
                                     $existing[$subProp.Name] = $subProp.Value
                                 } elseif ($existing -is [PSCustomObject]) {

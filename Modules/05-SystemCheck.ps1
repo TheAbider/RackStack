@@ -210,16 +210,32 @@ function Test-HyperVMinimumSpecs {
 # Function to test network connectivity
 function Test-NetworkConnectivity {
     param (
-        [string]$Target = $script:DefaultConnectivityTarget
+        [string]$Target = $script:DefaultConnectivityTarget,
+        [int]$TcpPort = 443
     )
 
+    # ICMP first — fast and cheap when it's allowed.
     try {
-        $ping = Test-Connection -ComputerName $Target -Count 1 -Quiet -ErrorAction SilentlyContinue
-        return $ping
+        if (Test-Connection -ComputerName $Target -Count 1 -Quiet -ErrorAction SilentlyContinue) {
+            return $true
+        }
     }
-    catch {
-        return $false
+    catch { }
+
+    # ICMP failed. Many hardened/corporate networks (and most cloud egress paths) block
+    # outbound ICMP while HTTPS works perfectly — a ping-only gate there yields a false
+    # "no network" and dead-ends ISO downloads, Windows Update, and the updater. Fall back
+    # to an actual TCP connect on $TcpPort (443) before declaring the host unreachable.
+    try {
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        $iar = $tcp.BeginConnect($Target, $TcpPort, $null, $null)
+        $connected = $iar.AsyncWaitHandle.WaitOne(3000, $false) -and $tcp.Connected
+        $tcp.Close()
+        if ($connected) { return $true }
     }
+    catch { }
+
+    return $false
 }
 
 # Function to check RDP state

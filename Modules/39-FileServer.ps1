@@ -596,15 +596,17 @@ function Get-FileServerFile {
         $integrity = Test-FileIntegrity -FilePath $destFile -ExpectedSize $expectedSize -RemoteFilePath $FilePath -StrictVerify:$StrictVerify
 
         if (-not $integrity.Valid) {
-            Write-OutputColor "  Integrity check failed: $($integrity.Error)" -color "Error"
-            # The only recoverable failure is "no .sha256 sidecar published": the file
-            # downloaded fine and its size matched the server's Content-Length. Keep it so an
-            # interactive caller can offer an explicit trust-on-first-use decision without
-            # re-downloading. Every other failure (hash mismatch, no signal, compute error)
-            # is a fail-closed delete — an unverifiable or tampered file never lingers on disk.
+            # The only recoverable outcome is "no published hash to verify against" (Reason
+            # 'NoSidecar' — also covers the no-Content-Length-and-no-sidecar case): the file
+            # downloaded fine, there's just nothing to compare it to. Keep it so an executor
+            # caller can offer an explicit trust-on-first-use decision without re-downloading,
+            # and DON'T print a red "failed" — it isn't a failure, just an absent reference.
+            # Every other outcome (hash mismatch, compute error) is a genuine fail-closed:
+            # show the error and delete so a tampered/unverifiable file never lingers on disk.
             if ($integrity.Reason -eq 'NoSidecar') {
-                return @{ Success = $false; Error = "Integrity check failed: $($integrity.Error)"; Reason = 'NoSidecar'; FilePath = $destFile; FileSize = $fileSize; Hash = $integrity.Hash }
+                return @{ Success = $false; Error = $integrity.Error; Reason = 'NoSidecar'; FilePath = $destFile; FileSize = $fileSize; Hash = $integrity.Hash }
             }
+            Write-OutputColor "  Integrity check failed: $($integrity.Error)" -color "Error"
             Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
             return @{ Success = $false; Error = "Integrity check failed: $($integrity.Error)"; Reason = $integrity.Reason; FilePath = $null }
         }
@@ -812,11 +814,23 @@ function Test-FileIntegrity {
             $result.Reason = 'SizeOnly'
         }
     } else {
-        # Neither size nor hash was verified. This is the agent's flagged failure mode:
-        # HEAD returned 0 Content-Length AND no .sha256 sidecar = zero signals. Fail-closed
-        # regardless of StrictVerify so an unverifiable file never reaches an executor.
-        $result.Error = "No verifiable signal (no Content-Length from HEAD, no .sha256 sidecar) — refusing to mark Valid"
-        $result.Reason = 'NoSignal'
+        # Neither size nor hash could be checked: the HEAD returned no Content-Length (so
+        # ExpectedSize was <=0 and the size branch was skipped) AND no .sha256 sidecar exists.
+        # The file still downloaded fully (we have a local hash) — there is simply no reference
+        # to verify it against. Previously this hard-failed "regardless of StrictVerify", which
+        # deleted a perfectly good multi-GB ISO/VHD or agent EXE with no recovery and made
+        # RequireHash=$false powerless. Treat it like the no-sidecar case instead:
+        #  - Non-strict callers (ISO/VHD/generic) accept it (weakest signal, download complete).
+        #  - Strict callers (executor) get Reason 'NoSidecar' so the agent installer's
+        #    trust-on-first-use prompt fires and the operator makes the call — no silent run,
+        #    no dead-end. A genuine hash MISMATCH still fails closed in the branch above.
+        if ($StrictVerify) {
+            $result.Error = "No published hash and no server-reported size to verify against"
+            $result.Reason = 'NoSidecar'
+        } else {
+            $result.Valid = $true
+            $result.Reason = 'SizeOnly'
+        }
     }
 
     # Save local .sha256 file for future re-verification. Write as UTF-8 WITHOUT BOM —

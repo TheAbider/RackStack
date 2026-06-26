@@ -402,7 +402,12 @@ function Install-ScriptUpdate {
 echo Updating $($script:ToolName)...
 timeout /t 5 /nobreak >nul
 rem Re-verify SHA256 right before the move — TOCTOU defense.
-for /f "skip=1 tokens=*" %%H in ('certutil -hashfile "$tempPath" SHA256 ^| findstr /v ":"') do (
+rem certutil prints 3 lines; the header and footer both contain ':' so findstr /v ":"
+rem removes them, leaving ONLY the hex hash line. Do NOT skip it (the old "skip=1" skipped
+rem the hash itself, leaving ACTUAL empty so the compare always failed and the EXE never
+rem got replaced — i.e. the update silently refused and never restarted). for /f also
+rem skips blank lines, so the first iteration is the hash regardless of stray blank lines.
+for /f "tokens=*" %%H in ('certutil -hashfile "$tempPath" SHA256 ^| findstr /v ":"') do (
     set "ACTUAL=%%H"
     goto :hashed
 )
