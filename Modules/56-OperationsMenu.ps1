@@ -692,6 +692,7 @@ function Import-Defaults {
         InstallPaths     = @()
         SuccessExitCodes = @(0, 1641, 3010)
         TimeoutSeconds   = 300
+        RequireHash      = $true
     }
     $script:AdditionalAgents = @()
     $script:AgentInstallerCache = $null

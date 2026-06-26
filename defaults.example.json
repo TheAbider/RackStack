@@ -264,7 +264,10 @@
         "_SuccessExitCodes_help": "Exit codes that mean 'success'. 0 = normal success. 1641 = reboot initiated. 3010 = reboot required. These are standard Windows installer codes. Add any agent-specific success codes your installer uses.",
 
         "TimeoutSeconds": 300,
-        "_TimeoutSeconds_help": "How long to wait (in seconds) for the installer to finish. 300 = 5 minutes. Increase if your agent takes longer (large downloads, slow networks)."
+        "_TimeoutSeconds_help": "How long to wait (in seconds) for the installer to finish. 300 = 5 minutes. Increase if your agent takes longer (large downloads, slow networks).",
+
+        "RequireHash": true,
+        "_RequireHash_help": "Require a cryptographic SHA256 hash match before running an agent installer as SYSTEM. true (default) = fail closed if the FileServer publishes no matching .sha256 sidecar next to the installer. Set to false if your RMM console mints a unique installer per site (Kaseya, Datto, etc.) and you can't pre-publish hashes — RackStack then falls back to size-only verification. When true and no sidecar exists, RackStack prompts once per install for explicit operator approval before proceeding size-only; a hash MISMATCH always fails closed regardless of this setting."
     },
 
     "_AdditionalAgents_help": "Define extra monitoring/management agents beyond the primary AgentInstaller. Each entry uses the same fields as AgentInstaller (ToolName, FolderName, FilePattern, etc). All agents appear in the Agent Management menu.",

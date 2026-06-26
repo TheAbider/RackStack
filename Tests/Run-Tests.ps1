@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.100.0
+    Automated Test Runner for RackStack v1.119.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7732,6 +7732,42 @@ try {
 
 } catch {
     Write-TestResult "Download Resume/Retry Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 134b: AGENT INSTALLER HASH-VERIFICATION POLICY (RequireHash / TOFU)
+# ============================================================================
+
+Write-SectionHeader "134b" "AGENT INSTALLER HASH-VERIFICATION POLICY"
+
+try {
+    $fsContent2  = Get-Content "$modulesPath\39-FileServer.ps1" -Raw
+    $aiContent2  = Get-Content "$modulesPath\57-AgentInstaller.ps1" -Raw
+    $initContent2 = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    $opsContent2 = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    $exampleJson = Get-Content (Join-Path (Split-Path $PSScriptRoot) 'defaults.example.json') -Raw
+
+    # Integrity gate distinguishes recoverable "no sidecar" from genuine tamper
+    Write-TestResult "39-FS: Test-FileIntegrity result carries a Reason field" ($fsContent2 -match 'Reason\s*=\s*\$null')
+    Write-TestResult "39-FS: integrity gate tags missing sidecar as NoSidecar" ($fsContent2 -match "Reason\s*=\s*'NoSidecar'")
+    Write-TestResult "39-FS: integrity gate tags tamper as HashMismatch" ($fsContent2 -match "Reason\s*=\s*'HashMismatch'")
+    # NoSidecar is recoverable (file kept for caller); everything else fails closed (deleted)
+    Write-TestResult "39-FS: Get-FileServerFile preserves file on NoSidecar" ($fsContent2 -match "Reason\s*-eq\s*'NoSidecar'[\s\S]{0,200}FilePath\s*=\s*\`$destFile")
+
+    # Agent installer honors the configurable policy and never auto-trusts a mismatch
+    Write-TestResult "57-Agent: reads AgentInstaller.RequireHash policy" ($aiContent2 -match '\$requireHash\s*=' -and $aiContent2 -match "ContainsKey\('RequireHash'\)")
+    Write-TestResult "57-Agent: passes policy to StrictVerify switch" ($aiContent2 -match '-StrictVerify:\$requireHash')
+    Write-TestResult "57-Agent: trust-on-first-use only for NoSidecar" ($aiContent2 -match "Reason\s*-eq\s*'NoSidecar'")
+    Write-TestResult "57-Agent: trust-on-first-use requires explicit operator approval" ($aiContent2 -match 'Confirm-UserAction[\s\S]{0,120}size-only')
+    Write-TestResult "57-Agent: trust-on-first-use logs the approved size-only install" ($aiContent2 -match "Add-SessionChange[\s\S]{0,160}size-only")
+
+    # Defaults: fail-closed out of the box, surfaced in the example config
+    Write-TestResult "00-Init: AgentInstaller default RequireHash = true" ($initContent2 -match 'RequireHash\s*=\s*\$true')
+    Write-TestResult "56-Ops: Import-Defaults reset includes RequireHash" ($opsContent2 -match 'RequireHash\s*=\s*\$true')
+    Write-TestResult "defaults.example.json: documents RequireHash" ($exampleJson -match '"RequireHash"')
+
+} catch {
+    Write-TestResult "Agent Installer Hash-Verification Policy Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

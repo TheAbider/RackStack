@@ -63,6 +63,7 @@ $script:AgentInstaller = @{
     InstallPaths    = @()
     SuccessExitCodes = @(0, 1641, 3010)
     TimeoutSeconds  = 300
+    RequireHash     = $true   # Fail closed if the FileServer publishes no .sha256 sidecar. Set $false for RMM consoles that mint a unique per-site installer (no pre-published hash) to fall back to size-only verification.
 }
 
 # Additional agent installers (v1.8.0, override via defaults.json AdditionalAgents array)
@@ -225,7 +226,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.119.1"
+$script:ScriptVersion = "1.119.2"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

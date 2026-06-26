@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.119.2
+
+Agent installer — fixes a dead-end when your file server doesn't publish a `.sha256` sidecar next to each installer.
+
+- **`AgentInstaller.RequireHash` (new, default `true`)** — controls whether a cryptographic SHA256 hash match is required before an agent installer runs as SYSTEM. Previously the installer always demanded a published `.sha256` sidecar, so RMM consoles that mint a unique installer per site (where you can't pre-publish a hash) could never complete an install. Set `RequireHash` to `false` to fall back to size-only verification, or publish a sidecar / supply a per-agent `ExpectedHash` for full verification.
+- **Trust-on-first-use prompt** — when `RequireHash` is `true` and no sidecar is found, RackStack now keeps the already-downloaded, size-verified installer and prompts once for explicit approval to proceed with size-only verification, rather than failing the install outright. In headless mode this stays fail-closed (no prompt = no install) unless `RequireHash` is `false`.
+- **Tamper handling is unchanged** — a SHA256 **mismatch** (the genuine tamper signal) still always fails closed and deletes the file, regardless of `RequireHash`. The new behavior only affects the "no hash published" case.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.119.1
 
 CI maintenance — clears the two non-blocking annotations the release workflow was emitting, ahead of GitHub's deadlines.

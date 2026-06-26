@@ -597,8 +597,16 @@ function Get-FileServerFile {
 
         if (-not $integrity.Valid) {
             Write-OutputColor "  Integrity check failed: $($integrity.Error)" -color "Error"
+            # The only recoverable failure is "no .sha256 sidecar published": the file
+            # downloaded fine and its size matched the server's Content-Length. Keep it so an
+            # interactive caller can offer an explicit trust-on-first-use decision without
+            # re-downloading. Every other failure (hash mismatch, no signal, compute error)
+            # is a fail-closed delete — an unverifiable or tampered file never lingers on disk.
+            if ($integrity.Reason -eq 'NoSidecar') {
+                return @{ Success = $false; Error = "Integrity check failed: $($integrity.Error)"; Reason = 'NoSidecar'; FilePath = $destFile; FileSize = $fileSize; Hash = $integrity.Hash }
+            }
             Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
-            return @{ Success = $false; Error = "Integrity check failed: $($integrity.Error)"; FilePath = $null }
+            return @{ Success = $false; Error = "Integrity check failed: $($integrity.Error)"; Reason = $integrity.Reason; FilePath = $null }
         }
 
         # Verify against caller-provided expected hash (if supplied)
@@ -743,6 +751,10 @@ function Test-FileIntegrity {
         HashMatch = $null
         SizeMatch = $null
         Error     = $null
+        # Machine-readable outcome so callers can tell a recoverable "no sidecar published"
+        # apart from a genuine tamper signal ("HashMismatch"). Only NoSidecar is eligible
+        # for an operator trust-on-first-use override; a mismatch always fails closed.
+        Reason    = $null
     }
 
     $localFile = Get-Item -LiteralPath $FilePath -ErrorAction SilentlyContinue
@@ -773,12 +785,15 @@ function Test-FileIntegrity {
     # Compare hashes if remote hash was found
     if (-not $result.Hash) {
         $result.Error = "Failed to compute local SHA256 hash"
+        $result.Reason = 'HashComputeFailed'
     } elseif ($result.RemoteHash) {
         if ($result.Hash -eq $result.RemoteHash) {
             $result.HashMatch = $true
             $result.Valid = $true
+            $result.Reason = 'HashMatch'
         } else {
             $result.HashMatch = $false
+            $result.Reason = 'HashMismatch'
             $localHashShort = if ($result.Hash.Length -ge 16) { $result.Hash.Substring(0,16) } else { $result.Hash }
             $remoteHashShort = if ($result.RemoteHash.Length -ge 16) { $result.RemoteHash.Substring(0,16) } else { $result.RemoteHash }
             $result.Error = "SHA256 mismatch (local: $localHashShort..., remote: $remoteHashShort...)"
@@ -791,14 +806,17 @@ function Test-FileIntegrity {
         # matching .sha256 sidecar to pass.
         if ($StrictVerify) {
             $result.Error = "No .sha256 sidecar published; -StrictVerify requires hash match"
+            $result.Reason = 'NoSidecar'
         } else {
             $result.Valid = $true
+            $result.Reason = 'SizeOnly'
         }
     } else {
         # Neither size nor hash was verified. This is the agent's flagged failure mode:
         # HEAD returned 0 Content-Length AND no .sha256 sidecar = zero signals. Fail-closed
         # regardless of StrictVerify so an unverifiable file never reaches an executor.
         $result.Error = "No verifiable signal (no Content-Length from HEAD, no .sha256 sidecar) — refusing to mark Valid"
+        $result.Reason = 'NoSignal'
     }
 
     # Save local .sha256 file for future re-verification. Write as UTF-8 WITHOUT BOM —
