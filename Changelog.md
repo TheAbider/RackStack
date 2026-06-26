@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.119.3
+
+Real-server robustness — a batch of first-deployment reliability fixes for the agent install, file download, self-update, and connectivity paths.
+
+- **Self-update now actually applies and restarts.** The EXE self-updater's post-staging hash re-check skipped the very line it needed to read, so it always saw an empty hash, declared a mismatch, and refused to swap in the new build — the update appeared to run but nothing changed and the app never restarted. Fixed; updates apply and relaunch as intended.
+- **Agent installs no longer get killed mid-enrollment.** When an RMM agent registered its Windows service early (Kaseya, Datto, ConnectWise, NinjaRMM all do this) RackStack treated the install as finished and terminated the still-running installer, leaving the agent installed but never checked into the console. RackStack now gives the installer a grace window to finish enrolling, doesn't early-detect off a pre-existing service on reinstalls, and never kills an installer it has already judged successful.
+- **Downloads with no server-reported size are no longer discarded.** A fully downloaded installer/ISO/VHD was deleted as "no verifiable signal" when the file server didn't return a size on its HEAD response. That case is now recoverable: non-executor downloads (ISO/VHD) proceed, and agent installs surface the same one-time size-only approval prompt as the no-sidecar case.
+- **No more "Integrity check failed" red text when a hash simply isn't published.** The recoverable no-published-hash case now reads as an informational prompt rather than an error.
+- **ISO downloads and Windows Update no longer dead-end where ping is blocked.** The connectivity check fell back to nothing when ICMP to a public address was filtered (common on hardened networks) even though HTTPS worked fine. It now also tries a direct TCP connection before reporting "no network".
+- **Config flags set to `false` now take effect.** A defaults value of `false` was silently dropped during the settings merge; boolean overrides are now honored.
+- **Windows Update no longer hangs silently when the PowerShell Gallery is blocked.** Installing the update helper module could sit with no disk/CPU/network activity for many minutes on locked-down networks. RackStack now checks the gallery is reachable first and, if not, fails fast with guidance (allow it, pre-install the module, or use WSUS/SCCM/sconfig) instead of hanging.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.119.2
 
 Agent installer — fixes a dead-end when your file server doesn't publish a `.sha256` sidecar next to each installer.

@@ -99,6 +99,20 @@ function Install-WindowsUpdates {
     Write-OutputColor "  Network connectivity confirmed." -color "Success"
     Write-OutputColor "" -color "Info"
 
+    # Pre-flight: PSWindowsUpdate installs from the PowerShell Gallery. On locked-down
+    # networks that block it, Install-Module hangs for many minutes with no feedback (no
+    # disk/CPU/network — it's stuck on a dropped TLS connect). If the module isn't already
+    # present and the gallery isn't reachable, fail fast with actionable guidance instead.
+    if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+        if (-not (Test-NetworkConnectivity -Target 'www.powershellgallery.com')) {
+            Write-OutputColor "  PSWindowsUpdate isn't installed and the PowerShell Gallery" -color "Error"
+            Write-OutputColor "  (www.powershellgallery.com:443) isn't reachable from this server." -color "Error"
+            Write-OutputColor "  Allow it through the firewall/proxy, or pre-install PSWindowsUpdate" -color "Warning"
+            Write-OutputColor "  on this host, then retry. (Updates can still go via WSUS/SCCM/sconfig.)" -color "Warning"
+            return
+        }
+    }
+
     try {
         # Suppress all PackageManagement/NuGet confirmation prompts
         $savedConfirmPref = $ConfirmPreference

@@ -66,6 +66,13 @@ $script:AgentInstaller = @{
     RequireHash     = $true   # Fail closed if the FileServer publishes no .sha256 sidecar. Set $false for RMM consoles that mint a unique per-site installer (no pre-published hash) to fall back to size-only verification.
 }
 
+# Grace window (seconds) after an agent's service first appears mid-install before RackStack
+# treats a still-running installer as a post-completion hang. RMM agents register the service
+# early then keep running to pull payload + apply the site/tenant token, so RackStack waits
+# this long for the installer to finish enrolling rather than killing it the instant the
+# service registers (which left agents installed-but-unenrolled). Bounded by the install timeout.
+$script:AgentEarlyDetectGraceSeconds = 90
+
 # Additional agent installers (v1.8.0, override via defaults.json AdditionalAgents array)
 $script:AdditionalAgents = @()
 
@@ -226,7 +233,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.119.2"
+$script:ScriptVersion = "1.119.3"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

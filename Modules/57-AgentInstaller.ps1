@@ -542,7 +542,7 @@ function Install-SelectedAgent {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  WARNING: No published SHA256 hash for this installer on the FileServer." -color "Warning"
         Write-OutputColor "  RackStack cannot cryptographically verify it before running it as SYSTEM." -color "Warning"
-        Write-OutputColor "  The file downloaded over your authenticated FileServer and its size matched ($sizeMB MB)." -color "Info"
+        Write-OutputColor "  The file downloaded over your authenticated FileServer ($sizeMB MB)." -color "Info"
         Write-OutputColor "  Local SHA256: $($dlResult.Hash)" -color "Info"
         Write-OutputColor "  Tip: publish a .sha256 sidecar next to the installer for full verification," -color "Info"
         Write-OutputColor "       or set AgentInstaller.RequireHash = false in your defaults to skip this prompt." -color "Info"
@@ -575,6 +575,14 @@ function Install-SelectedAgent {
         $elapsed = 0
         $earlyDetect = $false
         $userSkipped = $false
+        $installOK = $false
+        # Was the agent service ALREADY present before this run? On a reinstall/upgrade it is,
+        # so "service exists" tells us nothing about THIS install — don't early-detect off it.
+        $preInstalled = [bool]($currentStatus -and $currentStatus.Installed)
+        # When the service first appears mid-install (fresh install), note the time so we can
+        # give the installer a grace window to finish enrolling instead of declaring done and
+        # killing it the instant the service registers.
+        $serviceFirstSeen = $null
         # Normalize InstallArgs to a string[] so Start-Process passes each switch as a
         # separate argv entry. Older installers that parse via GetCommandLine() see a
         # single concatenated string as one literal token and silently ignore the
@@ -628,13 +636,26 @@ function Install-SelectedAgent {
                 }
             }
 
-            # Every 5 seconds (after initial 10s), check if agent is already installed
-            # Catches installers that hang after completing (e.g., waiting on child services)
-            if ($elapsed -ge 10 -and $elapsed % 5 -eq 0) {
+            # Every 5s (after the first 10s) check whether the agent's service has appeared.
+            # Only meaningful for a FRESH install: on a reinstall/upgrade the OLD service is
+            # already present ($preInstalled), so its existence says nothing about THIS run —
+            # those rely on the installer process exiting (exit-code path below).
+            # When the service first appears mid-install, do NOT kill the installer: most RMM
+            # agents (Kaseya, Datto, ConnectWise, Ninja) register the service early then keep
+            # running for tens of seconds to pull payload and apply the site/tenant token.
+            # Killing there leaves the agent installed-but-unenrolled (never checks into the
+            # console) while we'd report success. Give it a grace window to finish; only treat
+            # it as a post-completion hang — and declare done — once it overruns that window.
+            if (-not $preInstalled -and $elapsed -ge 10 -and $elapsed % 5 -eq 0) {
                 $earlyCheck = Test-AgentInstalled
                 if ($earlyCheck.Installed) {
-                    $earlyDetect = $true
-                    break
+                    if ($null -eq $serviceFirstSeen) {
+                        $serviceFirstSeen = $elapsed
+                        Show-ProgressMessage -Activity "Installing $toolName Agent" -Status "Service detected - letting installer finish enrolling..." -SecondsElapsed $elapsed
+                    } elseif (($elapsed - $serviceFirstSeen) -ge $script:AgentEarlyDetectGraceSeconds) {
+                        $earlyDetect = $true
+                        break
+                    }
                 }
             }
 
@@ -789,10 +810,19 @@ function Install-SelectedAgent {
         }
     }
     finally {
-        if ($installProcess -and -not $installProcess.HasExited) {
+        # Only kill a still-running installer if THIS run did NOT succeed. When the agent
+        # service came up (earlyDetect) or the install otherwise verified, the installer is
+        # often still finishing enrollment in the background — killing it there leaves the
+        # agent half-configured. Let it run, and don't yank the EXE it's executing from.
+        $leaveRunning = $earlyDetect -or $installOK
+        $stillRunning = $installProcess -and -not $installProcess.HasExited
+        if ($stillRunning -and -not $leaveRunning) {
             try { $installProcess.Kill() } catch {}
+            $stillRunning = $installProcess -and -not $installProcess.HasExited
         }
-        Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        if (-not $stillRunning) {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 

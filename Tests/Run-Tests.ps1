@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.119.2
+    Automated Test Runner for RackStack v1.119.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7768,6 +7768,61 @@ try {
 
 } catch {
     Write-TestResult "Agent Installer Hash-Verification Policy Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 134c: REAL-SERVER ROBUSTNESS (self-update, dead-ends, connectivity)
+# ============================================================================
+
+Write-SectionHeader "134c" "REAL-SERVER ROBUSTNESS"
+
+try {
+    $utilContent3 = Get-Content "$modulesPath\35-Utilities.ps1" -Raw
+    $fsContent3   = Get-Content "$modulesPath\39-FileServer.ps1" -Raw
+    $aiContent3   = Get-Content "$modulesPath\57-AgentInstaller.ps1" -Raw
+    $scContent3   = Get-Content "$modulesPath\05-SystemCheck.ps1" -Raw
+    $opsContent3  = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    $initContent3 = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+
+    # Fix 1: EXE self-update batch must NOT skip the certutil hash line (skip=1 left ACTUAL empty)
+    Write-TestResult "35-Util: self-update certutil loop does not skip the hash line" `
+        ($utilContent3 -match "certutil -hashfile" -and $utilContent3 -notmatch 'skip=1 tokens=\*"\s+%%H in \(.certutil')
+    Write-TestResult "35-Util: self-update certutil loop reads tokens=* (no skip)" `
+        ($utilContent3 -match 'for /f "tokens=\*" %%H in \(.certutil -hashfile')
+
+    # Fix 2: recoverable NoSidecar must NOT print the red "Integrity check failed" before returning
+    Write-TestResult "39-FS: NoSidecar returns before the red 'Integrity check failed' print" `
+        ($fsContent3 -match "Reason\s*-eq\s*'NoSidecar'[\s\S]{0,260}return[\s\S]{0,260}Write-OutputColor\s+`"\s*Integrity check failed")
+
+    # Fix 4: no-Content-Length + no-sidecar is recoverable, not a hard 'NoSignal' delete
+    Write-TestResult "39-FS: 'NoSignal' hard-fail reason removed" ($fsContent3 -notmatch "'NoSignal'")
+    Write-TestResult "39-FS: size-unknown strict path is recoverable (NoSidecar)" `
+        ($fsContent3 -match "No published hash and no server-reported size[\s\S]{0,120}Reason\s*=\s*'NoSidecar'")
+    Write-TestResult "39-FS: size-unknown non-strict path accepts (SizeOnly)" `
+        ($fsContent3 -match "No published hash and no server-reported size[\s\S]{0,260}Valid\s*=\s*\`$true")
+
+    # Fix 3: early-detect must not kill the still-enrolling installer
+    Write-TestResult "57-Agent: snapshots pre-install state (no early-detect on reinstall)" ($aiContent3 -match '\$preInstalled\s*=')
+    Write-TestResult "57-Agent: early-detect gated on fresh install" ($aiContent3 -match '-not\s+\$preInstalled\s+-and\s+\$elapsed\s*-ge\s*10')
+    Write-TestResult "57-Agent: grace window before declaring early-detect done" ($aiContent3 -match '\$serviceFirstSeen' -and $aiContent3 -match 'AgentEarlyDetectGraceSeconds')
+    Write-TestResult "57-Agent: finally leaves a succeeded installer running" ($aiContent3 -match '\$leaveRunning\s*=\s*\$earlyDetect\s*-or\s*\$installOK')
+    Write-TestResult "00-Init: AgentEarlyDetectGraceSeconds constant defined" ($initContent3 -match '\$script:AgentEarlyDetectGraceSeconds\s*=\s*\d+')
+
+    # Fix 5: connectivity gate falls back to TCP when ICMP is blocked
+    Write-TestResult "05-SC: Test-NetworkConnectivity has TCP fallback" `
+        ($scContent3 -match 'function Test-NetworkConnectivity[\s\S]{0,1200}TcpClient[\s\S]{0,200}BeginConnect')
+
+    # Fix 6: boolean false no longer dropped by the defaults merge guard
+    Write-TestResult "56-Ops: company merge skips only empty strings, not false" ($opsContent3 -match 'Import-CompanyDefaults[\s\S]{0,1100}IsNullOrEmpty\(\$prop\.Value\)')
+    Write-TestResult "56-Ops: personal merge skips only empty strings, not false" ($opsContent3 -match 'IsNullOrEmpty\(\$prop\.Value\)' -and $opsContent3 -match 'IsNullOrEmpty\(\$subProp\.Value\)')
+
+    # Fix 7: Windows Update fails fast when the PowerShell Gallery is unreachable (no silent hang)
+    $wuContent3 = Get-Content "$modulesPath\14-WindowsUpdates.ps1" -Raw
+    Write-TestResult "14-WU: pre-flight PSGallery reachability guard before module install" `
+        ($wuContent3 -match "Get-Module -ListAvailable -Name PSWindowsUpdate[\s\S]{0,200}Test-NetworkConnectivity -Target 'www\.powershellgallery\.com'")
+
+} catch {
+    Write-TestResult "Real-Server Robustness Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
