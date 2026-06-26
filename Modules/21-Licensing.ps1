@@ -82,6 +82,7 @@ function Get-WindowsVersionInfo {
         return @{
             "WindowsVersion" = $windowsVersion
             "WindowsEdition" = $windowsEdition
+            "EditionId"      = $edition   # raw registry EditionID (e.g. ServerStandardEval) for eval detection + DISM conversion
             "IsServer" = $isServer
             "BuildNumber" = $buildNumber
             "DisplayVersion" = $displayVersion
@@ -91,6 +92,7 @@ function Get-WindowsVersionInfo {
         return @{
             WindowsVersion = "Unknown"
             WindowsEdition = "Unknown"
+            EditionId      = "Unknown"
             IsServer       = $false
             BuildNumber    = "Unknown"
             DisplayVersion = "Unknown"
@@ -291,6 +293,105 @@ function Show-LicenseStatus {
     }
 }
 
+# Run DISM /Set-Edition to convert an evaluation edition to its full edition. Shared by the
+# live path and the Dry-Run apply. /NoRestart so RackStack controls the reboot prompt.
+function Invoke-DismSetEdition {
+    param(
+        [Parameter(Mandatory)][string]$TargetEditionId,
+        [Parameter(Mandatory)][string]$ProductKey,
+        [Parameter(Mandatory)][string]$TargetFriendly
+    )
+
+    Write-OutputColor "  Running DISM /Set-Edition (this can take several minutes)..." -color "Info"
+    $dismOut  = & dism.exe /online /Set-Edition:$TargetEditionId /ProductKey:$ProductKey /AcceptEula /NoRestart 2>&1
+    $dismCode = $LASTEXITCODE
+    $dismText = ($dismOut | Out-String)
+
+    if ($dismCode -eq 0 -or $dismText -match '(?i)operation completed successfully') {
+        Write-OutputColor "  Edition conversion staged successfully." -color "Success"
+        Write-OutputColor "  Reboot to finish converting to $TargetFriendly. After reboot it activates" -color "Warning"
+        Write-OutputColor "  automatically (MAK/retail key) or via your KMS server (KMS client key)." -color "Info"
+        $script:RebootNeeded = $true
+        Add-SessionChange -Category "Licensing" -Description "Converted evaluation edition to $TargetFriendly (reboot pending)"
+    } else {
+        Write-OutputColor "  Edition conversion failed (DISM exit $dismCode)." -color "Error"
+        $errLine = ($dismOut | Where-Object { $_ -match '(?i)error|0x[0-9a-fA-F]{8}' } | Select-Object -First 1)
+        if ($errLine) { Write-OutputColor "  $($errLine.ToString().Trim())" -color "Error" }
+        Write-OutputColor "  Tip: run 'DISM /online /Get-TargetEditions' to list valid targets, and confirm" -color "Warning"
+        Write-OutputColor "  the key matches $TargetFriendly." -color "Warning"
+    }
+}
+
+# Convert a Windows Server Evaluation edition to its full edition. Eval SKUs reject
+# slmgr /ipk (0xC004F069 product-SKU-not-found), so DISM /Set-Edition is the only path.
+# Prefers the operator's configured key (a MAK/retail key converts AND activates on reboot);
+# a built-in GVLK converts to full and then needs a KMS server. Irreversible + needs reboot.
+function Invoke-EvalEditionConversion {
+    param(
+        [Parameter(Mandatory)][string]$WindowsVersion,
+        [Parameter(Mandatory)][string]$TargetFriendly,
+        [Parameter(Mandatory)][string]$TargetEditionId,
+        [string]$ConversionKey,
+        [bool]$UsingCustomKey
+    )
+
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
+    Write-OutputColor "  │$("  EVALUATION EDITION DETECTED".PadRight(72))│" -color "Warning"
+    Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
+    Write-OutputColor "  Evaluation editions can't take a product key directly — that's the" -color "Info"
+    Write-OutputColor "  '0xC004F069 / product SKU not found' error you saw. They must first be" -color "Info"
+    Write-OutputColor "  converted to the full edition, which is one-way and needs a reboot." -color "Info"
+    Write-OutputColor "" -color "Info"
+
+    # Resolve a conversion key — prompt if neither a configured nor built-in key is available.
+    if ([string]::IsNullOrWhiteSpace($ConversionKey)) {
+        Write-OutputColor "  No $TargetFriendly key is configured. Enter a $TargetFriendly product key" -color "Info"
+        Write-OutputColor "  (MAK, retail, or KMS client key) to convert with:" -color "Info"
+        $attempts = 0
+        while ($attempts -lt $script:MaxRetryAttempts) {
+            $entered = Read-Host "  Product key"
+            $nav = Test-NavigationCommand -UserInput $entered
+            if ($nav.ShouldReturn) { return }
+            if (-not [string]::IsNullOrWhiteSpace($entered) -and (Test-ValidLicenseKey -licenseKey $entered.ToUpper())) {
+                $ConversionKey = $entered.ToUpper(); break
+            }
+            Write-OutputColor "  Invalid key format (expected XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)." -color "Error"
+            $attempts++
+        }
+        if ([string]::IsNullOrWhiteSpace($ConversionKey)) { Write-OutputColor "  No valid key entered." -color "Error"; return }
+    }
+
+    $keyTail = if ($ConversionKey.Length -ge 5) { $ConversionKey.Substring($ConversionKey.Length - 5) } else { $ConversionKey }
+    Write-OutputColor "  Target edition : $TargetFriendly ($TargetEditionId)" -color "Info"
+    if ($UsingCustomKey) {
+        Write-OutputColor "  Using key      : your configured $TargetFriendly key (*****-$keyTail)" -color "Success"
+        Write-OutputColor "                   a MAK/retail key activates automatically after reboot." -color "Info"
+    } else {
+        Write-OutputColor "  Using key      : built-in KMS client key (*****-$keyTail)" -color "Info"
+        Write-OutputColor "                   converts to full edition; needs a KMS server to activate." -color "Warning"
+    }
+    Write-OutputColor "  This is IRREVERSIBLE (no going back to evaluation) and requires a reboot." -color "Warning"
+    Write-OutputColor "" -color "Info"
+
+    if (-not (Confirm-UserAction -Message "Convert this server to $TargetFriendly now?")) {
+        Write-OutputColor "  Conversion cancelled." -color "Info"
+        return
+    }
+
+    if ($script:DryRunMode -and -not $script:ApplyingDryRunQueue) {
+        $capId = $TargetEditionId; $capKey = $ConversionKey; $capName = $TargetFriendly
+        Push-DryRunStep -Label "Convert evaluation edition to $capName (DISM /Set-Edition)" -Category "Licensing" -OneWay $true `
+            -Params @{ TargetEdition = $capId } `
+            -Apply { Invoke-DismSetEdition -TargetEditionId $capId -ProductKey $capKey -TargetFriendly $capName }.GetNewClosure()
+        Write-OutputColor "  Queued (Dry-Run): convert to $capName." -color "Warning"
+        Add-SessionChange -Category "DryRun" -Description "Queued eval->$capName edition conversion"
+        return
+    }
+
+    Invoke-DismSetEdition -TargetEditionId $TargetEditionId -ProductKey $ConversionKey -TargetFriendly $TargetFriendly
+}
+
 # Function to license the server
 function Register-ServerLicense {
     # --- Section: Initialization & Status Display ---
@@ -443,6 +544,27 @@ function Register-ServerLicense {
         foreach ($ed in $script:CustomAVMAKeys[$ver].Keys) {
             $avmaKeys[$ver][$ed] = $script:CustomAVMAKeys[$ver][$ed]
         }
+    }
+
+    # --- Section: Evaluation Edition Conversion ---
+    # Evaluation editions can't be activated with a product key — slmgr /ipk returns
+    # 0xC004F069 "product SKU not found". They must first be converted to the full edition
+    # with DISM /Set-Edition (which also stamps the key), then reboot. Route eval SKUs here
+    # instead of the normal activation menu so the operator isn't stuck on that error. The
+    # conversion key is resolved from the SAME merged table, so a configured custom key
+    # (a MAK/retail key) both converts AND activates on reboot.
+    if ($windowsInfo.EditionId -match 'Eval$') {
+        $targetFriendly  = ($windowsInfo.WindowsEdition -replace '\s*Evaluation$', '').Trim()
+        $targetEditionId = $windowsInfo.EditionId -replace 'Eval$', ''
+        $convKey = $null
+        if ($keys.ContainsKey($windowsInfo.WindowsVersion) -and $keys[$windowsInfo.WindowsVersion].ContainsKey($targetFriendly)) {
+            $convKey = $keys[$windowsInfo.WindowsVersion][$targetFriendly]
+        }
+        $usingCustom = ($script:CustomKMSKeys.ContainsKey($windowsInfo.WindowsVersion) -and
+                        $script:CustomKMSKeys[$windowsInfo.WindowsVersion].ContainsKey($targetFriendly))
+        Invoke-EvalEditionConversion -WindowsVersion $windowsInfo.WindowsVersion -TargetFriendly $targetFriendly `
+            -TargetEditionId $targetEditionId -ConversionKey $convKey -UsingCustomKey $usingCustom
+        return
     }
 
     # --- Section: Helper Function - Manual Key Entry ---

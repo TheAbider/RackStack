@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.119.4
+
+Evaluation-edition licensing, and less friction in the admin/reboot confirmations.
+
+- **Evaluation editions can now be licensed.** Activating a Windows Server *Evaluation* edition failed with "product key installation failed / product SKU is not found" because an Eval SKU can't take a product key directly. RackStack now detects the Evaluation edition and offers to convert it to the full edition with `DISM /Set-Edition` (one-way, requires a reboot). If you've configured a product key for that edition, it's used as the conversion key — a MAK/retail key both converts **and** activates after the reboot; otherwise the built-in KMS client key converts to full edition for activation against your KMS server.
+- **Fewer "type this exact phrase" confirmations.** Disabling the built-in Administrator while you're logged in as it now only asks for a simple yes/no when another verified local admin already exists (the long typed confirmation is reserved for the genuine lock-yourself-out case). If no alternate admin exists, RackStack offers to create one on the spot instead of just stopping.
+- **Reboot confirmation simplified.** The self-removal reboot on exit no longer makes you type the full computer name — it's a plain yes/no with the same warning.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.119.3
 
 Real-server robustness — a batch of first-deployment reliability fixes for the agent install, file download, self-update, and connectivity paths.

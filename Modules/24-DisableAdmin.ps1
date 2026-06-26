@@ -115,12 +115,20 @@ function Disable-BuiltInAdminAccount {
 
         if (-not $hasVerifiedLocal -and -not $hasDomainPath -and $unverifiedExternalAdmins.Count -eq 0) {
             Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Error"
-            Write-OutputColor "  ║$("  BLOCKED: No alternate admin account detected!".PadRight(72))║" -color "Error"
+            Write-OutputColor "  ║$("  No alternate admin account detected.".PadRight(72))║" -color "Error"
             Write-OutputColor "  ╠════════════════════════════════════════════════════════════════════════╣" -color "Error"
-            Write-OutputColor "  ║$("  Disabling the only admin account will LOCK YOU OUT.".PadRight(72))║" -color "Error"
-            Write-OutputColor "  ║$("  Create another local admin account first, or join a domain.".PadRight(72))║" -color "Error"
+            Write-OutputColor "  ║$("  Disabling the only admin account would LOCK YOU OUT.".PadRight(72))║" -color "Error"
             Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Error"
             Write-OutputColor "" -color "Info"
+            # Offer to create one right here instead of just dead-ending, then come back.
+            if (Confirm-UserAction -Message "Create a local admin account now?" -DefaultYes) {
+                Add-LocalAdminAccount
+                Write-OutputColor "" -color "Info"
+                Write-OutputColor "  Local admin step complete. Re-run 'Disable built-in Administrator'" -color "Info"
+                Write-OutputColor "  to finish — it will detect the new account as your fallback." -color "Info"
+            } else {
+                Write-OutputColor "  Create another local admin account (or join a domain) first." -color "Warning"
+            }
             Write-PressEnter
             return
         }
@@ -169,17 +177,22 @@ function Disable-BuiltInAdminAccount {
         $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         $builtInSid = $adminAccount.SID.Value
         if ($currentSid -eq $builtInSid) {
-            Write-OutputColor "" -color "Critical"
-            Write-OutputColor "  CAUTION: you are currently logged in AS the built-in Administrator." -color "Critical"
-            Write-OutputColor "  Account name in use: $($adminAccount.Name) (SID $builtInSid)" -color "Warning"
-            Write-OutputColor "  Disabling it keeps your CURRENT session alive but blocks all future logons" -color "Warning"
-            Write-OutputColor "  to this account. You must verify the alternate admin works BEFORE rebooting." -color "Warning"
-            Write-OutputColor "  Type LOGGED-IN-AS-BUILTIN to confirm you understand:" -color "Critical"
-            $selfConfirm = Read-Host
-            if ($selfConfirm -ne 'LOGGED-IN-AS-BUILTIN') {
-                Write-OutputColor "  Cancelled." -color "Info"
-                Write-PressEnter
-                return
+            Write-OutputColor "" -color "Warning"
+            Write-OutputColor "  Note: you're logged in AS the built-in Administrator ($($adminAccount.Name))." -color "Warning"
+            Write-OutputColor "  Disabling it keeps THIS session alive but blocks future logons to it —" -color "Warning"
+            Write-OutputColor "  sign in as the alternate admin shown above before rebooting." -color "Warning"
+            # Only demand the typed confirmation when there's no locally-verified fallback admin
+            # (real lockout risk). With a verified alternate local admin present, the plain y/N
+            # below is enough — you can simply log in as that account. (Operators found the long
+            # typed phrase needless busywork in the common "I already made another admin" case.)
+            if (-not $hasVerifiedLocal) {
+                Write-OutputColor "  Type LOGGED-IN-AS-BUILTIN to confirm you understand:" -color "Critical"
+                $selfConfirm = Read-Host
+                if ($selfConfirm -ne 'LOGGED-IN-AS-BUILTIN') {
+                    Write-OutputColor "  Cancelled." -color "Info"
+                    Write-PressEnter
+                    return
+                }
             }
         }
 
