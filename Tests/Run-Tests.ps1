@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.119.3
+    Automated Test Runner for RackStack v1.119.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -7823,6 +7823,36 @@ try {
 
 } catch {
     Write-TestResult "Real-Server Robustness Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 134d: EVAL-EDITION LICENSING + ADMIN/REBOOT CONFIRMATION UX
+# ============================================================================
+
+Write-SectionHeader "134d" "EVAL LICENSING + CONFIRMATION UX"
+
+try {
+    $licContent4 = Get-Content "$modulesPath\21-Licensing.ps1" -Raw
+    $daContent4  = Get-Content "$modulesPath\24-DisableAdmin.ps1" -Raw
+    $exitContent4 = Get-Content "$modulesPath\47-ExitCleanup.ps1" -Raw
+
+    # Eval-edition licensing: detect + DISM /Set-Edition conversion preferring the operator's key
+    Write-TestResult "21-Lic: Get-WindowsVersionInfo returns EditionId" ($licContent4 -match '"EditionId"\s*=\s*\$edition')
+    Write-TestResult "21-Lic: eval edition routed to conversion" ($licContent4 -match "EditionId -match 'Eval\`$'[\s\S]{0,800}Invoke-EvalEditionConversion")
+    Write-TestResult "21-Lic: conversion runs DISM /Set-Edition with the key" ($licContent4 -match "dism\.exe /online /Set-Edition:\`$TargetEditionId /ProductKey:\`$ProductKey")
+    Write-TestResult "21-Lic: conversion prefers operator's configured key" ($licContent4 -match '\$usingCustom\s*=\s*\(\$script:CustomKMSKeys\.ContainsKey' -and $licContent4 -match 'UsingCustomKey')
+    Write-TestResult "21-Lic: conversion is reboot-flagged + dry-run aware" ($licContent4 -match 'RebootNeeded\s*=\s*\$true' -and $licContent4 -match 'Push-DryRunStep[\s\S]{0,200}Set-Edition')
+
+    # Disable-admin UX: typed phrase only on real lockout risk; offer inline admin creation
+    Write-TestResult "24-DA: typed self-confirm only without a verified fallback admin" ($daContent4 -match 'if \(-not \$hasVerifiedLocal\)[\s\S]{0,200}LOGGED-IN-AS-BUILTIN')
+    Write-TestResult "24-DA: offers inline local-admin creation when none exists" ($daContent4 -match 'Create a local admin account now\?[\s\S]{0,120}Add-LocalAdminAccount')
+
+    # Exit/self-destruct reboot: simple confirm, not type-the-hostname
+    Write-TestResult "47-Exit: reboot uses a plain confirm, not type-the-hostname" `
+        ($exitContent4 -match 'Reboot now and remove tool files\?' -and $exitContent4 -notmatch "Type the computer name '\`$env:COMPUTERNAME' to confirm")
+
+} catch {
+    Write-TestResult "Eval Licensing + Confirmation UX Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

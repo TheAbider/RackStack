@@ -90,12 +90,11 @@ function Exit-Script {
         } catch { }
 
         Write-OutputColor "" -color "Critical"
-        Write-OutputColor "  WARNING: about to schedule a post-reboot SYSTEM deletion of tool files." -color "Critical"
-        Write-OutputColor "  This is a destructive operation that cannot be undone after reboot." -color "Warning"
-        Write-OutputColor "  Type the computer name '$env:COMPUTERNAME' to confirm:" -color "Critical"
-        $hostConfirm = Read-Host
-        if ($hostConfirm -ne $env:COMPUTERNAME) {
-            Write-OutputColor "  Cancelled (hostname did not match)." -color "Info"
+        Write-OutputColor "  About to reboot $env:COMPUTERNAME and schedule a post-reboot SYSTEM cleanup" -color "Critical"
+        Write-OutputColor "  that removes the tool's files from this server. This can't be undone after" -color "Warning"
+        Write-OutputColor "  reboot, and any unsaved work on this server will be lost." -color "Warning"
+        if (-not (Confirm-UserAction -Message "Reboot now and remove tool files?")) {
+            Write-OutputColor "  Cancelled — no reboot." -color "Info"
             return
         }
 
