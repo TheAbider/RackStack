@@ -57,7 +57,7 @@ Copy `defaults.example.json` to `defaults.json` and customize for your environme
 | `DefenderExclusionPaths` | Windows Defender exclusion paths for Hyper-V hosts |
 | `DefenderCommonVMPaths` | Common VM storage paths added to Defender exclusions (auto-generated if not set) |
 | `StoragePaths` | Default Hyper-V storage paths (VM storage, ISOs, VHD cache, cluster paths) |
-| `AgentInstaller` | MSP agent installer config: tool name, service name, file pattern, install args, paths, exit codes |
+| `AgentInstaller` | MSP agent installer config: tool name, service name, file pattern, install args, paths, exit codes, hash-verification policy |
 | `CustomKMSKeys` / `CustomAVMAKeys` | Org-specific license keys, merged with built-in Microsoft GVLK/AVMA tables |
 | `VMNaming` | VM naming pattern, site ID source, and detection regex |
 | `CustomVMTemplates` | Override built-in VM template specs or add new templates (partial overrides supported) |
@@ -194,7 +194,8 @@ Default storage paths for Hyper-V hosts. Drive letters are updated by Host Stora
         "%ProgramFiles(x86)%\\MyRMM"
     ],
     "SuccessExitCodes": [0, 1641, 3010],
-    "TimeoutSeconds": 300
+    "TimeoutSeconds": 300,
+    "RequireHash": true
 }
 ```
 
@@ -207,6 +208,7 @@ Configures the MSP agent installer. Customize for your RMM tool:
 - `InstallPaths` -- Directories to check for existing installation
 - `SuccessExitCodes` -- Exit codes that indicate successful installation
 - `TimeoutSeconds` -- Max wait time for installation to complete
+- `RequireHash` -- Require a SHA256 hash match before running an installer as SYSTEM. `true` (default) fails closed when the file server publishes no matching `.sha256` sidecar next to the installer. Set `false` if your RMM console mints a unique installer per site and you can't pre-publish hashes -- RackStack then falls back to size-only verification. When `true` and no sidecar is found, RackStack prompts once for explicit approval before continuing size-only; a hash **mismatch** always fails closed regardless of this setting.
 
 ### VM Naming
 

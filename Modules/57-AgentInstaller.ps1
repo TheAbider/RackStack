@@ -519,7 +519,44 @@ function Install-SelectedAgent {
     # size-only verification (size match alone would let a forged Content-Length pass
     # a tampered EXE through to Start-Process running as SYSTEM).
     $expectedHash = if ($Agent.ContainsKey('ExpectedHash')) { [string]$Agent.ExpectedHash } else { '' }
-    $dlResult = Get-FileServerFile -FilePath $Agent.FilePath -DestinationPath $env:TEMP -FileName $Agent.FileName -ExpectedHash $expectedHash -StrictVerify
+
+    # Effective hash-verification policy. Default is fail-closed ($true): a tampered EXE
+    # must never reach Start-Process as SYSTEM. Operators whose FileServer doesn't publish
+    # per-agent .sha256 sidecars — common for RMM consoles (Kaseya, ConnectWise, Datto…)
+    # that mint a unique installer per site — can set AgentInstaller.RequireHash = false in
+    # defaults.json to fall back to size-only verification, or publish a sidecar / supply an
+    # ExpectedHash per agent entry for full cryptographic verification.
+    $requireHash = if ($script:AgentInstaller.ContainsKey('RequireHash')) { [bool]$script:AgentInstaller.RequireHash } else { $true }
+
+    $dlResult = Get-FileServerFile -FilePath $Agent.FilePath -DestinationPath $env:TEMP -FileName $Agent.FileName -ExpectedHash $expectedHash -StrictVerify:$requireHash
+
+    # Trust-on-first-use: strict verification failed ONLY because the FileServer has no
+    # published .sha256 sidecar — NOT a hash mismatch, which always fails closed above.
+    # The installer already downloaded and its size matched the server's Content-Length.
+    # Offer the operator one explicit, logged decision to proceed with size-only
+    # verification rather than dead-ending the install. In headless mode Confirm-UserAction
+    # returns $false, so unattended installs without a sidecar stay fail-closed unless the
+    # operator opts in via RequireHash = false.
+    if (-not $dlResult.Success -and $dlResult.Reason -eq 'NoSidecar' -and $dlResult.FilePath -and (Test-Path -LiteralPath $dlResult.FilePath)) {
+        $sizeMB = if ($dlResult.FileSize) { [math]::Round($dlResult.FileSize / 1MB) } else { '?' }
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  WARNING: No published SHA256 hash for this installer on the FileServer." -color "Warning"
+        Write-OutputColor "  RackStack cannot cryptographically verify it before running it as SYSTEM." -color "Warning"
+        Write-OutputColor "  The file downloaded over your authenticated FileServer and its size matched ($sizeMB MB)." -color "Info"
+        Write-OutputColor "  Local SHA256: $($dlResult.Hash)" -color "Info"
+        Write-OutputColor "  Tip: publish a .sha256 sidecar next to the installer for full verification," -color "Info"
+        Write-OutputColor "       or set AgentInstaller.RequireHash = false in your defaults to skip this prompt." -color "Info"
+        Write-OutputColor "" -color "Info"
+        if (Confirm-UserAction -Message "Proceed with size-only verification (no hash match)?") {
+            Write-OutputColor "  Proceeding with size-only verification (operator-approved)." -color "Warning"
+            Add-SessionChange -Category "AgentInstall" -Description "Approved size-only install of $fn (no .sha256 sidecar)"
+            $dlResult = @{ Success = $true; Error = $null; FilePath = $dlResult.FilePath; FileSize = $dlResult.FileSize; Hash = $dlResult.Hash }
+        } else {
+            Write-OutputColor "  Installation cancelled — no verified hash." -color "Info"
+            Remove-Item -LiteralPath $dlResult.FilePath -Force -ErrorAction SilentlyContinue
+            return
+        }
+    }
 
     if (-not $dlResult.Success -or -not (Test-Path -LiteralPath $tempPath)) {
         Write-OutputColor "  Failed to download installer. $($dlResult.Error)" -color "Error"
