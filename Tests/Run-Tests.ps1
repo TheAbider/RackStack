@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.9
+    Automated Test Runner for RackStack v1.121.10
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9912,6 +9912,41 @@ try {
 }
 catch {
     Write-TestResult "Download-Execute Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 197: CREDENTIAL & SECRET HANDLING (v1.121.10)
+# ============================================================================
+# Guards three fixes from the credential/secret-handling audit:
+#   H  New-StrongPassword must not RETURN the generated plaintext — a bare-statement caller would
+#      stream it to top-level Out-Default, re-echoing it to the console AND into the on-disk
+#      transcript, defeating the module's own Stop-Transcript display mitigation.
+#   L1 the clipboard auto-clear Timer must be kept rooted (script-scope), or GC cancels it and the
+#      plaintext lingers in the clipboard / Win+V history.
+#   L2 the FileServer CF-Access-Client-Secret must be collected hidden (-AsSecureString) and marshalled
+#      with a zero-freed BSTR, so a plain Read-Host doesn't echo it to console/transcript.
+Write-SectionHeader "SECTION 197: CREDENTIAL & SECRET HANDLING"
+
+try {
+    $pwRaw  = Get-Content "$modulesPath\22-Password.ps1" -Raw
+    $opsRaw = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+
+    # H — no plaintext return of the generated password (case-sensitive: the generated var is
+    # lowercase $password; an unrelated entry-helper legitimately returns $Password1).
+    Write-TestResult "22-Password: New-StrongPassword does not return the plaintext (H)" (-not ($pwRaw -cmatch 'return \$password'))
+    Write-TestResult "22-Password: still shows the password via [Console]::WriteLine (H)" ($pwRaw -match '\[Console\]::WriteLine\([\s\S]{0,20}\$\(\$password')
+
+    # L1 — clipboard auto-clear timer rooted in script scope; old unrooted form gone.
+    Write-TestResult "22-Password: clipboard clear timer is kept rooted (L1)" ($pwRaw -match '\$script:_clipClearTimer = New-Object System\.Threading\.Timer')
+    Write-TestResult "22-Password: prior clipboard timer disposed on regen (L1)" ($pwRaw -match 'if \(\$script:_clipClearTimer\) \{ try \{ \$script:_clipClearTimer\.Dispose')
+    Write-TestResult "22-Password: no unrooted (`$null =) timer (L1)" (-not ($pwRaw -match '\$null = New-Object System\.Threading\.Timer'))
+
+    # L2 — CF client secret collected hidden and zero-freed.
+    Write-TestResult "56-Ops: CF client secret uses Read-Host -AsSecureString (L2)" ($opsRaw -match 'Enter CF-Access-Client-Secret[\s\S]{0,140}Read-Host -AsSecureString')
+    Write-TestResult "56-Ops: CF client secret BSTR is zero-freed (L2)" ($opsRaw -match 'ClientSecret = \[System\.Runtime\.InteropServices\.Marshal\]::PtrToStringBSTR[\s\S]{0,200}ZeroFreeBSTR')
+}
+catch {
+    Write-TestResult "Credential & Secret Handling Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

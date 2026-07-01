@@ -427,15 +427,27 @@ function New-StrongPassword {
                 }
             } catch { }
         }
-        # Timer is fire-once (period = -1). Reference is intentionally not held;
-        # GC will reclaim after the callback fires.
-        $null = New-Object System.Threading.Timer($timerCallback, $expectedClip, ($clipTTL * 1000), [System.Threading.Timeout]::Infinite)
+        # Timer is fire-once (period = -1). It MUST be kept rooted: an unreferenced
+        # System.Threading.Timer is GC-eligible immediately and its finalizer CANCELS the
+        # pending callback, so a collection within the 60s window (ordinary gen0 GC in the menu
+        # loop, or the explicit [GC]::Collect() in Clear-SecureMemory) would silently skip the
+        # clipboard clear and leave the plaintext in the clipboard/Win+V history indefinitely.
+        # Hold it in a script-scope field; dispose the prior one so repeated generation doesn't
+        # leak timers.
+        if ($script:_clipClearTimer) { try { $script:_clipClearTimer.Dispose() } catch { } }
+        $script:_clipClearTimer = New-Object System.Threading.Timer($timerCallback, $expectedClip, ($clipTTL * 1000), [System.Threading.Timeout]::Infinite)
         Write-OutputColor "  Copied to clipboard (auto-clears in ${clipTTL}s while this window is open)." -color "Success"
     }
     catch {
         Write-OutputColor "  Tip: Select and copy the password above." -color "Info"
     }
 
-    return $password
+    # Deliberately DO NOT return the plaintext. The only caller (menu option 11) discards the
+    # value, and returning it emits the password on the success stream to top-level Out-Default,
+    # which both re-echoes it to the console AND writes it into the (just-resumed) on-disk
+    # transcript — defeating the Stop-Transcript dance above that kept it out of the log. The
+    # password is shown once via [Console]::WriteLine for the operator to record; it must not
+    # leave this function.
+    return
 }
 #endregion
