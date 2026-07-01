@@ -100,13 +100,10 @@ function Exit-Script {
 
         Write-OutputColor "  As always, should you or any member of your IT Force be caught or killed, the Abider will disavow any knowledge of your actions" -color "Error"
 
-        for ($i = 5; $i -gt 0; $i--) {
-            Write-Host "`r  This script will now self destruct in $i seconds   " -ForegroundColor Red -NoNewline
-            Start-Sleep -Seconds 1
-        }
-        Write-OutputColor ""
-
-        Write-OutputColor "  Good luck." -color "Error"
+        # Do the slow work (profile scan + scheduling the SYSTEM cleanup task) up front, BEFORE the
+        # dramatic countdown, so the gap between "Good luck." and the actual reboot is near-instant
+        # instead of the ~10s it used to hang while it enumerated the whole Administrator profile.
+        Write-OutputColor "  Preparing self-destruct sequence..." -color "Warning"
 
         # Build list of paths to delete. Narrowed heuristics: only target folders whose path
         # contains $script:ToolName literally so sibling Pester repos / customer migration
@@ -124,8 +121,14 @@ function Exit-Script {
             # recursive delete would walk into the link target and delete arbitrary files matching
             # the name patterns. Locale-neutral via [System.IO.FileAttributes]::ReparsePoint.
             $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
-            $allProfileFiles = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -File -ErrorAction SilentlyContinue |
+            # Single recursive pass over the profile, partitioned into files/dirs in memory. This
+            # used to be TWO full recursive enumerations of the whole Administrator profile (one
+            # -File, one -Directory) — the dominant cost of the pre-reboot delay. ReparsePoint
+            # filtering is preserved so junctions/symlinks are still never traversed.
+            $allProfileItems = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -ErrorAction SilentlyContinue |
                 Where-Object { -not ($_.Attributes -band $reparseAttr) }
+            $allProfileFiles = @($allProfileItems | Where-Object { -not $_.PSIsContainer })
+            $allProfileDirs  = @($allProfileItems | Where-Object { $_.PSIsContainer })
             $monoFiles = $allProfileFiles | Where-Object {
                 ($_.Name -like "$toolName v*.ps1") -or
                 ($_.Name -like "$toolName*Configuration Tool*.ps1") -or
@@ -137,9 +140,6 @@ function Exit-Script {
             }
             foreach ($f in $monoFiles) { $pathsToDelete.Add($f.FullName) }
 
-            # Directory recursion: also filter ReparsePoint so junction dirs aren't traversed.
-            $allProfileDirs = Get-ChildItem -LiteralPath $adminFolder -Recurse -Force -Directory -ErrorAction SilentlyContinue |
-                Where-Object { -not ($_.Attributes -band $reparseAttr) }
             foreach ($folder in $allProfileDirs) {
                 # Only delete folders whose path explicitly contains the tool name. The prior
                 # heuristic "any folder containing 00-Initialization.ps1" caught unrelated
@@ -225,6 +225,15 @@ function Exit-Script {
         catch {
             Write-OutputColor "  Could not schedule cleanup: $_" -color "Error"
         }
+
+        # Everything is staged — run the dramatic countdown, then reboot immediately (no more
+        # multi-second hang between "Good luck." and the actual restart).
+        for ($i = 5; $i -gt 0; $i--) {
+            Write-Host "`r  This script will now self destruct in $i seconds   " -ForegroundColor Red -NoNewline
+            Start-Sleep -Seconds 1
+        }
+        Write-OutputColor ""
+        Write-OutputColor "  Good luck." -color "Error"
 
         Clear-Host
         Restart-Computer -Force

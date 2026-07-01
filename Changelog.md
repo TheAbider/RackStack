@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.121.1
+
+- **Faster tool self-removal.** When you choose the "remove this tool and reboot" option, the reboot now fires promptly instead of pausing for several seconds first. The post-reboot cleanup is prepared up front, and the user profile is scanned in a single pass instead of twice.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.0
 
 Disk initialization now works on brand-new disks, and disk/volume lists make the OS disk and removable media obvious at a glance.

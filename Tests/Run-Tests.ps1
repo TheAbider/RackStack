@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.0
+    Automated Test Runner for RackStack v1.121.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -6130,6 +6130,15 @@ try {
 
     # Saves session state if VM deployment queue has items
     Write-TestResult "47-ExitCleanup: saves session state for pending VMs" ($ecContent -match 'Save-SessionState')
+
+    # Perf: the profile is enumerated in a SINGLE recursive pass (partitioned in memory), not the
+    # old two full passes (-File then -Directory) that dominated the pre-reboot delay.
+    Write-TestResult "47-ExitCleanup: single profile scan (partitioned)" ($ecContent -match '\$allProfileItems\s*=\s*Get-ChildItem[\s\S]{0,120}-Recurse -Force' -and $ecContent -match 'PSIsContainer')
+    Write-TestResult "47-ExitCleanup: no separate -File/-Directory profile passes" (-not ($ecContent -match 'Get-ChildItem[^\r\n]*-Recurse -Force -File') -and -not ($ecContent -match 'Get-ChildItem[^\r\n]*-Recurse -Force -Directory'))
+    # Perf: the countdown + "Good luck." run AFTER the cleanup task is scheduled, so the gap between
+    # "Good luck." and the reboot is instant (scan/scheduling happens before the countdown now).
+    Write-TestResult "47-ExitCleanup: 'Good luck' comes after task scheduling" ($ecContent -match 'Register-ScheduledTask[\s\S]*?Good luck')
+    Write-TestResult "47-ExitCleanup: reboot immediately follows the countdown" ($ecContent -match 'Good luck[\s\S]{0,120}Restart-Computer -Force')
 
 } catch {
     Write-TestResult "Exit Cleanup Module Tests" $false $_.Exception.Message
