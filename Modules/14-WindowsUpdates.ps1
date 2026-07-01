@@ -133,7 +133,16 @@ function Install-WindowsUpdates {
             $psWindowsUpdate = Get-Module -ListAvailable -Name PSWindowsUpdate
             if (-not $psWindowsUpdate) {
                 Write-OutputColor "  Installing PSWindowsUpdate module..." -color "Info"
-                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+                # Surface a failure to trust PSGallery instead of silently swallowing it — otherwise
+                # the Install-Module below fails or prompts with no visible root cause. Don't abort
+                # the flow on it (Install-Module may still succeed / prompt).
+                try {
+                    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+                }
+                catch {
+                    Write-OutputColor "  Warning: could not set PSGallery as trusted: $($_.Exception.Message)" -color "Warning"
+                    Write-OutputColor "  Install-Module may prompt for confirmation." -color "Info"
+                }
                 Install-Module -Name PSWindowsUpdate -Force -SkipPublisherCheck -Confirm:$false -ErrorAction Stop
                 $needsRedraw = $true
             }

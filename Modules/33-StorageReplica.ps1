@@ -108,10 +108,13 @@ function Show-StorageReplicaManagement {
                     Write-OutputColor "  Storage Replica operation failed: $_" -color "Error"
                 }
                 Write-PressEnter
+                return
             }
-            default { }
+            default {
+                Write-OutputColor "  Invalid choice. Enter I or B." -color "Error"
+                Start-Sleep -Milliseconds 700
+            }
         }
-        return
     }
 
     while ($true) {

@@ -725,7 +725,7 @@ function Set-PagefileConfiguration {
                     }
                     foreach ($existing in $existingSettings) {
                         if ($existing.Name -like "$currentDrive*") {
-                            Remove-CimInstance -InputObject $existing -ErrorAction SilentlyContinue
+                            Remove-CimInstance -InputObject $existing -ErrorAction Stop
                         }
                     }
 
@@ -815,7 +815,7 @@ function Set-PagefileConfiguration {
                     # Remove existing pagefile settings (intentional consolidation for Move)
                     if ($null -ne $existingSettings) {
                         foreach ($existing in $existingSettings) {
-                            Remove-CimInstance -InputObject $existing -ErrorAction SilentlyContinue
+                            Remove-CimInstance -InputObject $existing -ErrorAction Stop
                         }
                     }
 
@@ -972,7 +972,7 @@ function Set-SNMPConfiguration {
                     Clear-MenuCache
 
                     # Restart SNMP service to apply
-                    Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
+                    Restart-Service -Name "SNMP" -Force -ErrorAction Stop
                     Write-OutputColor "  SNMP service restarted." -color "Info"
                 }
                 catch {
@@ -1028,7 +1028,7 @@ function Set-SNMPConfiguration {
                         Write-OutputColor "  Community string '$removeName' removed." -color "Success"
                         Add-SessionChange -Category "System" -Description "Removed SNMP community string '$removeName'"
                         Clear-MenuCache
-                        Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
+                        Restart-Service -Name "SNMP" -Force -ErrorAction Stop
                         Write-OutputColor "  SNMP service restarted." -color "Info"
                     }
                     catch {
@@ -1095,7 +1095,7 @@ function Set-SNMPConfiguration {
                             Write-OutputColor "  Permitted manager '$mgrHost' added." -color "Success"
                             Add-SessionChange -Category "System" -Description "Added SNMP permitted manager '$mgrHost'"
                             Clear-MenuCache
-                            Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
+                            Restart-Service -Name "SNMP" -Force -ErrorAction Stop
                         }
                         catch {
                             Write-OutputColor "  Failed to add manager: $_" -color "Error"
@@ -1107,12 +1107,12 @@ function Set-SNMPConfiguration {
                         if (Confirm-UserAction -Message "Remove all permitted managers? (all hosts will be able to poll)") {
                             try {
                                 foreach ($prop in $managerProps) {
-                                    Remove-ItemProperty -Path $regPath -Name $prop -Force -ErrorAction SilentlyContinue
+                                    Remove-ItemProperty -Path $regPath -Name $prop -Force -ErrorAction Stop
                                 }
                                 Write-OutputColor "  All permitted managers removed." -color "Success"
                                 Add-SessionChange -Category "System" -Description "Removed all SNMP permitted managers"
                                 Clear-MenuCache
-                                Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue
+                                Restart-Service -Name "SNMP" -Force -ErrorAction Stop
                             }
                             catch {
                                 Write-OutputColor "  Failed to remove managers: $_" -color "Error"

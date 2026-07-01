@@ -729,9 +729,9 @@ function Set-iSCSIConfiguration {
     # Show auto-config menu
     $choice = Show-iSCSIAutoConfigMenu
 
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
-
+    # Match the affirmative menu keys (A / M) FIRST; navigation (back/home/etc.) is handled in the
+    # switch default. Running Test-NavigationCommand up front swallowed [M] Manual, because "m" is
+    # the global "home" token, before the '^[Mm]$' arm could run.
     switch -Regex ($choice) {
         '^[Aa]$' {
             Set-iSCSIAutoConfiguration
@@ -761,10 +761,10 @@ function Set-iSCSIConfiguration {
             Write-OutputColor "`niSCSI Configuration Complete" -color "Success"
             Write-OutputColor "  Processed: $totalCount adapter(s)" -color "Info"
         }
-        '^[Bb]$' {
-            return
-        }
         default {
+            # Not an affirmative key — treat as navigation (back/[B]/home/etc), else invalid.
+            $navResult = Test-NavigationCommand -UserInput $choice
+            if ($navResult.ShouldReturn) { return }
             Write-OutputColor "  Invalid selection. Enter A, M, or B." -color "Error"
         }
     }
