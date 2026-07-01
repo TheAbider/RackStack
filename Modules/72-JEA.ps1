@@ -246,7 +246,14 @@ function New-JEAEndpoint {
                 else { $true }
             }.GetNewClosure() `
             -Apply {
-                Invoke-JEAEndpointBuild -Endpoint $capEndpoint -Group $capGroup -VisibleCmdlets $capCmdlets | Out-Null
+                # Invoke-JEAEndpointBuild returns $false WITHOUT throwing when the generated .pssc
+                # fails Test-PSSessionConfigurationFile (it cleans up and returns). The dry-run
+                # engine treats a non-throwing Apply as success, so a validation failure would be
+                # reported as a registered security endpoint. Throw to surface it as a real failure
+                # (and trigger rollback).
+                if (-not (Invoke-JEAEndpointBuild -Endpoint $capEndpoint -Group $capGroup -VisibleCmdlets $capCmdlets)) {
+                    throw "JEA endpoint '$capEndpoint' failed validation and was not registered."
+                }
             }.GetNewClosure() `
             -Undo {
                 Unregister-PSSessionConfiguration -Name $capEndpoint -Force -ErrorAction SilentlyContinue

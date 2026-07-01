@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.121.12
+
+Backup / undo honesty — fixes found by a deep audit of the security-feature modules (Group Policy, JEA, NPS, SIEM forwarding). Common theme: a safety-net backup that could silently fail and then be trusted anyway.
+
+- **A SIEM config change can't destroy your working config on undo.** When rewriting a forwarder config (Splunk/syslog/Winlogbeat), the "undo" restored from a backup — but if that backup silently failed to copy, undo *deleted* the live config instead, silently stopping log forwarding. It now refuses to overwrite a config it couldn't back up.
+- **"Back up all GPOs" no longer reports success when it backed up nothing.** A scheduled `GPOBackup` that enumerated GPOs but failed to back up every one still exited 0, leaving an empty folder that later got trusted as a baseline. It now reports failure.
+- **GPO drift detection stops hiding real changes.** A GPO whose baseline settings were missing was silently reported as "unchanged"; it's now listed as "not checked" so you know the comparison was incomplete instead of getting a false all-clear.
+- **Undoable operations only claim to be undoable when they really are.** A GPO restore and an NPS config import each take a pre-change snapshot first; if that snapshot silently failed, the tool used to still offer an "undo" that quietly did nothing. Both now verify the snapshot exists and tell you plainly when a change isn't undoable.
+- **A JEA endpoint that fails validation in Dry-Run is reported as failed**, not queued-and-applied.
+
+(The audit also confirmed the JEA role/endpoint configuration is correctly least-privilege and constrained, and the VPN/RADIUS policy values are correct.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.11
 
 State-integrity hardening — fixes found by a deep audit of the Dry-Run engine, configuration profile import/export, and the batch (scripted) apply.
