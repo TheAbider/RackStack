@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.121.6
+
+Failover Clustering safety — fixes found by a deep audit of the clustering module.
+
+- **Draining a node from the dashboard now protects quorum.** It refuses to drain if no other node is up to receive the roles, and warns (requiring you to type CONTINUE) if draining would drop the cluster below quorum — instead of a single yes/no that could take the whole cluster offline.
+- **Node eviction won't silently break quorum on larger clusters.** The safety check was hardcoded for small clusters; it now calculates quorum for the actual cluster size, so it can't be bypassed on 4+ node clusters.
+- **Removing a Cluster Shared Volume can't destroy live-VM storage on false information.** If the tool can't determine the CSV's mount point (e.g. it's offline/degraded), it now refuses the removal rather than reporting "no VMs" from a check that never actually ran.
+- **Quorum witness validation.** A disk witness must be Online before it can be selected; a file-share witness path is checked for reachability up front, with a reminder that the cluster account needs Full Control on the share.
+- **Correct CSV redirected-I/O detection.** The dashboard no longer shows a false "REDIRECTED I/O ACTIVE" warning on healthy volumes (it was reading the wrong property).
+- **Cluster validation report location is now shown** so you can actually find the report.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.5
 
 Reliability sweep — fixes found by auditing every menu for the same class of issues you ran into.

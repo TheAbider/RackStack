@@ -196,6 +196,34 @@ function Start-ClusterNodeDrain {
 
     $selectedNode = $nodeMap[$choice]
 
+    # Safety: refuse to drain if no OTHER Up node can host the migrated roles, and require a typed
+    # CONTINUE if draining would drop the cluster below quorum — a bare yes/no confirm is not enough
+    # for a quorum-affecting operation. ($nodes above is Up-only, so re-query ALL nodes for the
+    # quorum math.) Mirrors Suspend-ClusterNodeForMaintenance in 27-FailoverClustering.ps1.
+    $clusterNodes = @(Get-ClusterNode -ErrorAction SilentlyContinue)
+    $otherUp = @($clusterNodes | Where-Object { $_.State -eq 'Up' -and $_.Name -ne $selectedNode })
+    if ($otherUp.Count -eq 0) {
+        Write-OutputColor "" -color "Error"
+        Write-OutputColor "  REFUSING to drain '$selectedNode': no other Up node is available to host its roles." -color "Error"
+        Write-OutputColor "  Draining would leave roles unhosted and take the cluster offline." -color "Error"
+        Write-PressEnter
+        return
+    }
+    if ($clusterNodes.Count -gt 0) {
+        $quorumThreshold = [math]::Floor($clusterNodes.Count / 2) + 1
+        if ($otherUp.Count -lt $quorumThreshold) {
+            Write-OutputColor "" -color "Warning"
+            Write-OutputColor "  CAUTION: after draining, only $($otherUp.Count)/$($clusterNodes.Count) nodes will be Up" -color "Warning"
+            Write-OutputColor "  (quorum requires $quorumThreshold). The cluster may halt if any other node fails." -color "Warning"
+            Write-OutputColor "  Type CONTINUE to proceed:" -color "Warning"
+            $drainConfirm = Read-Host
+            if ($drainConfirm -ne 'CONTINUE') {
+                Write-OutputColor "  Cancelled." -color "Info"
+                return
+            }
+        }
+    }
+
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Draining node: $selectedNode" -color "Warning"
     Write-OutputColor "  This will migrate all VMs to other nodes and pause the node." -color "Info"
@@ -315,7 +343,13 @@ function Show-CSVHealth {
 
     foreach ($csv in $csvs) {
         $partition = $csv.SharedVolumeInfo.Partition
-        $redirected = $csv.SharedVolumeInfo.FaultState
+        # Correct redirected-I/O detection: SharedVolumeInfo.FaultState reports fault status (e.g.
+        # "NoFaults"), never a redirection string, so the old '-ne "NoRedirectedAccess"' test warned
+        # on EVERY healthy CSV. Use Get-ClusterSharedVolumeState.FileSystemRedirectedIOReason — the
+        # API this module already uses correctly elsewhere.
+        $redirectedState = @($csv | Get-ClusterSharedVolumeState -ErrorAction SilentlyContinue) |
+            Where-Object { $_.FileSystemRedirectedIOReason -and $_.FileSystemRedirectedIOReason -ne 'NotRedirected' } |
+            Select-Object -First 1
         if (-not $partition) {
             $lineStr = "  $($csv.Name) - Partition info unavailable"
             if ($lineStr.Length -gt 69) { $lineStr = $lineStr.Substring(0, 69) + "..." }
@@ -348,8 +382,8 @@ function Show-CSVHealth {
         Write-OutputColor "  │$("  Space: ${usedGB}GB used / ${totalGB}GB total (${usedPct}% used)".PadRight(72))│" -color $spaceColor
         Write-OutputColor "  │$("  Free: ${freeGB}GB".PadRight(72))│" -color $spaceColor
 
-        # Redirected I/O warning
-        if ($redirected -ne "NoRedirectedAccess") {
+        # Redirected I/O warning (only when genuinely redirected)
+        if ($redirectedState) {
             Write-OutputColor "  │$("  ⚠ REDIRECTED I/O ACTIVE - Performance degraded!".PadRight(72))│" -color "Error"
         }
 
