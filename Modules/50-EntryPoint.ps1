@@ -13439,6 +13439,19 @@ function Start-BatchMode {
                     $changesApplied++
                     Add-SessionChange -Category "Network" -Description "DNS servers updated on $adapterName"
                     Clear-MenuCache
+
+                    # Register a DNS-only undo so 'Undo all reversible changes' restores the prior
+                    # DNS. This fast path changed DNS but previously pushed nothing onto the undo
+                    # stack, so the rollback silently left DNS pointed at the new values (the full
+                    # reconfigure path below correctly captures + restores DNS).
+                    $dnsUndoAdapterEsc = $adapterName -replace "'", "''"
+                    $dnsUndoOld = @($currentDNS) | Where-Object { $_ }
+                    $dnsUndoOldLiteral = if ($dnsUndoOld -and $dnsUndoOld.Count -gt 0) {
+                        "@('" + (($dnsUndoOld | ForEach-Object { $_ -replace "'", "''" }) -join "','") + "')"
+                    } else { '@()' }
+                    $dnsOnlyUndo = "`$dnsRestore = $dnsUndoOldLiteral; if (`$dnsRestore.Count -gt 0) { Set-DnsClientServerAddress -InterfaceAlias '$dnsUndoAdapterEsc' -ServerAddresses `$dnsRestore -ErrorAction SilentlyContinue } else { Set-DnsClientServerAddress -InterfaceAlias '$dnsUndoAdapterEsc' -ResetServerAddresses -ErrorAction SilentlyContinue }"
+                    $script:BatchUndoStack.Add(@{ Step = $stepNum; Description = "Restore DNS servers on $adapterName"; Reversible = $true; UndoScript = [scriptblock]::Create($dnsOnlyUndo) })
+                    Save-BatchUndoState
                 }
                 catch {
                     Write-OutputColor "           Failed to update DNS: $_" -color "Error"
@@ -13704,8 +13717,11 @@ function Start-BatchMode {
                 $oldPlanGuid = $currentPlan.Guid
                 powercfg /setactive $script:PowerPlanGUID[$Config.SetPowerPlan] 2>&1 | Out-Null
                 if ($LASTEXITCODE -ne 0) {
+                    # A real powercfg failure is an error, not a skip. The batch summary and the
+                    # JSON/exit-code derive Success from $errors only, so bucketing this as
+                    # $skipped let a genuine power-plan failure report overall success (exit 0).
                     Write-OutputColor "           Failed to set power plan (exit code $LASTEXITCODE)." -color "Warning"
-                    $skipped++
+                    $errors++
                 } else {
                     Write-OutputColor "           Power plan set." -color "Success"
                     $changesApplied++
@@ -14126,7 +14142,16 @@ function Start-BatchMode {
         else {
         try {
             Install-WindowsUpdates
-            $changesApplied++
+            # Install-WindowsUpdates signals failure by early `return` (no throw), so the catch
+            # alone can't detect a no-network / gallery-unreachable / scan-failed run. Check the
+            # status flag it sets instead of unconditionally counting an applied change.
+            if ($script:LastWindowsUpdateStatus -eq 'Success') {
+                $changesApplied++
+            }
+            else {
+                Write-OutputColor "           Windows Updates did not complete successfully." -color "Warning"
+                $errors++
+            }
         }
         catch {
             Write-OutputColor "           Failed: $_" -color "Error"
@@ -14449,10 +14474,19 @@ function Start-BatchMode {
                 # Non-iSCSI backends: use the generalized initializer
                 $configHash = @{}
                 if ($Config.SMB3SharePath) { $configHash["SMB3SharePath"] = $Config.SMB3SharePath }
-                $null = Initialize-StorageBackendBatch -Config $configHash -BackendType $storageBackend
-                $changesApplied++
-                Add-SessionChange -Category "Storage" -Description "Configured $storageBackend storage backend"
-                Clear-MenuCache
+                # Honor the boolean result: Initialize-StorageBackendBatch returns $false on real
+                # failure/refusal paths (e.g. S2D consent missing, Enable-ClusterS2D threw and was
+                # caught internally). Discarding it with $null = and unconditionally counting the
+                # change reported a storage step that did nothing as an applied success.
+                $storageOk = Initialize-StorageBackendBatch -Config $configHash -BackendType $storageBackend
+                if ($storageOk) {
+                    $changesApplied++
+                    Add-SessionChange -Category "Storage" -Description "Configured $storageBackend storage backend"
+                    Clear-MenuCache
+                } else {
+                    Write-OutputColor "           Storage backend '$storageBackend' was not configured (refused or failed)." -color "Warning"
+                    $errors++
+                }
             }
         }
         catch {

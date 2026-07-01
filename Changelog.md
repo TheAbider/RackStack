@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.121.11
+
+State-integrity hardening — fixes found by a deep audit of the Dry-Run engine, configuration profile import/export, and the batch (scripted) apply.
+
+- **A rolled-back Dry-Run commit no longer silently drops changes.** If an atomic commit failed partway and rolled the applied steps back, those steps were still marked "Applied" — so a retry skipped them and reported "all steps applied" while their changes were actually missing. Reverted steps are now re-applied on retry.
+- **Applying a saved profile can't strand a server with no IP.** The network step removed the current address before adding the new one; if the new address failed (duplicate IP, bad gateway) the box was left with no IPv4 and no gateway. It now restores the previous address on failure. (Same fix applied to the drift-remediation path.)
+- **The batch report tells the truth about failures.** A shared-storage step that was refused or failed, a Windows Update run with no connectivity, and a failed power-plan change were all being counted as successful applied changes. Each now reports the real result.
+- **Cancelling one import step no longer aborts the whole import.** Declining the network reconfiguration (or hitting an invalid domain name) used to silently skip every remaining step and the summary; it now skips just that step and continues.
+- **Export no longer invents a DNS server.** When a machine had no DNS configured, export wrote a public resolver (8.8.8.8) into the profile; it now leaves DNS blank so import doesn't apply a value the source never had.
+- **'Undo all' restores DNS after a DNS-only batch change**, and the interactive text export reports a real error instead of silently writing a truncated file.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.10
 
 Credential-handling hardening — fixes found by a deep audit of password generation, SecureString hygiene, and secret leakage.
