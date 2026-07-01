@@ -462,7 +462,10 @@ function Export-ServerConfiguration {
         # was missing it. A kill mid-write would leave a truncated config file next to the operator
         # with no warning.
         $tmpExportPath = "$exportPath.tmp"
-        $config | Out-File -LiteralPath $tmpExportPath -Encoding UTF8 -Force
+        # -ErrorAction Stop so a non-terminating write failure (disk full / quota) doesn't fall
+        # through to a successful same-volume rename of a TRUNCATED file and report success.
+        # Matches the guarded writes in Save-ConfigurationProfile / Save-DriftBaseline.
+        $config | Out-File -LiteralPath $tmpExportPath -Encoding UTF8 -Force -ErrorAction Stop
         Move-Item -LiteralPath $tmpExportPath -Destination $exportPath -Force -ErrorAction Stop
 
         Write-OutputColor "`nConfiguration exported successfully!" -color "Success"
@@ -517,8 +520,11 @@ function Save-ConfigurationProfile {
             "IPAddress" = $null  # Intentionally null - user should set for new server
             "SubnetCIDR" = if ($primaryIP) { $primaryIP.PrefixLength } else { 24 }
             "Gateway" = $null  # Intentionally null - user should set for new server
-            "DnS1" = if ($primaryDnS -and $primaryDnS.ServerAddresses.Count -ge 1) { $primaryDnS.ServerAddresses[0] } else { $script:DnSPresets["Google DnS"][0] }
-            "DnS2" = if ($primaryDnS -and $primaryDnS.ServerAddresses.Count -ge 2) { $primaryDnS.ServerAddresses[1] } else { $script:DnSPresets["Google DnS"][1] }
+            # Null when the source has no DNS configured — do NOT fabricate a public resolver
+            # (8.8.8.8). Fabricating a value the source never had breaks round-trip fidelity and
+            # injects an unexpected external resolver on import. Import skips DNS when DnS1 is null.
+            "DnS1" = if ($primaryDnS -and $primaryDnS.ServerAddresses.Count -ge 1) { $primaryDnS.ServerAddresses[0] } else { $null }
+            "DnS2" = if ($primaryDnS -and $primaryDnS.ServerAddresses.Count -ge 2) { $primaryDnS.ServerAddresses[1] } else { $null }
         }
         "Domain" = [ordered]@{
             "JoinDomain" = if ($null -ne $computerSystem) { $computerSystem.PartOfDomain } else { $false }
@@ -805,36 +811,69 @@ function Import-ConfigurationProfile {
                         $remoteSession = $true
                     }
                 } catch { }
+                $proceedNetwork = $true
                 if ($remoteSession) {
                     Write-OutputColor "        WARNING: applying network changes over a remote session may disconnect you." -color "Warning"
                     if (-not (Confirm-UserAction -Message "Continue with network reconfiguration?")) {
-                        Write-OutputColor "        Network step cancelled." -color "Info"
+                        # Skip ONLY the network step and continue the rest of the import. A bare
+                        # `return` here previously aborted the ENTIRE profile import — every later
+                        # step (timezone, RDP, WinRM, firewall, domain join...), the summary, the
+                        # reboot notice and the session-change log were all silently skipped.
+                        Write-OutputColor "        Network step cancelled — continuing with the remaining steps." -color "Info"
                         $errors++
-                        return
+                        $proceedNetwork = $false
                     }
                 }
 
+                if ($proceedNetwork) {
                 # Targeted removal: only delete the existing static IP that matches the saved
                 # adapter, not every IP on the NIC. Loop in case multiple primary IPs exist.
                 $existingIPs = @(Get-NetIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -ErrorAction SilentlyContinue |
                     Where-Object { $_.PrefixOrigin -eq 'Manual' })
+                # Capture the current IP(s) + default gateway BEFORE removing them, so a failed
+                # New-NetIPAddress can be rolled back instead of stranding the host with no IPv4
+                # address and no default route — a remote box would drop off the network entirely
+                # with no in-band recovery.
+                $rollbackIPs = @($existingIPs | ForEach-Object { @{ IPAddress = $_.IPAddress; PrefixLength = $_.PrefixLength } })
+                $oldGateway = (Get-NetRoute -InterfaceAlias $adaptername -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+                    Select-Object -First 1).NextHop
                 foreach ($ip in $existingIPs) {
                     Remove-NetIPAddress -InterfaceAlias $adaptername -IPAddress $ip.IPAddress -Confirm:$false -ErrorAction SilentlyContinue
                 }
                 # Only remove the default route on this adapter (not every route)
                 Remove-NetRoute -InterfaceAlias $adaptername -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
 
-                new-netIPAddress -InterfaceAlias $adaptername -IPAddress $configProfile.network.IPAddress `
-                    -PrefixLength $configProfile.network.SubnetCIDR -DefaultGateway $configProfile.network.Gateway -ErrorAction Stop
+                try {
+                    new-netIPAddress -InterfaceAlias $adaptername -IPAddress $configProfile.network.IPAddress `
+                        -PrefixLength $configProfile.network.SubnetCIDR -DefaultGateway $configProfile.network.Gateway -ErrorAction Stop
+                }
+                catch {
+                    # New IP couldn't be set — restore the previous address(es) + gateway so the
+                    # host keeps a reachable IPv4 config, then re-throw to the outer handler.
+                    Write-OutputColor "        New IP assignment failed; restoring previous network config..." -color "Warning"
+                    foreach ($rb in $rollbackIPs) {
+                        New-NetIPAddress -InterfaceAlias $adaptername -IPAddress $rb.IPAddress -PrefixLength $rb.PrefixLength -ErrorAction SilentlyContinue | Out-Null
+                    }
+                    if ($oldGateway) {
+                        New-NetRoute -InterfaceAlias $adaptername -DestinationPrefix '0.0.0.0/0' -NextHop $oldGateway -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+                    }
+                    throw
+                }
 
-                $dnsServers = @($configProfile.network.DnS1)
-                if ($configProfile.network.DnS2) { $dnsServers += $configProfile.network.DnS2 }
-                Set-DnsClientServerAddress -InterfaceAlias $adaptername -ServerAddresses $dnsServers -ErrorAction Stop
+                # Only set DNS when the profile actually carries a primary server. A null DnS1
+                # (source had none, no longer fabricated) must NOT be pushed as @($null), which
+                # would error or wipe the adapter's DNS.
+                if (-not [string]::IsNullOrWhiteSpace($configProfile.network.DnS1)) {
+                    $dnsServers = @($configProfile.network.DnS1)
+                    if ($configProfile.network.DnS2) { $dnsServers += $configProfile.network.DnS2 }
+                    Set-DnsClientServerAddress -InterfaceAlias $adaptername -ServerAddresses $dnsServers -ErrorAction Stop
+                }
 
                 $changesApplied++
                 Write-OutputColor "        network configured." -color "Success"
                 Add-SessionChange -Category "network" -Description "Set IP $($configProfile.network.IPAddress)/$($configProfile.network.SubnetCIDR) on $adaptername"
                 Clear-MenuCache
+                }
             }
             catch {
                 Write-OutputColor "        Failed: $_" -color "Error"
@@ -1062,11 +1101,13 @@ function Import-ConfigurationProfile {
             Write-OutputColor "  [13/13] Joining domain '$($configProfile.Domain.Domainname)'..." -color "Info"
             # Validate before Add-Computer (mirrors the gate in 50-EntryPoint:13280).
             if (-not (Test-ValidDomainName -DomainName $configProfile.Domain.Domainname)) {
+                # Skip ONLY the domain-join step and fall through to the summary. A bare `return`
+                # here previously aborted the function before the "Profile applied" summary, the
+                # reboot notice and the Install-Updates prompt were ever reached.
                 Write-OutputColor "        ERROR: '$($configProfile.Domain.Domainname)' is not a valid domain name. Skipping." -color "Error"
                 $errors++
-                Write-OutputColor "" -color "Info"
-                return
             }
+            else {
             Write-OutputColor "        Enter domain credentials:" -color "Info"
             try {
                 $domainCred = Get-Credential -Message "Enter credentials to join $($configProfile.Domain.Domainname)"
@@ -1082,6 +1123,7 @@ function Import-ConfigurationProfile {
             catch {
                 Write-OutputColor "        Failed: $_" -color "Error"
                 $errors++
+            }
             }
         } else {
             Write-OutputColor "  [13/13] Domain join: skipped" -color "Debug"
@@ -1520,14 +1562,26 @@ function Invoke-Remediation {
                     $currentIPObj = Get-NetIPAddress -InterfaceAlias $adaptername -AddressFamily IPv4 -ErrorAction SilentlyContinue |
                         Where-Object { $_.IPAddress -eq $current -or $_.PrefixOrigin -ne 'Dhcp' } |
                         Select-Object -First 1
+                    # Capture prior IP + gateway so a failed New-NetIPAddress can be rolled back
+                    # rather than stranding the host with no IPv4 address / default route.
+                    $rbIP = if ($currentIPObj) { @{ IPAddress = $currentIPObj.IPAddress; PrefixLength = $currentIPObj.PrefixLength } } else { $null }
+                    $rbGW = (Get-NetRoute -InterfaceAlias $adaptername -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
                     if ($currentIPObj) {
                         Remove-NetIPAddress -InterfaceAlias $adaptername -IPAddress $currentIPObj.IPAddress -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
                     }
                     Remove-NetRoute -InterfaceAlias $adaptername -DestinationPrefix "0.0.0.0/0" -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
-                    if ($newGW) {
-                        new-netIPAddress -InterfaceAlias $adaptername -IPAddress $newIP -PrefixLength $cidr -DefaultGateway $newGW -ErrorAction Stop | Out-null
-                    } else {
-                        new-netIPAddress -InterfaceAlias $adaptername -IPAddress $newIP -PrefixLength $cidr -ErrorAction Stop | Out-null
+                    try {
+                        if ($newGW) {
+                            new-netIPAddress -InterfaceAlias $adaptername -IPAddress $newIP -PrefixLength $cidr -DefaultGateway $newGW -ErrorAction Stop | Out-null
+                        } else {
+                            new-netIPAddress -InterfaceAlias $adaptername -IPAddress $newIP -PrefixLength $cidr -ErrorAction Stop | Out-null
+                        }
+                    }
+                    catch {
+                        Write-OutputColor "  New IP assignment failed; restoring previous network config..." -color "Warning"
+                        if ($rbIP) { New-NetIPAddress -InterfaceAlias $adaptername -IPAddress $rbIP.IPAddress -PrefixLength $rbIP.PrefixLength -ErrorAction SilentlyContinue | Out-Null }
+                        if ($rbGW) { New-NetRoute -InterfaceAlias $adaptername -DestinationPrefix "0.0.0.0/0" -NextHop $rbGW -Confirm:$false -ErrorAction SilentlyContinue | Out-Null }
+                        throw
                     }
                     $detail = "Set IP to $newIP/$cidr$(if ($newGW) { " GW $newGW" })"
                     Add-SessionChange -Category "Remediation" -Description $detail

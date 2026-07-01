@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.10
+    Automated Test Runner for RackStack v1.121.11
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9955,6 +9955,67 @@ catch {
 }
 
 # ============================================================================
+# SECTION 198: STATE-INTEGRITY HARDENING (v1.121.11)
+# ============================================================================
+# Guards the fixes from the Dry-Run / config-export / batch-config state-integrity audit:
+#   [0] Dry-Run atomic rollback resets a reverted step to Queued (so a retry re-applies it
+#       instead of silently skipping it and reporting success).
+#   [1] Config-profile network apply (import + remediation) captures the prior IP/gateway and
+#       restores it if New-NetIPAddress fails, instead of leaving the host with no IPv4.
+#   [2] Batch shared-storage honors Initialize-StorageBackendBatch's boolean (no false "applied").
+#   [3] Declining the network sub-step skips only that step (was aborting the whole import);
+#       an invalid domain name likewise falls through to the summary.
+#   [4] Export leaves DNS null when the source has none (no fabricated 8.8.8.8); import skips null.
+#   [5] Batch Windows-Updates checks a status flag (Install-WindowsUpdates returns, not throws).
+#   [6] Interactive text export write uses -ErrorAction Stop (no truncated-file "success").
+#   [7] Batch power-plan failure counts as an error, not a skip.
+#   [8] Batch DNS-only fast path registers an undo so 'Undo all' restores DNS.
+Write-SectionHeader "SECTION 198: STATE-INTEGRITY HARDENING"
+
+try {
+    $drRaw = Get-Content "$modulesPath\70-DryRun.ps1" -Raw
+    $ceRaw = Get-Content "$modulesPath\45-ConfigExport.ps1" -Raw
+    $epRaw = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    $wuRaw = Get-Content "$modulesPath\14-WindowsUpdates.ps1" -Raw
+
+    # [0] rollback resets status
+    Write-TestResult "70-DryRun: atomic rollback resets reverted step to Queued [0]" ($drRaw -match '& \$s\.Undo[\s\S]{0,750}\$s\.Status = "Queued"')
+
+    # [1] network apply rollback (both sites)
+    Write-TestResult "45-ConfigExport: import captures IP/gateway for rollback [1]" ($ceRaw -match '\$rollbackIPs = @\(\$existingIPs')
+    Write-TestResult "45-ConfigExport: import restores network + re-throws on new-IP failure [1]" ($ceRaw -match 'restoring previous network config[\s\S]{0,260}New-NetIPAddress[\s\S]{0,600}throw')
+    Write-TestResult "45-ConfigExport: remediation captures IP/gateway for rollback [1]" ($ceRaw -match '\$rbIP = if \(\$currentIPObj\)')
+
+    # [2] shared-storage boolean honored
+    Write-TestResult "50-EntryPoint: batch shared-storage honors the boolean result [2]" ($epRaw -match '\$storageOk = Initialize-StorageBackendBatch[\s\S]{0,120}if \(\$storageOk\)')
+
+    # [3] decline-network / invalid-domain skip only their step
+    Write-TestResult "45-ConfigExport: decline-network skips only that step (not the import) [3]" (($ceRaw -match '\$proceedNetwork = \$false') -and ($ceRaw -match 'if \(\$proceedNetwork\)'))
+    Write-TestResult "45-ConfigExport: invalid domain falls through to summary [3]" ($ceRaw -match 'is not a valid domain name\. Skipping[\s\S]{0,200}\$errors\+\+[\s\S]{0,120}else \{')
+
+    # [4] export leaves DNS null (no fabricated 8.8.8.8); import guards null
+    Write-TestResult "45-ConfigExport: export does not fabricate Google DNS [4]" (-not ($ceRaw -match 'DnS1" = if[\s\S]{0,120}Google DnS'))
+    Write-TestResult "45-ConfigExport: import skips DNS when profile DnS1 is null [4]" ($ceRaw -match 'IsNullOrWhiteSpace\(\$configProfile\.network\.DnS1\)')
+
+    # [5] Windows Updates status flag
+    Write-TestResult "14-WindowsUpdates: sets a pessimistic status flag [5]" ($wuRaw -match "LastWindowsUpdateStatus = 'Failed'")
+    Write-TestResult "14-WindowsUpdates: marks success at up-to-date + installed [5]" ((([regex]::Matches($wuRaw, "LastWindowsUpdateStatus = 'Success'")).Count) -ge 2)
+    Write-TestResult "50-EntryPoint: batch checks the update status flag [5]" ($epRaw -match "LastWindowsUpdateStatus -eq 'Success'")
+
+    # [6] text export -ErrorAction Stop
+    Write-TestResult "45-ConfigExport: text export write uses -ErrorAction Stop [6]" ($ceRaw -match 'Out-File -LiteralPath \$tmpExportPath -Encoding UTF8 -Force -ErrorAction Stop')
+
+    # [7] power-plan failure is an error
+    Write-TestResult "50-EntryPoint: batch power-plan failure counts as error [7]" ($epRaw -match 'Failed to set power plan \(exit code \$LASTEXITCODE\)\.[\s\S]{0,80}\$errors\+\+')
+
+    # [8] batch DNS-only path registers undo
+    Write-TestResult "50-EntryPoint: batch DNS-only fast path registers an undo [8]" ($epRaw -match 'Restore DNS servers on \$adapterName[\s\S]{0,140}Save-BatchUndoState')
+}
+catch {
+    Write-TestResult "State-Integrity Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -12080,7 +12141,7 @@ try {
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles Timezone" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Set-TimeZone")
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles RDP" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,6000}fDenyTSConnections")
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles DNS" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,8000}Set-DnsClientServerAddress")
-    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Hostname" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,14000}Rename-Computer")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Hostname" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,16000}Rename-Computer")
     Write-TestResult "45-ConfigExport: Invoke-Remediation tracks reboot" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,3000}RebootRequired")
     Write-TestResult "45-ConfigExport: Invoke-Remediation calls Add-SessionChange" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Add-SessionChange.*Remediation")
     Write-TestResult "45-ConfigExport: Show-RemediationReport function exists" ($ceContentCLI -match "function Show-RemediationReport")
