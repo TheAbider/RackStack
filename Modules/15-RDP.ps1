@@ -127,6 +127,12 @@ function Enable-RDP {
         Write-OutputColor "  [2] Skip (allow from any address)" -color "Info"
         $restrictChoice = Read-Host "  Select"
 
+        # Any choice other than [1] skips the (optional) subnet restriction — say so explicitly
+        # instead of silently doing nothing. RDP is already enabled at this point either way.
+        if ($restrictChoice -ne "1") {
+            Write-OutputColor "  Skipping subnet restriction — RDP is allowed from any address." -color "Info"
+        }
+
         if ($restrictChoice -eq "1") {
             $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24 or 192.168.1.0/24)"
             $navResult = Test-NavigationCommand -UserInput $subnet
@@ -501,6 +507,11 @@ function Enable-PowerShellRemoting {
         Write-OutputColor "  Restrict WinRM to a specific subnet? (recommended for security)" -color "Info"
         Write-OutputColor "  [1] Restrict to subnet  [2] Skip" -color "Info"
         $winrmRestrict = Read-Host "  Select"
+
+        # Any choice other than [1] skips the (optional) subnet restriction — say so explicitly.
+        if ($winrmRestrict -ne "1") {
+            Write-OutputColor "  Skipping subnet restriction — WinRM is allowed from any address." -color "Info"
+        }
 
         if ($winrmRestrict -eq "1") {
             $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24)"

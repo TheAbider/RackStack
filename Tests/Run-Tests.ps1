@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.4
+    Automated Test Runner for RackStack v1.121.5
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9708,6 +9708,39 @@ catch {
 }
 
 # ============================================================================
+# SECTION 192: RELIABILITY SWEEP — NAV / OPAQUE-FAILURE / DEAD-END (v1.121.5)
+# ============================================================================
+Write-SectionHeader "SECTION 192: RELIABILITY SWEEP FIXES"
+
+try {
+    $setSw  = Get-Content "$modulesPath\09-SET.ps1" -Raw
+    $iscsiSw= Get-Content "$modulesPath\10-iSCSI.ps1" -Raw
+    $qolSw  = Get-Content "$modulesPath\55-QoLFeatures.ps1" -Raw
+    $wuSw   = Get-Content "$modulesPath\14-WindowsUpdates.ps1" -Raw
+    $srSw   = Get-Content "$modulesPath\33-StorageReplica.ps1" -Raw
+    $rdpSw  = Get-Content "$modulesPath\15-RDP.ps1" -Raw
+
+    # NAV: [M] Manual matched before the nav check (m = home token) in SET adapter + iSCSI menus.
+    Write-TestResult "09-SET: Select-PhysicalAdaptersSmart matches A/M before nav" ($setSw -match "Select-PhysicalAdaptersSmart[\s\S]{0,1400}'\^\[Aa\]\`$'[\s\S]{0,3500}Test-NavigationCommand")
+    Write-TestResult "10-iSCSI: Set-iSCSIConfiguration matches keys before nav (nav in default)" ($iscsiSw -match "function Set-iSCSIConfiguration[\s\S]{0,120}Show-iSCSIAutoConfigMenu[\s\S]{0,400}switch -Regex" -and $iscsiSw -match "function Set-iSCSIConfiguration[\s\S]{0,1600}default \{[\s\S]{0,200}Test-NavigationCommand")
+
+    # OPAQUE-FAILURE: state-changing cmdlets no longer silenced where a success message follows.
+    Write-TestResult "55-QoL: SNMP restarts use -ErrorAction Stop" (-not ($qolSw -match 'Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue'))
+    Write-TestResult "55-QoL: SNMP restart is now -ErrorAction Stop" ($qolSw -match 'Restart-Service -Name "SNMP" -Force -ErrorAction Stop')
+    Write-TestResult "55-QoL: pagefile Remove-CimInstance uses -ErrorAction Stop" (-not ($qolSw -match 'Remove-CimInstance -InputObject \$existing -ErrorAction SilentlyContinue'))
+    Write-TestResult "55-QoL: SNMP Remove-ItemProperty uses -ErrorAction Stop" ($qolSw -match 'Remove-ItemProperty -Path \$regPath -Name \$prop -Force -ErrorAction Stop')
+    Write-TestResult "14-WU: Set-PSRepository trust failure is surfaced (try/catch)" ($wuSw -match 'Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop' -and $wuSw -match 'could not set PSGallery as trusted')
+
+    # DEAD-END: invalid input now gives feedback instead of a silent exit/skip.
+    Write-TestResult "33-StorageReplica: invalid choice gives feedback" ($srSw -match 'default \{[\s\S]{0,120}Invalid choice\. Enter I or B')
+    Write-TestResult "15-RDP: RDP subnet skip is explicit" ($rdpSw -match '\$restrictChoice -ne "1"[\s\S]{0,120}Skipping subnet restriction')
+    Write-TestResult "15-RDP: WinRM subnet skip is explicit" ($rdpSw -match '\$winrmRestrict -ne "1"[\s\S]{0,120}Skipping subnet restriction')
+}
+catch {
+    Write-TestResult "Reliability Sweep Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -9851,6 +9884,20 @@ foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
                 }
             }
             if ($isReturnPattern) { continue }
+
+            # Also OK: the "keys-first" pattern — the choice is matched against affirmative menu
+            # keys (a '^[..]' regex match or a 'switch -Regex') BEFORE the nav check, which then
+            # lives in the else / switch-default further down. This is the CORRECT ordering that
+            # avoids the nav-token collision (e.g. [M] Manual vs the 'm' home token), so accept it.
+            $isKeysFirst = $false
+            $keyEnd = [math]::Min($i + 8, $lines.Count - 1)
+            for ($k = $i + 1; $k -le $keyEnd; $k++) {
+                if ($lines[$k] -match "-match\s+'\^\[" -or $lines[$k] -match 'switch\s+-Regex') {
+                    $isKeysFirst = $true
+                    break
+                }
+            }
+            if ($isKeysFirst) { continue }
 
             $foundNav = $false
             $endCheck = [math]::Min($i + 10, $lines.Count - 1)

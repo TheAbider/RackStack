@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.121.5
+
+Reliability sweep — fixes found by auditing every menu for the same class of issues you ran into.
+
+- **The [M] Manual option now works** when choosing adapters for SET teaming and when configuring iSCSI. Pressing **M** was being read as the "home" shortcut and silently cancelled the menu before the Manual option could run.
+- **SNMP and pagefile changes report real results.** Restarting the SNMP service and removing an old pagefile no longer report success when they actually failed — you get the real error instead. (This could otherwise leave SNMP changes not applied, or two pagefiles configured, while claiming success.)
+- **Windows Update prerequisite is clearer.** If trusting the PowerShell Gallery fails, it now says so instead of silently continuing into a confusing module-install prompt.
+- **No more silent dead-ends on invalid input** at the Storage Replica install prompt and the RDP/WinRM "restrict to subnet" prompts — you now get clear feedback instead of the menu doing nothing.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.4
 
 Server role templates (the automatic role setups) — clearer failures and a friendlier Print Server setup.

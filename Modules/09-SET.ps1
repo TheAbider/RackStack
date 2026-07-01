@@ -76,9 +76,9 @@ function Select-PhysicalAdaptersSmart {
 
     $choice = Read-Host "  Select"
 
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return $null }
-
+    # Match the affirmative menu keys (A / M) BEFORE the navigation check — "m" is the global "home"
+    # token, so a nav check first silently swallowed the [M] Manual option (it never reached the
+    # '^[Mm]$' arm below). Navigation is handled in the final else for non-menu-key input.
     if ($choice -match '^[Aa]$') {
         # Auto-detect mode
         Write-OutputColor "" -color "Info"
@@ -147,6 +147,9 @@ function Select-PhysicalAdaptersSmart {
         return Select-PhysicalAdapters
     }
     else {
+        # Not an affirmative menu key — treat as navigation (back), otherwise invalid.
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return $null }
         Write-OutputColor "  Invalid selection. Enter A, M, or B." -color "Error"
         return $null
     }
