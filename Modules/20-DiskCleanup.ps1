@@ -430,8 +430,14 @@ function Clear-BrowserCaches {
 
         if ($chromeTotal -gt 0) {
             if (Confirm-UserAction -Message "Clear Chrome cache ($chromeMB MB)?" -DefaultYes) {
+                # Reparse-point filter on the recursion. The path globs into the operator's own
+                # LocalAppData, but a malicious or careless prior install could plant a junction
+                # inside the Chrome profile path; without this filter, admin-context Remove-Item
+                # would walk through to the link target.
+                $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
                 $cleaned = 0
-                Get-ChildItem -Path "$chromeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ChildItem -Path "$chromeCachePath\*\Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue |
+                    Where-Object { -not ($_.Attributes -band $reparseAttr) } | ForEach-Object {
                     try {
                         $fileLen = $_.Length
                         Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
@@ -439,7 +445,8 @@ function Clear-BrowserCaches {
                     }
                     catch { $null = $_ }
                 }
-                Get-ChildItem -Path "$chromeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ChildItem -Path "$chromeCachePath\*\Code Cache\*" -Recurse -Force -File -ErrorAction SilentlyContinue |
+                    Where-Object { -not ($_.Attributes -band $reparseAttr) } | ForEach-Object {
                     try {
                         $fileLen = $_.Length
                         Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
@@ -464,8 +471,14 @@ function Clear-BrowserCaches {
 
         if ($firefoxSize -gt 0) {
             if (Confirm-UserAction -Message "Clear Firefox cache ($firefoxMB MB)?" -DefaultYes) {
+                # Reparse-point filter on the recursion. The path globs into the operator's own
+                # LocalAppData, but a malicious or careless prior install could plant a junction
+                # inside the Firefox profile path; without this filter, admin-context Remove-Item
+                # would walk through to the link target.
+                $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
                 $cleaned = 0
-                Get-ChildItem -Path "$firefoxProfilePath\*\cache2\*" -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ChildItem -Path "$firefoxProfilePath\*\cache2\*" -Recurse -Force -File -ErrorAction SilentlyContinue |
+                    Where-Object { -not ($_.Attributes -band $reparseAttr) } | ForEach-Object {
                     try {
                         $fileLen = $_.Length
                         Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
@@ -961,9 +974,14 @@ function Invoke-FullEnhancedCleanup {
         $browserPaths += "$firefoxProfilePath\*\cache2\*"
     }
 
+    # Reparse-point filter on the recursion. These globs walk the operator's own LocalAppData,
+    # but a malicious or careless prior install could plant a junction inside a browser profile
+    # path; without this filter, admin-context Remove-Item would walk through to the link target.
+    $reparseAttr = [System.IO.FileAttributes]::ReparsePoint
     $browserCleaned = 0
     foreach ($bp in $browserPaths) {
-        Get-ChildItem -Path $bp -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-ChildItem -Path $bp -Recurse -Force -File -ErrorAction SilentlyContinue |
+            Where-Object { -not ($_.Attributes -band $reparseAttr) } | ForEach-Object {
             try {
                 $fileLen = $_.Length
                 Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
