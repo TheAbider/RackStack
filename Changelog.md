@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.121.8
+
+Cleanup and encryption safety — fixes found by a deep audit of the destructive/data-affecting modules.
+
+- **Browser-cache cleanup can't be tricked into deleting files outside the cache.** The Chrome, Firefox, and full-cleanup sweeps now skip reparse points (junctions/symlinks) during recursion, the same protection the Edge and temp-file sweeps already had. Without it, a junction planted inside a browser profile could redirect the admin-context delete to files elsewhere on disk.
+- **Enabling BitLocker now asks for a final confirmation** naming the exact volume and method before it starts encrypting — matching the confirmation the Disable path already had — so a mistyped volume number can be caught before a one-way, hours-long encryption begins.
+
+(The audit also confirmed the Deduplication, Storage Migration, and Debloat modules — and BitLocker's recovery-key handling — are already correct; these were the only gaps.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.7
 
 Active Directory — the new-forest wizard now catches two problems up front instead of failing partway through promotion.

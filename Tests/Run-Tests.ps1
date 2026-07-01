@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.7
+    Automated Test Runner for RackStack v1.121.8
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9802,6 +9802,51 @@ try {
 }
 catch {
     Write-TestResult "New-Forest Validation Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 195: DESTRUCTIVE-MODULE HARDENING (v1.121.8)
+# ============================================================================
+# Guards two fixes from the destructive/data-affecting-module audit:
+#   DC-001/002/003 — the Chrome, Firefox, and full-cleanup browser-cache sweeps must skip reparse
+#     points during recursion (a junction planted in a browser profile could otherwise redirect an
+#     admin-context Remove-Item to files elsewhere on disk). Matches the Edge/temp-sweep pattern.
+#   BL-001 — enabling BitLocker must confirm the exact volume + method before the one-way encryption
+#     starts, mirroring the gate the Disable path already has.
+Write-SectionHeader "SECTION 195: DESTRUCTIVE-MODULE HARDENING"
+
+try {
+    $dcR = Get-Content "$modulesPath\20-DiskCleanup.ps1" -Raw
+
+    # DC-001/002: Chrome sweep filters reparse points on BOTH the Cache and Code Cache recursion.
+    $chromeBlock = [regex]::Match($dcR, 'Clear Chrome cache[\s\S]*?Chrome cache cleared').Value
+    $chromeFilters = @([regex]::Matches($chromeBlock, '-band \$reparseAttr')).Count
+    Write-TestResult "20-Cleanup: Chrome sweep filters reparse points (both caches)" ($chromeFilters -ge 2) "found $chromeFilters"
+
+    # DC-003a: Firefox cache2 sweep filters reparse points.
+    $firefoxBlock = [regex]::Match($dcR, 'Clear Firefox cache[\s\S]*?Firefox cache cleared').Value
+    Write-TestResult "20-Cleanup: Firefox sweep filters reparse points" ($firefoxBlock -match '-band \$reparseAttr')
+
+    # DC-003b: the Invoke-FullEnhancedCleanup browser loop filters reparse points.
+    $fullLoop = [regex]::Match($dcR, '\$browserCleaned = 0[\s\S]{0,400}').Value
+    Write-TestResult "20-Cleanup: full-cleanup browser loop filters reparse points" ($fullLoop -match '-band \$reparseAttr')
+
+    # Regression: the pre-existing Edge sweep still filters (both caches) — proves we matched, not replaced.
+    $edgeBlock = [regex]::Match($dcR, 'Clear Edge cache[\s\S]*?Edge cache cleared').Value
+    $edgeFilters = @([regex]::Matches($edgeBlock, '-band \$reparseAttr')).Count
+    Write-TestResult "20-Cleanup: Edge sweep still filters reparse points (regression)" ($edgeFilters -ge 2) "found $edgeFilters"
+
+    $blR = Get-Content "$modulesPath\31-BitLocker.ps1" -Raw
+
+    # BL-001: Enable prompts a final confirmation naming the volume, before the live Enable-BitLocker.
+    Write-TestResult "31-BitLocker: Enable confirm names volume + one-way encryption" ($blR -match 'Enable BitLocker on \$\(\$vol\.MountPoint\)[\s\S]{0,200}one-way encryption')
+    Write-TestResult "31-BitLocker: Enable confirm precedes the live Enable-BitLocker call" ($blR -match 'Confirm-UserAction -Message "Enable BitLocker on \$\(\$vol\.MountPoint\)[\s\S]{0,600}Enable-BitLocker -MountPoint \$vol\.MountPoint')
+
+    # Regression: the Disable path keeps its own confirmation gate.
+    Write-TestResult "31-BitLocker: Disable still confirms (regression)" ($blR -match 'Confirm-UserAction -Message "Disable BitLocker on \$\(\$vol\.MountPoint\)')
+}
+catch {
+    Write-TestResult "Destructive-Module Hardening Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

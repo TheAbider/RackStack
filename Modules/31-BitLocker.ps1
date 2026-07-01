@@ -255,6 +255,21 @@ function Show-BitLockerManagement {
                             continue
                         }
 
+                        # Final confirmation before the live encryption. Enabling BitLocker is a
+                        # one-way, hours-long full-volume operation; name the target volume and the
+                        # chosen method so the operator can catch a wrong-disk selection here. The
+                        # Disable path has an equivalent gate; the Dry-Run path above is its own gate.
+                        $methodLabel = switch ($method) {
+                            "1" { "TPM only" }
+                            "2" { "TPM + PIN" }
+                            "3" { "Password only" }
+                            default { "method $method" }
+                        }
+                        if ($method -in "1","2","3" -and -not (Confirm-UserAction -Message "Enable BitLocker on $($vol.MountPoint) ($methodLabel)? This starts a one-way encryption of the volume.")) {
+                            Write-OutputColor "  Cancelled. No changes made." -color "Info"
+                            continue
+                        }
+
                         try {
                             switch ($method) {
                                 "1" {
