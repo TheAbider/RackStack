@@ -328,7 +328,11 @@ function Show-LocalAccountAudit {
 
 # Function to generate a strong random password
 function New-StrongPassword {
-    param([int]$Length = 16)
+    # -PassThru returns the generated plaintext to the caller. It is OFF by default: the
+    # interactive menu action must NOT receive the value (a bare-statement call would stream it
+    # to top-level Out-Default, re-echoing it to the console and into the on-disk transcript).
+    # Only explicit programmatic/test callers that capture and handle the value pass -PassThru.
+    param([int]$Length = 16, [switch]$PassThru)
 
     if ($Length -lt 12) { $Length = 12 }
     if ($Length -gt 128) { $Length = 128 }
@@ -442,12 +446,13 @@ function New-StrongPassword {
         Write-OutputColor "  Tip: Select and copy the password above." -color "Info"
     }
 
-    # Deliberately DO NOT return the plaintext. The only caller (menu option 11) discards the
-    # value, and returning it emits the password on the success stream to top-level Out-Default,
-    # which both re-echoes it to the console AND writes it into the (just-resumed) on-disk
-    # transcript — defeating the Stop-Transcript dance above that kept it out of the log. The
-    # password is shown once via [Console]::WriteLine for the operator to record; it must not
-    # leave this function.
+    # Return the plaintext ONLY when the caller explicitly opts in via -PassThru (tests /
+    # programmatic use, which capture and handle it). The interactive menu action (option 11)
+    # calls this WITHOUT -PassThru, so the password never emits on the success stream to
+    # top-level Out-Default — which would re-echo it to the console AND write it into the
+    # just-resumed on-disk transcript, defeating the Stop-Transcript dance above. On the default
+    # path it is shown once via [Console]::WriteLine for the operator to record and nothing more.
+    if ($PassThru) { return $password }
     return
 }
 #endregion

@@ -9930,10 +9930,15 @@ Write-SectionHeader "SECTION 197: CREDENTIAL & SECRET HANDLING"
 try {
     $pwRaw  = Get-Content "$modulesPath\22-Password.ps1" -Raw
     $opsRaw = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    $runnerRaw197 = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
 
-    # H — no plaintext return of the generated password (case-sensitive: the generated var is
-    # lowercase $password; an unrelated entry-helper legitimately returns $Password1).
-    Write-TestResult "22-Password: New-StrongPassword does not return the plaintext (H)" (-not ($pwRaw -cmatch 'return \$password'))
+    # H — the generated plaintext is returned ONLY under an explicit -PassThru opt-in (tests /
+    # programmatic callers that capture it). The interactive menu action calls New-StrongPassword
+    # WITHOUT -PassThru, so on the default path the password never streams to top-level
+    # Out-Default (which would re-echo it to the console and into the on-disk transcript).
+    Write-TestResult "22-Password: New-StrongPassword has a -PassThru opt-in switch (H)" ($pwRaw -match '\[switch\]\$PassThru')
+    Write-TestResult "22-Password: plaintext return is guarded by -PassThru (H)" ($pwRaw -match 'if \(\$PassThru\) \{ return \$password \}')
+    Write-TestResult "22-Password: interactive menu caller does NOT pass -PassThru (H)" ($runnerRaw197 -match '"11"\s*\{\s*New-StrongPassword;')
     Write-TestResult "22-Password: still shows the password via [Console]::WriteLine (H)" ($pwRaw -match '\[Console\]::WriteLine\([\s\S]{0,20}\$\(\$password')
 
     # L1 — clipboard auto-clear timer rooted in script scope; old unrooted form gone.
