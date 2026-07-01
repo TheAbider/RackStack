@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.121.15
+
+Final audit sweep — remaining fixes across the firewall/RDP, iSCSI, network-diagnostics, and session modules.
+
+- **"Restrict RDP to a subnet" now actually restricts it.** If you had previously added RDP (or WinRM) firewall rules via the Firewall Templates, the subnet-restriction step left those wide-open rules enabled — so RDP/WinRM stayed reachable from any address while the tool reported it was locked down. It now disables those rules too, so the restriction holds.
+- **PowerShell Remoting reports its real firewall state.** It used to list every firewall group as "enabled" regardless; it now shows each group's actual status.
+- **iSCSI fixes:** the [M] Manual option in "Connect to iSCSI Targets" works (it was silently exiting the menu); the status screen shows the real iSCSI auto-claim state instead of always "Enabled"; and the dry-run undo for a connection now actually disconnects.
+- **The network throughput benchmark shows the correct MB/s.** A variable-name clash made the MB/s figure display the Mbps value (8× too high).
+- **Session state is saved atomically**, so a crash mid-save can't corrupt the file the tool reads on resume.
+
+(This completes an end-to-end adversarial audit of the whole codebase; every remaining finding is fixed and verified.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.14
 
 VM and storage safety — fixes found by a deep audit of the VM export/import, offline-VHD, VHD conversion, and Hyper-V Replica modules.

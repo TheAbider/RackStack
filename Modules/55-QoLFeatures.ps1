@@ -358,7 +358,14 @@ function Save-SessionState {
     }
 
     try {
-        $sessionState | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $script:SessionStatePath -Encoding UTF8 -Force
+        # Atomic write — THIS is the file Restore-SessionState reads, and its load path deletes the
+        # file on a ConvertFrom-Json failure, so a mid-write truncation (process kill / disk full)
+        # would lose session state. Write to .tmp then rename so the reader only ever sees a complete
+        # file. (The snapshot file below already does this; the consumed file was missing it.)
+        $sessionJson = $sessionState | ConvertTo-Json -Depth 10
+        $tmpSession = "$($script:SessionStatePath).tmp"
+        Set-Content -LiteralPath $tmpSession -Value $sessionJson -Encoding UTF8 -ErrorAction Stop
+        Move-Item -LiteralPath $tmpSession -Destination $script:SessionStatePath -Force -ErrorAction Stop
     }
     catch {
         Write-OutputColor "  Warning: Could not save session state: $($_.Exception.Message)" -color "Warning"

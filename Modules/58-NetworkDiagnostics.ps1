@@ -1179,8 +1179,11 @@ function Invoke-NetworkThroughputBenchmark {
     }
 
     if ($ok) {
-        $writeMbps = [math]::Round($writeMBps * 8, 0)
-        $readMbps  = [math]::Round($readMBps * 8, 0)
+        # NOTE: PowerShell variable names are case-INSENSITIVE, so $writeMbps and $writeMBps are the
+        # SAME variable — the old code overwrote the MB/s value with the *8 Mbps value, then printed
+        # both columns from it (MB/s shown 8x inflated). Use case-distinct names for the Mbps values.
+        $writeMbits = [math]::Round($writeMBps * 8, 0)
+        $readMbits  = [math]::Round($readMBps * 8, 0)
         $title = "  THROUGHPUT: $target"
         if ($title.Length -gt 69) { $title = $title.Substring(0, 69) + "..." }
         Write-OutputColor "" -color "Info"
@@ -1188,8 +1191,8 @@ function Invoke-NetworkThroughputBenchmark {
         Write-OutputColor "  │$($title.PadRight(72))│" -color "Info"
         Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
         Write-OutputColor "  │$("  Test size:  ${sizeMB} MB".PadRight(72))│" -color "Info"
-        Write-OutputColor "  │$("  Write:      ${writeMBps} MB/s  (${writeMbps} Mbps)".PadRight(72))│" -color "Success"
-        Write-OutputColor "  │$("  Read:       ${readMBps} MB/s  (${readMbps} Mbps)".PadRight(72))│" -color "Success"
+        Write-OutputColor "  │$("  Write:      ${writeMBps} MB/s  (${writeMbits} Mbps)".PadRight(72))│" -color "Success"
+        Write-OutputColor "  │$("  Read:       ${readMBps} MB/s  (${readMbits} Mbps)".PadRight(72))│" -color "Success"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     }
     Write-PressEnter
