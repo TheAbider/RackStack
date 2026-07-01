@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.5
+    Automated Test Runner for RackStack v1.121.6
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9738,6 +9738,45 @@ try {
 }
 catch {
     Write-TestResult "Reliability Sweep Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 193: FAILOVER CLUSTERING SAFETY (v1.121.6)
+# ============================================================================
+# Guards the cluster-safety fixes: quorum-preserving drain/evict, CSV-removal data-loss guard,
+# disk/file-share witness validation, correct CSV redirected-I/O detection, report path.
+Write-SectionHeader "SECTION 193: FAILOVER CLUSTERING SAFETY"
+
+try {
+    $fcR = Get-Content "$modulesPath\27-FailoverClustering.ps1" -Raw
+    $cdR = Get-Content "$modulesPath\51-ClusterDashboard.ps1" -Raw
+
+    # Dashboard node-drain now checks other-Up-nodes + quorum before Suspend-ClusterNode -Drain.
+    Write-TestResult "51-ClusterDashboard: drain refuses when no other Up node" ($cdR -match 'REFUSING to drain[\s\S]{0,1500}Suspend-ClusterNode')
+    Write-TestResult "51-ClusterDashboard: drain has quorum-threshold gate" ($cdR -match 'quorumThreshold = \[math\]::Floor[\s\S]{0,1200}Suspend-ClusterNode')
+
+    # Node-eviction undo uses size-aware post-eviction quorum math (no hardcoded -le 2).
+    Write-TestResult "27-FC: eviction undo is size-aware (no hardcoded -le 2)" ($fcR -match '\$quorumAfter = \[math\]::Floor\(\$totalAfter / 2\) \+ 1' -and -not ($fcR -match 'if \(\$upNodes\.Count -le 2\)'))
+
+    # CSV removal aborts when the mount point can't be resolved (no false 'no VMs').
+    Write-TestResult "27-FC: CSV removal aborts on unresolved mount point" ($fcR -match 'if \(-not \$csvMountRoot\)[\s\S]{0,300}refused for safety')
+
+    # Disk witness must be Online before being nominated.
+    Write-TestResult "27-FC: disk witness requires Online state" ($fcR -match 'State -ne "Online"[\s\S]{0,300}Set-ClusterQuorum -NodeAndDiskMajority' -or $fcR -match 'State -ne "Online"[\s\S]{0,300}cannot serve as the quorum witness')
+
+    # File-share witness has a reachability pre-flight + CNO ACL reminder.
+    Write-TestResult "27-FC: file-share witness pre-flights reachability" ($fcR -match 'Test-Path -LiteralPath \$sharePath[\s\S]{0,700}Set-ClusterQuorum -NodeAndFileShareMajority')
+    Write-TestResult "27-FC: file-share witness reminds about CNO ACL" ($fcR -match 'cluster name object \(CNO')
+
+    # CSV redirected-I/O uses the correct API (not the always-true FaultState comparison).
+    Write-TestResult "51-ClusterDashboard: CSV redirect uses Get-ClusterSharedVolumeState" ($cdR -match 'Get-ClusterSharedVolumeState[\s\S]{0,200}FileSystemRedirectedIOReason')
+    Write-TestResult "51-ClusterDashboard: no bogus FaultState redirect check" (-not ($cdR -match '\$redirected -ne "NoRedirectedAccess"'))
+
+    # Cluster validation report is saved to a known path and its location shown.
+    Write-TestResult "27-FC: wizard validation report path is shown" ($fcR -match 'Test-Cluster -Node \$nodes -ReportName \$valReportPath[\s\S]{0,120}Report saved to')
+}
+catch {
+    Write-TestResult "Failover Clustering Safety Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

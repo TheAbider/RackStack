@@ -298,8 +298,11 @@ function New-ClusterWizard {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Running cluster validation (this may take several minutes)..." -color "Info"
         try {
-            Test-Cluster -Node $nodes -ReportName "ClusterValidation_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-            Write-OutputColor "  Validation complete. Check the report for any issues." -color "Success"
+            # Save the validation report to a known location and tell the operator where it is (a
+            # bare -ReportName drops the .htm in an unstated default dir). Mirrors Test-ClusterValidation.
+            $valReportPath = Join-Path $script:TempPath "ClusterValidation_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+            Test-Cluster -Node $nodes -ReportName $valReportPath | Out-Null
+            Write-OutputColor "  Validation complete. Report saved to: $valReportPath.htm" -color "Success"
             Write-OutputColor "" -color "Info"
             if (-not (Confirm-UserAction -Message "Proceed with cluster creation?")) {
                 return
@@ -387,9 +390,18 @@ function Add-NodeToCluster {
                 return
             }
             $upNodes = @($liveNodes | Where-Object { $_.State -eq 'Up' })
-            if ($upNodes.Count -le 2) {
-                Write-OutputColor "  REFUSING to evict: only $($upNodes.Count) node(s) currently Up." -color "Error"
-                Write-OutputColor "  Evicting '$Node' would leave the cluster without quorum." -color "Error"
+            # Size-aware quorum check. Eviction REMOVES a node, so compute quorum against the
+            # post-eviction node count. The old '-le 2' test only protected 2-3 node clusters — on a
+            # 5-node cluster with 3 Up it passed, but evicting one leaves 4 nodes / 2 Up while quorum
+            # needs floor(4/2)+1 = 3, silently losing quorum.
+            $totalAfter = $liveNodes.Count - 1
+            $nodeWasUp = @($upNodes | Where-Object { $_.Name -eq $Node }).Count -gt 0
+            $upAfter = if ($nodeWasUp) { $upNodes.Count - 1 } else { $upNodes.Count }
+            $quorumAfter = [math]::Floor($totalAfter / 2) + 1
+            if ($totalAfter -lt 1 -or $upAfter -lt $quorumAfter) {
+                Write-OutputColor "  REFUSING to evict '$Node'." -color "Error"
+                Write-OutputColor "  After eviction the cluster would have $upAfter/$totalAfter Up node(s), but quorum requires $quorumAfter." -color "Error"
+                Write-OutputColor "  This would leave the cluster without quorum." -color "Error"
                 Write-OutputColor "  If this is intentional, evict manually via Failover Cluster Manager." -color "Warning"
                 return
             }
@@ -579,6 +591,17 @@ function Edit-ClusterSharedVolume {
                             $csvMountRoot = $info.FriendlyVolumeName.TrimEnd('\')
                         }
                     } catch { }
+                    # If we can't resolve the CSV mount point, the VM-dependency scan below would
+                    # match nothing and falsely report "no VMs" — the operator would then confirm a
+                    # removal on false information and could destroy live-VM storage. Refuse instead.
+                    if (-not $csvMountRoot) {
+                        Write-OutputColor "" -color "Error"
+                        Write-OutputColor "  Could not determine the mount point of CSV '$csvName'." -color "Error"
+                        Write-OutputColor "  Cannot verify whether any VMs depend on it, so removal is refused for safety." -color "Error"
+                        Write-OutputColor "  (Usually means the CSV is offline/degraded — check its health first.)" -color "Warning"
+                        Write-PressEnter
+                        return
+                    }
                     $dependentVMs = @()
                     try {
                         $clusteredVMs = @(Get-ClusterGroup -ErrorAction SilentlyContinue | Where-Object { $_.GroupType -eq 'VirtualMachine' })
@@ -972,7 +995,8 @@ function Set-ClusterQuorumConfig {
             Write-OutputColor "" -color "Info"
             $idx = 1
             foreach ($disk in $disks) {
-                Write-OutputColor "  [$idx] $($disk.Name)" -color "Info"
+                $diskStateColor = if ($disk.State -eq 'Online') { "Info" } else { "Warning" }
+                Write-OutputColor "  [$idx] $($disk.Name) [$($disk.State)]" -color $diskStateColor
                 $idx++
             }
             Write-OutputColor "" -color "Info"
@@ -982,6 +1006,15 @@ function Set-ClusterQuorumConfig {
             if ($diskChoice -match '^\d+$') {
                 $selIdx = [int]$diskChoice - 1
                 if ($selIdx -ge 0 -and $selIdx -lt $disks.Count) {
+                    # A disk witness that is Offline/Failed still counts as a vote — if it's not
+                    # actually available, the cluster loses quorum when that vote is needed. Refuse
+                    # to nominate a non-Online disk as the witness.
+                    if ($disks[$selIdx].State -ne "Online") {
+                        Write-OutputColor "  Disk '$($disks[$selIdx].Name)' is not Online (State: $($disks[$selIdx].State))." -color "Error"
+                        Write-OutputColor "  An Offline/Failed disk cannot serve as the quorum witness — bring it Online first." -color "Warning"
+                        Write-PressEnter
+                        return
+                    }
                     try {
                         Set-ClusterQuorum -NodeAndDiskMajority $disks[$selIdx].Name -ErrorAction Stop
                         Write-OutputColor "  Quorum set to Node and Disk Majority." -color "Success"
@@ -1009,6 +1042,17 @@ function Set-ClusterQuorumConfig {
                 break
             }
             if ($sharePath) {
+                # Pre-flight: a UNC that merely LOOKS valid isn't enough. The classic file-share-
+                # witness failure is a reachable share that doesn't grant the cluster name object
+                # (CNO) permission — the witness vote then fails at the critical moment. Verify
+                # reachability and remind about the ACL before committing.
+                if (-not (Test-Path -LiteralPath $sharePath)) {
+                    Write-OutputColor "  Share '$sharePath' is not reachable from this node." -color "Error"
+                    Write-OutputColor "  Create/share it and confirm network access, then retry." -color "Warning"
+                    break
+                }
+                Write-OutputColor "  Reminder: the cluster name object (CNO, e.g. CLUSTERNAME`$) needs Full Control" -color "Warning"
+                Write-OutputColor "  on this share (both the SMB share and NTFS ACLs), or the witness vote will fail." -color "Warning"
                 try {
                     Set-ClusterQuorum -NodeAndFileShareMajority $sharePath -ErrorAction Stop
                     Write-OutputColor "  Quorum set to Node and File Share Majority." -color "Success"
