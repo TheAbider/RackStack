@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.14
+    Automated Test Runner for RackStack v1.121.15
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10129,6 +10129,47 @@ try {
 }
 catch {
     Write-TestResult "VM-Lifecycle + Storage Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 202: FINAL-SWEEP HARDENING (v1.121.15)
+# ============================================================================
+# Guards the fixes from the final consolidated audit (Firewall/RDP, iSCSI, NetDiag, QoL):
+#   [0] RDP subnet restriction also disables the tool's own custom (no-group, any-address) RDP rules.
+#   [1] WinRM subnet restriction likewise disables the custom WinRM rules.
+#   [2] The [M] Manual option in Connect-to-iSCSI-Targets is matched before the nav check.
+#   [3] iSCSI Auto-Claim status reads the iSCSI key (was truthiness of the hashtable).
+#   [4] Throughput benchmark uses case-distinct Mbps var (was overwriting MB/s -> 8x inflated).
+#   [5] PowerShell-Remoting firewall groups are reported by actual state, not a hardcoded list.
+#   [6] iSCSI connect dry-run undo matches the target-portal via the connection (not initiator IP).
+#   [7] Session-state save writes the CONSUMED file atomically (tmp -> rename).
+Write-SectionHeader "SECTION 202: FINAL-SWEEP HARDENING"
+
+try {
+    $rdpRaw = Get-Content "$modulesPath\15-RDP.ps1" -Raw
+    $iscRaw = Get-Content "$modulesPath\10-iSCSI.ps1" -Raw
+    $ndRaw  = Get-Content "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
+    $qolRaw = Get-Content "$modulesPath\55-QoLFeatures.ps1" -Raw
+
+    # [0]/[1] subnet restriction disables the custom no-group allow rules
+    Write-TestResult "15-RDP: subnet restrict disables custom RDP rules [0]" ($rdpRaw -match 'Get-NetFirewallRule -DisplayName "RDP Inbound TCP 3389", "RDP Inbound UDP 3389" -ErrorAction SilentlyContinue \|[\s\S]{0,80}Disable-NetFirewallRule')
+    Write-TestResult "15-RDP: subnet restrict disables custom WinRM rules [1]" ($rdpRaw -match 'Get-NetFirewallRule -DisplayName "WinRM HTTP Inbound", "WinRM HTTPS Inbound" -ErrorAction SilentlyContinue \|[\s\S]{0,80}Disable-NetFirewallRule')
+    # [2]
+    Write-TestResult "10-iSCSI: Connect [M] matched before nav check [2]" ($iscRaw -match "connectChoice -notmatch '\^\[AaMmPp\]\`$'")
+    # [3]
+    Write-TestResult "10-iSCSI: Auto-Claim reads the iSCSI key [3]" ($iscRaw -match "\`$mpioClaim\['iSCSI'\]")
+    # [4]
+    Write-TestResult "58-NetDiag: throughput uses case-distinct Mbps var [4]" (($ndRaw -match '\$writeMbits = \[math\]::Round\(\$writeMBps \* 8') -and ($ndRaw -cmatch '\$\{writeMbits\} Mbps'))
+    Write-TestResult "58-NetDiag: no case-colliding Mbps display var [4]" (-not ($ndRaw -cmatch '\$\{writeMbps\}'))
+    # [5]
+    Write-TestResult "15-RDP: PS-remoting firewall groups reported by real state [5]" ($rdpRaw -match '\$rmGroups = @\([\s\S]{0,300}foreach \(\$grp in \$rmGroups\)')
+    # [6]
+    Write-TestResult "10-iSCSI: connect undo matches target portal via connection [6]" ($iscRaw -match 'Get-IscsiConnection -ErrorAction SilentlyContinue \| Where-Object \{ \$_\.TargetAddress -eq \$p \}')
+    # [7]
+    Write-TestResult "55-QoL: consumed session-state file written atomically [7]" ($qolRaw -match '\$tmpSession = "\$\(\$script:SessionStatePath\)\.tmp"[\s\S]{0,200}Move-Item -LiteralPath \$tmpSession')
+}
+catch {
+    Write-TestResult "Final-Sweep Hardening Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
