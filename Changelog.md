@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.121.2
+
+Storage Manager reliability — a batch of fixes so disk and volume operations actually run instead of silently dead-ending.
+
+- **Disk 0 is now selectable.** Every disk operation (create/delete partition, format, extend, shrink, view partitions, initialize, clean, online/offline) was silently dead-ending when you picked disk 0, because "0" doubles as the back/cancel key and was being read as "cancel" before it was checked as a disk number. Numeric entries are now matched against the disk list first, so disk 0 — often the main data/RAID disk — works everywhere.
+- **Drive letters B and C can be assigned again.** "B" and "C" were being read as back/cancel in the drive-letter and volume-rename prompts, so those letters could never be entered. A single letter is now matched before the navigation check.
+- **Volume labels can be any text.** A label of "0", "C", "back", etc. is no longer rejected as a navigation command.
+- **Real disk errors are surfaced.** If the storage provider fails or times out while reading partitions or size limits (seen on some RAID controllers), you now get the actual error instead of a misleading "no unallocated space" / "no additional space" message.
+- **Honest partition result.** Creating a partition no longer reports full success when the drive-letter assignment actually failed — it now clearly says the letter was not assigned.
+- **Host Storage Analysis no longer errors.** The VM host-storage summary threw a "Property is not valid" error when a folder contained subfolders; it now counts files correctly.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.1
 
 - **Faster tool self-removal.** When you choose the "remove this tool and reboot" option, the reboot now fires promptly instead of pausing for several seconds first. The post-reboot cleanup is prepared up front, and the user profile is scanned in a single pass instead of twice.

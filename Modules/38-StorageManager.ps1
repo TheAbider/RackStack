@@ -456,11 +456,10 @@ function Select-Disk {
     Write-OutputColor "" -color "Info"
     $selection = Read-Host "Enter disk number (or 'back' to cancel)"
 
-    $navResult = Test-NavigationCommand -UserInput $selection
-    if ($navResult.ShouldReturn) {
-        return $null
-    }
-
+    # IMPORTANT: match a numeric entry against the listed disks BEFORE the navigation check.
+    # Disks are 0-indexed and "0" is a global back/cancel command (see Test-NavigationCommand),
+    # so running the nav check first made disk 0 impossible to select — it was read as "cancel",
+    # which silently dead-ended every storage operation on a server whose data disk is Disk 0.
     if ($selection -match '^\d+$') {
         $selectedDisk = $disks | Where-Object { $_.Number -eq [int]$selection }
         if ($selectedDisk) {
@@ -477,6 +476,13 @@ function Select-Disk {
             }
             return $selectedDisk
         }
+        # A number that is not a listed disk falls through to the nav check below (so a stray "0"
+        # on a system with no Disk 0 still cancels), and otherwise to the invalid-selection message.
+    }
+
+    $navResult = Test-NavigationCommand -UserInput $selection
+    if ($navResult.ShouldReturn) {
+        return $null
     }
 
     Write-OutputColor "  Invalid selection. Enter a listed disk number or 'back'." -color "Error"
@@ -526,16 +532,19 @@ function Select-Partition {
     Write-OutputColor "" -color "Info"
     $selection = Read-Host "Enter partition number (or 'back' to cancel)"
 
-    $navResult = Test-NavigationCommand -UserInput $selection
-    if ($navResult.ShouldReturn) {
-        return $null
-    }
-
+    # Match the entered number against the listed partitions BEFORE the navigation check, so a
+    # partition numbered 0 isn't swallowed by the global "0 = back" command (same class of bug as
+    # Select-Disk). A number that matches no partition falls through to nav/invalid handling.
     if ($selection -match '^\d+$') {
         $selectedPart = $partitions | Where-Object { $_.PartitionNumber -eq [int]$selection }
         if ($selectedPart) {
             return $selectedPart
         }
+    }
+
+    $navResult = Test-NavigationCommand -UserInput $selection
+    if ($navResult.ShouldReturn) {
+        return $null
     }
 
     Write-OutputColor "  Invalid selection. Enter a listed partition number or 'back'." -color "Error"
@@ -944,8 +953,17 @@ function New-DiskPartition {
         return
     }
 
-    # Check for unallocated space
-    $partitions = Get-Partition -DiskNumber $disk.Number -ErrorAction SilentlyContinue
+    # Check for unallocated space. Surface a real enumeration failure (e.g. a Dell PERC / Storage
+    # provider timeout) instead of silently treating it as "0 used" — which would misreport a full
+    # disk as entirely unallocated, or a failing disk's error as a plain "No unallocated space".
+    try {
+        $partitions = @(Get-Partition -DiskNumber $disk.Number -ErrorAction Stop)
+    }
+    catch {
+        Write-OutputColor "  Could not read partitions on Disk $($disk.Number): $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  The storage provider may be busy or the disk may be failing — try again or check the disk." -color "Warning"
+        return
+    }
     $usedSpace = ($partitions | Measure-Object -Property Size -Sum).Sum
     if (-not $usedSpace) { $usedSpace = 0 }
 
@@ -972,9 +990,13 @@ function New-DiskPartition {
 
     $sizeInput = Read-Host "Partition size"
 
-    $navResult = Test-NavigationCommand -UserInput $sizeInput
-    if ($navResult.ShouldReturn) {
-        return
+    # Only treat input as navigation if it is not a size value. A plain number like "0" is a size
+    # (which then gets a real "must be at least 1 MB" error), not the global "back" command.
+    if ($sizeInput -notmatch '^\s*(max|(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?)\s*$') {
+        $navResult = Test-NavigationCommand -UserInput $sizeInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
     }
 
     $useMax = $false
@@ -1055,6 +1077,10 @@ function New-DiskPartition {
         Write-OutputColor "  Partition Number: $($newPartition.PartitionNumber)" -color "Info"
         if ($driveAssigned) {
             Write-OutputColor "  Drive Letter: $driveLetter" -color "Info"
+        }
+        elseif ($assignDriveLetter -and $driveLetter) {
+            # Don't let the "created successfully" line imply the letter was assigned when it wasn't.
+            Write-OutputColor "  Drive Letter: NOT ASSIGNED (see warning above) — assign it later via Change Drive Letter." -color "Error"
         }
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Note: The partition is not yet formatted. Use 'Format Volume' to format it." -color "Warning"
@@ -1397,8 +1423,17 @@ function Expand-DiskVolume {
         return
     }
 
-    # Calculate available space (simplified - takes space after partition)
-    $maxSize = $partition | Get-PartitionSupportedSize -ErrorAction SilentlyContinue
+    # Calculate available space. Surface a provider failure (locked/protected partition, PERC
+    # timeout) instead of reporting it as "no additional space".
+    try {
+        $maxSize = $partition | Get-PartitionSupportedSize -ErrorAction Stop
+    }
+    catch {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Could not determine extend limits: $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  The storage provider may be busy or the partition may be locked/protected." -color "Warning"
+        return
+    }
 
     if (-not $maxSize -or $maxSize.SizeMax -le $partition.Size) {
         Write-OutputColor "" -color "Info"
@@ -1424,9 +1459,13 @@ function Expand-DiskVolume {
 
     $sizeInput = Read-Host "Size to add"
 
-    $navResult = Test-NavigationCommand -UserInput $sizeInput
-    if ($navResult.ShouldReturn) {
-        return
+    # Only treat input as navigation if it is not a size value (so a plain number, incl. "0",
+    # validates and returns a real error rather than silently cancelling as the "back" command).
+    if ($sizeInput -notmatch '^\s*(max|(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?)\s*$') {
+        $navResult = Test-NavigationCommand -UserInput $sizeInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
     }
 
     $newSize = 0
@@ -1505,7 +1544,14 @@ function Compress-DiskVolume {
     }
 
     # Get minimum size
-    $sizeInfo = $partition | Get-PartitionSupportedSize -ErrorAction SilentlyContinue
+    try {
+        $sizeInfo = $partition | Get-PartitionSupportedSize -ErrorAction Stop
+    }
+    catch {
+        Write-OutputColor "  Could not determine shrink limits: $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  The storage provider may be busy or the partition may be locked/protected." -color "Warning"
+        return
+    }
 
     if (-not $sizeInfo) {
         Write-OutputColor "  Unable to determine shrink limits for this partition." -color "Error"
@@ -1537,9 +1583,13 @@ function Compress-DiskVolume {
 
     $shrinkInput = Read-Host "Shrink by"
 
-    $navResult = Test-NavigationCommand -UserInput $shrinkInput
-    if ($navResult.ShouldReturn) {
-        return
+    # Only treat input as navigation if it is not a size value (a plain "0" gets a real error
+    # rather than silently cancelling as the "back" command).
+    if ($shrinkInput -notmatch '^\s*(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?\s*$') {
+        $navResult = Test-NavigationCommand -UserInput $shrinkInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
     }
 
     if ($shrinkInput -notmatch '^(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?$') {
@@ -1753,52 +1803,57 @@ function Select-DriveLetterSmart {
 
     $userResponse = Read-Host "  Drive letter"
 
+    # Press Enter to skip (assign a letter later).
+    if ([string]::IsNullOrWhiteSpace($userResponse)) { return $null }
+
+    # Match a SINGLE drive letter BEFORE the navigation check. 'B' and 'C' are also back/cancel
+    # tokens, so checking navigation first made those letters impossible to enter (drive letter C
+    # was unusable). Enter = skip, the word "back" = cancel.
+    if ($userResponse -match '^[A-Za-z]$') {
+        $chosenLetter = "$userResponse".ToUpper()
+
+        # Block A and B (floppy reserved)
+        if ($chosenLetter -eq 'A' -or $chosenLetter -eq 'B') {
+            Write-OutputColor "  Letters A and B are reserved for floppy drives." -color "Warning"
+            return $null
+        }
+
+        # Check if the letter is the current letter
+        if ($CurrentLetter -and $chosenLetter -eq $CurrentLetter) {
+            Write-OutputColor "  That's already the current drive letter." -color "Warning"
+            return $null
+        }
+
+        $info = $map[$chosenLetter]
+
+        if ($info.Status -eq "Available") {
+            return $chosenLetter
+        }
+
+        # Letter is in use - check if it's a CD/DVD that can be moved
+        if ($info.DriveType -eq "CD-ROM") {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  $($chosenLetter): is used by a CD/DVD drive." -color "Warning"
+            if (Confirm-UserAction -Message "Move CD/DVD to another letter and use $($chosenLetter): for this volume?") {
+                if (Move-OpticalDriveLetter -CurrentLetter $chosenLetter) {
+                    return $chosenLetter
+                } else {
+                    return $null
+                }
+            }
+            return $null
+        }
+
+        # In use by a regular volume - can't use it
+        Write-OutputColor "  Drive letter $chosenLetter is in use by: $($info.Label) ($($info.Size))" -color "Error"
+        return $null
+    }
+
+    # Multi-character input: honor navigation (back/cancel), otherwise it's invalid.
     $navResult = Test-NavigationCommand -UserInput $userResponse
     if ($navResult.ShouldReturn) { return $null }
 
-    if ([string]::IsNullOrWhiteSpace($userResponse)) { return $null }
-
-    if ($userResponse -notmatch '^[A-Za-z]$') {
-        Write-OutputColor "  Invalid input. Enter a single letter." -color "Error"
-        return $null
-    }
-
-    $chosenLetter = "$userResponse".ToUpper()
-
-    # Block A and B (floppy reserved)
-    if ($chosenLetter -eq 'A' -or $chosenLetter -eq 'B') {
-        Write-OutputColor "  Letters A and B are reserved for floppy drives." -color "Warning"
-        return $null
-    }
-
-    # Check if the letter is the current letter
-    if ($CurrentLetter -and $chosenLetter -eq $CurrentLetter) {
-        Write-OutputColor "  That's already the current drive letter." -color "Warning"
-        return $null
-    }
-
-    $info = $map[$chosenLetter]
-
-    if ($info.Status -eq "Available") {
-        return $chosenLetter
-    }
-
-    # Letter is in use - check if it's a CD/DVD that can be moved
-    if ($info.DriveType -eq "CD-ROM") {
-        Write-OutputColor "" -color "Info"
-        Write-OutputColor "  $($chosenLetter): is used by a CD/DVD drive." -color "Warning"
-        if (Confirm-UserAction -Message "Move CD/DVD to another letter and use $($chosenLetter): for this volume?") {
-            if (Move-OpticalDriveLetter -CurrentLetter $chosenLetter) {
-                return $chosenLetter
-            } else {
-                return $null
-            }
-        }
-        return $null
-    }
-
-    # In use by a regular volume - can't use it
-    Write-OutputColor "  Drive letter $chosenLetter is in use by: $($info.Label) ($($info.Size))" -color "Error"
+    Write-OutputColor "  Invalid input. Enter a single drive letter (C-Z), or press Enter to skip." -color "Error"
     return $null
 }
 
@@ -1893,8 +1948,13 @@ function Set-VolumeDriveLetter {
     Write-OutputColor "" -color "Info"
 
     $userResponse = Read-Host "  Drive letter"
-    $navResult = Test-NavigationCommand -UserInput $userResponse
-    if ($navResult.ShouldReturn) { return }
+    # Only treat input as navigation when it is NOT a single drive letter and NOT 'REMOVE'.
+    # 'B' and 'C' are back/cancel tokens, so an unconditional nav check made those drive letters
+    # impossible to enter. Enter cancels (handled below); the word "back" still cancels.
+    if ($userResponse -notmatch '^[A-Za-z]$' -and $userResponse -notmatch '^remove$') {
+        $navResult = Test-NavigationCommand -UserInput $userResponse
+        if ($navResult.ShouldReturn) { return }
+    }
 
     if ([string]::IsNullOrWhiteSpace($userResponse)) { return }
 
@@ -2027,12 +2087,13 @@ function Set-VolumeLabel {
     Write-OutputColor "" -color "Info"
     $letterInput = Read-Host "Enter drive letter of volume to rename"
 
-    $navResult = Test-NavigationCommand -UserInput $letterInput
-    if ($navResult.ShouldReturn) {
-        return
-    }
-
+    # Only treat input as navigation if it is not a single drive letter — 'B' and 'C' are
+    # back/cancel tokens but are valid volume letters here. Type "back" to cancel.
     if ($letterInput -notmatch '^[A-Za-z]$') {
+        $navResult = Test-NavigationCommand -UserInput $letterInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
         Write-OutputColor "  Invalid drive letter." -color "Error"
         return
     }
@@ -2055,8 +2116,8 @@ function Set-VolumeLabel {
     Write-OutputColor "  Enter new label (or press Enter to clear label):" -color "Info"
     $newLabel = (Read-Host "New label").Trim()
 
-    $navResult = Test-NavigationCommand -UserInput $newLabel
-    if ($navResult.ShouldReturn) { return }
+    # NOTE: no navigation check here — a volume label is arbitrary free text and must be allowed
+    # to be "back", "cancel", "0", "C", etc. Press Enter (empty) to clear the label.
 
     try {
         Set-Volume -DriveLetter $driveLetter -NewFileSystemLabel $newLabel -ErrorAction Stop
@@ -2147,15 +2208,19 @@ function Start-StorageManager {
             "3" {
                 Write-OutputColor "" -color "Info"
                 $diskNum = Read-Host "Enter disk number to view partitions"
-                $navResult = Test-NavigationCommand -UserInput $diskNum
-                if ($navResult.ShouldReturn) { continue }
+                # Numeric FIRST — "0" is a global back token, so a bare disk number (including 0)
+                # must be matched before the navigation check, or Disk 0 can never be viewed.
                 if ($diskNum -match '^\d+$') {
                     Show-DiskPartitions -DiskNumber ([int]$diskNum)
+                    Write-PressEnter
                 }
                 else {
-                    Write-OutputColor "  Invalid disk number." -color "Error"
+                    $navResult = Test-NavigationCommand -UserInput $diskNum
+                    if (-not $navResult.ShouldReturn) {
+                        Write-OutputColor "  Invalid disk number." -color "Error"
+                        Write-PressEnter
+                    }
                 }
-                Write-PressEnter
             }
             "4" {
                 Set-DiskOnlineStatus

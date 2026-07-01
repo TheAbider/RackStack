@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.1
+    Automated Test Runner for RackStack v1.121.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9581,6 +9581,64 @@ try {
 }
 catch {
     Write-TestResult "Disk Init + Storage Color Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 189: STORAGE MANAGER RELIABILITY (v1.121.2)
+# ============================================================================
+# Guards the "navigation check runs before input validation" bug class, where the global
+# back/cancel tokens '0','b','c' were swallowed before the real disk number / drive letter was
+# matched — making Disk 0 unselectable (Create Partition dead-end) and drive letters B/C unusable.
+Write-SectionHeader "SECTION 189: STORAGE MANAGER RELIABILITY"
+
+try {
+    $smR = Get-Content "$modulesPath\38-StorageManager.ps1" -Raw
+    $hsR = Get-Content "$modulesPath\40-HostStorage.ps1" -Raw
+
+    # Ordering helper: within the first ~4000 chars of $func's body, does the FIRST match of the
+    # input-validation regex $before occur BEFORE the first Test-NavigationCommand ($after)?
+    function Test-SMOrder([string]$content, [string]$func, [string]$before) {
+        $start = $content.IndexOf("function $func")
+        if ($start -lt 0) { return $false }
+        $rest = $content.Substring($start + 10)
+        $nf = $rest.IndexOf("`nfunction ")
+        $len = if ($nf -ge 0) { $nf } else { $rest.Length }
+        $body = $content.Substring($start, [Math]::Min($len + 10, $content.Length - $start))
+        $ib = [regex]::Match($body, $before)
+        # Key on the actual call (with -UserInput) so a "(see Test-NavigationCommand)" comment
+        # reference is not mistaken for the nav call.
+        $ia = $body.IndexOf('Test-NavigationCommand -UserInput')
+        return ($ib.Success -and $ia -ge 0 -and $ib.Index -lt $ia)
+    }
+
+    # Numeric pickers: the disk/partition number is matched before the nav check (Disk 0 works).
+    Write-TestResult "38-Storage: Select-Disk matches number before nav" (Test-SMOrder $smR 'Select-Disk' "-match '\^\\d\+")
+    Write-TestResult "38-Storage: Select-Partition matches number before nav" (Test-SMOrder $smR 'Select-Partition' "-match '\^\\d\+")
+
+    # Menu [3] View Disk Partitions: numeric branch precedes the nav check.
+    Write-TestResult "38-Storage: menu [3] numeric before nav" ($smR -match "Enter disk number to view partitions[\s\S]{0,320}-match '\^\\d\+\$'[\s\S]{0,320}Test-NavigationCommand")
+
+    # Drive-letter pickers: a single letter is matched before the nav check (letters B and C work).
+    Write-TestResult "38-Storage: Select-DriveLetterSmart matches letter before nav" (Test-SMOrder $smR 'Select-DriveLetterSmart' "-match '\^\[A-Za-z\]")
+    Write-TestResult "38-Storage: Set-VolumeDriveLetter guards nav for letters/REMOVE" ($smR -match "Set-VolumeDriveLetter[\s\S]{0,6000}-notmatch '\^\[A-Za-z\]\$'[\s\S]{0,160}Test-NavigationCommand")
+    Write-TestResult "38-Storage: Set-VolumeLabel guards nav for letters" (Test-SMOrder $smR 'Set-VolumeLabel' "-notmatch '\^\[A-Za-z\]")
+
+    # A volume label is arbitrary text — no nav check between reading the label and setting it.
+    Write-TestResult "38-Storage: Set-VolumeLabel does not nav-check the label text" (-not ($smR -match "New label[\s\S]{0,90}Test-NavigationCommand"))
+
+    # Storage-provider errors are surfaced, not masked as 'no space'.
+    Write-TestResult "38-Storage: New-DiskPartition surfaces Get-Partition errors" ($smR -match "function New-DiskPartition[\s\S]{0,900}Get-Partition -DiskNumber[^\r\n]*-ErrorAction Stop")
+    Write-TestResult "38-Storage: Expand uses Get-PartitionSupportedSize -ErrorAction Stop" ($smR -match "function Expand-DiskVolume[\s\S]{0,900}Get-PartitionSupportedSize -ErrorAction Stop")
+    Write-TestResult "38-Storage: Compress uses Get-PartitionSupportedSize -ErrorAction Stop" ($smR -match "function Compress-DiskVolume[\s\S]{0,900}Get-PartitionSupportedSize -ErrorAction Stop")
+
+    # Honest success message when drive-letter assignment failed.
+    Write-TestResult "38-Storage: New-DiskPartition reports letter NOT ASSIGNED" ($smR -match 'NOT ASSIGNED')
+
+    # Host Storage Analysis counts only files (-File) so directories don't break Measure-Object.
+    Write-TestResult "40-HostStorage: folder-size scan uses -File" ($hsR -match 'Get-ChildItem -LiteralPath \$folderPath -File -Recurse')
+}
+catch {
+    Write-TestResult "Storage Manager Reliability Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
