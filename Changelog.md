@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.121.7
+
+Active Directory — the new-forest wizard now catches two problems up front instead of failing partway through promotion.
+
+- **Invalid NetBIOS name is caught before you start.** If the domain name's first label is longer than 15 characters, the wizard now tells you immediately (before asking for the DSRM password) instead of failing several minutes into the promotion.
+- **Wrong starting state is caught up front.** Creating a new forest requires a standalone (workgroup) server; if the machine is already joined to a domain, the wizard now says so and points you to "Add Domain Controller" instead of failing during promotion.
+
+(A deep audit of the AD module confirmed its security-critical parts — DSRM password handling, credentials, and promotion parameters — are already correct; these were the only two gaps.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.6
 
 Failover Clustering safety — fixes found by a deep audit of the clustering module.
