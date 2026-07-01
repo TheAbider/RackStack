@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.119.4
+    Automated Test Runner for RackStack v1.120.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -656,12 +656,12 @@ $requiredFunctions = @(
     "Suspend-ClusterNodeForMaintenance",
     # v1.88.0 — push to 98%+
     "Select-Host-Network-Adapter",
-    "Select-VM-Network-Adapter",
+    "Select-Physical-Network-Adapter",
     "Select-iSCSI-Adapters",
     "Select-Partition",
     "Select-DriveLetterSmart",
     "Start-Show-HostNetworkIPMenu",
-    "Start-Show-VM-NetworkMenu",
+    "Start-Show-PhysicalAdapterMenu",
     "Resume-ClusterNodeFromDrain",
     "Clear-ShadowCopies",
     "Clear-UserProfileTemp",
@@ -4936,8 +4936,8 @@ try {
     # Show-Host-IPNetworkMenu uses Show-AdapterInfoBox
     Write-TestResult "48-MenuDisplay: Show-Host-IPNetworkMenu uses Show-AdapterInfoBox" ($content -match 'Show-Host-IPNetworkMenu[\s\S]*?Show-AdapterInfoBox')
 
-    # Show-VM-NetworkMenu uses Show-AdapterInfoBox
-    Write-TestResult "48-MenuDisplay: Show-VM-NetworkMenu uses Show-AdapterInfoBox" ($content -match 'Show-VM-NetworkMenu[\s\S]*?Show-AdapterInfoBox')
+    # Show-PhysicalAdapterMenu uses Show-AdapterInfoBox
+    Write-TestResult "48-MenuDisplay: Show-PhysicalAdapterMenu uses Show-AdapterInfoBox" ($content -match 'Show-PhysicalAdapterMenu[\s\S]*?Show-AdapterInfoBox')
 
     # Show-AdapterInfoBox has null safety for empty adapter name
     Write-TestResult "48-MenuDisplay: Show-AdapterInfoBox has null safety for adapter name" ($content -match 'Show-AdapterInfoBox[\s\S]*?(none selected|\(none)')
@@ -6853,7 +6853,7 @@ try {
 
     # 48-MenuDisplay: renamed menu
     $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
-    Write-TestResult "48-MenuDisplay: Storage & SAN Management label" ($menuContent -match 'Storage & SAN Management')
+    Write-TestResult "48-MenuDisplay: Storage & SAN menu label" ($menuContent -match 'Storage & SAN \(iSCSI\)')
 
     # 49-MenuRunner: dispatches to Start-StorageSANMenu
     $runnerContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
@@ -9489,6 +9489,53 @@ try {
 }
 catch {
     Write-TestResult "Remote Desktop Services Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 187: HOST-NETWORK HYPER-V GATING (v1.120.0)
+# ============================================================================
+# Guards the reboot-loop fix + operational-readiness gating for the
+# Virtualization Host Networking branch, and the split networking menu tree.
+Write-SectionHeader "SECTION 187: HOST-NETWORK HYPER-V GATING"
+
+try {
+    $sysHV    = Get-Content "$modulesPath\05-SystemCheck.ps1" -Raw
+    $navHV    = Get-Content "$modulesPath\04-Navigation.ps1" -Raw
+    $runnerHV = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    $dispHV   = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    $setHV    = Get-Content "$modulesPath\09-SET.ps1" -Raw
+
+    # Test-HyperVReady exists and checks the VMMS service + Hyper-V module (not just feature state).
+    Write-TestResult "05-SystemCheck: Test-HyperVReady exists" ($sysHV -match 'function\s+Test-HyperVReady\b')
+    Write-TestResult "05-SystemCheck: Test-HyperVReady checks vmms service" ($sysHV -match 'function\s+Test-HyperVReady[\s\S]{0,500}Get-Service[\s\S]{0,120}vmms')
+    Write-TestResult "05-SystemCheck: Test-HyperVReady checks Get-VMSwitch availability" ($sysHV -match 'function\s+Test-HyperVReady[\s\S]{0,600}Get-Command[\s\S]{0,80}Get-VMSwitch')
+
+    # Pending reboot is a WARNING, not a blocker, in the feature-install preflight.
+    Write-TestResult "05-SystemCheck: pending-reboot preflight is Warn not Fail" ($sysHV -match 'Pending Reboot"[\s\S]{0,200}\{\s*"Warn"\s*\}')
+
+    # The host-network gate ensures Hyper-V BEFORE it renders the menu, and does NOT hard-block on a
+    # pending reboot. The old "reboot is pending. Please reboot ... rerun" hard-return is gone.
+    Write-TestResult "49-MenuRunner: no hard reboot-pending block in host-network gate" (-not ($runnerHV -match 'Please reboot the server and rerun the script'))
+    Write-TestResult "49-MenuRunner: host-network gate checks Test-HyperVInstalled first" ($runnerHV -match 'function\s+Start-Show-HostNetworkMenu[\s\S]{0,900}Test-HyperVInstalled')
+    Write-TestResult "49-MenuRunner: host-network gate gates on Test-HyperVReady" ($runnerHV -match '"HyperVReady"\s*-FetchScript\s*\{\s*Test-HyperVReady')
+
+    # Clear-MenuCache invalidates the readiness probe so a fresh check runs after any feature change.
+    Write-TestResult "04-Navigation: Clear-MenuCache nulls HyperVReady" ($navHV -match 'Clear-MenuCache[\s\S]{0,200}MenuCache\.HyperVReady\s*=\s*\$null')
+
+    # The switch-management render guards on readiness before calling Get-VMSwitch.
+    Write-TestResult "48-MenuDisplay: Show-VirtualSwitchMenu guards Get-VMSwitch on readiness" ($dispHV -match 'Show-VirtualSwitchMenu[\s\S]{0,500}Test-HyperVReady[\s\S]{0,300}Get-VMSwitch')
+
+    # SET / standard vSwitch creation require operational readiness (not just install state).
+    Write-TestResult "09-SET: New-SwitchEmbeddedTeam gates on Test-HyperVReady" ($setHV -match 'function\s+New-SwitchEmbeddedTeam[\s\S]{0,900}Test-HyperVReady')
+    Write-TestResult "09-SET: New-StandardVSwitch gates on Test-HyperVReady" ($setHV -match 'function\s+New-StandardVSwitch[\s\S]{0,900}Test-HyperVReady')
+
+    # Networking menu is split into physical / host / SAN branches with corrected labels.
+    Write-TestResult "48-MenuDisplay: Network menu has Physical Adapter Configuration" ($dispHV -match 'Physical Adapter Configuration')
+    Write-TestResult "48-MenuDisplay: Network menu has Virtualization Host Networking" ($dispHV -match 'Virtualization Host Networking')
+    Write-TestResult "49-MenuRunner: Network menu dispatches Start-Show-PhysicalAdapterMenu" ($runnerHV -match 'Start-Show-PhysicalAdapterMenu')
+}
+catch {
+    Write-TestResult "Host-Network Hyper-V Gating Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

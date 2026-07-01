@@ -757,11 +757,14 @@ function Show-NetworkMenu {
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
-    Write-MenuItem "[1]  Configure Host Network"
-    Write-OutputColor "  │$("        Physical adapters, SET teaming, SAN/storage".PadRight(72))│" -color "Info"
+    Write-MenuItem "[1]  Physical Adapter Configuration"
+    Write-OutputColor "  │$("        IP / DNS / rename / disable IPv6 on physical NICs".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
-    Write-MenuItem "[2]  Configure Virtual Machine Network"
-    Write-OutputColor "  │$("        VM IP configuration, DNS settings".PadRight(72))│" -color "Info"
+    Write-MenuItem "[2]  Virtualization Host Networking (Hyper-V)"
+    Write-OutputColor "  │$("        Virtual switches, SET teaming, host vNICs".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
+    Write-MenuItem "[3]  Storage & SAN (iSCSI)"
+    Write-OutputColor "  │$("        iSCSI / SAN storage connectivity".PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -788,19 +791,22 @@ function Show-HostNetworkMenu {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                     HOST NETWORK CONFIGURATION").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ║$(("                   VIRTUALIZATION HOST NETWORKING").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "  Adapters: $adapterLabel" -color $(if ($adapterSummary.Down -gt 0) { "Warning" } else { "Info" })
+    # Non-blocking heads-up: Hyper-V is already confirmed ready by the caller, so a reboot pending
+    # for unrelated reasons doesn't stop switch configuration — just surface it.
+    $rebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
+    if ($rebootPending) {
+        Write-OutputColor "  Note: a reboot is pending (unrelated to Hyper-V) — configuration still works." -color "Warning"
+    }
     Write-OutputColor "" -color "Info"
 
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-MenuItem "[1]  Virtual Switch Management ►"
     Write-OutputColor "  │$("        Create, view, or remove virtual switches (SET/External/etc)".PadRight(72))│" -color "Info"
     Write-MenuItem "[2]  Add Virtual NIC to Switch"
-    Write-MenuItem "[3]  Configure IP Address"
-    Write-MenuItem "[4]  Storage & SAN Management ►"
-    Write-MenuItem "[5]  Rename Network Adapter"
-    Write-MenuItem "[6]  Disable IPv6 (All Adapters)"
+    Write-MenuItem "[3]  Configure Host vNIC IP Address"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Networking    [M] ◄◄ Server Config" -color "Info"
@@ -814,11 +820,18 @@ function Show-HostNetworkMenu {
 function Show-VirtualSwitchMenu {
     Clear-Host
 
-    # Get current switch summary (cached to avoid slow WMI query on every render)
-    $switchCount = Get-CachedValue -Key "VMSwitchCount" -FetchScript {
-        @(Get-VMSwitch -ErrorAction SilentlyContinue).Count
-    } -CacheSeconds 30
-    $switchSummary = "$switchCount switch(es)"
+    # Get current switch summary (cached to avoid slow WMI query on every render).
+    # Only query when Hyper-V is operationally ready — calling Get-VMSwitch while the feature is
+    # installed-but-not-yet-active throws "not recognized" and would render a misleading "0 switch(es)".
+    $hvReady = Get-CachedValue -Key "HyperVReady" -FetchScript { Test-HyperVReady } -CacheSeconds 30
+    if ($hvReady) {
+        $switchCount = Get-CachedValue -Key "VMSwitchCount" -FetchScript {
+            @(Get-VMSwitch -ErrorAction SilentlyContinue).Count
+        } -CacheSeconds 30
+        $switchSummary = "$switchCount switch(es)"
+    } else {
+        $switchSummary = "Hyper-V not active (reboot required)"
+    }
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
@@ -851,7 +864,7 @@ function Show-VirtualSwitchMenu {
 }
 
 # Helper function to display a CURRENT ADAPTER info box (72-char inner width)
-# Used by Show-Host-IPNetworkMenu and Show-VM-NetworkMenu to avoid duplicated code.
+# Used by Show-Host-IPNetworkMenu and Show-PhysicalAdapterMenu to avoid duplicated code.
 function Show-AdapterInfoBox {
     param (
         [string]$AdapterName
@@ -944,7 +957,7 @@ function Show-Host-IPNetworkMenu {
 }
 
 # Function to display the VM network configuration menu
-function Show-VM-NetworkMenu {
+function Show-PhysicalAdapterMenu {
     param (
         [string]$selectedAdapterName
     )
@@ -953,7 +966,7 @@ function Show-VM-NetworkMenu {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ╔════════════════════════════════════════════════════════════════════════╗" -color "Info"
-    Write-OutputColor "  ║$(("                      VIRTUAL MACHINE NETWORK").PadRight(72))║" -color "Info"
+    Write-OutputColor "  ║$(("                    PHYSICAL ADAPTER CONFIGURATION").PadRight(72))║" -color "Info"
     Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -967,8 +980,9 @@ function Show-VM-NetworkMenu {
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-MenuItem "[1]  Set IP Address"
     Write-MenuItem "[2]  Set DNS"
-    Write-MenuItem "[3]  Disable IPv6 (All Adapters)"
-    Write-MenuItem "[4]  Choose Different Adapter"
+    Write-MenuItem "[3]  Rename Adapter"
+    Write-MenuItem "[4]  Disable IPv6 (All Adapters)"
+    Write-MenuItem "[5]  Choose Different Adapter"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  [B] ◄ Back to Networking    [M] ◄◄ Server Config" -color "Info"

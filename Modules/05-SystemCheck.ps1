@@ -55,6 +55,25 @@ function Test-HyperVInstalled {
     }
 }
 
+# Function to check if Hyper-V is operationally READY (not just feature-installed).
+# Test-HyperVInstalled reports the feature InstallState only: right after installing Hyper-V the
+# feature reads "Installed" while the VMMS service and the Hyper-V PowerShell module are not yet
+# available (they come up after the reboot). In that window Get-VMSwitch / New-VMSwitch fail with
+# "not recognized". Use Test-HyperVReady for any gate that is about to RUN Hyper-V cmdlets; use
+# Test-HyperVInstalled only to decide whether to OFFER an install.
+function Test-HyperVReady {
+    if (-not (Test-HyperVInstalled)) { return $false }
+
+    # Virtual Machine Management service must be running for the switch cmdlets to work.
+    $vmms = Get-Service -Name vmms -ErrorAction SilentlyContinue
+    if ($null -eq $vmms -or $vmms.Status -ne 'Running') { return $false }
+
+    # The Hyper-V module must be loadable (missing until the post-install reboot).
+    if (-not (Get-Command -Name Get-VMSwitch -ErrorAction SilentlyContinue)) { return $false }
+
+    return $true
+}
+
 # Function to check if reboot is pending
 function Test-RebootPending {
     $rebootKeys = @(
@@ -639,12 +658,15 @@ function Test-FeaturePrerequisites {
 
     $checks = @()
 
-    # Common check: pending reboot
+    # Common check: pending reboot.
+    # A pending reboot is a WARNING, not a blocker — Windows allows feature installs while a reboot
+    # is pending (the feature just needs one more reboot to activate). Blocking here previously
+    # trapped freshly-built servers in a reboot loop before Hyper-V could ever be installed.
     $rebootPending = Test-RebootPending
     $checks += @{
         Name    = "Pending Reboot"
-        Status  = if ($rebootPending) { "Fail" } else { "Pass" }
-        Message = if ($rebootPending) { "Reboot required before installing features" } else { "No reboot pending" }
+        Status  = if ($rebootPending) { "Warn" } else { "Pass" }
+        Message = if ($rebootPending) { "Reboot already pending — install can proceed (one more reboot needed to activate)" } else { "No reboot pending" }
     }
 
     # Common check: PowerShell version

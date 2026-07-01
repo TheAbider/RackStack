@@ -125,12 +125,12 @@ function Select-Host-Network-Adapter {
     }
 }
 
-# Function to select a VM network adapter (non-vEthernet adapters)
-function Select-VM-Network-Adapter {
+# Function to select a physical network adapter (non-vEthernet adapters)
+function Select-Physical-Network-Adapter {
     while ($true) {
         if ($script:ReturnToMainMenu) { return }
         Clear-Host
-        Write-CenteredOutput "Select VM Network Adapter" -color "Info"
+        Write-CenteredOutput "Select Physical Network Adapter" -color "Info"
 
         # Show ALL non-vEthernet adapters (up and down)
         $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "vEthernet*" }
