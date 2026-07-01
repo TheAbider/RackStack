@@ -147,9 +147,13 @@ function Set-RDSLicenseMode {
             -Params @{ Mode = $Mode; LicenseServer = $server } `
             -Preflight { $true }.GetNewClosure() `
             -Apply {
-                if (-not (Test-Path $path)) { New-Item -Path $path -Force -ErrorAction SilentlyContinue | Out-Null }
-                Set-ItemProperty -Path $path -Name 'LicensingMode' -Value $mv -Type DWord -ErrorAction SilentlyContinue
-                Set-ItemProperty -Path $path -Name 'LicenseServers' -Value $sv -Type String -ErrorAction SilentlyContinue
+                # -EA Stop (matching the immediate path below) so a failed registry write THROWS
+                # and the Dry-Run commit engine records the step as failed + rolls back. With
+                # SilentlyContinue the engine (which judges success purely by "did Apply throw?")
+                # marked a no-op write as "Applied" and printed "all steps applied successfully".
+                if (-not (Test-Path $path)) { New-Item -Path $path -Force -ErrorAction Stop | Out-Null }
+                Set-ItemProperty -Path $path -Name 'LicensingMode' -Value $mv -Type DWord -ErrorAction Stop
+                Set-ItemProperty -Path $path -Name 'LicenseServers' -Value $sv -Type String -ErrorAction Stop
             }.GetNewClosure() `
             -Undo {
                 if ($null -ne $pm) { Set-ItemProperty -Path $path -Name 'LicensingMode' -Value $pm -Type DWord -ErrorAction SilentlyContinue }

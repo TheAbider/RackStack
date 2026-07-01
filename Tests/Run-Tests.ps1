@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.12
+    Automated Test Runner for RackStack v1.121.13
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9484,7 +9484,7 @@ try {
     Write-TestResult "80-RDS: role install is reversible (undo)" ($rdsC -match 'function\s+Install-RDSRoles[\s\S]{0,3000}Add-UndoAction[\s\S]{0,400}Uninstall-WindowsFeature')
     Write-TestResult "80-RDS: role install is server-SKU gated" ($rdsC -match 'Test-WindowsServer')
     # Licensing mode is reversible (captures prior + undo).
-    Write-TestResult "80-RDS: license-mode change is reversible (undo)" ($rdsC -match 'function\s+Set-RDSLicenseMode[\s\S]{0,3500}Add-UndoAction[\s\S]{0,400}LicensingMode')
+    Write-TestResult "80-RDS: license-mode change is reversible (undo)" ($rdsC -match 'function\s+Set-RDSLicenseMode[\s\S]{0,4000}Add-UndoAction[\s\S]{0,400}LicensingMode')
     Write-TestResult "80-RDS: license-mode change is Dry-Run aware (reversible)" ($rdsC -match 'Set-RDSLicenseMode[\s\S]{0,2000}Push-DryRunStep[\s\S]{0,400}-OneWay \$false')
     # Validates the license-server name before writing it.
     Write-TestResult "80-RDS: validates license server name" ($rdsC -match 'LicenseServer[\s\S]{0,200}-notmatch')
@@ -10054,6 +10054,39 @@ try {
 }
 catch {
     Write-TestResult "Backup/Undo Safety-Net Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 200: ROLE/SERVICE MODULE HARDENING (v1.121.13)
+# ============================================================================
+# Guards the fixes from the role/service-module audit (ADCS/cert/scheduled-task/Defender/WSUS/RDS):
+#   [0] Self-destruct also unregisters the tool's other SYSTEM/Highest tasks (ScheduledExport,
+#       UpdateCheck) so it doesn't leave privileged tasks orphaned against deleted binaries.
+#   [1] RDS licensing Dry-Run apply uses -EA Stop so a failed registry write isn't reported applied.
+#   [2] WSUS default-config returns $false when no update classification was enabled (syncs nothing).
+#   [3] Task Health no longer flags healthy never-run tasks (0x00041300 / 0x00041303) as FAILED.
+Write-SectionHeader "SECTION 200: ROLE/SERVICE MODULE HARDENING"
+
+try {
+    $ecRaw   = Get-Content "$modulesPath\47-ExitCleanup.ps1" -Raw
+    $rdsRaw  = Get-Content "$modulesPath\80-RemoteDesktopServices.ps1" -Raw
+    $wsusRaw = Get-Content "$modulesPath\67-WSUS.ps1" -Raw
+    $schRaw  = Get-Content "$modulesPath\63-ScheduledTasks.ps1" -Raw
+
+    # [0]
+    Write-TestResult "47-ExitCleanup: self-destruct unregisters the ScheduledExport task [0]" ($ecRaw -match "Unregister-ScheduledTask -TaskName '\`$\(\`$toolNameEsc\)-ScheduledExport'")
+    Write-TestResult "47-ExitCleanup: self-destruct unregisters the UpdateCheck task [0]" ($ecRaw -match "Unregister-ScheduledTask -TaskName '\`$\(\`$toolNameEsc\)_UpdateCheck'")
+    # [1]
+    Write-TestResult "80-RDS: licensing Dry-Run apply uses -EA Stop [1]" ($rdsRaw -match "Set-ItemProperty -Path \`$path -Name 'LicensingMode' -Value \`$mv -Type DWord -ErrorAction Stop")
+    Write-TestResult "80-RDS: licensing Dry-Run apply no longer swallows write errors [1]" (-not ($rdsRaw -match "Name 'LicensingMode' -Value \`$mv -Type DWord -ErrorAction SilentlyContinue"))
+    # [2]
+    Write-TestResult "67-WSUS: tracks whether classifications were enabled [2]" (($wsusRaw -match '\$classificationsEnabled = \$false') -and ($wsusRaw -match '\$classificationsEnabled = \$true'))
+    Write-TestResult "67-WSUS: returns false when no classification enabled [2]" ($wsusRaw -match 'if \(-not \$classificationsEnabled\)[\s\S]{0,400}return \$false')
+    # [3]
+    Write-TestResult "63-ScheduledTasks: never-run tasks are not flagged FAILED [3]" ($schRaw -match '\$lastResult -eq 0x00041300 -or \$lastResult -eq 0x00041303')
+}
+catch {
+    Write-TestResult "Role/Service Module Hardening Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

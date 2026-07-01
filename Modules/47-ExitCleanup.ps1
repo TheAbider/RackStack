@@ -212,6 +212,14 @@ function Exit-Script {
                 $cleanupCommands += "Remove-Item -LiteralPath '$escapedPath' -Recurse -Force -ErrorAction SilentlyContinue`n"
             }
             $toolNameEsc = $script:ToolName -replace "'", "''"
+            # Also unregister the OTHER SYSTEM/Highest tasks the tool creates — otherwise the
+            # self-destruct deletes their target binaries ($script:ScriptPath / the installed exe)
+            # but leaves the tasks registered and firing on schedule against a missing file: a
+            # privileged persistence remnant (and, for a portable .ps1 run from a user-writable
+            # dir, a SYSTEM phantom-task EoP if someone recreates the deleted script). Harmless
+            # -EA SilentlyContinue when a task doesn't exist.
+            $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)-ScheduledExport' -TaskPath '\$($toolNameEsc)\' -Confirm:`$false -ErrorAction SilentlyContinue`n"
+            $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)_UpdateCheck' -Confirm:`$false -ErrorAction SilentlyContinue`n"
             $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)Cleanup' -Confirm:`$false -ErrorAction SilentlyContinue"
 
             $bytes = [System.Text.Encoding]::Unicode.GetBytes($cleanupCommands)
