@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.13
+    Automated Test Runner for RackStack v1.121.14
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10087,6 +10087,48 @@ try {
 }
 catch {
     Write-TestResult "Role/Service Module Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 201: VM-LIFECYCLE + STORAGE HARDENING (v1.121.14)
+# ============================================================================
+# Guards the fixes from the VM-lifecycle/storage audit (export/import, offline-VHD, VHD convert,
+# batch S2D, Hyper-V Replica). Recurring class: false success on a cancel/failure path.
+#   [0] A cancelled/timed-out VM export is not reported as a completed successful export.
+#   [1] Offline-VHD customization returns $false when the hive(s) didn't load (nothing applied).
+#   [2] VHD convert gates success on the Move succeeding (not on the dynamic file still existing).
+#   [3] A replica-side planned failover requires explicit confirm the primary was prepared+shut down.
+#   [4] Batch S2D consent flag (AllowS2DDataLoss) is carried to the gate (was silently dropped).
+#   [5] Certificate-based replica resolves + passes a -CertificateThumbprint (was never supplied).
+#   [6] Dry-Run replica undos use -EA Stop so a failed rollback isn't a silent open-receiver no-op.
+Write-SectionHeader "SECTION 201: VM-LIFECYCLE + STORAGE HARDENING"
+
+try {
+    $veiRaw  = Get-Content "$modulesPath\53-VMExportImport.ps1" -Raw
+    $ovhdRaw = Get-Content "$modulesPath\43-OfflineVHD.ps1" -Raw
+    $vhdRaw  = Get-Content "$modulesPath\41-VHDManagement.ps1" -Raw
+    $epRaw2  = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    $replRaw = Get-Content "$modulesPath\62-HyperVReplica.ps1" -Raw
+
+    # [0]
+    Write-TestResult "53-VMExport: cancelled export is not reported complete [0]" ($veiRaw -match 'if \(\$cancelRequested\)[\s\S]{0,700}completion is NOT confirmed[\s\S]{0,450}return')
+    # [1]
+    Write-TestResult "43-OfflineVHD: returns false when SYSTEM hive didn't load (name not applied) [1]" ($ovhdRaw -match '\$ComputerName -and -not \$systemHiveLoaded[\s\S]{0,600}return \$false')
+    Write-TestResult "43-OfflineVHD: returns false when neither hive loaded [1]" ($ovhdRaw -match '-not \$systemHiveLoaded -and -not \$softwareHiveLoaded[\s\S]{0,500}return \$false')
+    # [2]
+    Write-TestResult "41-VHD: convert success gated on the move succeeding [2]" (($vhdRaw -match '\$moveOk = \$false') -and ($vhdRaw -match 'if \(\$moveOk -and \(Test-Path -LiteralPath \$finalPath\)\)'))
+    # [3]
+    Write-TestResult "62-Replica: replica-side planned failover confirms primary prepared [3]" ($replRaw -match 'lossless if, on the PRIMARY[\s\S]{0,500}Confirm-UserAction[\s\S]{0,120}Complete failover now')
+    # [4]
+    Write-TestResult "50-EntryPoint: batch carries the S2D consent flag to the gate [4]" ($epRaw2 -match 'if \(\$Config\.AllowS2DDataLoss\) \{ \$configHash\["AllowS2DDataLoss"\]')
+    # [5]
+    Write-TestResult "62-Replica: certificate auth resolves + passes a thumbprint [5]" (($replRaw -match '\$certThumbprint = \$certs\[0\]\.Thumbprint') -and ($replRaw -match "CertificateThumbprint'\] = \`$certThumbprint"))
+    # [6]
+    Write-TestResult "62-Replica: enable-replica dry-run undo no longer silent (-EA Stop) [6]" (-not ($replRaw -match 'Set-VMReplicationServer -ReplicationEnabled \$false -ErrorAction SilentlyContinue'))
+    Write-TestResult "62-Replica: enable-vm-replication dry-run undo no longer silent (-EA Stop) [6]" (-not ($replRaw -match 'Remove-VMReplication -VMName \$capVM -ErrorAction SilentlyContinue'))
+}
+catch {
+    Write-TestResult "VM-Lifecycle + Storage Hardening Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

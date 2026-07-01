@@ -14474,6 +14474,10 @@ function Start-BatchMode {
                 # Non-iSCSI backends: use the generalized initializer
                 $configHash = @{}
                 if ($Config.SMB3SharePath) { $configHash["SMB3SharePath"] = $Config.SMB3SharePath }
+                # Carry the S2D data-loss consent flag through — Initialize-StorageBackendBatch's
+                # gate checks $Config.AllowS2DDataLoss, so dropping it here made batch S2D enable
+                # permanently unreachable (the gate always saw $null and refused).
+                if ($Config.AllowS2DDataLoss) { $configHash["AllowS2DDataLoss"] = $Config.AllowS2DDataLoss }
                 # Honor the boolean result: Initialize-StorageBackendBatch returns $false on real
                 # failure/refusal paths (e.g. S2D consent missing, Enable-ClusterS2D threw and was
                 # caught internally). Discarding it with $null = and unconditionally counting the

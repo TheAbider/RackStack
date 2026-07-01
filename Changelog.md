@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.121.14
+
+VM and storage safety — fixes found by a deep audit of the VM export/import, offline-VHD, VHD conversion, and Hyper-V Replica modules.
+
+- **A cancelled VM export is no longer reported as complete.** If you stopped watching an export (or the 4-hour cap elapsed) while it was still running, the tool printed "Export complete!" and logged a successful export — even though Hyper-V was still writing a partial, unbootable copy in the background. Trusting that, an operator could delete the source VM and lose it. It now clearly says the export wasn't confirmed and to verify it first.
+- **Offline VHD customization tells the truth.** If it couldn't load the VHD's registry (e.g. a leftover mount from a prior crash), it silently applied nothing yet reported success — so the VM booted with the wrong name. It now reports the customization as incomplete.
+- **VHD conversion reports the fixed disk, not the dynamic one.** If the final rename failed, the tool reported the un-converted dynamic disk as "Fixed VHD"; it now returns the actual converted disk.
+- **Planned Hyper-V Replica failover asks for confirmation on the replica.** Completing a failover on the replica is only lossless if the primary was prepared and shut down first; the tool now confirms that before completing, to avoid silent data loss or split-brain.
+- **Certificate-based Hyper-V Replica actually works now** (it selects and passes the HTTPS certificate), and **batch S2D setup respects its data-loss consent flag** (previously it was dropped, making batch S2D unreachable).
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.13
 
 Role/service cleanup and reporting fixes — found by a deep audit of the ADCS, scheduled-task, WSUS, and Remote Desktop modules.
