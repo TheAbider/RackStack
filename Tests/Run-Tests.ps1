@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.3
+    Automated Test Runner for RackStack v1.121.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9679,6 +9679,32 @@ try {
 }
 catch {
     Write-TestResult "VM Deployment Queue Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 191: SERVER ROLE TEMPLATE SETUP (v1.121.4)
+# ============================================================================
+# Guards the "role install failures are opaque" fix and the Print Server post-install guidance.
+Write-SectionHeader "SECTION 191: SERVER ROLE TEMPLATE SETUP"
+
+try {
+    $rtR = Get-Content "$modulesPath\60-ServerRoleTemplates.ps1" -Raw
+
+    # Install failures surface the ACTUAL per-feature reason, not just a bare "Failed: N".
+    Write-TestResult "60-Roles: install loop captures per-feature failures" ($rtR -match 'function Install-ServerRoleTemplate[\s\S]{0,5500}\$failures\s*\+=' -and $rtR -match '\$installResult\.Error')
+    Write-TestResult "60-Roles: install summary prints the failure reason" ($rtR -match 'Why it failed:' -and $rtR -match '\$f\.Feature.{0,6}\$f\.Reason')
+    Write-TestResult "60-Roles: install surfaces timeouts" ($rtR -match '\$installResult\.TimedOut')
+
+    # Print Server template uses valid Windows feature names and now has post-install guidance.
+    Write-TestResult "60-Roles: PRINT template uses valid feature names" ($rtR -match '"PRINT"\s*=\s*@\{[\s\S]{0,300}Print-Services[\s\S]{0,60}Print-Server')
+    Write-TestResult "60-Roles: PRINT template wired to Start-PrintServerPostInstall" ($rtR -match '"PRINT"\s*=\s*@\{[\s\S]{0,400}PostInstall\s*=\s*"Start-PrintServerPostInstall"')
+    Write-TestResult "60-Roles: Start-PrintServerPostInstall exists" ($rtR -match 'function\s+Start-PrintServerPostInstall\b')
+    # The post-install name must satisfy the allowed-verb safety pattern used by the invoker.
+    Write-TestResult "60-Roles: print post-install name matches allowed verb pattern" ('Start-PrintServerPostInstall' -match '^(Start|Invoke|Initialize|Configure)-[A-Za-z][A-Za-z0-9]+$')
+    Write-TestResult "60-Roles: print post-install points at Print Management" ($rtR -match 'function\s+Start-PrintServerPostInstall[\s\S]{0,600}printmanagement\.msc')
+}
+catch {
+    Write-TestResult "Server Role Template Setup Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

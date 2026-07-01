@@ -45,9 +45,9 @@ $script:ServerRoleTemplates = @{
     }
     "PRINT" = @{
         FullName       = "Print Server"
-        Description    = "Print and Document Services"
-        Features       = @("Print-Server", "Print-Services")
-        PostInstall    = $null
+        Description    = "Print and Document Services (Print Server role service + management tools)"
+        Features       = @("Print-Services", "Print-Server")
+        PostInstall    = "Start-PrintServerPostInstall"
         RequiresReboot = $false
         ServerOnly     = $true
     }
@@ -337,13 +337,26 @@ function Install-ServerRoleTemplate {
 
     $successCount = 0
     $failCount = 0
+    $failures = @()
 
     foreach ($featureName in $featuresToInstall) {
         $installResult = Install-WindowsFeatureWithTimeout -FeatureName $featureName -DisplayName $featureName -IncludeManagementTools
         if ($installResult.Success) {
+            Write-OutputColor "  [OK]  $featureName" -color "Success"
             $successCount++
         }
         else {
+            # Surface the ACTUAL reason instead of a bare "Failed" — this is what tells the operator
+            # why e.g. Print Server didn't install (missing source files, edition, WSUS block, etc.).
+            $reason = if ($installResult.TimedOut) {
+                "installation timed out"
+            } elseif ($installResult.Error) {
+                ($installResult.Error -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
+            } else {
+                "unknown error (the role may be unavailable on this edition, or its source files are missing)"
+            }
+            Write-OutputColor "  [XX]  $featureName - $reason" -color "Error"
+            $failures += @{ Feature = $featureName; Reason = $reason }
             $failCount++
         }
     }
@@ -360,6 +373,19 @@ function Install-ServerRoleTemplate {
 
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"
+
+    if ($failCount -gt 0) {
+        Write-OutputColor "  Why it failed:" -color "Error"
+        foreach ($f in $failures) {
+            Write-OutputColor "    - $($f.Feature): $($f.Reason)" -color "Warning"
+        }
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Common causes: the role's source files aren't on the system (install from" -color "Info"
+        Write-OutputColor "  Windows Update or point -Source at a mounted ISO's SxS folder), WSUS/Group" -color "Info"
+        Write-OutputColor "  Policy is blocking the feature source, or the role isn't offered on this" -color "Info"
+        Write-OutputColor "  Windows edition. The exact error above says which." -color "Info"
+        Write-OutputColor "" -color "Info"
+    }
 
     # Set reboot flag if needed
     if ($template.RequiresReboot -and $successCount -gt 0) {
@@ -566,6 +592,29 @@ function Start-WSUSPostInstall {
     Write-OutputColor "  │$('     - Configure auto-approval rules'.PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-PressEnter
+}
+
+# Post-install guidance for Print Server. Installing the role only adds the service; this points the
+# operator at the actual "set up printers" next steps so it feels like a finished setup, and offers
+# to open the Print Management console.
+function Start-PrintServerPostInstall {
+    Write-OutputColor "" -color "Info"
+    Write-OutputColor "  Print Server role installed. To finish setting it up:" -color "Success"
+    Write-OutputColor "    - Open Print Management (printmanagement.msc) to add printers and drivers." -color "Info"
+    Write-OutputColor "    - Add a TCP/IP port:  Add-PrinterPort -Name <ip> -PrinterHostAddress <ip>" -color "Info"
+    Write-OutputColor "    - Add a printer:      Add-Printer -Name <name> -DriverName <driver> -PortName <ip>" -color "Info"
+    Write-OutputColor "    - Share it:           Set-Printer -Name <name> -Shared `$true -ShareName <share>" -color "Info"
+    Write-OutputColor "" -color "Info"
+    if (Confirm-UserAction -Message "Open the Print Management console now?") {
+        try {
+            Start-Process "printmanagement.msc" -ErrorAction Stop
+            Write-OutputColor "  Print Management opened." -color "Success"
+        }
+        catch {
+            Write-OutputColor "  Could not open Print Management: $($_.Exception.Message)" -color "Warning"
+            Write-OutputColor "  Open it manually from Server Manager > Tools > Print Management." -color "Info"
+        }
+    }
 }
 
 # Stub for DC promotion - directs user to the AD DS Promotion module
