@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.121.0
+
+Disk initialization now works on brand-new disks, and disk/volume lists make the OS disk and removable media obvious at a glance.
+
+- **"Initialize disk" now works on a new (offline) disk.** A brand-new disk ships Offline, and the initializer was silently filtering offline disks out of the selection list — so the disk you wanted to initialize never appeared and the option seemed to do nothing. Offline uninitialized disks are now selectable; RackStack brings the chosen disk online and clears read-only before initializing, and tells you exactly why if a disk is write-protected instead of failing with a generic error.
+- **Disk lists now show Online/Offline.** The disk picker marks offline disks with `[Offline]`, the partition view shows the disk's status, and the Set Online/Offline screen colors the current status.
+- **The OS / boot disk and volume are shown in red.** Wherever disks, partitions, or volumes are listed, the system/boot disk and the C: volume are painted red with a "do not touch" marker so it's clear that operating on them is dangerous.
+- **CD/DVD and removable media are a distinct color.** Optical drives and USB/SD media now render in magenta across the disk overview, the disk picker, the volume overview, and the drive-letter map, so they're never mistaken for a fixed data disk.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.120.0
 
 Networking reorganized so a plain physical server no longer runs into Hyper-V, and the Hyper-V host-networking path installs and validates Hyper-V correctly before use.
