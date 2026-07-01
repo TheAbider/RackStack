@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.11
+    Automated Test Runner for RackStack v1.121.12
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10013,6 +10013,47 @@ try {
 }
 catch {
     Write-TestResult "State-Integrity Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 199: BACKUP / UNDO SAFETY-NET HONESTY (v1.121.12)
+# ============================================================================
+# Guards the fixes from the security-feature-module audit (71-76). Common class: a backup/
+# snapshot taken with -EA SilentlyContinue (or its result discarded), then trusted downstream
+# as if it exists — so a silently-failed backup made the exit code lie, missed drift, or (worst)
+# made an "undo" delete the live config.
+#   [0] GPOBackup returns $null (exit 1) when 0 GPOs actually backed up.
+#   [1] GPO drift tracks an Indeterminate bucket instead of calling a missing baseline "unchanged".
+#   [2] JEA dry-run apply throws on a validation failure (return $false) so it isn't marked applied.
+#   [3] NPS import verifies the pre-import backup landed before claiming it / registering undo.
+#   [4] GPO restore only registers an undo when the pre-restore snapshot actually succeeded.
+#   [5] SIEM config write fails closed if it can't back up the prior config (undo never deletes it).
+Write-SectionHeader "SECTION 199: BACKUP / UNDO SAFETY-NET HONESTY"
+
+try {
+    $gpoRaw  = Get-Content "$modulesPath\71-GPOManager.ps1" -Raw
+    $jeaRaw  = Get-Content "$modulesPath\72-JEA.ps1" -Raw
+    $npsRaw  = Get-Content "$modulesPath\73-NPS.ps1" -Raw
+    $siemRaw = Get-Content "$modulesPath\76-SIEMForwarder.ps1" -Raw
+
+    # [0]
+    Write-TestResult "71-GPO: backup returns null when nothing was backed up [0]" ($gpoRaw -match 'if \(\$ok -eq 0\) \{[\s\S]{0,400}return \$null')
+    # [1]
+    Write-TestResult "71-GPO: drift tracks an Indeterminate bucket [1]" (($gpoRaw -match '\$indeterminate = @\(\)') -and ($gpoRaw -match 'Indeterminate = \$indeterminate'))
+    Write-TestResult "71-GPO: unverifiable compare is indeterminate, not unchanged [1]" ($gpoRaw -match 'reliable compare wasn''t possible[\s\S]{0,600}\$indeterminate \+= \$g\.DisplayName')
+    # [2]
+    Write-TestResult "72-JEA: dry-run apply throws on validation failure [2]" ($jeaRaw -match 'if \(-not \(Invoke-JEAEndpointBuild[\s\S]{0,200}throw')
+    # [3]
+    Write-TestResult "73-NPS: import verifies the pre-import backup exists [3]" (($npsRaw -match '\$preBackupOk = Test-Path -LiteralPath \$preFile') -and ($npsRaw -match 'if \(\$preBackupOk\)'))
+    Write-TestResult "73-NPS: dry-run undo warns when no backup was captured [3]" ($npsRaw -match 'Undo unavailable: no pre-import NPS backup')
+    # [4]
+    Write-TestResult "71-GPO: restore undo gated on a successful snapshot [4]" (($gpoRaw -match '\$preSnapshotOk = \(\$null -ne \$snap\)') -and ($gpoRaw -match 'if \(\$preSnapshotOk\)'))
+    Write-TestResult "71-GPO: dry-run restore undo verifies snapshot content [4]" ($gpoRaw -match '\$snapDirs = @\(Get-ChildItem -LiteralPath \$capPre -Directory')
+    # [5]
+    Write-TestResult "76-SIEM: config write fails closed if it can't back up the prior config [5]" ($siemRaw -match 'Copy-Item -LiteralPath \$TargetPath -Destination \$backup -Force -ErrorAction Stop[\s\S]{0,260}return @\{ Ok = \$false; Backup = \$null')
+}
+catch {
+    Write-TestResult "Backup/Undo Safety-Net Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

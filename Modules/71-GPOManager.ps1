@@ -139,6 +139,15 @@ function Invoke-GPOBackupAll {
 
     $resultColor = if ($fail -eq 0) { "Success" } else { "Warning" }
     Write-OutputColor "  Backup complete: $ok succeeded, $fail failed." -color $resultColor
+    # Honor the function's own contract ("returns the backup folder path, or $null on failure").
+    # If GPOs were enumerated but EVERY Backup-GPO failed ($ok -eq 0), the folder is empty and
+    # must NOT be reported as a success — otherwise the CLI dispatcher exits 0 and a monitoring
+    # job trusts an empty folder as a drift/restore baseline.
+    if ($ok -eq 0) {
+        Write-OutputColor "  No GPOs were backed up — not treating this as a successful baseline." -color "Error"
+        Add-SessionChange -Category "GroupPolicy" -Description "GPO backup produced no backups ($fail failed)"
+        return $null
+    }
     Add-SessionChange -Category "GroupPolicy" -Description "Backed up $ok GPO(s) to $folder"
     return $folder
 }
@@ -190,7 +199,7 @@ function Compare-GPODriftAgainst {
     $baseById = @{}
     foreach ($b in $baseGpos) { $baseById[$b.Id] = $b }
 
-    $added = @(); $removed = @(); $changed = @(); $unchanged = 0
+    $added = @(); $removed = @(); $changed = @(); $unchanged = 0; $indeterminate = @()
 
     foreach ($b in $baseGpos) {
         if (-not $liveById.ContainsKey($b.Id)) { $removed += $b.DisplayName }
@@ -206,9 +215,12 @@ function Compare-GPODriftAgainst {
             if ($baseXml -ne $liveXml) { $changed += $g.DisplayName } else { $unchanged++ }
         }
         else {
-            # Settings XML unavailable for a reliable compare — count as unchanged
-            # rather than raising a false drift.
-            $unchanged++
+            # A reliable compare wasn't possible — either the BASELINE settings XML is missing
+            # (Get-GPOReport failed during backup, or the file was lost) or the LIVE report is
+            # transiently unavailable. Do NOT count this as "unchanged": that silently reported
+            # a genuinely-drifted GPO as clean (a false negative in a compliance check). Track it
+            # separately so the operator knows the check was incomplete for this GPO.
+            $indeterminate += $g.DisplayName
         }
     }
 
@@ -219,6 +231,7 @@ function Compare-GPODriftAgainst {
         Removed = $removed
         Changed = $changed
         Unchanged = $unchanged
+        Indeterminate = $indeterminate
     }
 }
 
@@ -228,6 +241,7 @@ function Show-GPODriftResult {
     $addedC = @($Drift.Added).Count
     $removedC = @($Drift.Removed).Count
     $changedC = @($Drift.Changed).Count
+    $indetC = @($Drift.Indeterminate | Where-Object { $_ }).Count
     $total = $addedC + $removedC + $changedC
     $driftColor = if ($total -eq 0) { "Success" } else { "Warning" }
 
@@ -240,14 +254,21 @@ function Show-GPODriftResult {
     foreach ($n in $Drift.Removed) { Write-OutputColor "      - $n" -color "Warning" }
     Write-OutputColor "    Changed:   $changedC" -color $driftColor
     foreach ($n in $Drift.Changed) { Write-OutputColor "      ~ $n" -color "Warning" }
+    if ($indetC -gt 0) {
+        Write-OutputColor "    Not checked: $indetC (baseline/live settings unavailable)" -color "Warning"
+        foreach ($n in $Drift.Indeterminate) { Write-OutputColor "      ? $n" -color "Warning" }
+    }
     Write-OutputColor "" -color "Info"
-    if ($total -eq 0) {
+    if ($total -eq 0 -and $indetC -eq 0) {
         Write-OutputColor "  No drift — live GPOs match the baseline." -color "Success"
     }
-    else {
-        Write-OutputColor "  Drift detected: $total GPO(s) differ from the baseline." -color "Warning"
+    elseif ($total -eq 0) {
+        Write-OutputColor "  No drift among compared GPOs, but $indetC could not be checked (missing baseline settings) — the baseline may be incomplete." -color "Warning"
     }
-    Add-SessionChange -Category "GroupPolicy" -Description "GPO drift check: +$addedC -$removedC ~$changedC vs baseline"
+    else {
+        Write-OutputColor "  Drift detected: $total GPO(s) differ from the baseline$(if ($indetC -gt 0) { " ($indetC not checked)" })." -color "Warning"
+    }
+    Add-SessionChange -Category "GroupPolicy" -Description "GPO drift check: +$addedC -$removedC ~$changedC ?$indetC vs baseline"
 }
 
 # Interactive: drift detection.
@@ -357,8 +378,15 @@ function Restore-GPOInteractive {
                 Restore-GPO -Name $capName -Path $capFolder -ErrorAction Stop | Out-Null
             }.GetNewClosure() `
             -Undo {
-                if (Test-Path -LiteralPath $capPre) {
+                # Only restore if the pre-restore snapshot actually produced a backup. Backup-GPO
+                # writes a {GUID} subfolder on success; an empty $capPre means the Apply-time
+                # snapshot silently failed, and Restore-GPO from it would be a no-op that falsely
+                # presents as a successful revert.
+                $snapDirs = @(Get-ChildItem -LiteralPath $capPre -Directory -ErrorAction SilentlyContinue)
+                if ($snapDirs.Count -gt 0) {
                     Restore-GPO -Name $capName -Path $capPre -ErrorAction SilentlyContinue | Out-Null
+                } else {
+                    Write-OutputColor "  Undo unavailable: no pre-restore snapshot was captured for '$capName'." -color "Warning"
                 }
             }.GetNewClosure()
         Write-OutputColor "  Queued (Dry-Run): restore GPO '$capName'." -color "Warning"
@@ -369,14 +397,23 @@ function Restore-GPOInteractive {
     $preFolder = Join-Path $script:TempPath "GPO-PreRestore-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     try {
         $existing = Get-GPO -Name $target -ErrorAction SilentlyContinue
+        $preSnapshotOk = $false
         if ($existing) {
             $null = New-Item -LiteralPath $preFolder -ItemType Directory -Force -ErrorAction SilentlyContinue
-            Backup-GPO -Guid $existing.Id -Path $preFolder -Comment "RackStack pre-restore" -ErrorAction SilentlyContinue | Out-Null
+            # Capture the pre-restore snapshot result. The undo restores from $preFolder, so if
+            # this snapshot silently fails the folder is created-but-empty and the undo no-ops in
+            # silence — the operator thinks the restore is reversible when it isn't.
+            $snap = $null
+            try { $snap = Backup-GPO -Guid $existing.Id -Path $preFolder -Comment "RackStack pre-restore" -ErrorAction Stop }
+            catch { Write-OutputColor "  Warning: could not snapshot '$target' before restore — this restore will NOT be undoable: $($_.Exception.Message)" -color "Warning" }
+            $preSnapshotOk = ($null -ne $snap)
         }
         Restore-GPO -Name $target -Path $folder -ErrorAction Stop | Out-Null
         Write-OutputColor "  Restored GPO '$target'." -color "Success"
         Add-SessionChange -Category "GroupPolicy" -Description "Restored GPO '$target' from backup"
-        if ($existing) {
+        if ($preSnapshotOk) {
+            # Only register the undo when the snapshot actually succeeded, so 'Undo' is never a
+            # silent no-op presenting as a successful revert.
             Add-UndoAction -Category "GroupPolicy" -Description "Restored GPO '$target'" -UndoScript {
                 param($Name, $PrePath)
                 if (Test-Path -LiteralPath $PrePath) { Restore-GPO -Name $Name -Path $PrePath -ErrorAction SilentlyContinue | Out-Null }
