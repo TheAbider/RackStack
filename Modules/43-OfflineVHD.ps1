@@ -294,6 +294,24 @@ Remove-Item -Path `$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyCont
             Write-OutputColor "  Note: First-boot script creation failed. Some settings may need manual config." -color "Error"
         }
 
+        # Don't report success when the offline registry customization silently did nothing. The
+        # computer name is applied ONLY offline (no first-boot fallback), so if a name was requested
+        # but the SYSTEM hive never loaded, the VM boots with its sysprep-default name — the operator
+        # can't find it. A leftover HKLM\OFFLINE_* mount from a prior crash is the usual cause.
+        if ($ComputerName -and -not $systemHiveLoaded) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Offline customization INCOMPLETE: the SYSTEM hive could not be loaded, so the" -color "Error"
+            Write-OutputColor "  computer name '$ComputerName' was NOT applied (the VM will boot with its sysprep" -color "Error"
+            Write-OutputColor "  default name). Reboot the host to clear any leftover HKLM\OFFLINE_* mount, then retry." -color "Warning"
+            return $false
+        }
+        if (-not $systemHiveLoaded -and -not $softwareHiveLoaded) {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Offline customization INCOMPLETE: neither registry hive could be loaded — no offline" -color "Error"
+            Write-OutputColor "  settings were applied (only the first-boot fallback script was written)." -color "Warning"
+            return $false
+        }
+
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Offline customization complete!" -color "Success"
 

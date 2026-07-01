@@ -258,6 +258,44 @@ function Enable-ReplicaServer {
         }
     }
 
+    # Certificate-based replication needs an HTTPS-listener cert (Server Authentication EKU) in
+    # LocalMachine\My, and Set-VMReplicationServer REQUIRES -CertificateThumbprint for it. The old
+    # code offered Certificate auth but never resolved/passed a thumbprint, so a fresh cert-based
+    # enable always threw. Resolve one here (or abort with guidance) so the option actually works.
+    $certThumbprint = $null
+    if ($authType -eq 'Certificate') {
+        $serverAuthOid = '1.3.6.1.5.5.7.3.1'
+        $certs = @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Where-Object {
+            $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) -and
+            (@($_.EnhancedKeyUsageList | ForEach-Object { $_.ObjectId }) -contains $serverAuthOid)
+        })
+        if ($certs.Count -eq 0) {
+            Write-OutputColor "  No valid Server-Authentication certificate found in LocalMachine\My." -color "Error"
+            Write-OutputColor "  Install/import an HTTPS server-auth certificate for this host, then retry." -color "Warning"
+            return
+        }
+        elseif ($certs.Count -eq 1) {
+            $certThumbprint = $certs[0].Thumbprint
+            Write-OutputColor "  Using certificate: $($certs[0].Subject) [$($certs[0].Thumbprint)]" -color "Info"
+        }
+        else {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  Select the certificate for HTTPS replication:" -color "Info"
+            for ($ci = 0; $ci -lt $certs.Count; $ci++) {
+                Write-OutputColor "    [$($ci + 1)] $($certs[$ci].Subject) (expires $($certs[$ci].NotAfter.ToString('yyyy-MM-dd')))" -color "Info"
+            }
+            $certPick = Read-Host "  Select"
+            $navResult = Test-NavigationCommand -UserInput $certPick
+            if ($navResult.ShouldReturn) { return }
+            if ($certPick -match '^\d+$' -and [int]$certPick -ge 1 -and [int]$certPick -le $certs.Count) {
+                $certThumbprint = $certs[[int]$certPick - 1].Thumbprint
+            }
+            else {
+                Write-OutputColor "  Invalid selection." -color "Error"; return
+            }
+        }
+    }
+
     # Step 2: Set allowed primary servers
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
@@ -358,7 +396,9 @@ function Enable-ReplicaServer {
             } `
             -Apply { Enable-ReplicaServer } `
             -Undo  {
-                Set-VMReplicationServer -ReplicationEnabled $false -ErrorAction SilentlyContinue
+                # -EA Stop (not SilentlyContinue) so a failed rollback surfaces via the dry-run
+                # engine's [revert FAILED] path instead of silently leaving an OPEN replica receiver.
+                Set-VMReplicationServer -ReplicationEnabled $false -ErrorAction Stop
             }
         Write-OutputColor "  Queued (Dry-Run): enable Hyper-V Replica Server." -color "Warning"
         Add-SessionChange -Category "DryRun" -Description "Queued Hyper-V Replica Server enable"
@@ -378,11 +418,16 @@ function Enable-ReplicaServer {
         # list is honored by toggling -ReplicationAllowedFromAnyServer based on it AND
         # registering New-VMReplicationAuthorizationEntry rows for each allowed primary.
         $allowAny = ($script:ReplicaAllowedServers.Count -eq 0)
-        Set-VMReplicationServer -ReplicationEnabled $true `
-            -AllowedAuthenticationType $authType `
-            -DefaultStorageLocation $storagePath `
-            -ReplicationAllowedFromAnyServer $allowAny `
-            -ErrorAction Stop
+        $replParams = @{
+            ReplicationEnabled              = $true
+            AllowedAuthenticationType       = $authType
+            DefaultStorageLocation          = $storagePath
+            ReplicationAllowedFromAnyServer = $allowAny
+            ErrorAction                     = 'Stop'
+        }
+        # Certificate auth requires the HTTPS-listener cert thumbprint resolved above.
+        if ($authType -eq 'Certificate' -and $certThumbprint) { $replParams['CertificateThumbprint'] = $certThumbprint }
+        Set-VMReplicationServer @replParams
 
         if (-not $allowAny) {
             $trustGroup = "RackStackReplicaTrust"
@@ -639,7 +684,7 @@ function Enable-VMReplicationWizard {
                 else { $true }
             }.GetNewClosure() `
             -Apply { Enable-VMReplicationWizard } `
-            -Undo  { Remove-VMReplication -VMName $capVM -ErrorAction SilentlyContinue }.GetNewClosure()
+            -Undo  { Remove-VMReplication -VMName $capVM -ErrorAction Stop }.GetNewClosure()
         Write-OutputColor "  Queued (Dry-Run): enable replication for VM '$capVM'." -color "Warning"
         Add-SessionChange -Category "DryRun" -Description "Queued VM replication for '$capVM'"
         return
@@ -1252,7 +1297,20 @@ function Start-PlannedFailover {
             Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         }
         else {
-            # On the replica server — complete the failover
+            # On the replica server — complete the failover. A planned (lossless) failover REQUIRES
+            # that the PRIMARY already ran 'Start-VMFailover -Prepare' (which pushes the final delta)
+            # and SHUT DOWN the VM. A replica cannot pull that final sync itself, so completing here
+            # without it fails over to the last-received sync — silent data loss — and, if the
+            # primary is still running, causes split-brain. We can't verify the remote primary's
+            # state from here, so require the operator to confirm the prepare + shutdown was done.
+            Write-OutputColor "  A planned failover is only lossless if, on the PRIMARY server, you have ALREADY" -color "Warning"
+            Write-OutputColor "  run 'Start-VMFailover -VMName ''$vmName'' -Prepare' and SHUT DOWN the VM." -color "Warning"
+            Write-OutputColor "  Completing without that loses the final unsynced delta (data loss); if the primary" -color "Warning"
+            Write-OutputColor "  is still running you also get split-brain." -color "Warning"
+            if (-not (Confirm-UserAction -Message "Confirm the primary was prepared (-Prepare) and shut down. Complete failover now?")) {
+                Write-OutputColor "  Failover cancelled." -color "Info"
+                return
+            }
             Write-OutputColor "  Completing failover on replica server..." -color "Info"
             Start-VMFailover -VMName $vmName -ErrorAction Stop
             Complete-VMFailover -VMName $vmName -ErrorAction Stop

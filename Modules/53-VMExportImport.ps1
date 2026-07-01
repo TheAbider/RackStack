@@ -277,6 +277,18 @@ function Export-VMWizard {
         }
         Write-OutputColor ""
 
+        if ($cancelRequested) {
+            # The operator stopped watching (ESC) or declined the time-cap while the export job was
+            # still Running. Stop-Job does NOT abort the underlying vmms.exe export (see the cancel
+            # prompts above), so the on-disk export is truncated / still in progress. Do NOT print a
+            # completion summary or write an "Exported ..." audit record — that false success could
+            # lead the operator to trust an incomplete export and decommission the source VM.
+            Write-OutputColor "  Export was left running in the background — completion is NOT confirmed." -color "Warning"
+            Write-OutputColor "  Verify $exportPath\$($selectedVM.Name) is complete before relying on it or removing the source VM." -color "Warning"
+            Add-SessionChange -Category "VM" -Description "Export of VM '$($selectedVM.Name)' to $exportPath left running (completion NOT confirmed)"
+            return
+        }
+
         $null = Receive-Job -Job $exportJob -ErrorAction Stop
         Remove-Job -Job $exportJob
 
