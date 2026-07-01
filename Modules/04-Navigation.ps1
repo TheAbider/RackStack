@@ -453,6 +453,7 @@ function Get-CachedValue {
 # Function to invalidate cache (call after making changes)
 function Clear-MenuCache {
     $script:MenuCache.HyperVInstalled = $null
+    $script:MenuCache.HyperVReady = $null
     $script:MenuCache.RDPState = $null
     $script:MenuCache.FirewallState = $null
     $script:MenuCache.AdminEnabled = $null

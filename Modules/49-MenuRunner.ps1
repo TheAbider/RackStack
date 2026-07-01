@@ -393,44 +393,52 @@ function Start-Show-NetworkMenu {
 
         switch ($networkChoice) {
             "1" {
-                Start-Show-HostNetworkMenu
+                Start-Show-PhysicalAdapterMenu
                 if ($script:ReturnToMainMenu) { return }
             }
             "2" {
-                Start-Show-VM-NetworkMenu
+                Start-Show-HostNetworkMenu
+                if ($script:ReturnToMainMenu) { return }
+            }
+            "3" {
+                Start-StorageSANMenu
                 if ($script:ReturnToMainMenu) { return }
             }
             "back" {
                 return
             }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-2 or B to go back." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-3 or B to go back." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }
     }
 }
 
-# Function to run the host network configuration menu
+# Function to run the Virtualization Host Networking menu (Hyper-V: virtual switches, host vNICs).
+# Everything under this branch needs Hyper-V, so Hyper-V is ensured up front BEFORE the page renders.
 function Start-Show-HostNetworkMenu {
     while ($true) {
         if ($script:ReturnToMainMenu) { return }
-        # Check if a reboot is pending (cached to avoid repeated registry reads in loop)
-        $rebootPending = Get-CachedValue -Key "RebootPending" -FetchScript { Test-RebootPending } -CacheSeconds 15
-        if ($rebootPending) {
-            Clear-Host
-            Write-CenteredOutput "Configure Host Network" -color "Info"
-            Write-OutputColor "  A reboot is pending. Please reboot the server and rerun the script." -color "Error"
-            Write-PressEnter
-            return
-        }
-
-        # Check if Hyper-V is installed (use same cache key as menu display)
+        # Step 1: Hyper-V not installed -> offer to install it FIRST (before any reboot check).
+        # A pending reboot must NOT block this: freshly-built/updated servers almost always have a
+        # pending-reboot flag, and installing Hyper-V itself sets one — gating the install behind it
+        # is what trapped operators in a reboot loop. A pending reboot is a heads-up only.
         $hvInstalled = Get-CachedValue -Key "HyperVInstalled" -FetchScript { Test-HyperVInstalled } -CacheSeconds 300
         if (-not $hvInstalled) {
             Clear-Host
-            Write-CenteredOutput "Configure Host Network" -color "Info"
-            Write-OutputColor "  Hyper-V is not installed." -color "Warning"
+            Write-CenteredOutput "Virtualization Host Networking" -color "Info"
+            Write-OutputColor "  Hyper-V is required for virtual switches and host vNICs, and is not installed." -color "Warning"
+
+            if (Test-RebootPending) {
+                $rebootReasons = @(Get-RebootPendingReasons)
+                if ($rebootReasons.Count -gt 0) {
+                    Write-OutputColor "  Note: a reboot is already pending ($($rebootReasons -join '; '))." -color "Warning"
+                } else {
+                    Write-OutputColor "  Note: a reboot is already pending." -color "Warning"
+                }
+                Write-OutputColor "  Hyper-V will still install now; you'll reboot once more to activate it." -color "Info"
+            }
 
             if (Confirm-UserAction -Message "Install Hyper-V now?") {
                 $installResult = Install-WindowsFeatureWithTimeout -FeatureName "Hyper-V" -DisplayName "Hyper-V" -IncludeManagementTools
@@ -438,7 +446,7 @@ function Start-Show-HostNetworkMenu {
                     $script:RebootNeeded = $true
                     Add-SessionChange -Category "Roles" -Description "Installed Hyper-V (reboot required)"
                     Clear-MenuCache
-                    Write-OutputColor "  A reboot is required." -color "Warning"
+                    Write-OutputColor "  Hyper-V installed. Reboot to activate it, then rerun to configure virtual switches." -color "Warning"
                 }
                 Write-PressEnter
                 return
@@ -448,6 +456,21 @@ function Start-Show-HostNetworkMenu {
             }
         }
 
+        # Step 2: installed but not operational yet (feature staged; hypervisor/VMMS need a reboot to
+        # start). Do NOT render the switch menu or call any vSwitch cmdlet in this window — they would
+        # fail with "not recognized". Show a clear reboot-to-activate message instead.
+        $hvReady = Get-CachedValue -Key "HyperVReady" -FetchScript { Test-HyperVReady } -CacheSeconds 30
+        if (-not $hvReady) {
+            Clear-Host
+            Write-CenteredOutput "Virtualization Host Networking" -color "Info"
+            Write-OutputColor "  Hyper-V is installed but not yet active — a reboot is required to start the hypervisor." -color "Warning"
+            Write-OutputColor "  Reboot the server, then rerun to configure virtual switches." -color "Info"
+            Write-PressEnter
+            return
+        }
+
+        # Step 3: Hyper-V is ready. A reboot pending for unrelated reasons is surfaced as a
+        # non-blocking banner inside Show-HostNetworkMenu, not a hard stop.
         $hostNetworkChoice = Show-HostNetworkMenu
 
         # Check for navigation commands
@@ -477,24 +500,12 @@ function Start-Show-HostNetworkMenu {
                 Start-Show-HostNetworkIPMenu
                 if ($script:ReturnToMainMenu) { return }
             }
-            "4" {
-                Start-StorageSANMenu
-                if ($script:ReturnToMainMenu) { return }
-            }
-            "5" {
-                Rename-NetworkAdapter
-                Write-PressEnter
-            }
-            "6" {
-                Disable-AllIPv6
-                Write-PressEnter
-            }
             "M" {
                 $script:ReturnToMainMenu = $true
                 return
             }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-6, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-3, B, or M." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }
@@ -581,9 +592,10 @@ function Start-Show-HostNetworkIPMenu {
     }
 }
 
-# Function to run the VM network configuration menu
-function Start-Show-VM-NetworkMenu {
-    $selectedAdapterName = Select-VM-Network-Adapter
+# Function to run the Physical Adapter configuration menu (real NICs — IP / DNS / VLAN / rename /
+# IPv6). Needs NO Hyper-V, so any server (standalone or virtualization host) can use it.
+function Start-Show-PhysicalAdapterMenu {
+    $selectedAdapterName = Select-Physical-Network-Adapter
 
     if ($null -eq $selectedAdapterName) {
         Write-PressEnter
@@ -592,14 +604,14 @@ function Start-Show-VM-NetworkMenu {
 
     while ($true) {
         if ($script:ReturnToMainMenu) { return }
-        $vmNetworkChoice = Show-VM-NetworkMenu -selectedAdapterName $selectedAdapterName
+        $adapterChoice = Show-PhysicalAdapterMenu -selectedAdapterName $selectedAdapterName
 
-        $navResult = Test-NavigationCommand -UserInput $vmNetworkChoice
+        $navResult = Test-NavigationCommand -UserInput $adapterChoice
         if ($navResult.Action -eq "exit") { Exit-Script; return }
         if ($navResult.Action -eq "back") { return }
         if ($navResult.Action -eq "home") { $script:ReturnToMainMenu = $true; return }
 
-        switch ($vmNetworkChoice) {
+        switch ($adapterChoice) {
             "1" {
                 Set-VMIPAddress -selectedAdapterName $selectedAdapterName
                 Write-PressEnter
@@ -609,11 +621,15 @@ function Start-Show-VM-NetworkMenu {
                 Write-PressEnter
             }
             "3" {
-                Disable-AllIPv6
+                Rename-NetworkAdapter
                 Write-PressEnter
             }
             "4" {
-                $newAdapter = Select-VM-Network-Adapter
+                Disable-AllIPv6
+                Write-PressEnter
+            }
+            "5" {
+                $newAdapter = Select-Physical-Network-Adapter
                 if ($null -ne $newAdapter) {
                     $selectedAdapterName = $newAdapter
                 }
@@ -626,7 +642,7 @@ function Start-Show-VM-NetworkMenu {
                 return
             }
             default {
-                Write-OutputColor "  Invalid choice. Enter 1-4, B, or M." -color "Error"
+                Write-OutputColor "  Invalid choice. Enter 1-5, B, or M." -color "Error"
                 Start-Sleep -Milliseconds 500
             }
         }

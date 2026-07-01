@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.120.0
+
+Networking reorganized so a plain physical server no longer runs into Hyper-V, and the Hyper-V host-networking path installs and validates Hyper-V correctly before use.
+
+- **A pending reboot no longer traps you before Hyper-V is installed.** Opening the host networking page on a freshly-built server used to say "a reboot is pending — reboot and rerun" and send you in circles: a fresh server almost always has a pending-reboot flag (and installing Hyper-V sets another), so the Hyper-V install was never actually offered. RackStack now offers to install Hyper-V first, and a pending reboot is shown as a heads-up rather than a blocker.
+- **The virtual-switch tools no longer open before Hyper-V is actually running.** Previously the menu could appear while Hyper-V was installed but not yet active (it needs a reboot to start), then fail with "command not recognized" when it listed switches. RackStack now confirms Hyper-V is genuinely running before showing the switch tools, and tells you to reboot if it isn't yet.
+- **Networking menu split by job, with corrected labels.** Network Configuration now has three clear branches: **Physical Adapter Configuration** (IP, DNS, rename, disable IPv6 — no Hyper-V needed), **Virtualization Host Networking** (virtual switches, SET teaming, host vNICs), and **Storage & SAN** (iSCSI). Basic NIC setup on a standalone server no longer routes through, or requires, Hyper-V. The old menu mislabeled physical-adapter configuration as "Virtual Machine Network" and gated the whole branch behind Hyper-V.
+- **Feature installs are no longer blocked by a pending reboot.** The pre-flight check now treats a pending reboot as a warning rather than a hard block, matching how Windows itself allows a feature to install while a reboot is pending.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.119.4
 
 Evaluation-edition licensing, and less friction in the admin/reboot confirmations.
