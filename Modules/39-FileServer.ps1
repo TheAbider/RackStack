@@ -244,7 +244,9 @@ function Find-FileServerFile {
 }
 
 # Reusable function to download files from FileServer via HTTP GET
-# Uses WebClient.DownloadFile() to avoid Invoke-WebRequest keep-alive hang.
+# Streams via HttpWebRequest (in a background job) with AllowAutoRedirect disabled — avoids
+# Invoke-WebRequest keep-alive hang AND keeps the Cloudflare Access token from being resent to
+# a redirect target on another host.
 # Shows rich progress bar with speed/ETA, retries once on failure, and
 # verifies integrity via size check + SHA256 hash.
 # Supports HTTP Range-based resume for partial downloads and optional
@@ -375,6 +377,11 @@ function Get-FileServerFile {
                     $resumeRequest = [System.Net.HttpWebRequest]::Create($downloadUrl)
                     $resumeRequest.AddRange($existingSize)
                     $resumeRequest.Timeout = 30000
+                    # Do NOT auto-follow redirects: this request carries the Cloudflare Access
+                    # service token, which .NET would resend verbatim to a redirect target on a
+                    # different host, exfiltrating the secret. A CF-protected origin redirecting an
+                    # authenticated range request elsewhere is anomalous — fail closed (restart).
+                    $resumeRequest.AllowAutoRedirect = $false
                     foreach ($key in $downloadHeaders.Keys) {
                         $resumeRequest.Headers.Add($key, $downloadHeaders[$key])
                     }
@@ -426,31 +433,59 @@ function Get-FileServerFile {
             }
 
             if (-not $resumed) {
-                # Background job using WebClient (closes connection immediately, no hang).
-                # Wrapped in try/finally to GUARANTEE job cleanup even if an exception fires
-                # inside the progress-monitoring loop (Get-Item race, console KeyAvailable on
-                # a remote session, etc.). Without this, every exception path in the loop
-                # left the background runspace alive and accumulated across the retry loop.
+                # Background download job (closes connection immediately, no hang). Wrapped in
+                # try/finally to GUARANTEE job cleanup even if an exception fires inside the
+                # progress-monitoring loop (Get-Item race, console KeyAvailable on a remote
+                # session, etc.). Without this, every exception path in the loop left the
+                # background runspace alive and accumulated across the retry loop.
                 $downloadJob = $null
                 try {
                 $downloadJob = Start-Job -ScriptBlock {
                     param($url, $headersJson, $destPath)
-                    $webClient = New-Object System.Net.WebClient
-                    try {
-                        if ($headersJson) {
-                            $hdrs = $headersJson | ConvertFrom-Json
-                            foreach ($prop in $hdrs.PSObject.Properties) {
-                                $webClient.Headers.Add($prop.Name, $prop.Value)
-                            }
+                    # Stream via HttpWebRequest with AllowAutoRedirect DISABLED. The previous
+                    # WebClient.DownloadFile auto-followed 3xx redirects and RESENT caller headers —
+                    # including the Cloudflare Access service token — to the redirect target on ANY
+                    # host, exfiltrating the secret. WebClient exposes no switch for this and
+                    # subclassing needs Add-Type, which can't compile the same source on both hosts
+                    # (WebClient is obsolete under .NET 5+/pwsh7 → warning-as-error, while PS 5.1's
+                    # older compiler rejects the SYSLIB0014 suppression pragma as an invalid number).
+                    # HttpWebRequest is used at RUNTIME only (obsolete = warning, never a compile
+                    # error) so it works on both hosts and lets us refuse redirects outright — a
+                    # CF-protected origin redirecting an authenticated download is anomalous; fail
+                    # closed rather than leak the token. The file grows on disk as CopyTo writes, so
+                    # the parent's size-based progress monitor is unaffected.
+                    $req = [System.Net.HttpWebRequest]::Create($url)
+                    $req.AllowAutoRedirect = $false
+                    $req.Timeout = 100000
+                    $req.ReadWriteTimeout = 300000
+                    if ($headersJson) {
+                        $hdrs = $headersJson | ConvertFrom-Json
+                        foreach ($prop in $hdrs.PSObject.Properties) {
+                            $req.Headers.Add($prop.Name, $prop.Value)
                         }
-                        $webClient.DownloadFile($url, $destPath)
+                    }
+                    $resp = $null; $inStream = $null; $outStream = $null
+                    try {
+                        $resp = $req.GetResponse()
+                        # With redirects disabled a 3xx is returned (not thrown) — treat it as a
+                        # hard failure so the secret is never carried to the Location target and we
+                        # don't write the (empty) redirect body over the destination as "success".
+                        $statusCode = [int]$resp.StatusCode
+                        if ($statusCode -ge 300 -and $statusCode -lt 400) {
+                            return @{ Success = $false; Error = "Server returned redirect ($statusCode) to '$($resp.Headers['Location'])'; refusing to follow with auth headers attached." }
+                        }
+                        $inStream = $resp.GetResponseStream()
+                        $outStream = [System.IO.File]::Create($destPath)
+                        $inStream.CopyTo($outStream)
                         return @{ Success = $true; Error = $null }
                     }
                     catch {
                         return @{ Success = $false; Error = $_.Exception.Message }
                     }
                     finally {
-                        $webClient.Dispose()
+                        if ($outStream) { $outStream.Close() }
+                        if ($inStream) { $inStream.Close() }
+                        if ($resp) { $resp.Close() }
                     }
                 } -ArgumentList $downloadUrl, ($downloadHeaders | ConvertTo-Json -Compress), $destFile
 
@@ -604,6 +639,29 @@ function Get-FileServerFile {
             # Every other outcome (hash mismatch, compute error) is a genuine fail-closed:
             # show the error and delete so a tampered/unverifiable file never lingers on disk.
             if ($integrity.Reason -eq 'NoSidecar') {
+                # No server-published .sha256 sidecar. But if the CALLER supplied a locally-trusted
+                # reference hash (e.g. the AgentInstaller HashManifest configured in defaults.json),
+                # that hash is authoritative and independent of the server — enforce it HERE rather
+                # than deferring to a weak size-only trust-on-first-use prompt. This is the documented
+                # RMM primary path (unique per-site installers with no pre-published sidecar). A match
+                # is full cryptographic verification; a mismatch is a hard fail-closed.
+                if (-not [string]::IsNullOrWhiteSpace($ExpectedHash)) {
+                    if ([string]::IsNullOrWhiteSpace($integrity.Hash)) {
+                        Write-OutputColor "  Integrity check failed: could not compute SHA256 to compare against the expected hash." -color "Error"
+                        Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
+                        return @{ Success = $false; Error = "Could not compute SHA256 for expected-hash comparison"; Reason = 'HashComputeFailed'; FilePath = $null }
+                    }
+                    if ($integrity.Hash -ne $ExpectedHash.ToUpper()) {
+                        Write-OutputColor "  Hash verification FAILED (operator-configured reference)" -color "Error"
+                        Write-OutputColor "  Expected: $($ExpectedHash.ToUpper())" -color "Error"
+                        Write-OutputColor "  Actual:   $($integrity.Hash)" -color "Error"
+                        Remove-Item -LiteralPath $destFile -Force -ErrorAction SilentlyContinue
+                        return @{ Success = $false; Error = "SHA256 hash mismatch against expected hash"; FilePath = $null }
+                    }
+                    Write-OutputColor "  Hash verified: SHA256 match (operator-configured reference)" -color "Success"
+                    Write-TransferComplete -TotalBytes $fileSize -ElapsedSeconds $totalElapsed -Hash $integrity.Hash -HashMatch $true
+                    return @{ Success = $true; Error = $null; FilePath = $destFile; FileSize = $fileSize; Hash = $integrity.Hash }
+                }
                 return @{ Success = $false; Error = $integrity.Error; Reason = 'NoSidecar'; FilePath = $destFile; FileSize = $fileSize; Hash = $integrity.Hash }
             }
             Write-OutputColor "  Integrity check failed: $($integrity.Error)" -color "Error"
@@ -659,6 +717,10 @@ function Get-FileServerFileSize {
         $request = [System.Net.WebRequest]::Create($url)
         $request.Method = "HEAD"
         $request.Timeout = 15000
+        # Don't auto-follow redirects with the Cloudflare Access token attached — .NET would
+        # resend the secret to a cross-host redirect target. An unexpected redirect just means
+        # no size (non-fatal), never a leaked service token.
+        if ($request -is [System.Net.HttpWebRequest]) { $request.AllowAutoRedirect = $false }
 
         $headers = Get-FileServerHeaders
         foreach ($key in $headers.Keys) {
@@ -696,6 +758,10 @@ function Get-FileServerHashFile {
         $request = [System.Net.WebRequest]::Create($url)
         $request.Method = "GET"
         $request.Timeout = 10000
+        # Don't auto-follow redirects with the Cloudflare Access token attached — .NET would
+        # resend the secret to a cross-host redirect target. An unexpected redirect just means
+        # no sidecar found (handled downstream as NoSidecar), never a leaked service token.
+        if ($request -is [System.Net.HttpWebRequest]) { $request.AllowAutoRedirect = $false }
 
         $headers = Get-FileServerHeaders
         foreach ($key in $headers.Keys) {

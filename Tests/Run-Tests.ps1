@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.8
+    Automated Test Runner for RackStack v1.121.9
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -3054,10 +3054,12 @@ try {
     $acMod = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
     $hasRetry = $acMod -match 'Retrying download'
     $hasIntegrity = $acMod -match 'Test-FileIntegrity'
-    $hasWebClient = $acMod -match 'System\.Net\.WebClient'
+    # v1.121.9: the download moved off WebClient (auto-followed redirects and resent the CF
+    # Access token) to a redirect-safe HttpWebRequest stream with AllowAutoRedirect disabled.
+    $hasStreamingDownload = ($acMod -match '\[System\.Net\.HttpWebRequest\]::Create') -and ($acMod -match 'AllowAutoRedirect = \$false')
     Write-TestResult "Get-FileServerFile: has retry logic on download failure" $hasRetry
     Write-TestResult "Get-FileServerFile: calls Test-FileIntegrity for validation" $hasIntegrity
-    Write-TestResult "Get-FileServerFile: uses WebClient for downloads" $hasWebClient
+    Write-TestResult "Get-FileServerFile: streams downloads via redirect-safe HttpWebRequest" $hasStreamingDownload
 } catch {
     Write-TestResult "Get-FileServerFile retry logic" $false $_.Exception.Message
 }
@@ -7762,7 +7764,10 @@ try {
     Write-TestResult "39-FS: integrity gate tags missing sidecar as NoSidecar" ($fsContent2 -match "Reason\s*=\s*'NoSidecar'")
     Write-TestResult "39-FS: integrity gate tags tamper as HashMismatch" ($fsContent2 -match "Reason\s*=\s*'HashMismatch'")
     # NoSidecar is recoverable (file kept for caller); everything else fails closed (deleted)
-    Write-TestResult "39-FS: Get-FileServerFile preserves file on NoSidecar" ($fsContent2 -match "Reason\s*-eq\s*'NoSidecar'[\s\S]{0,200}FilePath\s*=\s*\`$destFile")
+    # The recoverable NoSidecar return keeps the downloaded file (FilePath = $destFile) so a
+    # caller can offer trust-on-first-use. (v1.121.9 added an ExpectedHash gate ahead of this
+    # return; the recoverable return still preserves the file.)
+    Write-TestResult "39-FS: Get-FileServerFile preserves file on NoSidecar" ($fsContent2 -match "Reason = 'NoSidecar'; FilePath = \`$destFile")
 
     # Agent installer honors the configurable policy and never auto-trusts a mismatch
     Write-TestResult "57-Agent: reads AgentInstaller.RequireHash policy" ($aiContent2 -match '\$requireHash\s*=' -and $aiContent2 -match "ContainsKey\('RequireHash'\)")
@@ -7800,9 +7805,12 @@ try {
     Write-TestResult "35-Util: self-update certutil loop reads tokens=* (no skip)" `
         ($utilContent3 -match 'for /f "tokens=\*" %%H in \(.certutil -hashfile')
 
-    # Fix 2: recoverable NoSidecar must NOT print the red "Integrity check failed" before returning
+    # Fix 2: the recoverable NoSidecar return must come BEFORE the genuine-fail red
+    # "Integrity check failed: $($integrity.Error)" print (only real tamper/compute failures show
+    # that). v1.121.9 added an ExpectedHash gate inside the NoSidecar branch, so key on the
+    # recoverable return preceding the $integrity.Error print rather than a fixed-distance return.
     Write-TestResult "39-FS: NoSidecar returns before the red 'Integrity check failed' print" `
-        ($fsContent3 -match "Reason\s*-eq\s*'NoSidecar'[\s\S]{0,260}return[\s\S]{0,260}Write-OutputColor\s+`"\s*Integrity check failed")
+        ($fsContent3 -match "Reason = 'NoSidecar'; FilePath = \`$destFile[\s\S]{0,700}Integrity check failed: \`$\(\`$integrity\.Error\)")
 
     # Fix 4: no-Content-Length + no-sidecar is recoverable, not a hard 'NoSignal' delete
     Write-TestResult "39-FS: 'NoSignal' hard-fail reason removed" ($fsContent3 -notmatch "'NoSignal'")
@@ -9847,6 +9855,63 @@ try {
 }
 catch {
     Write-TestResult "Destructive-Module Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 196: DOWNLOAD → VERIFY → EXECUTE HARDENING (v1.121.9)
+# ============================================================================
+# Guards the seven fixes from the adversarial audit of the download/execute chain (FileServer,
+# AgentInstaller, ISO download, Utilities staging):
+#   A  config/caller ExpectedHash is enforced even when the FileServer has no .sha256 sidecar
+#   B  HashManifest lookup uses .ContainsKey (hashtable), so ExpectedHash is actually populated
+#   C  verified agent EXE is moved to an Admin/SYSTEM-only stage before execution (TOCTOU)
+#   D  reinstall/upgrade timeout & skip no longer falsely report SUCCESS from the pre-existing svc
+#   E  the Cloudflare Access token is never resent on a redirect (all four request paths)
+#   F  space-bearing InstallArgs tokens are quoted so Start-Process doesn't re-split them
+#   G  the ISO re-download free-space bail restores the .old fallback and clears the rollback ptr
+Write-SectionHeader "SECTION 196: DOWNLOAD -> VERIFY -> EXECUTE HARDENING"
+
+try {
+    $fsRaw  = Get-Content "$modulesPath\39-FileServer.ps1" -Raw
+    $aiRaw  = Get-Content "$modulesPath\57-AgentInstaller.ps1" -Raw
+    $utRaw  = Get-Content "$modulesPath\35-Utilities.ps1" -Raw
+    $isoRaw = Get-Content "$modulesPath\42-ISODownload.ps1" -Raw
+
+    # A — ExpectedHash enforced inside the NoSidecar branch, before returning NoSidecar.
+    Write-TestResult "39-FileServer: ExpectedHash enforced even without a sidecar (A)" `
+        ($fsRaw -match 'Reason -eq ''NoSidecar''[\s\S]{0,800}IsNullOrWhiteSpace\(\$ExpectedHash\)[\s\S]{0,900}integrity\.Hash -ne \$ExpectedHash')
+
+    # B — HashManifest existence check uses the hashtable idiom, and the dead PSObject idiom is gone.
+    Write-TestResult "57-AgentInstaller: HashManifest lookup uses .ContainsKey (B)" ($aiRaw -match 'ContainsKey\(''HashManifest''\)')
+    Write-TestResult "57-AgentInstaller: dead PSObject HashManifest idiom removed (B)" (-not ($aiRaw -match 'PSObject\.Properties\.Name -contains ''HashManifest'''))
+
+    # C — protected-staging helper exists (Admin+SYSTEM DACL) and is called before running the EXE.
+    Write-TestResult "35-Utilities: Move-ToProtectedStaging helper exists (C)" ($utRaw -match 'function Move-ToProtectedStaging')
+    Write-TestResult "35-Utilities: staging DACL is Administrators + SYSTEM only (C)" (($utRaw -match 'S-1-5-32-544') -and ($utRaw -match 'S-1-5-18'))
+    Write-TestResult "57-AgentInstaller: stages the EXE before executing it (C)" ($aiRaw -match 'Move-ToProtectedStaging[\s\S]{0,500}Running \$toolName Agent installer')
+
+    # D — reinstall guards on timeout & skip; a skipped-but-running installer isn't killed.
+    Write-TestResult "57-AgentInstaller: >=3 reinstall (-not preInstalled) guards (D)" ((([regex]::Matches($aiRaw, '-not \$preInstalled')).Count) -ge 3)
+    Write-TestResult "57-AgentInstaller: skip result requires fresh install to claim success (D)" ($aiRaw -match 'agentResult\.Installed -and -not \$preInstalled')
+    Write-TestResult "57-AgentInstaller: userSkipped leaves a running installer alone (D)" ($aiRaw -match '\$leaveRunning = \$earlyDetect -or \$installOK -or \$userSkipped')
+
+    # E — no CF token resent on redirect: all four request paths refuse auto-redirect; the main
+    # download streams via HttpWebRequest (no WebClient) and treats a 3xx as a hard failure.
+    Write-TestResult "39-FileServer: >=4 AllowAutoRedirect=false request paths (E)" ((([regex]::Matches($fsRaw, 'AllowAutoRedirect = \$false')).Count) -ge 4)
+    Write-TestResult "39-FileServer: main download streams via HttpWebRequest (E)" ($fsRaw -match 'GetResponseStream\(\)[\s\S]{0,200}CopyTo')
+    Write-TestResult "39-FileServer: a 3xx redirect is refused as failure (E)" ($fsRaw -match 'statusCode -ge 300 -and \$statusCode -lt 400')
+    Write-TestResult "39-FileServer: redirect-following WebClient removed (E)" ((([regex]::Matches($fsRaw, 'New-Object System\.Net\.WebClient')).Count) -eq 0)
+
+    # F — InstallArgs are built into a quoted string and passed as a string (not the raw array).
+    Write-TestResult "57-AgentInstaller: builds a quoted arg string (F)" ($aiRaw -match '\$argString = \(\$argArray \| ForEach-Object')
+    Write-TestResult "57-AgentInstaller: passes the built arg string to Start-Process (F)" ($aiRaw -match '-ArgumentList \$argString -PassThru')
+    Write-TestResult "57-AgentInstaller: no longer passes the raw arg array (F)" ((([regex]::Matches($aiRaw, '-ArgumentList \$argArray')).Count) -eq 0)
+
+    # G — ISO free-space bail restores the .old fallback and clears the script-scope rollback ptr.
+    Write-TestResult "42-ISODownload: free-space bail restores + clears rollback (G)" ($isoRaw -match 'Not enough space for ISO download[\s\S]{0,1500}_isoRollbackPath = \$null[\s\S]{0,80}return \$null')
+}
+catch {
+    Write-TestResult "Download-Execute Hardening Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
