@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.121.4
+
+Server role templates (the automatic role setups) — clearer failures and a friendlier Print Server setup.
+
+- **Role installs now tell you WHY they failed.** When a role template (e.g. Print Server) couldn't install, it just said "Failed" with no reason. It now shows the exact per-feature error and the common causes (missing source files, WSUS/Group Policy blocking the source, or the role not being available on that edition), so you can actually fix it.
+- **Print Server setup guidance.** After the Print Server role installs, RackStack now shows the next steps (add a port, add a printer, share it) and offers to open the Print Management console — so it's a finished setup, not just an installed role.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.3
 
 VM deployment — custom (and standard) VMs now actually save to the deployment queue.
