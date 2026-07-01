@@ -171,6 +171,21 @@ function Get-ServerISO {
             if ($freeGB -lt 10) {
                 Write-OutputColor "  ERROR: Only $freeGB GB free on ${isoDriveLetter}: drive." -color "Error"
                 Write-OutputColor "  Not enough space for ISO download (4-6 GB typically needed)." -color "Warning"
+                # Restore the .old fallback we renamed above (if any) before bailing, and clear the
+                # script-scope rollback pointer. Otherwise the renamed ISO is stranded (Test-CachedISO
+                # won't match `.iso.old`) AND a later Get-ServerISO for ANY version acts on this stale
+                # path — deleting it as "cleanup" on success, or Move-Item'ing it onto a different
+                # version's .iso name on failure, cross-contaminating that version.
+                if ($script:_isoRollbackPath -and (Test-Path -LiteralPath $script:_isoRollbackPath)) {
+                    try {
+                        $restorePath = $script:_isoRollbackPath -replace '\.old$', ''
+                        Move-Item -LiteralPath $script:_isoRollbackPath -Destination $restorePath -Force -ErrorAction Stop
+                        Write-OutputColor "  Restored previous ISO from rollback: $restorePath" -color "Info"
+                    } catch {
+                        Write-OutputColor "  Could not restore previous ISO: $($_.Exception.Message)" -color "Warning"
+                    }
+                }
+                $script:_isoRollbackPath = $null
                 return $null
             }
         }

@@ -225,6 +225,54 @@ function Test-ScriptUpdate {
     Write-PressEnter
 }
 
+# Move a just-verified file out of a world-/user-writable temp location into an
+# Administrators+SYSTEM-only staging directory BEFORE it is executed, closing the TOCTOU
+# window where a lower-privileged process watching the temp path could swap the file between
+# the hash verification and the execution/use. Returns the new (protected) path, or $null if
+# staging could not be established — in which case the caller keeps using the original path.
+#
+# The restrictive DACL is (re-)asserted on EVERY call, not just at creation: %ProgramData% lets
+# authenticated users create subdirectories, so a lower-privileged actor could pre-create the
+# stage dir with weak permissions; re-applying Administrators+SYSTEM-only (no inheritance) each
+# time prevents that from defeating the staging. Same SID/DACL pattern as the self-update stage.
+function Move-ToProtectedStaging {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Leaf,
+
+        [string]$SubDir = 'stage'
+    )
+    try {
+        if (-not (Test-Path -LiteralPath $SourcePath)) { return $null }
+        $stageDir = Join-Path $env:ProgramData $script:ToolName | Join-Path -ChildPath $SubDir
+        if (-not (Test-Path -LiteralPath $stageDir)) {
+            $null = New-Item -Path $stageDir -ItemType Directory -Force -ErrorAction Stop
+        }
+        # Re-assert Administrators + SYSTEM only, no inheritance (idempotent hardening).
+        $stageAcl = Get-Acl -LiteralPath $stageDir
+        $stageAcl.SetAccessRuleProtection($true, $false)
+        $stageAcl.Access | ForEach-Object { [void]$stageAcl.RemoveAccessRule($_) }
+        $adminsSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-544'
+        $systemSid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-18'
+        $stageAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($adminsSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+        $stageAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+        Set-Acl -LiteralPath $stageDir -AclObject $stageAcl -ErrorAction Stop
+
+        $destPath = Join-Path $stageDir $Leaf
+        if (Test-Path -LiteralPath $destPath) { Remove-Item -LiteralPath $destPath -Force -ErrorAction SilentlyContinue }
+        Move-Item -LiteralPath $SourcePath -Destination $destPath -Force -ErrorAction Stop
+        return $destPath
+    }
+    catch {
+        return $null
+    }
+}
+
 # Function to download and install an update from a GitHub release
 function Install-ScriptUpdate {
     param (

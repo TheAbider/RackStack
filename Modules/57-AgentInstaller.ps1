@@ -134,7 +134,13 @@ function Get-AgentInstallerList {
                 if ($parsed.Valid) {
                     # Look up optional caller-supplied hash from AgentInstaller.HashManifest (filename → SHA256)
                     $manifestHash = ''
-                    if ($script:AgentInstaller.PSObject.Properties.Name -contains 'HashManifest' -and $script:AgentInstaller.HashManifest) {
+                    # $script:AgentInstaller is a hashtable (00-Initialization) — its existence
+                    # check MUST use .ContainsKey (matching the RequireHash idiom below), not the
+                    # .PSObject.Properties idiom, which on a hashtable returns .NET members and
+                    # never the keys — leaving ExpectedHash silently empty and the operator's
+                    # configured SHA256 gate dead. The HashManifest VALUE is a PSCustomObject
+                    # (nested JSON object), so its per-file lookup at line below is correct as-is.
+                    if ($script:AgentInstaller.ContainsKey('HashManifest') -and $script:AgentInstaller.HashManifest) {
                         $manifest = $script:AgentInstaller.HashManifest
                         if ($manifest.PSObject.Properties.Name -contains $fileName) {
                             $manifestHash = [string]$manifest.$fileName
@@ -563,6 +569,15 @@ function Install-SelectedAgent {
         return
     }
 
+    # Protected staging: move the just-verified installer out of $env:TEMP into an
+    # Administrators+SYSTEM-only directory BEFORE running it as SYSTEM. This closes the TOCTOU
+    # window where a lower-privileged process watching $env:TEMP could swap the EXE between the
+    # SHA256 verification above and the Start-Process below. Mirrors the self-update path's
+    # staging. Best-effort — if staging can't be set up we fall back to the $env:TEMP path
+    # (which for an elevated run is already per-user ACL'd) rather than blocking the install.
+    $stagedPath = Move-ToProtectedStaging -SourcePath $tempPath -Leaf $fn -SubDir 'agentstage'
+    if ($stagedPath) { $tempPath = $stagedPath }
+
     # Run installer
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Running $toolName Agent installer..." -color "Info"
@@ -604,7 +619,16 @@ function Install-SelectedAgent {
             } | Where-Object { $_ -ne "" -and $null -ne $_ })
         }
         if ($argArray.Count -gt 0) {
-            $installProcess = Start-Process -FilePath $tempPath -ArgumentList $argArray -PassThru -WindowStyle Hidden -ErrorAction Stop
+            # PS 5.1's Start-Process joins -ArgumentList with single spaces and does NOT re-quote
+            # array elements that themselves contain whitespace — so a tokenizer-preserved value
+            # like `GUID with spaces` (from `/token "GUID with spaces"`) would be re-split by the
+            # installer's CommandLineToArgvW, undoing the careful tokenizing above at the exact
+            # call site it was meant to protect. Build the command-line string ourselves, wrapping
+            # any whitespace-bearing token in double quotes, so the installer gets the intended argv.
+            $argString = ($argArray | ForEach-Object {
+                if ($_ -match '\s' -and $_ -notmatch '^".*"$') { '"' + $_ + '"' } else { $_ }
+            }) -join ' '
+            $installProcess = Start-Process -FilePath $tempPath -ArgumentList $argString -PassThru -WindowStyle Hidden -ErrorAction Stop
         } else {
             $installProcess = Start-Process -FilePath $tempPath -PassThru -WindowStyle Hidden -ErrorAction Stop
         }
@@ -660,10 +684,18 @@ function Install-SelectedAgent {
             }
 
             if ($elapsed -gt $installTimeout) {
-                $timeoutCheck = Test-AgentInstalled
-                if ($timeoutCheck.Installed) {
-                    $earlyDetect = $true
-                    break
+                # Fresh install: a now-present service means the installer overran the timeout
+                # but the agent is in fact there — accept it. Reinstall/upgrade: the OLD service
+                # was already present ($preInstalled), so its presence proves NOTHING about THIS
+                # run; a process still running past the timeout is a genuine hang — fall through
+                # to kill + honest timeout report instead of falsely claiming success and leaving
+                # the hung installer running (the finally's leaveRunning would have spared it).
+                if (-not $preInstalled) {
+                    $timeoutCheck = Test-AgentInstalled
+                    if ($timeoutCheck.Installed) {
+                        $earlyDetect = $true
+                        break
+                    }
                 }
                 Write-OutputColor ""
                 Write-OutputColor "  Installation timed out after $installTimeout seconds." -color "Warning"
@@ -688,9 +720,12 @@ function Install-SelectedAgent {
             $exitDesc = "Success (agent detected)"
             $agentResult = Test-AgentInstalled
         } elseif ($userSkipped) {
-            # User pressed Escape — check if agent installed anyway
+            # User pressed Escape to stop waiting — check if the agent installed anyway. On a
+            # reinstall/upgrade the OLD service is already present ($preInstalled), so a positive
+            # Test-AgentInstalled can't be attributed to THIS run; only a FRESH install lets a
+            # detected agent count as success. Otherwise report an honest SKIPPED, never SUCCESS.
             $agentResult = Test-AgentInstalled
-            if ($agentResult.Installed) {
+            if ($agentResult.Installed -and -not $preInstalled) {
                 $installOK = $true
                 $exitCode = 0
                 $exitDesc = "Success (agent detected)"
@@ -810,11 +845,14 @@ function Install-SelectedAgent {
         }
     }
     finally {
-        # Only kill a still-running installer if THIS run did NOT succeed. When the agent
-        # service came up (earlyDetect) or the install otherwise verified, the installer is
-        # often still finishing enrollment in the background — killing it there leaves the
-        # agent half-configured. Let it run, and don't yank the EXE it's executing from.
-        $leaveRunning = $earlyDetect -or $installOK
+        # Only kill a still-running installer if THIS run did NOT succeed AND the operator
+        # didn't simply skip watching. When the agent service came up (earlyDetect) or the
+        # install otherwise verified, the installer is often still finishing enrollment in the
+        # background — killing it there leaves the agent half-configured. When the operator
+        # pressed Escape to stop waiting ($userSkipped) the installer may still be legitimately
+        # enrolling — especially a reinstall over a previously-working agent — so don't yank it
+        # out from under them either; the result box already reports SKIPPED (never SUCCESS).
+        $leaveRunning = $earlyDetect -or $installOK -or $userSkipped
         $stillRunning = $installProcess -and -not $installProcess.HasExited
         if ($stillRunning -and -not $leaveRunning) {
             try { $installProcess.Kill() } catch {}

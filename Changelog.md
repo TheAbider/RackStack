@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.121.9
+
+Installer download & agent-install hardening — fixes found by a deep audit of the download → verify → execute chain (FileServer, Agent Installer, ISO download).
+
+- **Your configured installer hash is actually checked now.** If you set a known-good SHA256 for an agent installer (the recommended path when your file server doesn't publish `.sha256` sidecars), it was being silently ignored — two separate bugs meant the hash never loaded and, even if it had, it was skipped when no sidecar existed. Both are fixed: a configured hash is now enforced, and a mismatch fails the install closed instead of falling through to a weaker size-only prompt.
+- **Reinstalling an agent can't falsely report success anymore.** When re-running over an already-installed agent, an install that timed out or was skipped could report "SUCCESS" (and leave a hung installer running) because the *old* service was still present. It now only counts a detected service as success on a fresh install, and a skipped-but-still-running installer is left to finish instead of being killed.
+- **The verified installer is run from a protected location.** After its hash is verified, the installer is moved into an Administrators/SYSTEM-only folder before it runs — closing a window where another process could swap the file between verification and execution.
+- **The file-server access token is never sent to an unexpected server.** Downloads no longer follow HTTP redirects while carrying the Cloudflare Access token, so the token can't be leaked to a redirect target on another host.
+- **Installer arguments with spaces are passed correctly.** A token like `/token "value with spaces"` is no longer re-split into separate arguments.
+- **A low-disk-space ISO re-download restores your existing ISO.** Bailing out for insufficient space now puts the previous ISO back and clears its rollback marker, instead of stranding it and confusing the next download.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.8
 
 Cleanup and encryption safety — fixes found by a deep audit of the destructive/data-affecting modules.
