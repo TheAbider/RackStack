@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.120.0
+    Automated Test Runner for RackStack v1.121.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9536,6 +9536,42 @@ try {
 }
 catch {
     Write-TestResult "Host-Network Hyper-V Gating Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 188: DISK INIT FIX + STORAGE STATUS/COLOR (v1.121.0)
+# ============================================================================
+Write-SectionHeader "SECTION 188: DISK INIT + STORAGE STATUS/COLOR"
+
+try {
+    $smC = Get-Content "$modulesPath\38-StorageManager.ps1" -Raw
+
+    # Detection helpers exist.
+    Write-TestResult "38-Storage: Get-BootSystemDiskNumbers exists" ($smC -match 'function\s+Get-BootSystemDiskNumbers\b')
+    Write-TestResult "38-Storage: Test-IsOpticalOrRemovable exists" ($smC -match 'function\s+Test-IsOpticalOrRemovable\b')
+
+    # THE init bug fix: Initialize-NewDisk must select offline disks (-AllowOffline) or a brand-new
+    # offline RAW disk is silently filtered out of the picker and never initializes.
+    Write-TestResult "38-Storage: Initialize-NewDisk selects offline disks (-AllowOffline)" ($smC -match 'function\s+Initialize-NewDisk[\s\S]{0,1500}Select-Disk[^\r\n]*-AllowOffline')
+    # It must clear read-only before Initialize-Disk (a read-only disk fails init generically).
+    Write-TestResult "38-Storage: Initialize-NewDisk clears read-only before init" ($smC -match '-IsReadOnly \$false[\s\S]{0,2500}Initialize-Disk -Number')
+
+    # Boot/system = red, removable/optical = magenta (Critical) in the disk overview.
+    Write-TestResult "38-Storage: Show-AllDisks uses boot/system detection" ($smC -match 'function\s+Show-AllDisks[\s\S]{0,2000}Get-BootSystemDiskNumbers')
+    Write-TestResult "38-Storage: Show-AllDisks paints removable Critical" ($smC -match 'function\s+Show-AllDisks[\s\S]{0,2500}Test-IsOpticalOrRemovable[\s\S]{0,400}Critical')
+
+    # Select-Disk shows an explicit [Offline] marker now that offline disks are selectable.
+    Write-TestResult "38-Storage: Select-Disk shows [Offline] marker" ($smC -match 'function\s+Select-Disk[\s\S]{0,3000}\[Offline\]')
+
+    # Volume overview paints the system volume red and optical/removable magenta.
+    Write-TestResult "38-Storage: Show-AllVolumes flags system volume red" ($smC -match 'function\s+Show-AllVolumes[\s\S]{0,3000}isSystemVol[\s\S]{0,200}Error')
+    Write-TestResult "38-Storage: Show-AllVolumes flags optical/removable" ($smC -match "function\s+Show-AllVolumes[\s\S]{0,3000}'CD-ROM',\s*'Removable'")
+
+    # Drive Letter Map uses magenta (not yellow) for optical, matching the rest of the tool.
+    Write-TestResult "38-Storage: Drive Letter Map optical is Magenta" ($smC -match 'DriveType -eq "CD-ROM"\s*\)\s*\{\s*"Magenta"')
+}
+catch {
+    Write-TestResult "Disk Init + Storage Color Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
