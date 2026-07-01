@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.6
+    Automated Test Runner for RackStack v1.121.7
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -9777,6 +9777,31 @@ try {
 }
 catch {
     Write-TestResult "Failover Clustering Safety Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 194: NEW-FOREST PRE-PROMOTION VALIDATION (v1.121.7)
+# ============================================================================
+# Guards the two new-forest input-validation fixes: fail fast on an invalid NetBIOS name and on a
+# domain-joined member server, BEFORE the DSRM password is collected.
+Write-SectionHeader "SECTION 194: NEW-FOREST PRE-PROMOTION VALIDATION"
+
+try {
+    $adR = Get-Content "$modulesPath\61-ActiveDirectory.ps1" -Raw
+
+    # NetBIOS length validation happens in Install-NewForest, BEFORE Read-DSRMPassword.
+    Write-TestResult "61-AD: new forest validates NetBIOS length" ($adR -match '\$netbiosName\.Length -gt 15')
+    Write-TestResult "61-AD: NetBIOS check precedes DSRM password prompt" ($adR -match '\$netbiosName\.Length -gt 15[\s\S]{0,1200}Read-DSRMPassword')
+
+    # New-forest-only member-server guard (scoped locally, not in the shared prereq check).
+    Write-TestResult "61-AD: new forest rejects domain-joined member server" ($adR -match 'DomainRole -in @\(1, 3\)[\s\S]{0,300}standalone \(workgroup\)')
+    Write-TestResult "61-AD: member-server guard is new-forest-scoped (shared prereq unchanged)" ($adR -match 'function Test-ADDSPrerequisites[\s\S]{0,4000}DomainRole[\s\S]{0,60}-ge 4')
+
+    # Regression guard: the shared prereq still uses -ge 4 (so Add-DC / RODC keep working on members).
+    Write-TestResult "61-AD: shared prereq still uses -ge 4 (not -ge 3)" (-not ($adR -match 'function Test-ADDSPrerequisites[\s\S]{0,4000}DomainRole[\s\S]{0,40}-ge 3'))
+}
+catch {
+    Write-TestResult "New-Forest Validation Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
