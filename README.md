@@ -28,7 +28,7 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="5230 structural tests" src="https://img.shields.io/badge/structural%20tests-5230-brightgreen">
+  <img alt="5242 structural tests" src="https://img.shields.io/badge/structural%20tests-5242-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>

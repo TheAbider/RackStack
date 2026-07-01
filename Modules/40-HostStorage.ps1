@@ -478,7 +478,11 @@ function Show-HostStorageAnalysis {
         foreach ($folder in $subfolders) {
             $folderPath = Join-Path $dataDrive $folder
             if (Test-Path -LiteralPath $folderPath) {
-                $folderSize = (Get-ChildItem -LiteralPath $folderPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                # -File is required: without it, Get-ChildItem -Recurse returns directory objects
+                # too (e.g. the _BaseImages subfolder), and Measure-Object -Property Length then
+                # throws "the value of argument 'Property' is not valid" because directories have
+                # no Length property.
+                $folderSize = (Get-ChildItem -LiteralPath $folderPath -File -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
                 $folderGB = [math]::Round($folderSize / 1GB, 1)
                 $fileCount = @(Get-ChildItem -LiteralPath $folderPath -File -Recurse -ErrorAction SilentlyContinue).Count
                 Write-OutputColor "    ${folder}: ${folderGB} GB ($fileCount files)" -color "Info"
