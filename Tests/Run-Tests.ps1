@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.2
+    Automated Test Runner for RackStack v1.121.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -970,7 +970,6 @@ $trueInputs = @(
     @{ Input = "QUIT"; ExpAction = "exit"; Desc = "'QUIT' -> exit" }
     @{ Input = "EXIT"; ExpAction = "exit"; Desc = "'EXIT' -> exit" }
     @{ Input = "exit"; ExpAction = "exit"; Desc = "'exit' -> exit" }
-    @{ Input = "C";    ExpAction = "back"; Desc = "'C' (cancel) -> back" }
     @{ Input = "0";    ExpAction = "back"; Desc = "'0' -> back" }
     @{ Input = "  b  "; ExpAction = "back"; Desc = "'  b  ' (whitespace) -> back" }
 )
@@ -989,6 +988,8 @@ foreach ($tc in $trueInputs) {
 $falseInputs = @(
     @{ Input = "Q";        Desc = "'Q' -> no match (menu shortcut, not exit)" }
     @{ Input = "q";        Desc = "'q' -> no match (menu shortcut, not exit)" }
+    @{ Input = "C";        Desc = "'C' -> no match (affirmative menu key: Continue/Create/Add)" }
+    @{ Input = "c";        Desc = "'c' -> no match (affirmative menu key, not cancel)" }
     @{ Input = "1";        Desc = "'1' -> no match" }
     @{ Input = "X";        Desc = "'X' -> no match" }
     @{ Input = "H";        Desc = "'H' -> no match" }
@@ -9639,6 +9640,45 @@ try {
 }
 catch {
     Write-TestResult "Storage Manager Reliability Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 190: VM DEPLOYMENT QUEUE + NAV 'C' COLLISION (v1.121.3)
+# ============================================================================
+# Guards the fix for the custom-VM-never-saves-to-queue bug: 'c'/'C' was a global back/cancel
+# token, so the [C] ADD TO QUEUE / [C] Continue affirmative keys were swallowed as "cancel".
+Write-SectionHeader "SECTION 190: VM DEPLOYMENT QUEUE + NAV 'C' COLLISION"
+
+try {
+    $navR = Get-Content "$modulesPath\04-Navigation.ps1" -Raw
+    $vmR  = Get-Content "$modulesPath\44-VMDeployment.ps1" -Raw
+
+    # 'c' must NOT be a back/cancel token — it is an affirmative menu key (Continue/Create/Add).
+    Write-TestResult "04-Navigation: backCommands excludes 'c'" ($navR -match '\$backCommands\s*=\s*@\(' -and -not ($navR -match '\$backCommands\s*=\s*@\([^\)]*"c"[^\)]*\)'))
+    # But keeps the legitimate back tokens.
+    Write-TestResult "04-Navigation: backCommands keeps back/b/cancel/0" ($navR -match '\$backCommands\s*=\s*@\("back",\s*"b",\s*"cancel",\s*"0"\)')
+
+    # Behavioral: 'c'/'C' is not a navigation command (dot-source the module and call it).
+    try {
+        . "$modulesPath\04-Navigation.ps1"
+        $navC = Test-NavigationCommand -UserInput 'c'
+        $navCUpper = Test-NavigationCommand -UserInput 'C'
+        Write-TestResult "Test-NavigationCommand: 'c' is not back/cancel" ($navC.ShouldReturn -eq $false)
+        Write-TestResult "Test-NavigationCommand: 'C' is not back/cancel" ($navCUpper.ShouldReturn -eq $false)
+        Write-TestResult "Test-NavigationCommand: 'back' still returns" ((Test-NavigationCommand -UserInput 'back').ShouldReturn -eq $true)
+    } catch {
+        Write-TestResult "Test-NavigationCommand 'c' behavioral" $false $_.Exception.Message
+    }
+
+    # The custom-VM review loop reaches Add-VMToQueue, whose += persists to the script-scope queue.
+    Write-TestResult "44-VMDeploy: [C] ADD TO QUEUE path calls Add-VMToQueue" ($vmR -match 'ADD TO QUEUE' -and $vmR -match 'Add-VMToQueue -Config')
+    Write-TestResult "44-VMDeploy: Add-VMToQueue appends to script queue" ($vmR -match '\$script:VMDeploymentQueue\s*\+=\s*\$Config')
+
+    # Batch deploy keeps failed VMs in the queue instead of wiping everything on partial failure.
+    Write-TestResult "44-VMDeploy: batch deploy retains failed VMs for retry" ($vmR -match 'if \(\$failCount -eq 0\)\s*\{\s*\$script:VMDeploymentQueue = @\(\)\s*\}\s*else\s*\{[\s\S]{0,300}failedConfigs')
+}
+catch {
+    Write-TestResult "VM Deployment Queue Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

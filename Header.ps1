@@ -30,7 +30,7 @@
     7h3 4b1d3r
 
 .VERSION
-    1.121.2
+    1.121.3
 .LAST UPDATED
     07/01/2026
 

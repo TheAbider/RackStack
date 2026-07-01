@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.121.3
+
+VM deployment — custom (and standard) VMs now actually save to the deployment queue.
+
+- **"Add to Queue" works.** Building a VM and pressing **[C] Add to Queue** did nothing — the VM never entered the deployment queue. The letter "C" was being treated as a global cancel/back key, so every affirmative **[C]** step in the VM builder (finish configuring disks, finish NICs, add to queue) was silently cancelled before it could run. "C" is no longer a cancel key (cancel is **[X]**, back is **[B]** / **[0]** / "back"), so the whole build-and-queue flow completes.
+- **Failed VMs stay in the queue.** If a batch deployment partly fails, the VMs that failed are now kept in the queue so you can fix the issue and retry, instead of the whole queue being cleared.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.2
 
 Storage Manager reliability — a batch of fixes so disk and volume operations actually run instead of silently dead-ending.
