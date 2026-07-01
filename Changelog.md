@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.121.10
+
+Credential-handling hardening — fixes found by a deep audit of password generation, SecureString hygiene, and secret leakage.
+
+- **A generated password no longer ends up in the session transcript.** The strong-password generator already went out of its way to keep the password off-screen-log by pausing transcription while it displayed — but it then *returned* the password, which the menu echoed back to the console (and into the transcript on disk). It no longer returns the plaintext; it's shown once for you to record and nothing more.
+- **The clipboard auto-clear actually runs now.** The 60-second "auto-clears from clipboard" timer could be garbage-collected before it fired, silently leaving the password in the clipboard (and Windows clipboard history). The timer is now held so it reliably clears.
+- **The file-server access secret is entered hidden.** Setting the Cloudflare Access client secret in the in-tool settings used a normal prompt that echoed the secret to the screen (and transcript). It's now entered masked and handled without leaving a plaintext copy behind.
+
+(The audit also confirmed the password generator already uses a cryptographic RNG, and that the RADIUS / VPN / SIEM / Azure Arc secrets that must be passed to their native tools are handled as safely as those tools allow.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.9
 
 Installer download & agent-install hardening — fixes found by a deep audit of the download → verify → execute chain (FileServer, Agent Installer, ISO download).

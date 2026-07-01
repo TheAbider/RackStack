@@ -1627,9 +1627,21 @@ function Show-EditDefaults {
                 $val = Read-Host
                 if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.ClientId = $val }
 
-                Write-OutputColor "  Enter CF-Access-Client-Secret:" -color "Info"
-                $val = Read-Host
-                if (-not [string]::IsNullOrWhiteSpace($val)) { $script:FileServer.ClientSecret = $val }
+                # Collect the CF-Access-Client-Secret hidden: a plain Read-Host echoes the typed
+                # secret to the console, which Start-Transcript then persists to the on-disk log.
+                # Marshal the SecureString to the plaintext string the FileServer needs as an HTTP
+                # header, zero-freeing the BSTR in a finally. (ClientId above is not a secret.)
+                Write-OutputColor "  Enter CF-Access-Client-Secret (input hidden, leave empty to keep current):" -color "Info"
+                $secVal = Read-Host -AsSecureString
+                if ($secVal -and $secVal.Length -gt 0) {
+                    $secBstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secVal)
+                    try {
+                        $script:FileServer.ClientSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($secBstr)
+                    }
+                    finally {
+                        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($secBstr)
+                    }
+                }
 
                 Write-OutputColor "  Enter ISOs subfolder name (default: ISOs):" -color "Info"
                 $val = Read-Host

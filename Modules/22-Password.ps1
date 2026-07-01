@@ -328,7 +328,11 @@ function Show-LocalAccountAudit {
 
 # Function to generate a strong random password
 function New-StrongPassword {
-    param([int]$Length = 16)
+    # -PassThru returns the generated plaintext to the caller. It is OFF by default: the
+    # interactive menu action must NOT receive the value (a bare-statement call would stream it
+    # to top-level Out-Default, re-echoing it to the console and into the on-disk transcript).
+    # Only explicit programmatic/test callers that capture and handle the value pass -PassThru.
+    param([int]$Length = 16, [switch]$PassThru)
 
     if ($Length -lt 12) { $Length = 12 }
     if ($Length -gt 128) { $Length = 128 }
@@ -427,15 +431,28 @@ function New-StrongPassword {
                 }
             } catch { }
         }
-        # Timer is fire-once (period = -1). Reference is intentionally not held;
-        # GC will reclaim after the callback fires.
-        $null = New-Object System.Threading.Timer($timerCallback, $expectedClip, ($clipTTL * 1000), [System.Threading.Timeout]::Infinite)
+        # Timer is fire-once (period = -1). It MUST be kept rooted: an unreferenced
+        # System.Threading.Timer is GC-eligible immediately and its finalizer CANCELS the
+        # pending callback, so a collection within the 60s window (ordinary gen0 GC in the menu
+        # loop, or the explicit [GC]::Collect() in Clear-SecureMemory) would silently skip the
+        # clipboard clear and leave the plaintext in the clipboard/Win+V history indefinitely.
+        # Hold it in a script-scope field; dispose the prior one so repeated generation doesn't
+        # leak timers.
+        if ($script:_clipClearTimer) { try { $script:_clipClearTimer.Dispose() } catch { } }
+        $script:_clipClearTimer = New-Object System.Threading.Timer($timerCallback, $expectedClip, ($clipTTL * 1000), [System.Threading.Timeout]::Infinite)
         Write-OutputColor "  Copied to clipboard (auto-clears in ${clipTTL}s while this window is open)." -color "Success"
     }
     catch {
         Write-OutputColor "  Tip: Select and copy the password above." -color "Info"
     }
 
-    return $password
+    # Return the plaintext ONLY when the caller explicitly opts in via -PassThru (tests /
+    # programmatic use, which capture and handle it). The interactive menu action (option 11)
+    # calls this WITHOUT -PassThru, so the password never emits on the success stream to
+    # top-level Out-Default — which would re-echo it to the console AND write it into the
+    # just-resumed on-disk transcript, defeating the Stop-Transcript dance above. On the default
+    # path it is shown once via [Console]::WriteLine for the operator to record and nothing more.
+    if ($PassThru) { return $password }
+    return
 }
 #endregion
