@@ -27,13 +27,20 @@ function Show-TaskHealthStatus {
 
             $color = "Success"
             $status = "OK"
-            if ($lastResult -ne 0 -and $lastResult -ne 267009) {  # 267009 = task is running
+            if ($lastResult -eq 267009) {  # 0x00041301 = task is currently running
+                $color = "Warning"
+                $status = "Running"
+            } elseif ($lastResult -eq 0x00041300 -or $lastResult -eq 0x00041303) {
+                # 0x00041300 = ready/never-run at its next time, 0x00041303 = has not yet run.
+                # These are HEALTHY not-yet-executed states, not failures — the sibling
+                # Show-FailedTasks excludes them too. Treating them as FAILED made a brand-new
+                # or on-demand task show a red error before it had ever run.
+                $color = "Info"
+                $status = "Ready (not yet run)"
+            } elseif ($lastResult -ne 0) {
                 $color = "Error"
                 $status = "FAILED (0x$($lastResult.ToString('X')))"
                 $failedCount++
-            } elseif ($lastResult -eq 267009) {
-                $color = "Warning"
-                $status = "Running"
             }
 
             Write-OutputColor "  $taskName  Last: $lastRun  $status" -color $color

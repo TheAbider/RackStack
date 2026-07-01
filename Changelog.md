@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.121.13
+
+Role/service cleanup and reporting fixes — found by a deep audit of the ADCS, scheduled-task, WSUS, and Remote Desktop modules.
+
+- **Self-destruct now removes all of the tool's scheduled tasks.** When the tool deleted itself, it left its own scheduled export and update-check tasks registered (running as SYSTEM) pointing at the now-deleted program — leftover privileged tasks that would fire and fail forever. It now unregisters those too, so it leaves nothing behind.
+- **A failed RDS licensing change in Dry-Run is reported as failed**, not silently applied.
+- **A WSUS setup with no valid update classifications is reported as incomplete.** Previously a misconfigured WSUS (which would sync nothing) still reported "configuration applied" — it now tells you the classifications didn't match and to fix them.
+- **The scheduled-task health view stops crying wolf.** Brand-new or on-demand tasks that simply hadn't run yet were shown in red as "FAILED"; they're now shown as "Ready (not yet run)".
+
+(The audit also confirmed the Certificate Authority setup uses strong crypto — SHA-256, RSA ≥ 2048 — and that the certificate-audit and Defender-onboarding paths are correct.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.12
 
 Backup / undo honesty — fixes found by a deep audit of the security-feature modules (Group Policy, JEA, NPS, SIEM forwarding). Common theme: a safety-net backup that could silently fail and then be trusted anyway.
