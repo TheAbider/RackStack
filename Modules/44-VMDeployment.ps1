@@ -2785,8 +2785,16 @@ function Start-BatchDeployment {
         }
     }
 
-    # Clear the queue
-    $script:VMDeploymentQueue = @()
+    # Clear only the successfully-deployed VMs from the queue; keep any that FAILED so the operator
+    # can fix the problem and retry without rebuilding them from scratch.
+    if ($failCount -eq 0) {
+        $script:VMDeploymentQueue = @()
+    }
+    else {
+        $failedConfigs = @($script:VMDeploymentQueue | Where-Object { $deployedVMs -notcontains $_ })
+        $script:VMDeploymentQueue = $failedConfigs
+        Write-OutputColor "  $($failedConfigs.Count) failed VM(s) kept in the queue for retry." -color "Warning"
+    }
 }
 
 # Function to add a VM config to the queue (used by Publish-StandardVM/Publish-CustomVM)

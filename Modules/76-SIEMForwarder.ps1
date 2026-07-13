@@ -323,8 +323,19 @@ function Write-SIEMConfigFile {
     $leaf = [System.IO.Path]::GetFileName($TargetPath)
     $backup = $null
     if (Test-Path -LiteralPath $TargetPath) {
+        # A prior config exists — it MUST be backed up before we overwrite it, or an Undo can't
+        # restore it. The old code copied with -EA SilentlyContinue and still returned the backup
+        # path even if the copy failed; Restore-SIEMConfig then saw the (missing) backup, fell
+        # through, and DELETED the live config on undo instead of restoring the prior one. Fail
+        # closed: if we can't take the backup, don't overwrite the existing config at all.
         $backup = Join-Path $secureDir "$leaf.$stamp.bak"
-        Copy-Item -LiteralPath $TargetPath -Destination $backup -Force -ErrorAction SilentlyContinue
+        try {
+            Copy-Item -LiteralPath $TargetPath -Destination $backup -Force -ErrorAction Stop
+        }
+        catch {
+            Write-OutputColor "  Failed to back up existing $leaf; leaving it in place: $($_.Exception.Message)" -color "Error"
+            return @{ Ok = $false; Backup = $null; Target = $TargetPath }
+        }
         Write-OutputColor "  Backed up existing $leaf to: $backup" -color "Info"
     }
     $stage = Join-Path $secureDir "$leaf.$stamp.stage"

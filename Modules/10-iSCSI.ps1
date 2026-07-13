@@ -729,9 +729,9 @@ function Set-iSCSIConfiguration {
     # Show auto-config menu
     $choice = Show-iSCSIAutoConfigMenu
 
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return }
-
+    # Match the affirmative menu keys (A / M) FIRST; navigation (back/home/etc.) is handled in the
+    # switch default. Running Test-NavigationCommand up front swallowed [M] Manual, because "m" is
+    # the global "home" token, before the '^[Mm]$' arm could run.
     switch -Regex ($choice) {
         '^[Aa]$' {
             Set-iSCSIAutoConfiguration
@@ -761,10 +761,10 @@ function Set-iSCSIConfiguration {
             Write-OutputColor "`niSCSI Configuration Complete" -color "Success"
             Write-OutputColor "  Processed: $totalCount adapter(s)" -color "Info"
         }
-        '^[Bb]$' {
-            return
-        }
         default {
+            # Not an affirmative key — treat as navigation (back/[B]/home/etc), else invalid.
+            $navResult = Test-NavigationCommand -UserInput $choice
+            if ($navResult.ShouldReturn) { return }
             Write-OutputColor "  Invalid selection. Enter A, M, or B." -color "Error"
         }
     }
@@ -1032,8 +1032,13 @@ function Connect-iSCSITargets {
                 # portals. Doesn't unregister the portals themselves so a
                 # subsequent re-connect is fast.
                 foreach ($p in $capPortals) {
-                    Get-IscsiSession -ErrorAction SilentlyContinue | Where-Object { $_.TargetNodeAddress -and $_.InitiatorPortalAddress -eq $p } |
-                        ForEach-Object { Disconnect-IscsiTarget -NodeAddress $_.TargetNodeAddress -Confirm:$false -ErrorAction SilentlyContinue }
+                    # Match on the session's CONNECTION target address (the target/SAN portal IP),
+                    # not InitiatorPortalAddress — that's the LOCAL initiator NIC IP and never equals
+                    # a captured target portal, so the old predicate matched nothing and the undo
+                    # silently disconnected nothing.
+                    Get-IscsiSession -ErrorAction SilentlyContinue | Where-Object {
+                        $_.TargetNodeAddress -and (@($_ | Get-IscsiConnection -ErrorAction SilentlyContinue | Where-Object { $_.TargetAddress -eq $p }).Count -gt 0)
+                    } | ForEach-Object { Disconnect-IscsiTarget -NodeAddress $_.TargetNodeAddress -Confirm:$false -ErrorAction SilentlyContinue }
                 }
             }.GetNewClosure()
         Write-OutputColor "  Queued (Dry-Run): connect iSCSI portals." -color "Warning"
@@ -1312,10 +1317,15 @@ function Show-iSCSIStatus {
             Write-OutputColor "  │$("  Load Balance Policy: Unknown".PadRight(72))│" -color "Warning"
         }
 
-        # Show MPIO disks
-        $mpioDisks = Get-MSDSMAutomaticClaimSettings -ErrorAction SilentlyContinue
-        if ($mpioDisks) {
+        # Show MPIO iSCSI auto-claim state. Get-MSDSMAutomaticClaimSettings returns a per-bus-type
+        # hashtable (e.g. @{ SAS = $true; iSCSI = $false }); a hashtable is ALWAYS truthy, so the old
+        # `if ($mpioDisks)` printed "Enabled" even when iSCSI auto-claim was off. Read the iSCSI key.
+        $mpioClaim = Get-MSDSMAutomaticClaimSettings -ErrorAction SilentlyContinue
+        if ($null -ne $mpioClaim -and $mpioClaim['iSCSI']) {
             Write-OutputColor "  │$("  iSCSI Auto-Claim: Enabled".PadRight(72))│" -color "Success"
+        }
+        else {
+            Write-OutputColor "  │$("  iSCSI Auto-Claim: Disabled".PadRight(72))│" -color "Warning"
         }
     }
     else {
@@ -1556,8 +1566,14 @@ function Start-Show-iSCSISANMenu {
                     Write-OutputColor "" -color "Info"
 
                     $connectChoice = Read-Host "  Select"
-                    $navResult = Test-NavigationCommand -UserInput $connectChoice
-                    if ($navResult.ShouldReturn) { return }
+                    # Match this menu's own action letters (A/M/P) BEFORE the nav check — otherwise
+                    # Test-NavigationCommand consumes 'M' as the home token and silently exits the
+                    # whole iSCSI/SAN menu, making [M] Manual unreachable dead code (same class fixed
+                    # in Set-iSCSIConfiguration). Only OTHER input (b/back/0/...) is treated as nav.
+                    if ($connectChoice -notmatch '^[AaMmPp]$') {
+                        $navResult = Test-NavigationCommand -UserInput $connectChoice
+                        if ($navResult.ShouldReturn) { return }
+                    }
 
                     switch -Regex ($connectChoice) {
                         '^[Aa]$' {

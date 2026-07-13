@@ -270,6 +270,7 @@ function Set-WSUSDefaultConfiguration {
     } else {
         @('Critical Updates', 'Security Updates', 'Definition Updates', 'Update Rollups')
     }
+    $classificationsEnabled = $false
     try {
         $allClass = $wsus.GetUpdateClassifications()
         $selected = @($allClass | Where-Object { $_.Title -in $wantClassifications })
@@ -291,6 +292,7 @@ function Set-WSUSDefaultConfiguration {
             foreach ($c in $selected) { [void]$coll.Add($c) }
             $sub.SetUpdateClassifications($coll)
             $sub.Save()
+            $classificationsEnabled = $true
             Write-OutputColor "  Enabled classifications: $($matchedTitles -join ', ')" -color "Success"
         }
     }
@@ -312,6 +314,17 @@ function Set-WSUSDefaultConfiguration {
     }
     catch {
         Write-OutputColor "  Could not set the sync schedule: $($_.Exception.Message)" -color "Warning"
+    }
+
+    # If NO update classification was enabled, the WSUS server will sync nothing — a misconfigured
+    # server that reports "configured" is the worst outcome (per the comment above). Don't claim
+    # success: report the config as incomplete and return $false so callers / the CLI exit code
+    # reflect it.
+    if (-not $classificationsEnabled) {
+        Add-SessionChange -Category "Roles" -Description "WSUS configuration incomplete — no update classifications enabled"
+        Write-OutputColor "  WSUS configuration is INCOMPLETE: no update classifications were enabled, so the" -color "Error"
+        Write-OutputColor "  server will sync nothing. Fix WSUS.Classifications in defaults.json and re-run." -color "Warning"
+        return $false
     }
 
     Add-SessionChange -Category "Roles" -Description "Applied default WSUS configuration (language, classifications, sync schedule)"

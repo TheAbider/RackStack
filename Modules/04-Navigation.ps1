@@ -7,7 +7,11 @@ function Test-NavigationCommand {
         [string]$UserInput
     )
 
-    $backCommands = @("back", "b", "cancel", "c", "0")
+    # NOTE: "c" is deliberately NOT a back/cancel token. Menus use [C] as an AFFIRMATIVE key
+    # (Continue / Create / Clear / Copy / ADD TO QUEUE), and treating "c" as cancel silently
+    # aborted those actions — e.g. a custom VM could never be added to the deployment queue.
+    # Cancel is [X] (handled locally) or the word "cancel"; back is [B]/[0]/"back".
+    $backCommands = @("back", "b", "cancel", "0")
     $exitCommands = @("exit", "quit")
     $homeCommands = @("home", "main", "m")
 
@@ -453,6 +457,7 @@ function Get-CachedValue {
 # Function to invalidate cache (call after making changes)
 function Clear-MenuCache {
     $script:MenuCache.HyperVInstalled = $null
+    $script:MenuCache.HyperVReady = $null
     $script:MenuCache.RDPState = $null
     $script:MenuCache.FirewallState = $null
     $script:MenuCache.AdminEnabled = $null

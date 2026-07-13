@@ -127,6 +127,12 @@ function Enable-RDP {
         Write-OutputColor "  [2] Skip (allow from any address)" -color "Info"
         $restrictChoice = Read-Host "  Select"
 
+        # Any choice other than [1] skips the (optional) subnet restriction — say so explicitly
+        # instead of silently doing nothing. RDP is already enabled at this point either way.
+        if ($restrictChoice -ne "1") {
+            Write-OutputColor "  Skipping subnet restriction — RDP is allowed from any address." -color "Info"
+        }
+
         if ($restrictChoice -eq "1") {
             $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24 or 192.168.1.0/24)"
             $navResult = Test-NavigationCommand -UserInput $subnet
@@ -147,9 +153,16 @@ function Enable-RDP {
                         -Profile Domain,Private,Public `
                         -Description "Allow RDP only from $subnet" -ErrorAction Stop | Out-Null
 
-                    # Disable the broad RDP rules so only the restricted one applies
+                    # Disable the broad RDP rules so only the restricted one applies. This must ALSO
+                    # cover RackStack's own custom RDP rules ('RDP Inbound TCP/UDP 3389' from the
+                    # Firewall Templates), which are created with NO DisplayGroup and RemoteAddress=Any
+                    # — the DisplayGroup query below misses them, so they'd stay enabled and (Windows
+                    # OR-combines inbound Allow rules) keep 3389 reachable from ANY address, silently
+                    # defeating the subnet restriction this path claims to apply.
                     Get-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue |
                         Where-Object { $_.DisplayName -ne "RDP Subnet Restriction" } |
+                        Disable-NetFirewallRule -ErrorAction SilentlyContinue
+                    Get-NetFirewallRule -DisplayName "RDP Inbound TCP 3389", "RDP Inbound UDP 3389" -ErrorAction SilentlyContinue |
                         Disable-NetFirewallRule -ErrorAction SilentlyContinue
 
                     Write-OutputColor "  RDP restricted to $subnet only." -color "Success"
@@ -158,6 +171,8 @@ function Enable-RDP {
                     Add-UndoAction -Category "Security" -Description "RDP subnet restriction to $subnet" -UndoScript {
                         Remove-NetFirewallRule -DisplayName "RDP Subnet Restriction" -ErrorAction SilentlyContinue
                         Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+                        Get-NetFirewallRule -DisplayName "RDP Inbound TCP 3389", "RDP Inbound UDP 3389" -ErrorAction SilentlyContinue |
+                            Enable-NetFirewallRule -ErrorAction SilentlyContinue
                     }
                 }
                 catch {
@@ -473,13 +488,30 @@ function Enable-PowerShellRemoting {
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  PowerShell Remoting enabled successfully!" -color "Success"
         Write-OutputColor "" -color "Info"
-        Write-OutputColor "  Firewall rules enabled:" -color "Info"
-        Write-OutputColor "  - Windows Remote Management (WinRM)" -color "Success"
-        Write-OutputColor "  - Remote Event Log Management" -color "Success"
-        Write-OutputColor "  - Remote Service Management" -color "Success"
-        Write-OutputColor "  - Windows Management Instrumentation (WMI)" -color "Success"
-        Write-OutputColor "  - Remote Scheduled Tasks Management" -color "Success"
-        Write-OutputColor "  - File and Printer Sharing" -color "Success"
+        Write-OutputColor "  Firewall rule groups:" -color "Info"
+        # Report each group's ACTUAL state rather than a hardcoded green list. The Enable calls above
+        # use -EA SilentlyContinue, so a group that is absent or failed to enable was previously still
+        # reported as enabled — false assurance about the remote-management firewall posture.
+        $rmGroups = @(
+            "Windows Remote Management",
+            "Remote Event Log Management",
+            "Remote Service Management",
+            "Windows Management Instrumentation (WMI)",
+            "Remote Scheduled Tasks Management",
+            "File and Printer Sharing"
+        )
+        foreach ($grp in $rmGroups) {
+            $grpRules = @(Get-NetFirewallRule -DisplayGroup $grp -ErrorAction SilentlyContinue)
+            if (@($grpRules | Where-Object { $_.Enabled -eq 'True' }).Count -gt 0) {
+                Write-OutputColor "  - $grp" -color "Success"
+            }
+            elseif ($grpRules.Count -eq 0) {
+                Write-OutputColor "  - $grp (no rules present on this host)" -color "Warning"
+            }
+            else {
+                Write-OutputColor "  - $grp (could NOT be enabled)" -color "Warning"
+            }
+        }
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  You can now connect to this server using:" -color "Info"
         Write-OutputColor "  Enter-PSSession -ComputerName $env:COMPUTERNAME" -color "Success"
@@ -502,6 +534,11 @@ function Enable-PowerShellRemoting {
         Write-OutputColor "  [1] Restrict to subnet  [2] Skip" -color "Info"
         $winrmRestrict = Read-Host "  Select"
 
+        # Any choice other than [1] skips the (optional) subnet restriction — say so explicitly.
+        if ($winrmRestrict -ne "1") {
+            Write-OutputColor "  Skipping subnet restriction — WinRM is allowed from any address." -color "Info"
+        }
+
         if ($winrmRestrict -eq "1") {
             $subnet = Read-Host "  Enter subnet CIDR (e.g., 10.0.1.0/24)"
             $navResult = Test-NavigationCommand -UserInput $subnet
@@ -519,8 +556,12 @@ function Enable-PowerShellRemoting {
                         -Profile Domain,Private,Public `
                         -Description "Allow WinRM only from $subnet" -ErrorAction Stop | Out-Null
 
-                    # Disable broad WinRM rules
+                    # Disable broad WinRM rules — including RackStack's own custom 'WinRM HTTP/HTTPS
+                    # Inbound' rules (Firewall Templates), which have no DisplayGroup + RemoteAddress=Any
+                    # and would otherwise keep 5985/5986 open to any source, defeating the restriction.
                     Get-NetFirewallRule -DisplayGroup "Windows Remote Management" -ErrorAction SilentlyContinue |
+                        Disable-NetFirewallRule -ErrorAction SilentlyContinue
+                    Get-NetFirewallRule -DisplayName "WinRM HTTP Inbound", "WinRM HTTPS Inbound" -ErrorAction SilentlyContinue |
                         Disable-NetFirewallRule -ErrorAction SilentlyContinue
 
                     Write-OutputColor "  WinRM restricted to $subnet." -color "Success"
@@ -528,6 +569,8 @@ function Enable-PowerShellRemoting {
                     Add-UndoAction -Category "Security" -Description "WinRM subnet restriction to $subnet" -UndoScript {
                         Remove-NetFirewallRule -DisplayName "WinRM Subnet Restriction" -ErrorAction SilentlyContinue
                         Enable-NetFirewallRule -DisplayGroup "Windows Remote Management" -ErrorAction SilentlyContinue
+                        Get-NetFirewallRule -DisplayName "WinRM HTTP Inbound", "WinRM HTTPS Inbound" -ErrorAction SilentlyContinue |
+                            Enable-NetFirewallRule -ErrorAction SilentlyContinue
                     }
                 }
                 catch {

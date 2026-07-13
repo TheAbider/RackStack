@@ -88,6 +88,13 @@ function Install-WindowsUpdates {
     Clear-Host
     Write-CenteredOutput "Windows Updates" -color "Info"
 
+    # Pessimistic status flag for non-interactive callers (batch config) to detect a genuine
+    # no-op/failure. The function signals its failures by early `return` (no throw), so a caller
+    # can't tell success from "no network / gallery unreachable / scan failed" without this.
+    # Defaults to 'Failed'; set to 'Success' only at the two real success points (up-to-date /
+    # install completed). Interactive callers ignore it.
+    $script:LastWindowsUpdateStatus = 'Failed'
+
     # Check network connectivity
     Write-OutputColor "  Checking network connectivity..." -color "Info"
     if (-not (Test-NetworkConnectivity)) {
@@ -133,7 +140,16 @@ function Install-WindowsUpdates {
             $psWindowsUpdate = Get-Module -ListAvailable -Name PSWindowsUpdate
             if (-not $psWindowsUpdate) {
                 Write-OutputColor "  Installing PSWindowsUpdate module..." -color "Info"
-                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+                # Surface a failure to trust PSGallery instead of silently swallowing it — otherwise
+                # the Install-Module below fails or prompts with no visible root cause. Don't abort
+                # the flow on it (Install-Module may still succeed / prompt).
+                try {
+                    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+                }
+                catch {
+                    Write-OutputColor "  Warning: could not set PSGallery as trusted: $($_.Exception.Message)" -color "Warning"
+                    Write-OutputColor "  Install-Module may prompt for confirmation." -color "Info"
+                }
                 Install-Module -Name PSWindowsUpdate -Force -SkipPublisherCheck -Confirm:$false -ErrorAction Stop
                 $needsRedraw = $true
             }
@@ -201,6 +217,7 @@ function Install-WindowsUpdates {
 
         if ($null -eq $updates -or @($updates).Count -eq 0) {
             Write-OutputColor "  No updates available. System is up to date!" -color "Success"
+            $script:LastWindowsUpdateStatus = 'Success'   # up-to-date is a successful check, not a failure
             return
         }
 
@@ -394,6 +411,7 @@ function Install-WindowsUpdates {
             Write-OutputColor "`nWindows updates installation complete!" -color "Success"
             Write-OutputColor "  A reboot may be required to complete the installation." -color "Warning"
             $script:RebootNeeded = $true
+            $script:LastWindowsUpdateStatus = 'Success'
             Add-SessionChange -Category "System" -Description "Installed $updateCount Windows update(s)"
             Clear-MenuCache
         }

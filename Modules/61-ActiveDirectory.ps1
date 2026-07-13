@@ -769,6 +769,23 @@ function Install-NewForest {
         return
     }
 
+    # New-forest-only guard: Install-ADDSForest requires a STANDALONE (workgroup) server. A
+    # domain-joined member (DomainRole 1 = member workstation, 3 = member server) cannot create a
+    # new forest — catch it now, before the domain prompt and DSRM password entry, instead of
+    # failing minutes into promotion. Scoped HERE, not in the shared Test-ADDSPrerequisites (which
+    # Add-DC / RODC reuse, where a member server is the valid starting state).
+    try {
+        $newForestCompSys = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 8 -ErrorAction Stop
+        if ($newForestCompSys.DomainRole -in @(1, 3)) {
+            Write-OutputColor "" -color "Error"
+            Write-OutputColor "  This server is joined to an existing domain ('$($newForestCompSys.Domain)')." -color "Error"
+            Write-OutputColor "  A NEW forest must be created on a standalone (workgroup) server." -color "Error"
+            Write-OutputColor "  To add a DC to the existing domain, use 'Add Domain Controller' instead." -color "Warning"
+            Write-PressEnter
+            return
+        }
+    } catch { }
+
     # Step 3: Domain name
     Write-OutputColor "" -color "Info"
     $domainName = Read-Host "  Enter domain name (e.g., corp.contoso.com)"
@@ -788,6 +805,18 @@ function Install-NewForest {
     }
 
     $netbiosName = Get-NetBIOSNameFromFQDN -DomainName $domainName
+
+    # Install-ADDSForest enforces a 15-character NetBIOS limit and fails several minutes into
+    # promotion (after the DSRM password has already been entered). Validate the derived NetBIOS
+    # name now so the operator can fix the domain name before committing anything.
+    if ($netbiosName.Length -gt 15) {
+        Write-OutputColor "" -color "Error"
+        Write-OutputColor "  The NetBIOS name derived from '$domainName' is '$netbiosName' ($($netbiosName.Length) chars)." -color "Error"
+        Write-OutputColor "  NetBIOS names must be 15 characters or fewer — use a domain whose first label" -color "Error"
+        Write-OutputColor "  is 15 characters or fewer (e.g. 'corp.$domainName'), then retry." -color "Warning"
+        Write-PressEnter
+        return
+    }
 
     # Step 4: Functional level
     $level = Select-FunctionalLevel

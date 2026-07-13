@@ -76,9 +76,9 @@ function Select-PhysicalAdaptersSmart {
 
     $choice = Read-Host "  Select"
 
-    $navResult = Test-NavigationCommand -UserInput $choice
-    if ($navResult.ShouldReturn) { return $null }
-
+    # Match the affirmative menu keys (A / M) BEFORE the navigation check — "m" is the global "home"
+    # token, so a nav check first silently swallowed the [M] Manual option (it never reached the
+    # '^[Mm]$' arm below). Navigation is handled in the final else for non-menu-key input.
     if ($choice -match '^[Aa]$') {
         # Auto-detect mode
         Write-OutputColor "" -color "Info"
@@ -147,6 +147,9 @@ function Select-PhysicalAdaptersSmart {
         return Select-PhysicalAdapters
     }
     else {
+        # Not an affirmative menu key — treat as navigation (back), otherwise invalid.
+        $navResult = Test-NavigationCommand -UserInput $choice
+        if ($navResult.ShouldReturn) { return $null }
         Write-OutputColor "  Invalid selection. Enter A, M, or B." -color "Error"
         return $null
     }
@@ -197,15 +200,20 @@ function New-SwitchEmbeddedTeam {
         return
     }
 
-    # SET requires Hyper-V to be installed
-    if (-not (Test-HyperVInstalled)) {
+    # SET requires Hyper-V to be installed AND active (VMMS running). Test-HyperVReady covers both:
+    # a freshly-installed-but-not-rebooted host reads "installed" yet the switch cmdlets still fail.
+    if (-not (Test-HyperVReady)) {
         Write-OutputColor "" -color "Info"
+        if (Test-HyperVInstalled) {
+            Write-OutputColor "  Hyper-V is installed but not active — reboot to start the hypervisor, then configure SET." -color "Warning"
+            return
+        }
         Write-OutputColor "  Hyper-V is required for Switch Embedded Teaming." -color "Warning"
         Write-OutputColor "  SET creates a Hyper-V virtual switch with NIC teaming built in." -color "Info"
         Write-OutputColor "" -color "Info"
         if (Confirm-UserAction -Message "Install Hyper-V now?") {
             Install-HyperVRole
-            if (-not (Test-HyperVInstalled)) {
+            if (-not (Test-HyperVReady)) {
                 Write-OutputColor "  Hyper-V requires a reboot before SET can be configured." -color "Warning"
                 return
             }
@@ -435,6 +443,13 @@ function Add-CustomVNIC {
     Clear-Host
     Write-CenteredOutput "Add Virtual NIC to Switch" -color "Info"
 
+    if (-not (Test-HyperVReady)) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Hyper-V is not active — a reboot is required to start the hypervisor before" -color "Warning"
+        Write-OutputColor "  virtual switches can be managed." -color "Info"
+        return
+    }
+
     # Find existing External switches (SET or standard)
     $externalSwitches = @(Get-VMSwitch -ErrorAction SilentlyContinue | Where-Object { $_.SwitchType -eq "External" })
 
@@ -663,14 +678,18 @@ function New-StandardVSwitch {
     Clear-Host
     Write-CenteredOutput "Create $SwitchType Virtual Switch" -color "Info"
 
-    # Hyper-V required for all switch types
-    if (-not (Test-HyperVInstalled)) {
+    # Hyper-V required (installed AND active) for all switch types.
+    if (-not (Test-HyperVReady)) {
         Write-OutputColor "" -color "Info"
+        if (Test-HyperVInstalled) {
+            Write-OutputColor "  Hyper-V is installed but not active — reboot to start the hypervisor, then create switches." -color "Warning"
+            return
+        }
         Write-OutputColor "  Hyper-V is required for virtual switches." -color "Warning"
         Write-OutputColor "" -color "Info"
         if (Confirm-UserAction -Message "Install Hyper-V now?") {
             Install-HyperVRole
-            if (-not (Test-HyperVInstalled)) {
+            if (-not (Test-HyperVReady)) {
                 Write-OutputColor "  Hyper-V requires a reboot before switches can be created." -color "Warning"
                 return
             }
@@ -852,6 +871,13 @@ function Show-VirtualSwitches {
     Clear-Host
     Write-CenteredOutput "Virtual Switches" -color "Info"
 
+    if (-not (Test-HyperVReady)) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Hyper-V is not active — a reboot is required to start the hypervisor before" -color "Warning"
+        Write-OutputColor "  virtual switches can be managed." -color "Info"
+        return
+    }
+
     $switches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
 
     if ($switches.Count -eq 0) {
@@ -913,6 +939,13 @@ function Show-VirtualSwitches {
 function Remove-VirtualSwitch {
     Clear-Host
     Write-CenteredOutput "Remove Virtual Switch" -color "Info"
+
+    if (-not (Test-HyperVReady)) {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Hyper-V is not active — a reboot is required to start the hypervisor before" -color "Warning"
+        Write-OutputColor "  virtual switches can be managed." -color "Info"
+        return
+    }
 
     $switches = @(Get-VMSwitch -ErrorAction SilentlyContinue)
 

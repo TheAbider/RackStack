@@ -1,5 +1,201 @@
 # Changelog
 
+## v1.121.15
+
+Final audit sweep — remaining fixes across the firewall/RDP, iSCSI, network-diagnostics, and session modules.
+
+- **"Restrict RDP to a subnet" now actually restricts it.** If you had previously added RDP (or WinRM) firewall rules via the Firewall Templates, the subnet-restriction step left those wide-open rules enabled — so RDP/WinRM stayed reachable from any address while the tool reported it was locked down. It now disables those rules too, so the restriction holds.
+- **PowerShell Remoting reports its real firewall state.** It used to list every firewall group as "enabled" regardless; it now shows each group's actual status.
+- **iSCSI fixes:** the [M] Manual option in "Connect to iSCSI Targets" works (it was silently exiting the menu); the status screen shows the real iSCSI auto-claim state instead of always "Enabled"; and the dry-run undo for a connection now actually disconnects.
+- **The network throughput benchmark shows the correct MB/s.** A variable-name clash made the MB/s figure display the Mbps value (8× too high).
+- **Session state is saved atomically**, so a crash mid-save can't corrupt the file the tool reads on resume.
+
+(This completes an end-to-end adversarial audit of the whole codebase; every remaining finding is fixed and verified.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.14
+
+VM and storage safety — fixes found by a deep audit of the VM export/import, offline-VHD, VHD conversion, and Hyper-V Replica modules.
+
+- **A cancelled VM export is no longer reported as complete.** If you stopped watching an export (or the 4-hour cap elapsed) while it was still running, the tool printed "Export complete!" and logged a successful export — even though Hyper-V was still writing a partial, unbootable copy in the background. Trusting that, an operator could delete the source VM and lose it. It now clearly says the export wasn't confirmed and to verify it first.
+- **Offline VHD customization tells the truth.** If it couldn't load the VHD's registry (e.g. a leftover mount from a prior crash), it silently applied nothing yet reported success — so the VM booted with the wrong name. It now reports the customization as incomplete.
+- **VHD conversion reports the fixed disk, not the dynamic one.** If the final rename failed, the tool reported the un-converted dynamic disk as "Fixed VHD"; it now returns the actual converted disk.
+- **Planned Hyper-V Replica failover asks for confirmation on the replica.** Completing a failover on the replica is only lossless if the primary was prepared and shut down first; the tool now confirms that before completing, to avoid silent data loss or split-brain.
+- **Certificate-based Hyper-V Replica actually works now** (it selects and passes the HTTPS certificate), and **batch S2D setup respects its data-loss consent flag** (previously it was dropped, making batch S2D unreachable).
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.13
+
+Role/service cleanup and reporting fixes — found by a deep audit of the ADCS, scheduled-task, WSUS, and Remote Desktop modules.
+
+- **Self-destruct now removes all of the tool's scheduled tasks.** When the tool deleted itself, it left its own scheduled export and update-check tasks registered (running as SYSTEM) pointing at the now-deleted program — leftover privileged tasks that would fire and fail forever. It now unregisters those too, so it leaves nothing behind.
+- **A failed RDS licensing change in Dry-Run is reported as failed**, not silently applied.
+- **A WSUS setup with no valid update classifications is reported as incomplete.** Previously a misconfigured WSUS (which would sync nothing) still reported "configuration applied" — it now tells you the classifications didn't match and to fix them.
+- **The scheduled-task health view stops crying wolf.** Brand-new or on-demand tasks that simply hadn't run yet were shown in red as "FAILED"; they're now shown as "Ready (not yet run)".
+
+(The audit also confirmed the Certificate Authority setup uses strong crypto — SHA-256, RSA ≥ 2048 — and that the certificate-audit and Defender-onboarding paths are correct.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.12
+
+Backup / undo honesty — fixes found by a deep audit of the security-feature modules (Group Policy, JEA, NPS, SIEM forwarding). Common theme: a safety-net backup that could silently fail and then be trusted anyway.
+
+- **A SIEM config change can't destroy your working config on undo.** When rewriting a forwarder config (Splunk/syslog/Winlogbeat), the "undo" restored from a backup — but if that backup silently failed to copy, undo *deleted* the live config instead, silently stopping log forwarding. It now refuses to overwrite a config it couldn't back up.
+- **"Back up all GPOs" no longer reports success when it backed up nothing.** A scheduled `GPOBackup` that enumerated GPOs but failed to back up every one still exited 0, leaving an empty folder that later got trusted as a baseline. It now reports failure.
+- **GPO drift detection stops hiding real changes.** A GPO whose baseline settings were missing was silently reported as "unchanged"; it's now listed as "not checked" so you know the comparison was incomplete instead of getting a false all-clear.
+- **Undoable operations only claim to be undoable when they really are.** A GPO restore and an NPS config import each take a pre-change snapshot first; if that snapshot silently failed, the tool used to still offer an "undo" that quietly did nothing. Both now verify the snapshot exists and tell you plainly when a change isn't undoable.
+- **A JEA endpoint that fails validation in Dry-Run is reported as failed**, not queued-and-applied.
+
+(The audit also confirmed the JEA role/endpoint configuration is correctly least-privilege and constrained, and the VPN/RADIUS policy values are correct.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.11
+
+State-integrity hardening — fixes found by a deep audit of the Dry-Run engine, configuration profile import/export, and the batch (scripted) apply.
+
+- **A rolled-back Dry-Run commit no longer silently drops changes.** If an atomic commit failed partway and rolled the applied steps back, those steps were still marked "Applied" — so a retry skipped them and reported "all steps applied" while their changes were actually missing. Reverted steps are now re-applied on retry.
+- **Applying a saved profile can't strand a server with no IP.** The network step removed the current address before adding the new one; if the new address failed (duplicate IP, bad gateway) the box was left with no IPv4 and no gateway. It now restores the previous address on failure. (Same fix applied to the drift-remediation path.)
+- **The batch report tells the truth about failures.** A shared-storage step that was refused or failed, a Windows Update run with no connectivity, and a failed power-plan change were all being counted as successful applied changes. Each now reports the real result.
+- **Cancelling one import step no longer aborts the whole import.** Declining the network reconfiguration (or hitting an invalid domain name) used to silently skip every remaining step and the summary; it now skips just that step and continues.
+- **Export no longer invents a DNS server.** When a machine had no DNS configured, export wrote a public resolver (8.8.8.8) into the profile; it now leaves DNS blank so import doesn't apply a value the source never had.
+- **'Undo all' restores DNS after a DNS-only batch change**, and the interactive text export reports a real error instead of silently writing a truncated file.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.10
+
+Credential-handling hardening — fixes found by a deep audit of password generation, SecureString hygiene, and secret leakage.
+
+- **A generated password no longer ends up in the session transcript.** The strong-password generator already went out of its way to keep the password off-screen-log by pausing transcription while it displayed — but it then *returned* the password, which the menu echoed back to the console (and into the transcript on disk). It no longer returns the plaintext; it's shown once for you to record and nothing more.
+- **The clipboard auto-clear actually runs now.** The 60-second "auto-clears from clipboard" timer could be garbage-collected before it fired, silently leaving the password in the clipboard (and Windows clipboard history). The timer is now held so it reliably clears.
+- **The file-server access secret is entered hidden.** Setting the Cloudflare Access client secret in the in-tool settings used a normal prompt that echoed the secret to the screen (and transcript). It's now entered masked and handled without leaving a plaintext copy behind.
+
+(The audit also confirmed the password generator already uses a cryptographic RNG, and that the RADIUS / VPN / SIEM / Azure Arc secrets that must be passed to their native tools are handled as safely as those tools allow.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.9
+
+Installer download & agent-install hardening — fixes found by a deep audit of the download → verify → execute chain (FileServer, Agent Installer, ISO download).
+
+- **Your configured installer hash is actually checked now.** If you set a known-good SHA256 for an agent installer (the recommended path when your file server doesn't publish `.sha256` sidecars), it was being silently ignored — two separate bugs meant the hash never loaded and, even if it had, it was skipped when no sidecar existed. Both are fixed: a configured hash is now enforced, and a mismatch fails the install closed instead of falling through to a weaker size-only prompt.
+- **Reinstalling an agent can't falsely report success anymore.** When re-running over an already-installed agent, an install that timed out or was skipped could report "SUCCESS" (and leave a hung installer running) because the *old* service was still present. It now only counts a detected service as success on a fresh install, and a skipped-but-still-running installer is left to finish instead of being killed.
+- **The verified installer is run from a protected location.** After its hash is verified, the installer is moved into an Administrators/SYSTEM-only folder before it runs — closing a window where another process could swap the file between verification and execution.
+- **The file-server access token is never sent to an unexpected server.** Downloads no longer follow HTTP redirects while carrying the Cloudflare Access token, so the token can't be leaked to a redirect target on another host.
+- **Installer arguments with spaces are passed correctly.** A token like `/token "value with spaces"` is no longer re-split into separate arguments.
+- **A low-disk-space ISO re-download restores your existing ISO.** Bailing out for insufficient space now puts the previous ISO back and clears its rollback marker, instead of stranding it and confusing the next download.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.8
+
+Cleanup and encryption safety — fixes found by a deep audit of the destructive/data-affecting modules.
+
+- **Browser-cache cleanup can't be tricked into deleting files outside the cache.** The Chrome, Firefox, and full-cleanup sweeps now skip reparse points (junctions/symlinks) during recursion, the same protection the Edge and temp-file sweeps already had. Without it, a junction planted inside a browser profile could redirect the admin-context delete to files elsewhere on disk.
+- **Enabling BitLocker now asks for a final confirmation** naming the exact volume and method before it starts encrypting — matching the confirmation the Disable path already had — so a mistyped volume number can be caught before a one-way, hours-long encryption begins.
+
+(The audit also confirmed the Deduplication, Storage Migration, and Debloat modules — and BitLocker's recovery-key handling — are already correct; these were the only gaps.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.7
+
+Active Directory — the new-forest wizard now catches two problems up front instead of failing partway through promotion.
+
+- **Invalid NetBIOS name is caught before you start.** If the domain name's first label is longer than 15 characters, the wizard now tells you immediately (before asking for the DSRM password) instead of failing several minutes into the promotion.
+- **Wrong starting state is caught up front.** Creating a new forest requires a standalone (workgroup) server; if the machine is already joined to a domain, the wizard now says so and points you to "Add Domain Controller" instead of failing during promotion.
+
+(A deep audit of the AD module confirmed its security-critical parts — DSRM password handling, credentials, and promotion parameters — are already correct; these were the only two gaps.)
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.6
+
+Failover Clustering safety — fixes found by a deep audit of the clustering module.
+
+- **Draining a node from the dashboard now protects quorum.** It refuses to drain if no other node is up to receive the roles, and warns (requiring you to type CONTINUE) if draining would drop the cluster below quorum — instead of a single yes/no that could take the whole cluster offline.
+- **Node eviction won't silently break quorum on larger clusters.** The safety check was hardcoded for small clusters; it now calculates quorum for the actual cluster size, so it can't be bypassed on 4+ node clusters.
+- **Removing a Cluster Shared Volume can't destroy live-VM storage on false information.** If the tool can't determine the CSV's mount point (e.g. it's offline/degraded), it now refuses the removal rather than reporting "no VMs" from a check that never actually ran.
+- **Quorum witness validation.** A disk witness must be Online before it can be selected; a file-share witness path is checked for reachability up front, with a reminder that the cluster account needs Full Control on the share.
+- **Correct CSV redirected-I/O detection.** The dashboard no longer shows a false "REDIRECTED I/O ACTIVE" warning on healthy volumes (it was reading the wrong property).
+- **Cluster validation report location is now shown** so you can actually find the report.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.5
+
+Reliability sweep — fixes found by auditing every menu for the same class of issues you ran into.
+
+- **The [M] Manual option now works** when choosing adapters for SET teaming and when configuring iSCSI. Pressing **M** was being read as the "home" shortcut and silently cancelled the menu before the Manual option could run.
+- **SNMP and pagefile changes report real results.** Restarting the SNMP service and removing an old pagefile no longer report success when they actually failed — you get the real error instead. (This could otherwise leave SNMP changes not applied, or two pagefiles configured, while claiming success.)
+- **Windows Update prerequisite is clearer.** If trusting the PowerShell Gallery fails, it now says so instead of silently continuing into a confusing module-install prompt.
+- **No more silent dead-ends on invalid input** at the Storage Replica install prompt and the RDP/WinRM "restrict to subnet" prompts — you now get clear feedback instead of the menu doing nothing.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.4
+
+Server role templates (the automatic role setups) — clearer failures and a friendlier Print Server setup.
+
+- **Role installs now tell you WHY they failed.** When a role template (e.g. Print Server) couldn't install, it just said "Failed" with no reason. It now shows the exact per-feature error and the common causes (missing source files, WSUS/Group Policy blocking the source, or the role not being available on that edition), so you can actually fix it.
+- **Print Server setup guidance.** After the Print Server role installs, RackStack now shows the next steps (add a port, add a printer, share it) and offers to open the Print Management console — so it's a finished setup, not just an installed role.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.3
+
+VM deployment — custom (and standard) VMs now actually save to the deployment queue.
+
+- **"Add to Queue" works.** Building a VM and pressing **[C] Add to Queue** did nothing — the VM never entered the deployment queue. The letter "C" was being treated as a global cancel/back key, so every affirmative **[C]** step in the VM builder (finish configuring disks, finish NICs, add to queue) was silently cancelled before it could run. "C" is no longer a cancel key (cancel is **[X]**, back is **[B]** / **[0]** / "back"), so the whole build-and-queue flow completes.
+- **Failed VMs stay in the queue.** If a batch deployment partly fails, the VMs that failed are now kept in the queue so you can fix the issue and retry, instead of the whole queue being cleared.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.2
+
+Storage Manager reliability — a batch of fixes so disk and volume operations actually run instead of silently dead-ending.
+
+- **Disk 0 is now selectable.** Every disk operation (create/delete partition, format, extend, shrink, view partitions, initialize, clean, online/offline) was silently dead-ending when you picked disk 0, because "0" doubles as the back/cancel key and was being read as "cancel" before it was checked as a disk number. Numeric entries are now matched against the disk list first, so disk 0 — often the main data/RAID disk — works everywhere.
+- **Drive letters B and C can be assigned again.** "B" and "C" were being read as back/cancel in the drive-letter and volume-rename prompts, so those letters could never be entered. A single letter is now matched before the navigation check.
+- **Volume labels can be any text.** A label of "0", "C", "back", etc. is no longer rejected as a navigation command.
+- **Real disk errors are surfaced.** If the storage provider fails or times out while reading partitions or size limits (seen on some RAID controllers), you now get the actual error instead of a misleading "no unallocated space" / "no additional space" message.
+- **Honest partition result.** Creating a partition no longer reports full success when the drive-letter assignment actually failed — it now clearly says the letter was not assigned.
+- **Host Storage Analysis no longer errors.** The VM host-storage summary threw a "Property is not valid" error when a folder contained subfolders; it now counts files correctly.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.1
+
+- **Faster tool self-removal.** When you choose the "remove this tool and reboot" option, the reboot now fires promptly instead of pausing for several seconds first. The post-reboot cleanup is prepared up front, and the user profile is scanned in a single pass instead of twice.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.121.0
+
+Disk initialization now works on brand-new disks, and disk/volume lists make the OS disk and removable media obvious at a glance.
+
+- **"Initialize disk" now works on a new (offline) disk.** A brand-new disk ships Offline, and the initializer was silently filtering offline disks out of the selection list — so the disk you wanted to initialize never appeared and the option seemed to do nothing. Offline uninitialized disks are now selectable; RackStack brings the chosen disk online and clears read-only before initializing, and tells you exactly why if a disk is write-protected instead of failing with a generic error.
+- **Disk lists now show Online/Offline.** The disk picker marks offline disks with `[Offline]`, the partition view shows the disk's status, and the Set Online/Offline screen colors the current status.
+- **The OS / boot disk and volume are shown in red.** Wherever disks, partitions, or volumes are listed, the system/boot disk and the C: volume are painted red with a "do not touch" marker so it's clear that operating on them is dangerous.
+- **CD/DVD and removable media are a distinct color.** Optical drives and USB/SD media now render in magenta across the disk overview, the disk picker, the volume overview, and the drive-letter map, so they're never mistaken for a fixed data disk.
+
+No module or CLI action changes (81 modules, 201 actions).
+
+## v1.120.0
+
+Networking reorganized so a plain physical server no longer runs into Hyper-V, and the Hyper-V host-networking path installs and validates Hyper-V correctly before use.
+
+- **A pending reboot no longer traps you before Hyper-V is installed.** Opening the host networking page on a freshly-built server used to say "a reboot is pending — reboot and rerun" and send you in circles: a fresh server almost always has a pending-reboot flag (and installing Hyper-V sets another), so the Hyper-V install was never actually offered. RackStack now offers to install Hyper-V first, and a pending reboot is shown as a heads-up rather than a blocker.
+- **The virtual-switch tools no longer open before Hyper-V is actually running.** Previously the menu could appear while Hyper-V was installed but not yet active (it needs a reboot to start), then fail with "command not recognized" when it listed switches. RackStack now confirms Hyper-V is genuinely running before showing the switch tools, and tells you to reboot if it isn't yet.
+- **Networking menu split by job, with corrected labels.** Network Configuration now has three clear branches: **Physical Adapter Configuration** (IP, DNS, rename, disable IPv6 — no Hyper-V needed), **Virtualization Host Networking** (virtual switches, SET teaming, host vNICs), and **Storage & SAN** (iSCSI). Basic NIC setup on a standalone server no longer routes through, or requires, Hyper-V. The old menu mislabeled physical-adapter configuration as "Virtual Machine Network" and gated the whole branch behind Hyper-V.
+- **Feature installs are no longer blocked by a pending reboot.** The pre-flight check now treats a pending reboot as a warning rather than a hard block, matching how Windows itself allows a feature to install while a reboot is pending.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.119.4
 
 Evaluation-edition licensing, and less friction in the admin/reboot confirmations.

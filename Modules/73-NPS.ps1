@@ -253,23 +253,32 @@ function Import-NPSConfig {
             }.GetNewClosure() `
             -Undo {
                 if (Test-Path -LiteralPath $capPre) { [void](Invoke-NetshNps -NetshArgs @("import", "filename=$capPre")) }
+                else { Write-OutputColor "  Undo unavailable: no pre-import NPS backup was captured." -color "Warning" }
             }.GetNewClosure()
         Write-OutputColor "  Queued (Dry-Run): import NPS config." -color "Warning"
         Add-SessionChange -Category "DryRun" -Description "Queued NPS config import"
         return
     }
 
-    # Capture the current config so the operator can roll back.
+    # Capture the current config so the operator can roll back. Verify the backup actually landed
+    # — the export result was previously discarded and the "Pre-import backup: ..." line + the
+    # undo were emitted unconditionally, so a failed export left the operator believing a rollback
+    # existed while the undo silently no-op'd and the overwrite was permanent.
     $preFile = Join-Path (Get-NPSBackupDir) "nps-preimport-$(Get-Date -Format 'yyyyMMdd-HHmmss').xml"
     [void](Invoke-NetshNps -NetshArgs @("export", "filename=$preFile", "exportPSK=YES"))
+    $preBackupOk = Test-Path -LiteralPath $preFile
     if (Invoke-NetshNps -NetshArgs @("import", "filename=$file")) {
         Write-OutputColor "  NPS configuration imported." -color "Success"
-        Write-OutputColor "  Pre-import backup: $preFile" -color "Info"
+        if ($preBackupOk) {
+            Write-OutputColor "  Pre-import backup: $preFile" -color "Info"
+            Add-UndoAction -Category "Network" -Description "Imported NPS config" -UndoScript {
+                param($PrePath)
+                if (Test-Path -LiteralPath $PrePath) { [void](& netsh nps import filename="$PrePath" 2>&1) }
+            } -UndoParams @{ PrePath = $preFile }
+        } else {
+            Write-OutputColor "  WARNING: pre-import backup could not be created — this import is NOT undoable." -color "Warning"
+        }
         Add-SessionChange -Category "Network" -Description "Imported NPS config from $file"
-        Add-UndoAction -Category "Network" -Description "Imported NPS config" -UndoScript {
-            param($PrePath)
-            if (Test-Path -LiteralPath $PrePath) { [void](& netsh nps import filename="$PrePath" 2>&1) }
-        } -UndoParams @{ PrePath = $preFile }
         Clear-MenuCache
     }
 }

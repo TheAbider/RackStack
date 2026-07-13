@@ -391,6 +391,14 @@ function Invoke-DryRunCommitAtomic {
             }
             try {
                 & $s.Undo
+                # Reset to Queued so a later retry RE-APPLIES this reverted step. Leaving it
+                # "Applied" would make the pending filter (Status -ne "Applied", line ~314) skip
+                # it on the next commit AND render it as [A] Applied in the queue view — silently
+                # dropping a rolled-back change while reporting "all steps applied successfully".
+                # Only steps whose Undo actually RAN are reset; OneWay / no-Undo / Undo-threw
+                # steps keep "Applied" because their change may still be live on the box.
+                $s.Status = "Queued"
+                $s.AppliedAt = $null
                 Write-OutputColor "    [revert] $($s.Label)" -color "Success"
             }
             catch {

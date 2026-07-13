@@ -119,6 +119,41 @@ function Test-SystemDisk {
     return $false
 }
 
+# Cheap, render-time detection of which disk Numbers are boot/system (host the OS). Unlike the
+# hang-hardened Test-SystemDisk (which spawns a job and is meant for a single destructive-op gate),
+# this is meant to be called ONCE per screen and reused for every row, so disk/volume lists can
+# paint the OS/boot disk red without a per-row Start-Job. Returns an int[] of disk Numbers.
+function Get-BootSystemDiskNumbers {
+    $nums = [System.Collections.Generic.List[int]]::new()
+    # The disk that hosts the running OS (C: / %SystemDrive%).
+    try {
+        $sysLetter = $env:SystemDrive.TrimEnd(':')
+        $osPart = Get-Partition -DriveLetter $sysLetter -ErrorAction SilentlyContinue
+        if ($osPart -and $null -ne $osPart.DiskNumber) { $nums.Add([int]$osPart.DiskNumber) }
+    } catch { }
+    # Any disk flagged IsBoot/IsSystem (covers separate boot/EFI disks).
+    try {
+        foreach ($d in @(Get-Disk -ErrorAction SilentlyContinue)) {
+            if (($d.IsBoot -eq $true -or $d.IsSystem -eq $true) -and ($nums -notcontains [int]$d.Number)) {
+                $nums.Add([int]$d.Number)
+            }
+        }
+    } catch { }
+    return $nums.ToArray()
+}
+
+# True when a disk is optical (CD/DVD) or removable (USB / SD / MMC) media — a category that is
+# something completely different from a fixed server data disk, so lists paint it a distinct color
+# and operators don't mistake a thumb drive or install DVD for a data volume. Boot/system coloring
+# still takes precedence (a bootable USB is shown as a system disk, not merely removable).
+function Test-IsOpticalOrRemovable {
+    param([object]$Disk)
+    if ($null -eq $Disk) { return $false }
+    $bus = "$($Disk.BusType)"
+    if ($bus -in @('USB', 'SD', 'MMC', 'ATAPI')) { return $true }
+    return $false
+}
+
 # Function to display all disks with details
 function Show-AllDisks {
     Clear-Host
@@ -138,19 +173,16 @@ function Show-AllDisks {
     Write-OutputColor ("{0,-6} {1,-12} {2,-12} {3,-15} {4,-12} {5,-15} {6}" -f "Disk", "Status", "Health", "Size", "Style", "Partition", "Type") -color "Info"
     Write-OutputColor ("=" * 100) -color "Info"
 
+    # Resolve boot/system disks once so every row can paint them red without a per-row job.
+    $bootSystemDisks = Get-BootSystemDiskNumbers
+
     foreach ($disk in $disks) {
         $size = Format-ByteSize -Bytes $disk.Size
         $health = Get-DiskHealthStatus -Disk $disk
         $partStyle = if ($disk.PartitionStyle -eq "RAW") { "Not Init" } else { $disk.PartitionStyle }
         $busType = $disk.BusType
 
-        # Color coding
-        $statusColor = switch ($disk.OperationalStatus) {
-            "Online" { "Success" }
-            "Offline" { "Error" }
-            default { "Warning" }
-        }
-
+        # Health cell keeps its own informative color.
         $healthColor = switch ($health) {
             "Healthy" { "Success" }
             "Warning" { "Warning" }
@@ -158,22 +190,29 @@ function Show-AllDisks {
             default { "Info" }
         }
 
-        # System/boot disk indicator
-        $diskLabel = ""
-        if ($disk.IsBoot -eq $true -and $disk.IsSystem -eq $true) {
-            $diskLabel = " (System/Boot)"
-        } elseif ($disk.IsSystem -eq $true) {
-            $diskLabel = " (System)"
-        } elseif ($disk.IsBoot -eq $true) {
-            $diskLabel = " (Boot)"
-        }
+        # Status cell: offline is always red; online normally green, but on a REMOVABLE disk the
+        # online state is shown magenta so the whole removable row reads as one category.
+        $isBootSystem = ([int]$disk.Number -in $bootSystemDisks) -or ($disk.IsBoot -eq $true) -or ($disk.IsSystem -eq $true)
+        $isRemovable  = Test-IsOpticalOrRemovable -Disk $disk
 
-        Write-OutputColor "$("$($disk.Number)".PadRight(6)) " -color "Info" -NoNewline
+        # Row category color — safety precedence: boot/system = RED (do not touch),
+        # optical/removable = MAGENTA (a completely different kind of media), else default.
+        $rowColor = if ($isBootSystem) { "Error" } elseif ($isRemovable) { "Critical" } else { "Info" }
+
+        $statusColor = if ($disk.OperationalStatus -eq "Offline") { "Error" }
+                       elseif ($disk.OperationalStatus -eq "Online") { if ($isBootSystem) { "Error" } elseif ($isRemovable) { "Critical" } else { "Success" } }
+                       else { "Warning" }
+
+        $diskLabel = if ($isBootSystem) { " (System/Boot - DO NOT TOUCH)" }
+                     elseif ($isRemovable) { " (Removable/Optical)" }
+                     else { "" }
+
+        Write-OutputColor "$("$($disk.Number)".PadRight(6)) " -color $rowColor -NoNewline
         Write-OutputColor "$("$($disk.OperationalStatus)".PadRight(12)) " -color $statusColor -NoNewline
         Write-OutputColor "$("$health".PadRight(12)) " -color $healthColor -NoNewline
-        Write-OutputColor "$($size.PadRight(15)) $($partStyle.PadRight(12)) $("$($disk.NumberOfPartitions)".PadRight(15)) $busType" -color "Info" -NoNewline
+        Write-OutputColor "$($size.PadRight(15)) $($partStyle.PadRight(12)) $("$($disk.NumberOfPartitions)".PadRight(15)) $busType" -color $rowColor -NoNewline
         if ($diskLabel) {
-            Write-OutputColor "$diskLabel" -color "Warning"
+            Write-OutputColor "$diskLabel" -color $rowColor
         } else {
             Write-OutputColor "" -color "Info"
         }
@@ -186,13 +225,17 @@ function Show-AllDisks {
                 if ($phys.MediaType -and $phys.MediaType -ne 'Unspecified') { $diskDetails += " | $($phys.MediaType)" }
                 if ($phys.SerialNumber) { $diskDetails += " | S/N: $($phys.SerialNumber.Trim())" }
             }
-            Write-OutputColor "       $diskDetails" -color "Info"
+            Write-OutputColor "       $diskDetails" -color $(if ($isBootSystem -or $isRemovable) { $rowColor } else { "Info" })
         }
     }
 
     Write-OutputColor ("=" * 100) -color "Info"
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Total Disks: $($disks.Count)" -color "Info"
+    Write-OutputColor "  Legend: " -color "Info" -NoNewline
+    Write-OutputColor "System/Boot disk (do not touch)" -color "Error" -NoNewline
+    Write-OutputColor "    " -color "Info" -NoNewline
+    Write-OutputColor "Removable/Optical media" -color "Critical"
 }
 
 # Function to display partitions for a specific disk
@@ -211,8 +254,15 @@ function Show-DiskPartitions {
         return
     }
 
-    Write-OutputColor "  Disk: $($disk.FriendlyName)" -color "Info"
+    $isBootSystem = ([int]$disk.Number -in (Get-BootSystemDiskNumbers)) -or ($disk.IsBoot -eq $true) -or ($disk.IsSystem -eq $true)
+    $isRemovable  = Test-IsOpticalOrRemovable -Disk $disk
+    $diskColor    = if ($isBootSystem) { "Error" } elseif ($isRemovable) { "Critical" } else { "Info" }
+    $diskTag      = if ($isBootSystem) { " (System/Boot - DO NOT TOUCH)" } elseif ($isRemovable) { " (Removable/Optical)" } else { "" }
+    $statusColor  = if ($disk.OperationalStatus -eq "Offline") { "Error" } elseif ($disk.OperationalStatus -eq "Online") { "Success" } else { "Warning" }
+
+    Write-OutputColor "  Disk: $($disk.FriendlyName)$diskTag" -color $diskColor
     Write-OutputColor "  Size: $(Format-ByteSize -Bytes $disk.Size)" -color "Info"
+    Write-OutputColor "  Status: $($disk.OperationalStatus)" -color $statusColor
     Write-OutputColor "  Partition Style: $($disk.PartitionStyle)" -color "Info"
     Write-OutputColor "" -color "Info"
 
@@ -272,6 +322,8 @@ function Show-AllVolumes {
     Write-OutputColor ("{0,-8} {1,-20} {2,-12} {3,-15} {4,-15} {5,-10} {6}" -f "Drive", "Label", "FileSystem", "Size", "Free", "% Used", "Health") -color "Info"
     Write-OutputColor ("=" * 100) -color "Info"
 
+    $sysLetter = "$($env:SystemDrive)"  # e.g. "C:"
+
     foreach ($vol in $volumes) {
         $driveLetter = if ($vol.DriveLetter) { "$($vol.DriveLetter):" } else { "-" }
         $label = if ($vol.FileSystemLabel) { $vol.FileSystemLabel } else { "(No Label)" }
@@ -296,12 +348,25 @@ function Show-AllVolumes {
             default { "Info" }
         }
 
-        Write-OutputColor "$($driveLetter.PadRight(8)) $($label.PadRight(20)) $("$($vol.FileSystem)".PadRight(12)) $($size.PadRight(15)) $($free.PadRight(15)) " -color "Info" -NoNewline
+        # Category (safety) coloring: the system volume (C:) is RED, optical/removable is MAGENTA,
+        # so the OS volume and any CD/USB media read as their own distinct categories at a glance.
+        $isSystemVol        = $vol.DriveLetter -and ("$($vol.DriveLetter):" -eq $sysLetter)
+        $isOpticalRemovable = "$($vol.DriveType)" -in @('CD-ROM', 'Removable')
+        $idColor = if ($isSystemVol) { "Error" } elseif ($isOpticalRemovable) { "Critical" } else { "Info" }
+        $volTag  = if ($isSystemVol) { "  <== SYSTEM (DO NOT TOUCH)" } elseif ($isOpticalRemovable) { "  [Removable/Optical]" } else { "" }
+
+        Write-OutputColor "$($driveLetter.PadRight(8)) $($label.PadRight(20)) " -color $idColor -NoNewline
+        Write-OutputColor "$("$($vol.FileSystem)".PadRight(12)) $($size.PadRight(15)) $($free.PadRight(15)) " -color "Info" -NoNewline
         Write-OutputColor "$("$usedPercent%".PadRight(10)) " -color $usageColor -NoNewline
-        Write-OutputColor "$($vol.HealthStatus)" -color $healthColor
+        Write-OutputColor "$($vol.HealthStatus)" -color $healthColor -NoNewline
+        Write-OutputColor "$volTag" -color $idColor
     }
 
     Write-OutputColor ("=" * 100) -color "Info"
+    Write-OutputColor "  Legend: " -color "Info" -NoNewline
+    Write-OutputColor "System volume (do not touch)" -color "Error" -NoNewline
+    Write-OutputColor "    " -color "Info" -NoNewline
+    Write-OutputColor "Removable/Optical" -color "Critical"
 }
 
 # Function to select a disk
@@ -360,7 +425,7 @@ function Select-Disk {
         $size = Format-ByteSize -Bytes $disk.Size
         $partStyle = if ($disk.PartitionStyle -eq "RAW") { "Not Initialized" } else { $disk.PartitionStyle }
 
-        # Mark OS/system/boot disk with warning
+        # Mark OS/system/boot disk.
         $osMarker = ""
         if ($disk.Number -eq $osDiskNumber) {
             $osMarker = " [OS DISK]"
@@ -372,30 +437,29 @@ function Select-Disk {
             $osMarker = " [Boot]"
         }
 
-        # Warn about USB/removable disks
+        # Mark USB/SD/optical removable media.
         $busMarker = ""
         if ($disk.BusType -eq "USB") { $busMarker = " [USB]" }
         elseif ($disk.BusType -eq "SD") { $busMarker = " [SD Card]" }
+        elseif ($disk.BusType -eq "ATAPI") { $busMarker = " [Optical]" }
 
-        if ($osMarker -and -not $AllowOSDisk) {
-            Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$osMarker$busMarker" -color "Warning"
-        }
-        elseif ($busMarker) {
-            Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$busMarker" -color "Warning"
-        }
-        else {
-            Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$osMarker" -color "Success"
-        }
+        # Show offline state explicitly — offline RAW disks are now selectable (they used to be
+        # silently filtered out), so the operator must be able to see which ones are offline.
+        $offlineMarker = if ($disk.OperationalStatus -ne "Online") { " [Offline]" } else { "" }
+
+        # Category color: OS/system/boot = RED, removable/optical = MAGENTA, normal = GREEN.
+        $rowColor = if ($osMarker) { "Error" } elseif ($busMarker) { "Critical" } else { "Success" }
+
+        Write-OutputColor "  [$($disk.Number)] $($disk.FriendlyName) - $size ($partStyle)$osMarker$busMarker$offlineMarker" -color $rowColor
     }
 
     Write-OutputColor "" -color "Info"
     $selection = Read-Host "Enter disk number (or 'back' to cancel)"
 
-    $navResult = Test-NavigationCommand -UserInput $selection
-    if ($navResult.ShouldReturn) {
-        return $null
-    }
-
+    # IMPORTANT: match a numeric entry against the listed disks BEFORE the navigation check.
+    # Disks are 0-indexed and "0" is a global back/cancel command (see Test-NavigationCommand),
+    # so running the nav check first made disk 0 impossible to select — it was read as "cancel",
+    # which silently dead-ended every storage operation on a server whose data disk is Disk 0.
     if ($selection -match '^\d+$') {
         $selectedDisk = $disks | Where-Object { $_.Number -eq [int]$selection }
         if ($selectedDisk) {
@@ -412,6 +476,13 @@ function Select-Disk {
             }
             return $selectedDisk
         }
+        # A number that is not a listed disk falls through to the nav check below (so a stray "0"
+        # on a system with no Disk 0 still cancels), and otherwise to the invalid-selection message.
+    }
+
+    $navResult = Test-NavigationCommand -UserInput $selection
+    if ($navResult.ShouldReturn) {
+        return $null
     }
 
     Write-OutputColor "  Invalid selection. Enter a listed disk number or 'back'." -color "Error"
@@ -461,16 +532,19 @@ function Select-Partition {
     Write-OutputColor "" -color "Info"
     $selection = Read-Host "Enter partition number (or 'back' to cancel)"
 
-    $navResult = Test-NavigationCommand -UserInput $selection
-    if ($navResult.ShouldReturn) {
-        return $null
-    }
-
+    # Match the entered number against the listed partitions BEFORE the navigation check, so a
+    # partition numbered 0 isn't swallowed by the global "0 = back" command (same class of bug as
+    # Select-Disk). A number that matches no partition falls through to nav/invalid handling.
     if ($selection -match '^\d+$') {
         $selectedPart = $partitions | Where-Object { $_.PartitionNumber -eq [int]$selection }
         if ($selectedPart) {
             return $selectedPart
         }
+    }
+
+    $navResult = Test-NavigationCommand -UserInput $selection
+    if ($navResult.ShouldReturn) {
+        return $null
     }
 
     Write-OutputColor "  Invalid selection. Enter a listed partition number or 'back'." -color "Error"
@@ -486,36 +560,11 @@ function Initialize-NewDisk {
     Write-OutputColor "  Initializing prepares the disk for partitioning." -color "Info"
     Write-OutputColor "" -color "Info"
 
-    # Check for offline disks first - they must be brought online before initialization
-    $offlineDisks = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.OperationalStatus -eq "Offline" })
-    if ($offlineDisks.Count -gt 0) {
-        Write-OutputColor "" -color "Info"
-        Write-OutputColor "  $($offlineDisks.Count) disk(s) are currently offline." -color "Warning"
-        Write-OutputColor "  Offline disks must be brought online before they can be initialized." -color "Info"
-        Write-OutputColor "" -color "Info"
-        if (Confirm-UserAction -Message "Bring offline disks online now?") {
-            foreach ($offDisk in $offlineDisks) {
-                try {
-                    Set-Disk -Number $offDisk.Number -IsOffline $false -ErrorAction Stop
-                    Set-Disk -Number $offDisk.Number -IsReadOnly $false -ErrorAction Stop
-                    # Verify read-only was cleared
-                    $diskState = Get-Disk -Number $offDisk.Number -ErrorAction Stop
-                    if ($diskState.IsReadOnly) {
-                        Write-OutputColor "  Disk $($offDisk.Number) is online but still read-only (may need firmware/driver update)." -color "Warning"
-                    }
-                    else {
-                        Write-OutputColor "  Disk $($offDisk.Number) ($($offDisk.FriendlyName)) brought online." -color "Success"
-                    }
-                }
-                catch {
-                    Write-OutputColor "  Failed to bring Disk $($offDisk.Number) online: $_" -color "Error"
-                }
-            }
-            Write-OutputColor "" -color "Info"
-        }
-    }
-
-    # Show only uninitialized disks
+    # Uninitialized (RAW) disks include brand-new disks that ship OFFLINE. We deliberately keep
+    # them selectable (Select-Disk -AllowOffline below) and bring the CHOSEN disk online right
+    # before initializing, instead of bulk-onlining every offline disk (some may be offline on
+    # purpose). This is the fix for "initialize does nothing" on a fresh offline RAW disk: the
+    # disk used to be filtered out of the picker, so the operator could never select it.
     $rawDisks = @(Get-Disk -ErrorAction SilentlyContinue | Where-Object { $_.PartitionStyle -eq "RAW" })
 
     if ($rawDisks.Count -eq 0) {
@@ -524,7 +573,7 @@ function Initialize-NewDisk {
         return
     }
 
-    $disk = Select-Disk -Prompt "Select a disk to initialize:" -OnlyUninitialized
+    $disk = Select-Disk -Prompt "Select a disk to initialize:" -OnlyUninitialized -AllowOffline
 
     if (-not $disk) {
         return
@@ -537,23 +586,51 @@ function Initialize-NewDisk {
         return
     }
 
-    # Double-check selected disk is online
-    if ($disk.OperationalStatus -eq "Offline") {
+    # Re-read the disk fresh (Select-Disk returns a snapshot) and make sure it is online AND
+    # writable before initializing. A brand-new disk is usually Offline, and sometimes ReadOnly;
+    # either state makes Initialize-Disk fail with a confusing generic error if not cleared first.
+    try {
+        $disk = Get-Disk -Number $disk.Number -ErrorAction Stop
+    }
+    catch {
+        Write-OutputColor "  Could not re-read Disk $($disk.Number): $($_.Exception.Message)" -color "Error"
+        return
+    }
+
+    if ($disk.IsOffline -or $disk.OperationalStatus -eq "Offline") {
         Write-OutputColor "" -color "Warning"
-        Write-OutputColor "  This disk is offline and cannot be initialized." -color "Warning"
-        if (Confirm-UserAction -Message "Bring Disk $($disk.Number) online now?") {
-            try {
-                Set-Disk -Number $disk.Number -IsOffline $false -ErrorAction Stop
-                Set-Disk -Number $disk.Number -IsReadOnly $false -ErrorAction Stop
-                Write-OutputColor "  Disk $($disk.Number) brought online." -color "Success"
-            }
-            catch {
-                Write-OutputColor "  Failed to bring disk online: $_" -color "Error"
-                return
-            }
-        } else {
+        Write-OutputColor "  Disk $($disk.Number) is offline. It must be online to initialize." -color "Warning"
+        if (-not (Confirm-UserAction -Message "Bring Disk $($disk.Number) online now?")) {
             return
         }
+        try {
+            Set-Disk -Number $disk.Number -IsOffline $false -ErrorAction Stop
+            Write-OutputColor "  Disk $($disk.Number) brought online." -color "Success"
+        }
+        catch {
+            Write-OutputColor "  Failed to bring Disk $($disk.Number) online: $($_.Exception.Message)" -color "Error"
+            return
+        }
+    }
+
+    # Clear read-only if set, then verify it actually cleared. If the disk is still read-only
+    # (physical write-protect switch, controller/firmware lock), stop with a specific reason
+    # rather than letting Initialize-Disk fail generically.
+    try {
+        $disk = Get-Disk -Number $disk.Number -ErrorAction Stop
+        if ($disk.IsReadOnly) {
+            Set-Disk -Number $disk.Number -IsReadOnly $false -ErrorAction Stop
+            $disk = Get-Disk -Number $disk.Number -ErrorAction Stop
+            if ($disk.IsReadOnly) {
+                Write-OutputColor "  Disk $($disk.Number) is read-only and cannot be initialized." -color "Error"
+                Write-OutputColor "  Clear the physical write-protect switch or check the controller/firmware, then retry." -color "Warning"
+                return
+            }
+        }
+    }
+    catch {
+        Write-OutputColor "  Failed to clear read-only on Disk $($disk.Number): $($_.Exception.Message)" -color "Error"
+        return
     }
 
     Write-OutputColor "" -color "Info"
@@ -621,7 +698,8 @@ function Set-DiskOnlineStatus {
 
     Write-OutputColor "" -color "Info"
     Write-OutputColor "  Selected: Disk $($disk.Number) - $($disk.FriendlyName)" -color "Info"
-    Write-OutputColor "  Current Status: $($disk.OperationalStatus)" -color "Info"
+    $curStatusColor = if ($disk.OperationalStatus -eq "Offline") { "Error" } elseif ($disk.OperationalStatus -eq "Online") { "Success" } else { "Warning" }
+    Write-OutputColor "  Current Status: $($disk.OperationalStatus)" -color $curStatusColor
     Write-OutputColor "" -color "Info"
 
     if ($disk.OperationalStatus -eq "Online") {
@@ -875,8 +953,17 @@ function New-DiskPartition {
         return
     }
 
-    # Check for unallocated space
-    $partitions = Get-Partition -DiskNumber $disk.Number -ErrorAction SilentlyContinue
+    # Check for unallocated space. Surface a real enumeration failure (e.g. a Dell PERC / Storage
+    # provider timeout) instead of silently treating it as "0 used" — which would misreport a full
+    # disk as entirely unallocated, or a failing disk's error as a plain "No unallocated space".
+    try {
+        $partitions = @(Get-Partition -DiskNumber $disk.Number -ErrorAction Stop)
+    }
+    catch {
+        Write-OutputColor "  Could not read partitions on Disk $($disk.Number): $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  The storage provider may be busy or the disk may be failing — try again or check the disk." -color "Warning"
+        return
+    }
     $usedSpace = ($partitions | Measure-Object -Property Size -Sum).Sum
     if (-not $usedSpace) { $usedSpace = 0 }
 
@@ -903,9 +990,13 @@ function New-DiskPartition {
 
     $sizeInput = Read-Host "Partition size"
 
-    $navResult = Test-NavigationCommand -UserInput $sizeInput
-    if ($navResult.ShouldReturn) {
-        return
+    # Only treat input as navigation if it is not a size value. A plain number like "0" is a size
+    # (which then gets a real "must be at least 1 MB" error), not the global "back" command.
+    if ($sizeInput -notmatch '^\s*(max|(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?)\s*$') {
+        $navResult = Test-NavigationCommand -UserInput $sizeInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
     }
 
     $useMax = $false
@@ -986,6 +1077,10 @@ function New-DiskPartition {
         Write-OutputColor "  Partition Number: $($newPartition.PartitionNumber)" -color "Info"
         if ($driveAssigned) {
             Write-OutputColor "  Drive Letter: $driveLetter" -color "Info"
+        }
+        elseif ($assignDriveLetter -and $driveLetter) {
+            # Don't let the "created successfully" line imply the letter was assigned when it wasn't.
+            Write-OutputColor "  Drive Letter: NOT ASSIGNED (see warning above) — assign it later via Change Drive Letter." -color "Error"
         }
         Write-OutputColor "" -color "Info"
         Write-OutputColor "  Note: The partition is not yet formatted. Use 'Format Volume' to format it." -color "Warning"
@@ -1328,8 +1423,17 @@ function Expand-DiskVolume {
         return
     }
 
-    # Calculate available space (simplified - takes space after partition)
-    $maxSize = $partition | Get-PartitionSupportedSize -ErrorAction SilentlyContinue
+    # Calculate available space. Surface a provider failure (locked/protected partition, PERC
+    # timeout) instead of reporting it as "no additional space".
+    try {
+        $maxSize = $partition | Get-PartitionSupportedSize -ErrorAction Stop
+    }
+    catch {
+        Write-OutputColor "" -color "Info"
+        Write-OutputColor "  Could not determine extend limits: $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  The storage provider may be busy or the partition may be locked/protected." -color "Warning"
+        return
+    }
 
     if (-not $maxSize -or $maxSize.SizeMax -le $partition.Size) {
         Write-OutputColor "" -color "Info"
@@ -1355,9 +1459,13 @@ function Expand-DiskVolume {
 
     $sizeInput = Read-Host "Size to add"
 
-    $navResult = Test-NavigationCommand -UserInput $sizeInput
-    if ($navResult.ShouldReturn) {
-        return
+    # Only treat input as navigation if it is not a size value (so a plain number, incl. "0",
+    # validates and returns a real error rather than silently cancelling as the "back" command).
+    if ($sizeInput -notmatch '^\s*(max|(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?)\s*$') {
+        $navResult = Test-NavigationCommand -UserInput $sizeInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
     }
 
     $newSize = 0
@@ -1436,7 +1544,14 @@ function Compress-DiskVolume {
     }
 
     # Get minimum size
-    $sizeInfo = $partition | Get-PartitionSupportedSize -ErrorAction SilentlyContinue
+    try {
+        $sizeInfo = $partition | Get-PartitionSupportedSize -ErrorAction Stop
+    }
+    catch {
+        Write-OutputColor "  Could not determine shrink limits: $($_.Exception.Message)" -color "Error"
+        Write-OutputColor "  The storage provider may be busy or the partition may be locked/protected." -color "Warning"
+        return
+    }
 
     if (-not $sizeInfo) {
         Write-OutputColor "  Unable to determine shrink limits for this partition." -color "Error"
@@ -1468,9 +1583,13 @@ function Compress-DiskVolume {
 
     $shrinkInput = Read-Host "Shrink by"
 
-    $navResult = Test-NavigationCommand -UserInput $shrinkInput
-    if ($navResult.ShouldReturn) {
-        return
+    # Only treat input as navigation if it is not a size value (a plain "0" gets a real error
+    # rather than silently cancelling as the "back" command).
+    if ($shrinkInput -notmatch '^\s*(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?\s*$') {
+        $navResult = Test-NavigationCommand -UserInput $shrinkInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
     }
 
     if ($shrinkInput -notmatch '^(\d+(?:\.\d+)?)\s*(TB|GB|MB|T|G|M)?$') {
@@ -1594,7 +1713,7 @@ function Show-DriveLetterMap {
         Write-Host "  │  " -NoNewline -ForegroundColor Cyan
         foreach ($part in $lineParts) {
             $color = if ($part.Info.Status -eq "Available") { "Green" }
-                     elseif ($part.Info.DriveType -eq "CD-ROM") { "Yellow" }
+                     elseif ($part.Info.DriveType -eq "CD-ROM") { "Magenta" }
                      else { "Red" }
             Write-Host $part.Text -NoNewline -ForegroundColor $color
         }
@@ -1611,7 +1730,7 @@ function Show-DriveLetterMap {
     Write-Host " = Available  " -NoNewline -ForegroundColor Cyan
     Write-Host "Red" -NoNewline -ForegroundColor Red
     Write-Host " = In Use  " -NoNewline -ForegroundColor Cyan
-    Write-Host "Yellow" -NoNewline -ForegroundColor Yellow
+    Write-Host "Magenta" -NoNewline -ForegroundColor Magenta
     Write-Host " = CD/DVD (can be moved)" -NoNewline -ForegroundColor Cyan
     Write-OutputColor "   │" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
@@ -1684,52 +1803,57 @@ function Select-DriveLetterSmart {
 
     $userResponse = Read-Host "  Drive letter"
 
+    # Press Enter to skip (assign a letter later).
+    if ([string]::IsNullOrWhiteSpace($userResponse)) { return $null }
+
+    # Match a SINGLE drive letter BEFORE the navigation check. 'B' and 'C' are also back/cancel
+    # tokens, so checking navigation first made those letters impossible to enter (drive letter C
+    # was unusable). Enter = skip, the word "back" = cancel.
+    if ($userResponse -match '^[A-Za-z]$') {
+        $chosenLetter = "$userResponse".ToUpper()
+
+        # Block A and B (floppy reserved)
+        if ($chosenLetter -eq 'A' -or $chosenLetter -eq 'B') {
+            Write-OutputColor "  Letters A and B are reserved for floppy drives." -color "Warning"
+            return $null
+        }
+
+        # Check if the letter is the current letter
+        if ($CurrentLetter -and $chosenLetter -eq $CurrentLetter) {
+            Write-OutputColor "  That's already the current drive letter." -color "Warning"
+            return $null
+        }
+
+        $info = $map[$chosenLetter]
+
+        if ($info.Status -eq "Available") {
+            return $chosenLetter
+        }
+
+        # Letter is in use - check if it's a CD/DVD that can be moved
+        if ($info.DriveType -eq "CD-ROM") {
+            Write-OutputColor "" -color "Info"
+            Write-OutputColor "  $($chosenLetter): is used by a CD/DVD drive." -color "Warning"
+            if (Confirm-UserAction -Message "Move CD/DVD to another letter and use $($chosenLetter): for this volume?") {
+                if (Move-OpticalDriveLetter -CurrentLetter $chosenLetter) {
+                    return $chosenLetter
+                } else {
+                    return $null
+                }
+            }
+            return $null
+        }
+
+        # In use by a regular volume - can't use it
+        Write-OutputColor "  Drive letter $chosenLetter is in use by: $($info.Label) ($($info.Size))" -color "Error"
+        return $null
+    }
+
+    # Multi-character input: honor navigation (back/cancel), otherwise it's invalid.
     $navResult = Test-NavigationCommand -UserInput $userResponse
     if ($navResult.ShouldReturn) { return $null }
 
-    if ([string]::IsNullOrWhiteSpace($userResponse)) { return $null }
-
-    if ($userResponse -notmatch '^[A-Za-z]$') {
-        Write-OutputColor "  Invalid input. Enter a single letter." -color "Error"
-        return $null
-    }
-
-    $chosenLetter = "$userResponse".ToUpper()
-
-    # Block A and B (floppy reserved)
-    if ($chosenLetter -eq 'A' -or $chosenLetter -eq 'B') {
-        Write-OutputColor "  Letters A and B are reserved for floppy drives." -color "Warning"
-        return $null
-    }
-
-    # Check if the letter is the current letter
-    if ($CurrentLetter -and $chosenLetter -eq $CurrentLetter) {
-        Write-OutputColor "  That's already the current drive letter." -color "Warning"
-        return $null
-    }
-
-    $info = $map[$chosenLetter]
-
-    if ($info.Status -eq "Available") {
-        return $chosenLetter
-    }
-
-    # Letter is in use - check if it's a CD/DVD that can be moved
-    if ($info.DriveType -eq "CD-ROM") {
-        Write-OutputColor "" -color "Info"
-        Write-OutputColor "  $($chosenLetter): is used by a CD/DVD drive." -color "Warning"
-        if (Confirm-UserAction -Message "Move CD/DVD to another letter and use $($chosenLetter): for this volume?") {
-            if (Move-OpticalDriveLetter -CurrentLetter $chosenLetter) {
-                return $chosenLetter
-            } else {
-                return $null
-            }
-        }
-        return $null
-    }
-
-    # In use by a regular volume - can't use it
-    Write-OutputColor "  Drive letter $chosenLetter is in use by: $($info.Label) ($($info.Size))" -color "Error"
+    Write-OutputColor "  Invalid input. Enter a single drive letter (C-Z), or press Enter to skip." -color "Error"
     return $null
 }
 
@@ -1824,8 +1948,13 @@ function Set-VolumeDriveLetter {
     Write-OutputColor "" -color "Info"
 
     $userResponse = Read-Host "  Drive letter"
-    $navResult = Test-NavigationCommand -UserInput $userResponse
-    if ($navResult.ShouldReturn) { return }
+    # Only treat input as navigation when it is NOT a single drive letter and NOT 'REMOVE'.
+    # 'B' and 'C' are back/cancel tokens, so an unconditional nav check made those drive letters
+    # impossible to enter. Enter cancels (handled below); the word "back" still cancels.
+    if ($userResponse -notmatch '^[A-Za-z]$' -and $userResponse -notmatch '^remove$') {
+        $navResult = Test-NavigationCommand -UserInput $userResponse
+        if ($navResult.ShouldReturn) { return }
+    }
 
     if ([string]::IsNullOrWhiteSpace($userResponse)) { return }
 
@@ -1958,12 +2087,13 @@ function Set-VolumeLabel {
     Write-OutputColor "" -color "Info"
     $letterInput = Read-Host "Enter drive letter of volume to rename"
 
-    $navResult = Test-NavigationCommand -UserInput $letterInput
-    if ($navResult.ShouldReturn) {
-        return
-    }
-
+    # Only treat input as navigation if it is not a single drive letter — 'B' and 'C' are
+    # back/cancel tokens but are valid volume letters here. Type "back" to cancel.
     if ($letterInput -notmatch '^[A-Za-z]$') {
+        $navResult = Test-NavigationCommand -UserInput $letterInput
+        if ($navResult.ShouldReturn) {
+            return
+        }
         Write-OutputColor "  Invalid drive letter." -color "Error"
         return
     }
@@ -1986,8 +2116,8 @@ function Set-VolumeLabel {
     Write-OutputColor "  Enter new label (or press Enter to clear label):" -color "Info"
     $newLabel = (Read-Host "New label").Trim()
 
-    $navResult = Test-NavigationCommand -UserInput $newLabel
-    if ($navResult.ShouldReturn) { return }
+    # NOTE: no navigation check here — a volume label is arbitrary free text and must be allowed
+    # to be "back", "cancel", "0", "C", etc. Press Enter (empty) to clear the label.
 
     try {
         Set-Volume -DriveLetter $driveLetter -NewFileSystemLabel $newLabel -ErrorAction Stop
@@ -2078,15 +2208,19 @@ function Start-StorageManager {
             "3" {
                 Write-OutputColor "" -color "Info"
                 $diskNum = Read-Host "Enter disk number to view partitions"
-                $navResult = Test-NavigationCommand -UserInput $diskNum
-                if ($navResult.ShouldReturn) { continue }
+                # Numeric FIRST — "0" is a global back token, so a bare disk number (including 0)
+                # must be matched before the navigation check, or Disk 0 can never be viewed.
                 if ($diskNum -match '^\d+$') {
                     Show-DiskPartitions -DiskNumber ([int]$diskNum)
+                    Write-PressEnter
                 }
                 else {
-                    Write-OutputColor "  Invalid disk number." -color "Error"
+                    $navResult = Test-NavigationCommand -UserInput $diskNum
+                    if (-not $navResult.ShouldReturn) {
+                        Write-OutputColor "  Invalid disk number." -color "Error"
+                        Write-PressEnter
+                    }
                 }
-                Write-PressEnter
             }
             "4" {
                 Set-DiskOnlineStatus

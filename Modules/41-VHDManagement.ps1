@@ -504,14 +504,19 @@ function Copy-VHDForVM {
 
         # Move the fixed file to the final name (overwrites the dynamic copy)
         $finalPath = Join-Path $DestinationFolder $destFileName
+        $moveOk = $false
         try {
             Move-Item -LiteralPath $fixedPath -Destination $finalPath -Force -ErrorAction Stop
+            $moveOk = $true
         }
         catch {
             Write-OutputColor "  Warning: Could not rename converted VHD: $_" -color "Warning"
         }
 
-        if (Test-Path -LiteralPath $finalPath) {
+        # Gate on $moveOk, NOT just Test-Path $finalPath: on a Move failure $finalPath STILL exists
+        # because it holds the un-converted DYNAMIC copy, so the old code returned/reported that
+        # dynamic file as the "Fixed VHD" and orphaned the real fixed file at $fixedPath.
+        if ($moveOk -and (Test-Path -LiteralPath $finalPath)) {
             $finalSize = (Get-Item -LiteralPath $finalPath).Length
             $sizeGB = [math]::Round($finalSize / 1GB, 2)
             Write-OutputColor "  Conversion complete! Fixed VHD: ${sizeGB} GB" -color "Success"
@@ -519,10 +524,12 @@ function Copy-VHDForVM {
             return $finalPath
         }
         elseif (Test-Path -LiteralPath $fixedPath) {
-            # Move failed but fixed file still exists at _fixed path - use it directly
+            # Rename failed but the converted FIXED file still exists at the _fixed path — return it
+            # directly rather than the dynamic copy at $finalPath. The dynamic copy is left in place
+            # for the operator to reclaim.
             $finalSize = (Get-Item -LiteralPath $fixedPath).Length
             $sizeGB = [math]::Round($finalSize / 1GB, 2)
-            Write-OutputColor "  Conversion complete! Fixed VHD: ${sizeGB} GB" -color "Success"
+            Write-OutputColor "  Conversion complete (kept as '$([System.IO.Path]::GetFileName($fixedPath))' — rename failed): ${sizeGB} GB" -color "Warning"
             return $fixedPath
         }
         else {

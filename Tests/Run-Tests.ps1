@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.119.4
+    Automated Test Runner for RackStack v1.121.15
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -656,12 +656,12 @@ $requiredFunctions = @(
     "Suspend-ClusterNodeForMaintenance",
     # v1.88.0 — push to 98%+
     "Select-Host-Network-Adapter",
-    "Select-VM-Network-Adapter",
+    "Select-Physical-Network-Adapter",
     "Select-iSCSI-Adapters",
     "Select-Partition",
     "Select-DriveLetterSmart",
     "Start-Show-HostNetworkIPMenu",
-    "Start-Show-VM-NetworkMenu",
+    "Start-Show-PhysicalAdapterMenu",
     "Resume-ClusterNodeFromDrain",
     "Clear-ShadowCopies",
     "Clear-UserProfileTemp",
@@ -970,7 +970,6 @@ $trueInputs = @(
     @{ Input = "QUIT"; ExpAction = "exit"; Desc = "'QUIT' -> exit" }
     @{ Input = "EXIT"; ExpAction = "exit"; Desc = "'EXIT' -> exit" }
     @{ Input = "exit"; ExpAction = "exit"; Desc = "'exit' -> exit" }
-    @{ Input = "C";    ExpAction = "back"; Desc = "'C' (cancel) -> back" }
     @{ Input = "0";    ExpAction = "back"; Desc = "'0' -> back" }
     @{ Input = "  b  "; ExpAction = "back"; Desc = "'  b  ' (whitespace) -> back" }
 )
@@ -989,6 +988,8 @@ foreach ($tc in $trueInputs) {
 $falseInputs = @(
     @{ Input = "Q";        Desc = "'Q' -> no match (menu shortcut, not exit)" }
     @{ Input = "q";        Desc = "'q' -> no match (menu shortcut, not exit)" }
+    @{ Input = "C";        Desc = "'C' -> no match (affirmative menu key: Continue/Create/Add)" }
+    @{ Input = "c";        Desc = "'c' -> no match (affirmative menu key, not cancel)" }
     @{ Input = "1";        Desc = "'1' -> no match" }
     @{ Input = "X";        Desc = "'X' -> no match" }
     @{ Input = "H";        Desc = "'H' -> no match" }
@@ -3053,10 +3054,12 @@ try {
     $acMod = Get-Content (Join-Path $modulesPath "39-FileServer.ps1") -Raw
     $hasRetry = $acMod -match 'Retrying download'
     $hasIntegrity = $acMod -match 'Test-FileIntegrity'
-    $hasWebClient = $acMod -match 'System\.Net\.WebClient'
+    # v1.121.9: the download moved off WebClient (auto-followed redirects and resent the CF
+    # Access token) to a redirect-safe HttpWebRequest stream with AllowAutoRedirect disabled.
+    $hasStreamingDownload = ($acMod -match '\[System\.Net\.HttpWebRequest\]::Create') -and ($acMod -match 'AllowAutoRedirect = \$false')
     Write-TestResult "Get-FileServerFile: has retry logic on download failure" $hasRetry
     Write-TestResult "Get-FileServerFile: calls Test-FileIntegrity for validation" $hasIntegrity
-    Write-TestResult "Get-FileServerFile: uses WebClient for downloads" $hasWebClient
+    Write-TestResult "Get-FileServerFile: streams downloads via redirect-safe HttpWebRequest" $hasStreamingDownload
 } catch {
     Write-TestResult "Get-FileServerFile retry logic" $false $_.Exception.Message
 }
@@ -4936,8 +4939,8 @@ try {
     # Show-Host-IPNetworkMenu uses Show-AdapterInfoBox
     Write-TestResult "48-MenuDisplay: Show-Host-IPNetworkMenu uses Show-AdapterInfoBox" ($content -match 'Show-Host-IPNetworkMenu[\s\S]*?Show-AdapterInfoBox')
 
-    # Show-VM-NetworkMenu uses Show-AdapterInfoBox
-    Write-TestResult "48-MenuDisplay: Show-VM-NetworkMenu uses Show-AdapterInfoBox" ($content -match 'Show-VM-NetworkMenu[\s\S]*?Show-AdapterInfoBox')
+    # Show-PhysicalAdapterMenu uses Show-AdapterInfoBox
+    Write-TestResult "48-MenuDisplay: Show-PhysicalAdapterMenu uses Show-AdapterInfoBox" ($content -match 'Show-PhysicalAdapterMenu[\s\S]*?Show-AdapterInfoBox')
 
     # Show-AdapterInfoBox has null safety for empty adapter name
     Write-TestResult "48-MenuDisplay: Show-AdapterInfoBox has null safety for adapter name" ($content -match 'Show-AdapterInfoBox[\s\S]*?(none selected|\(none)')
@@ -6131,6 +6134,15 @@ try {
     # Saves session state if VM deployment queue has items
     Write-TestResult "47-ExitCleanup: saves session state for pending VMs" ($ecContent -match 'Save-SessionState')
 
+    # Perf: the profile is enumerated in a SINGLE recursive pass (partitioned in memory), not the
+    # old two full passes (-File then -Directory) that dominated the pre-reboot delay.
+    Write-TestResult "47-ExitCleanup: single profile scan (partitioned)" ($ecContent -match '\$allProfileItems\s*=\s*Get-ChildItem[\s\S]{0,120}-Recurse -Force' -and $ecContent -match 'PSIsContainer')
+    Write-TestResult "47-ExitCleanup: no separate -File/-Directory profile passes" (-not ($ecContent -match 'Get-ChildItem[^\r\n]*-Recurse -Force -File') -and -not ($ecContent -match 'Get-ChildItem[^\r\n]*-Recurse -Force -Directory'))
+    # Perf: the countdown + "Good luck." run AFTER the cleanup task is scheduled, so the gap between
+    # "Good luck." and the reboot is instant (scan/scheduling happens before the countdown now).
+    Write-TestResult "47-ExitCleanup: 'Good luck' comes after task scheduling" ($ecContent -match 'Register-ScheduledTask[\s\S]*?Good luck')
+    Write-TestResult "47-ExitCleanup: reboot immediately follows the countdown" ($ecContent -match 'Good luck[\s\S]{0,120}Restart-Computer -Force')
+
 } catch {
     Write-TestResult "Exit Cleanup Module Tests" $false $_.Exception.Message
 }
@@ -6853,7 +6865,7 @@ try {
 
     # 48-MenuDisplay: renamed menu
     $menuContent = Get-Content (Join-Path $modulesPath "48-MenuDisplay.ps1") -Raw
-    Write-TestResult "48-MenuDisplay: Storage & SAN Management label" ($menuContent -match 'Storage & SAN Management')
+    Write-TestResult "48-MenuDisplay: Storage & SAN menu label" ($menuContent -match 'Storage & SAN \(iSCSI\)')
 
     # 49-MenuRunner: dispatches to Start-StorageSANMenu
     $runnerContent = Get-Content (Join-Path $modulesPath "49-MenuRunner.ps1") -Raw
@@ -7752,7 +7764,10 @@ try {
     Write-TestResult "39-FS: integrity gate tags missing sidecar as NoSidecar" ($fsContent2 -match "Reason\s*=\s*'NoSidecar'")
     Write-TestResult "39-FS: integrity gate tags tamper as HashMismatch" ($fsContent2 -match "Reason\s*=\s*'HashMismatch'")
     # NoSidecar is recoverable (file kept for caller); everything else fails closed (deleted)
-    Write-TestResult "39-FS: Get-FileServerFile preserves file on NoSidecar" ($fsContent2 -match "Reason\s*-eq\s*'NoSidecar'[\s\S]{0,200}FilePath\s*=\s*\`$destFile")
+    # The recoverable NoSidecar return keeps the downloaded file (FilePath = $destFile) so a
+    # caller can offer trust-on-first-use. (v1.121.9 added an ExpectedHash gate ahead of this
+    # return; the recoverable return still preserves the file.)
+    Write-TestResult "39-FS: Get-FileServerFile preserves file on NoSidecar" ($fsContent2 -match "Reason = 'NoSidecar'; FilePath = \`$destFile")
 
     # Agent installer honors the configurable policy and never auto-trusts a mismatch
     Write-TestResult "57-Agent: reads AgentInstaller.RequireHash policy" ($aiContent2 -match '\$requireHash\s*=' -and $aiContent2 -match "ContainsKey\('RequireHash'\)")
@@ -7790,9 +7805,12 @@ try {
     Write-TestResult "35-Util: self-update certutil loop reads tokens=* (no skip)" `
         ($utilContent3 -match 'for /f "tokens=\*" %%H in \(.certutil -hashfile')
 
-    # Fix 2: recoverable NoSidecar must NOT print the red "Integrity check failed" before returning
+    # Fix 2: the recoverable NoSidecar return must come BEFORE the genuine-fail red
+    # "Integrity check failed: $($integrity.Error)" print (only real tamper/compute failures show
+    # that). v1.121.9 added an ExpectedHash gate inside the NoSidecar branch, so key on the
+    # recoverable return preceding the $integrity.Error print rather than a fixed-distance return.
     Write-TestResult "39-FS: NoSidecar returns before the red 'Integrity check failed' print" `
-        ($fsContent3 -match "Reason\s*-eq\s*'NoSidecar'[\s\S]{0,260}return[\s\S]{0,260}Write-OutputColor\s+`"\s*Integrity check failed")
+        ($fsContent3 -match "Reason = 'NoSidecar'; FilePath = \`$destFile[\s\S]{0,700}Integrity check failed: \`$\(\`$integrity\.Error\)")
 
     # Fix 4: no-Content-Length + no-sidecar is recoverable, not a hard 'NoSignal' delete
     Write-TestResult "39-FS: 'NoSignal' hard-fail reason removed" ($fsContent3 -notmatch "'NoSignal'")
@@ -9466,7 +9484,7 @@ try {
     Write-TestResult "80-RDS: role install is reversible (undo)" ($rdsC -match 'function\s+Install-RDSRoles[\s\S]{0,3000}Add-UndoAction[\s\S]{0,400}Uninstall-WindowsFeature')
     Write-TestResult "80-RDS: role install is server-SKU gated" ($rdsC -match 'Test-WindowsServer')
     # Licensing mode is reversible (captures prior + undo).
-    Write-TestResult "80-RDS: license-mode change is reversible (undo)" ($rdsC -match 'function\s+Set-RDSLicenseMode[\s\S]{0,3500}Add-UndoAction[\s\S]{0,400}LicensingMode')
+    Write-TestResult "80-RDS: license-mode change is reversible (undo)" ($rdsC -match 'function\s+Set-RDSLicenseMode[\s\S]{0,4000}Add-UndoAction[\s\S]{0,400}LicensingMode')
     Write-TestResult "80-RDS: license-mode change is Dry-Run aware (reversible)" ($rdsC -match 'Set-RDSLicenseMode[\s\S]{0,2000}Push-DryRunStep[\s\S]{0,400}-OneWay \$false')
     # Validates the license-server name before writing it.
     Write-TestResult "80-RDS: validates license server name" ($rdsC -match 'LicenseServer[\s\S]{0,200}-notmatch')
@@ -9489,6 +9507,669 @@ try {
 }
 catch {
     Write-TestResult "Remote Desktop Services Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 187: HOST-NETWORK HYPER-V GATING (v1.120.0)
+# ============================================================================
+# Guards the reboot-loop fix + operational-readiness gating for the
+# Virtualization Host Networking branch, and the split networking menu tree.
+Write-SectionHeader "SECTION 187: HOST-NETWORK HYPER-V GATING"
+
+try {
+    $sysHV    = Get-Content "$modulesPath\05-SystemCheck.ps1" -Raw
+    $navHV    = Get-Content "$modulesPath\04-Navigation.ps1" -Raw
+    $runnerHV = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+    $dispHV   = Get-Content "$modulesPath\48-MenuDisplay.ps1" -Raw
+    $setHV    = Get-Content "$modulesPath\09-SET.ps1" -Raw
+
+    # Test-HyperVReady exists and checks the VMMS service + Hyper-V module (not just feature state).
+    Write-TestResult "05-SystemCheck: Test-HyperVReady exists" ($sysHV -match 'function\s+Test-HyperVReady\b')
+    Write-TestResult "05-SystemCheck: Test-HyperVReady checks vmms service" ($sysHV -match 'function\s+Test-HyperVReady[\s\S]{0,500}Get-Service[\s\S]{0,120}vmms')
+    Write-TestResult "05-SystemCheck: Test-HyperVReady checks Get-VMSwitch availability" ($sysHV -match 'function\s+Test-HyperVReady[\s\S]{0,600}Get-Command[\s\S]{0,80}Get-VMSwitch')
+
+    # Pending reboot is a WARNING, not a blocker, in the feature-install preflight.
+    Write-TestResult "05-SystemCheck: pending-reboot preflight is Warn not Fail" ($sysHV -match 'Pending Reboot"[\s\S]{0,200}\{\s*"Warn"\s*\}')
+
+    # The host-network gate ensures Hyper-V BEFORE it renders the menu, and does NOT hard-block on a
+    # pending reboot. The old "reboot is pending. Please reboot ... rerun" hard-return is gone.
+    Write-TestResult "49-MenuRunner: no hard reboot-pending block in host-network gate" (-not ($runnerHV -match 'Please reboot the server and rerun the script'))
+    Write-TestResult "49-MenuRunner: host-network gate checks Test-HyperVInstalled first" ($runnerHV -match 'function\s+Start-Show-HostNetworkMenu[\s\S]{0,900}Test-HyperVInstalled')
+    Write-TestResult "49-MenuRunner: host-network gate gates on Test-HyperVReady" ($runnerHV -match '"HyperVReady"\s*-FetchScript\s*\{\s*Test-HyperVReady')
+
+    # Clear-MenuCache invalidates the readiness probe so a fresh check runs after any feature change.
+    Write-TestResult "04-Navigation: Clear-MenuCache nulls HyperVReady" ($navHV -match 'Clear-MenuCache[\s\S]{0,200}MenuCache\.HyperVReady\s*=\s*\$null')
+
+    # The switch-management render guards on readiness before calling Get-VMSwitch.
+    Write-TestResult "48-MenuDisplay: Show-VirtualSwitchMenu guards Get-VMSwitch on readiness" ($dispHV -match 'Show-VirtualSwitchMenu[\s\S]{0,500}Test-HyperVReady[\s\S]{0,300}Get-VMSwitch')
+
+    # SET / standard vSwitch creation require operational readiness (not just install state).
+    Write-TestResult "09-SET: New-SwitchEmbeddedTeam gates on Test-HyperVReady" ($setHV -match 'function\s+New-SwitchEmbeddedTeam[\s\S]{0,900}Test-HyperVReady')
+    Write-TestResult "09-SET: New-StandardVSwitch gates on Test-HyperVReady" ($setHV -match 'function\s+New-StandardVSwitch[\s\S]{0,900}Test-HyperVReady')
+
+    # Networking menu is split into physical / host / SAN branches with corrected labels.
+    Write-TestResult "48-MenuDisplay: Network menu has Physical Adapter Configuration" ($dispHV -match 'Physical Adapter Configuration')
+    Write-TestResult "48-MenuDisplay: Network menu has Virtualization Host Networking" ($dispHV -match 'Virtualization Host Networking')
+    Write-TestResult "49-MenuRunner: Network menu dispatches Start-Show-PhysicalAdapterMenu" ($runnerHV -match 'Start-Show-PhysicalAdapterMenu')
+}
+catch {
+    Write-TestResult "Host-Network Hyper-V Gating Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 188: DISK INIT FIX + STORAGE STATUS/COLOR (v1.121.0)
+# ============================================================================
+Write-SectionHeader "SECTION 188: DISK INIT + STORAGE STATUS/COLOR"
+
+try {
+    $smC = Get-Content "$modulesPath\38-StorageManager.ps1" -Raw
+
+    # Detection helpers exist.
+    Write-TestResult "38-Storage: Get-BootSystemDiskNumbers exists" ($smC -match 'function\s+Get-BootSystemDiskNumbers\b')
+    Write-TestResult "38-Storage: Test-IsOpticalOrRemovable exists" ($smC -match 'function\s+Test-IsOpticalOrRemovable\b')
+
+    # THE init bug fix: Initialize-NewDisk must select offline disks (-AllowOffline) or a brand-new
+    # offline RAW disk is silently filtered out of the picker and never initializes.
+    Write-TestResult "38-Storage: Initialize-NewDisk selects offline disks (-AllowOffline)" ($smC -match 'function\s+Initialize-NewDisk[\s\S]{0,1500}Select-Disk[^\r\n]*-AllowOffline')
+    # It must clear read-only before Initialize-Disk (a read-only disk fails init generically).
+    Write-TestResult "38-Storage: Initialize-NewDisk clears read-only before init" ($smC -match '-IsReadOnly \$false[\s\S]{0,2500}Initialize-Disk -Number')
+
+    # Boot/system = red, removable/optical = magenta (Critical) in the disk overview.
+    Write-TestResult "38-Storage: Show-AllDisks uses boot/system detection" ($smC -match 'function\s+Show-AllDisks[\s\S]{0,2000}Get-BootSystemDiskNumbers')
+    Write-TestResult "38-Storage: Show-AllDisks paints removable Critical" ($smC -match 'function\s+Show-AllDisks[\s\S]{0,2500}Test-IsOpticalOrRemovable[\s\S]{0,400}Critical')
+
+    # Select-Disk shows an explicit [Offline] marker now that offline disks are selectable.
+    Write-TestResult "38-Storage: Select-Disk shows [Offline] marker" ($smC -match 'function\s+Select-Disk[\s\S]{0,3000}\[Offline\]')
+
+    # Volume overview paints the system volume red and optical/removable magenta.
+    Write-TestResult "38-Storage: Show-AllVolumes flags system volume red" ($smC -match 'function\s+Show-AllVolumes[\s\S]{0,3000}isSystemVol[\s\S]{0,200}Error')
+    Write-TestResult "38-Storage: Show-AllVolumes flags optical/removable" ($smC -match "function\s+Show-AllVolumes[\s\S]{0,3000}'CD-ROM',\s*'Removable'")
+
+    # Drive Letter Map uses magenta (not yellow) for optical, matching the rest of the tool.
+    Write-TestResult "38-Storage: Drive Letter Map optical is Magenta" ($smC -match 'DriveType -eq "CD-ROM"\s*\)\s*\{\s*"Magenta"')
+}
+catch {
+    Write-TestResult "Disk Init + Storage Color Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 189: STORAGE MANAGER RELIABILITY (v1.121.2)
+# ============================================================================
+# Guards the "navigation check runs before input validation" bug class, where the global
+# back/cancel tokens '0','b','c' were swallowed before the real disk number / drive letter was
+# matched — making Disk 0 unselectable (Create Partition dead-end) and drive letters B/C unusable.
+Write-SectionHeader "SECTION 189: STORAGE MANAGER RELIABILITY"
+
+try {
+    $smR = Get-Content "$modulesPath\38-StorageManager.ps1" -Raw
+    $hsR = Get-Content "$modulesPath\40-HostStorage.ps1" -Raw
+
+    # Ordering helper: within the first ~4000 chars of $func's body, does the FIRST match of the
+    # input-validation regex $before occur BEFORE the first Test-NavigationCommand ($after)?
+    function Test-SMOrder([string]$content, [string]$func, [string]$before) {
+        $start = $content.IndexOf("function $func")
+        if ($start -lt 0) { return $false }
+        $rest = $content.Substring($start + 10)
+        $nf = $rest.IndexOf("`nfunction ")
+        $len = if ($nf -ge 0) { $nf } else { $rest.Length }
+        $body = $content.Substring($start, [Math]::Min($len + 10, $content.Length - $start))
+        $ib = [regex]::Match($body, $before)
+        # Key on the actual call (with -UserInput) so a "(see Test-NavigationCommand)" comment
+        # reference is not mistaken for the nav call.
+        $ia = $body.IndexOf('Test-NavigationCommand -UserInput')
+        return ($ib.Success -and $ia -ge 0 -and $ib.Index -lt $ia)
+    }
+
+    # Numeric pickers: the disk/partition number is matched before the nav check (Disk 0 works).
+    Write-TestResult "38-Storage: Select-Disk matches number before nav" (Test-SMOrder $smR 'Select-Disk' "-match '\^\\d\+")
+    Write-TestResult "38-Storage: Select-Partition matches number before nav" (Test-SMOrder $smR 'Select-Partition' "-match '\^\\d\+")
+
+    # Menu [3] View Disk Partitions: numeric branch precedes the nav check.
+    Write-TestResult "38-Storage: menu [3] numeric before nav" ($smR -match "Enter disk number to view partitions[\s\S]{0,320}-match '\^\\d\+\$'[\s\S]{0,320}Test-NavigationCommand")
+
+    # Drive-letter pickers: a single letter is matched before the nav check (letters B and C work).
+    Write-TestResult "38-Storage: Select-DriveLetterSmart matches letter before nav" (Test-SMOrder $smR 'Select-DriveLetterSmart' "-match '\^\[A-Za-z\]")
+    Write-TestResult "38-Storage: Set-VolumeDriveLetter guards nav for letters/REMOVE" ($smR -match "Set-VolumeDriveLetter[\s\S]{0,6000}-notmatch '\^\[A-Za-z\]\$'[\s\S]{0,160}Test-NavigationCommand")
+    Write-TestResult "38-Storage: Set-VolumeLabel guards nav for letters" (Test-SMOrder $smR 'Set-VolumeLabel' "-notmatch '\^\[A-Za-z\]")
+
+    # A volume label is arbitrary text — no nav check between reading the label and setting it.
+    Write-TestResult "38-Storage: Set-VolumeLabel does not nav-check the label text" (-not ($smR -match "New label[\s\S]{0,90}Test-NavigationCommand"))
+
+    # Storage-provider errors are surfaced, not masked as 'no space'.
+    Write-TestResult "38-Storage: New-DiskPartition surfaces Get-Partition errors" ($smR -match "function New-DiskPartition[\s\S]{0,900}Get-Partition -DiskNumber[^\r\n]*-ErrorAction Stop")
+    Write-TestResult "38-Storage: Expand uses Get-PartitionSupportedSize -ErrorAction Stop" ($smR -match "function Expand-DiskVolume[\s\S]{0,900}Get-PartitionSupportedSize -ErrorAction Stop")
+    Write-TestResult "38-Storage: Compress uses Get-PartitionSupportedSize -ErrorAction Stop" ($smR -match "function Compress-DiskVolume[\s\S]{0,900}Get-PartitionSupportedSize -ErrorAction Stop")
+
+    # Honest success message when drive-letter assignment failed.
+    Write-TestResult "38-Storage: New-DiskPartition reports letter NOT ASSIGNED" ($smR -match 'NOT ASSIGNED')
+
+    # Host Storage Analysis counts only files (-File) so directories don't break Measure-Object.
+    Write-TestResult "40-HostStorage: folder-size scan uses -File" ($hsR -match 'Get-ChildItem -LiteralPath \$folderPath -File -Recurse')
+}
+catch {
+    Write-TestResult "Storage Manager Reliability Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 190: VM DEPLOYMENT QUEUE + NAV 'C' COLLISION (v1.121.3)
+# ============================================================================
+# Guards the fix for the custom-VM-never-saves-to-queue bug: 'c'/'C' was a global back/cancel
+# token, so the [C] ADD TO QUEUE / [C] Continue affirmative keys were swallowed as "cancel".
+Write-SectionHeader "SECTION 190: VM DEPLOYMENT QUEUE + NAV 'C' COLLISION"
+
+try {
+    $navR = Get-Content "$modulesPath\04-Navigation.ps1" -Raw
+    $vmR  = Get-Content "$modulesPath\44-VMDeployment.ps1" -Raw
+
+    # 'c' must NOT be a back/cancel token — it is an affirmative menu key (Continue/Create/Add).
+    Write-TestResult "04-Navigation: backCommands excludes 'c'" ($navR -match '\$backCommands\s*=\s*@\(' -and -not ($navR -match '\$backCommands\s*=\s*@\([^\)]*"c"[^\)]*\)'))
+    # But keeps the legitimate back tokens.
+    Write-TestResult "04-Navigation: backCommands keeps back/b/cancel/0" ($navR -match '\$backCommands\s*=\s*@\("back",\s*"b",\s*"cancel",\s*"0"\)')
+
+    # Behavioral: 'c'/'C' is not a navigation command (dot-source the module and call it).
+    try {
+        . "$modulesPath\04-Navigation.ps1"
+        $navC = Test-NavigationCommand -UserInput 'c'
+        $navCUpper = Test-NavigationCommand -UserInput 'C'
+        Write-TestResult "Test-NavigationCommand: 'c' is not back/cancel" ($navC.ShouldReturn -eq $false)
+        Write-TestResult "Test-NavigationCommand: 'C' is not back/cancel" ($navCUpper.ShouldReturn -eq $false)
+        Write-TestResult "Test-NavigationCommand: 'back' still returns" ((Test-NavigationCommand -UserInput 'back').ShouldReturn -eq $true)
+    } catch {
+        Write-TestResult "Test-NavigationCommand 'c' behavioral" $false $_.Exception.Message
+    }
+
+    # The custom-VM review loop reaches Add-VMToQueue, whose += persists to the script-scope queue.
+    Write-TestResult "44-VMDeploy: [C] ADD TO QUEUE path calls Add-VMToQueue" ($vmR -match 'ADD TO QUEUE' -and $vmR -match 'Add-VMToQueue -Config')
+    Write-TestResult "44-VMDeploy: Add-VMToQueue appends to script queue" ($vmR -match '\$script:VMDeploymentQueue\s*\+=\s*\$Config')
+
+    # Batch deploy keeps failed VMs in the queue instead of wiping everything on partial failure.
+    Write-TestResult "44-VMDeploy: batch deploy retains failed VMs for retry" ($vmR -match 'if \(\$failCount -eq 0\)\s*\{\s*\$script:VMDeploymentQueue = @\(\)\s*\}\s*else\s*\{[\s\S]{0,300}failedConfigs')
+}
+catch {
+    Write-TestResult "VM Deployment Queue Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 191: SERVER ROLE TEMPLATE SETUP (v1.121.4)
+# ============================================================================
+# Guards the "role install failures are opaque" fix and the Print Server post-install guidance.
+Write-SectionHeader "SECTION 191: SERVER ROLE TEMPLATE SETUP"
+
+try {
+    $rtR = Get-Content "$modulesPath\60-ServerRoleTemplates.ps1" -Raw
+
+    # Install failures surface the ACTUAL per-feature reason, not just a bare "Failed: N".
+    Write-TestResult "60-Roles: install loop captures per-feature failures" ($rtR -match 'function Install-ServerRoleTemplate[\s\S]{0,5500}\$failures\s*\+=' -and $rtR -match '\$installResult\.Error')
+    Write-TestResult "60-Roles: install summary prints the failure reason" ($rtR -match 'Why it failed:' -and $rtR -match '\$f\.Feature.{0,6}\$f\.Reason')
+    Write-TestResult "60-Roles: install surfaces timeouts" ($rtR -match '\$installResult\.TimedOut')
+
+    # Print Server template uses valid Windows feature names and now has post-install guidance.
+    Write-TestResult "60-Roles: PRINT template uses valid feature names" ($rtR -match '"PRINT"\s*=\s*@\{[\s\S]{0,300}Print-Services[\s\S]{0,60}Print-Server')
+    Write-TestResult "60-Roles: PRINT template wired to Start-PrintServerPostInstall" ($rtR -match '"PRINT"\s*=\s*@\{[\s\S]{0,400}PostInstall\s*=\s*"Start-PrintServerPostInstall"')
+    Write-TestResult "60-Roles: Start-PrintServerPostInstall exists" ($rtR -match 'function\s+Start-PrintServerPostInstall\b')
+    # The post-install name must satisfy the allowed-verb safety pattern used by the invoker.
+    Write-TestResult "60-Roles: print post-install name matches allowed verb pattern" ('Start-PrintServerPostInstall' -match '^(Start|Invoke|Initialize|Configure)-[A-Za-z][A-Za-z0-9]+$')
+    Write-TestResult "60-Roles: print post-install points at Print Management" ($rtR -match 'function\s+Start-PrintServerPostInstall[\s\S]{0,600}printmanagement\.msc')
+}
+catch {
+    Write-TestResult "Server Role Template Setup Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 192: RELIABILITY SWEEP — NAV / OPAQUE-FAILURE / DEAD-END (v1.121.5)
+# ============================================================================
+Write-SectionHeader "SECTION 192: RELIABILITY SWEEP FIXES"
+
+try {
+    $setSw  = Get-Content "$modulesPath\09-SET.ps1" -Raw
+    $iscsiSw= Get-Content "$modulesPath\10-iSCSI.ps1" -Raw
+    $qolSw  = Get-Content "$modulesPath\55-QoLFeatures.ps1" -Raw
+    $wuSw   = Get-Content "$modulesPath\14-WindowsUpdates.ps1" -Raw
+    $srSw   = Get-Content "$modulesPath\33-StorageReplica.ps1" -Raw
+    $rdpSw  = Get-Content "$modulesPath\15-RDP.ps1" -Raw
+
+    # NAV: [M] Manual matched before the nav check (m = home token) in SET adapter + iSCSI menus.
+    Write-TestResult "09-SET: Select-PhysicalAdaptersSmart matches A/M before nav" ($setSw -match "Select-PhysicalAdaptersSmart[\s\S]{0,1400}'\^\[Aa\]\`$'[\s\S]{0,3500}Test-NavigationCommand")
+    Write-TestResult "10-iSCSI: Set-iSCSIConfiguration matches keys before nav (nav in default)" ($iscsiSw -match "function Set-iSCSIConfiguration[\s\S]{0,120}Show-iSCSIAutoConfigMenu[\s\S]{0,400}switch -Regex" -and $iscsiSw -match "function Set-iSCSIConfiguration[\s\S]{0,1600}default \{[\s\S]{0,200}Test-NavigationCommand")
+
+    # OPAQUE-FAILURE: state-changing cmdlets no longer silenced where a success message follows.
+    Write-TestResult "55-QoL: SNMP restarts use -ErrorAction Stop" (-not ($qolSw -match 'Restart-Service -Name "SNMP" -Force -ErrorAction SilentlyContinue'))
+    Write-TestResult "55-QoL: SNMP restart is now -ErrorAction Stop" ($qolSw -match 'Restart-Service -Name "SNMP" -Force -ErrorAction Stop')
+    Write-TestResult "55-QoL: pagefile Remove-CimInstance uses -ErrorAction Stop" (-not ($qolSw -match 'Remove-CimInstance -InputObject \$existing -ErrorAction SilentlyContinue'))
+    Write-TestResult "55-QoL: SNMP Remove-ItemProperty uses -ErrorAction Stop" ($qolSw -match 'Remove-ItemProperty -Path \$regPath -Name \$prop -Force -ErrorAction Stop')
+    Write-TestResult "14-WU: Set-PSRepository trust failure is surfaced (try/catch)" ($wuSw -match 'Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop' -and $wuSw -match 'could not set PSGallery as trusted')
+
+    # DEAD-END: invalid input now gives feedback instead of a silent exit/skip.
+    Write-TestResult "33-StorageReplica: invalid choice gives feedback" ($srSw -match 'default \{[\s\S]{0,120}Invalid choice\. Enter I or B')
+    Write-TestResult "15-RDP: RDP subnet skip is explicit" ($rdpSw -match '\$restrictChoice -ne "1"[\s\S]{0,120}Skipping subnet restriction')
+    Write-TestResult "15-RDP: WinRM subnet skip is explicit" ($rdpSw -match '\$winrmRestrict -ne "1"[\s\S]{0,120}Skipping subnet restriction')
+}
+catch {
+    Write-TestResult "Reliability Sweep Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 193: FAILOVER CLUSTERING SAFETY (v1.121.6)
+# ============================================================================
+# Guards the cluster-safety fixes: quorum-preserving drain/evict, CSV-removal data-loss guard,
+# disk/file-share witness validation, correct CSV redirected-I/O detection, report path.
+Write-SectionHeader "SECTION 193: FAILOVER CLUSTERING SAFETY"
+
+try {
+    $fcR = Get-Content "$modulesPath\27-FailoverClustering.ps1" -Raw
+    $cdR = Get-Content "$modulesPath\51-ClusterDashboard.ps1" -Raw
+
+    # Dashboard node-drain now checks other-Up-nodes + quorum before Suspend-ClusterNode -Drain.
+    Write-TestResult "51-ClusterDashboard: drain refuses when no other Up node" ($cdR -match 'REFUSING to drain[\s\S]{0,1500}Suspend-ClusterNode')
+    Write-TestResult "51-ClusterDashboard: drain has quorum-threshold gate" ($cdR -match 'quorumThreshold = \[math\]::Floor[\s\S]{0,1200}Suspend-ClusterNode')
+
+    # Node-eviction undo uses size-aware post-eviction quorum math (no hardcoded -le 2).
+    Write-TestResult "27-FC: eviction undo is size-aware (no hardcoded -le 2)" ($fcR -match '\$quorumAfter = \[math\]::Floor\(\$totalAfter / 2\) \+ 1' -and -not ($fcR -match 'if \(\$upNodes\.Count -le 2\)'))
+
+    # CSV removal aborts when the mount point can't be resolved (no false 'no VMs').
+    Write-TestResult "27-FC: CSV removal aborts on unresolved mount point" ($fcR -match 'if \(-not \$csvMountRoot\)[\s\S]{0,300}refused for safety')
+
+    # Disk witness must be Online before being nominated.
+    Write-TestResult "27-FC: disk witness requires Online state" ($fcR -match 'State -ne "Online"[\s\S]{0,300}Set-ClusterQuorum -NodeAndDiskMajority' -or $fcR -match 'State -ne "Online"[\s\S]{0,300}cannot serve as the quorum witness')
+
+    # File-share witness has a reachability pre-flight + CNO ACL reminder.
+    Write-TestResult "27-FC: file-share witness pre-flights reachability" ($fcR -match 'Test-Path -LiteralPath \$sharePath[\s\S]{0,700}Set-ClusterQuorum -NodeAndFileShareMajority')
+    Write-TestResult "27-FC: file-share witness reminds about CNO ACL" ($fcR -match 'cluster name object \(CNO')
+
+    # CSV redirected-I/O uses the correct API (not the always-true FaultState comparison).
+    Write-TestResult "51-ClusterDashboard: CSV redirect uses Get-ClusterSharedVolumeState" ($cdR -match 'Get-ClusterSharedVolumeState[\s\S]{0,200}FileSystemRedirectedIOReason')
+    Write-TestResult "51-ClusterDashboard: no bogus FaultState redirect check" (-not ($cdR -match '\$redirected -ne "NoRedirectedAccess"'))
+
+    # Cluster validation report is saved to a known path and its location shown.
+    Write-TestResult "27-FC: wizard validation report path is shown" ($fcR -match 'Test-Cluster -Node \$nodes -ReportName \$valReportPath[\s\S]{0,120}Report saved to')
+}
+catch {
+    Write-TestResult "Failover Clustering Safety Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 194: NEW-FOREST PRE-PROMOTION VALIDATION (v1.121.7)
+# ============================================================================
+# Guards the two new-forest input-validation fixes: fail fast on an invalid NetBIOS name and on a
+# domain-joined member server, BEFORE the DSRM password is collected.
+Write-SectionHeader "SECTION 194: NEW-FOREST PRE-PROMOTION VALIDATION"
+
+try {
+    $adR = Get-Content "$modulesPath\61-ActiveDirectory.ps1" -Raw
+
+    # NetBIOS length validation happens in Install-NewForest, BEFORE Read-DSRMPassword.
+    Write-TestResult "61-AD: new forest validates NetBIOS length" ($adR -match '\$netbiosName\.Length -gt 15')
+    Write-TestResult "61-AD: NetBIOS check precedes DSRM password prompt" ($adR -match '\$netbiosName\.Length -gt 15[\s\S]{0,1200}Read-DSRMPassword')
+
+    # New-forest-only member-server guard (scoped locally, not in the shared prereq check).
+    Write-TestResult "61-AD: new forest rejects domain-joined member server" ($adR -match 'DomainRole -in @\(1, 3\)[\s\S]{0,300}standalone \(workgroup\)')
+    Write-TestResult "61-AD: member-server guard is new-forest-scoped (shared prereq unchanged)" ($adR -match 'function Test-ADDSPrerequisites[\s\S]{0,4000}DomainRole[\s\S]{0,60}-ge 4')
+
+    # Regression guard: the shared prereq still uses -ge 4 (so Add-DC / RODC keep working on members).
+    Write-TestResult "61-AD: shared prereq still uses -ge 4 (not -ge 3)" (-not ($adR -match 'function Test-ADDSPrerequisites[\s\S]{0,4000}DomainRole[\s\S]{0,40}-ge 3'))
+}
+catch {
+    Write-TestResult "New-Forest Validation Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 195: DESTRUCTIVE-MODULE HARDENING (v1.121.8)
+# ============================================================================
+# Guards two fixes from the destructive/data-affecting-module audit:
+#   DC-001/002/003 — the Chrome, Firefox, and full-cleanup browser-cache sweeps must skip reparse
+#     points during recursion (a junction planted in a browser profile could otherwise redirect an
+#     admin-context Remove-Item to files elsewhere on disk). Matches the Edge/temp-sweep pattern.
+#   BL-001 — enabling BitLocker must confirm the exact volume + method before the one-way encryption
+#     starts, mirroring the gate the Disable path already has.
+Write-SectionHeader "SECTION 195: DESTRUCTIVE-MODULE HARDENING"
+
+try {
+    $dcR = Get-Content "$modulesPath\20-DiskCleanup.ps1" -Raw
+
+    # DC-001/002: Chrome sweep filters reparse points on BOTH the Cache and Code Cache recursion.
+    $chromeBlock = [regex]::Match($dcR, 'Clear Chrome cache[\s\S]*?Chrome cache cleared').Value
+    $chromeFilters = @([regex]::Matches($chromeBlock, '-band \$reparseAttr')).Count
+    Write-TestResult "20-Cleanup: Chrome sweep filters reparse points (both caches)" ($chromeFilters -ge 2) "found $chromeFilters"
+
+    # DC-003a: Firefox cache2 sweep filters reparse points.
+    $firefoxBlock = [regex]::Match($dcR, 'Clear Firefox cache[\s\S]*?Firefox cache cleared').Value
+    Write-TestResult "20-Cleanup: Firefox sweep filters reparse points" ($firefoxBlock -match '-band \$reparseAttr')
+
+    # DC-003b: the Invoke-FullEnhancedCleanup browser loop filters reparse points.
+    $fullLoop = [regex]::Match($dcR, '\$browserCleaned = 0[\s\S]{0,400}').Value
+    Write-TestResult "20-Cleanup: full-cleanup browser loop filters reparse points" ($fullLoop -match '-band \$reparseAttr')
+
+    # Regression: the pre-existing Edge sweep still filters (both caches) — proves we matched, not replaced.
+    $edgeBlock = [regex]::Match($dcR, 'Clear Edge cache[\s\S]*?Edge cache cleared').Value
+    $edgeFilters = @([regex]::Matches($edgeBlock, '-band \$reparseAttr')).Count
+    Write-TestResult "20-Cleanup: Edge sweep still filters reparse points (regression)" ($edgeFilters -ge 2) "found $edgeFilters"
+
+    $blR = Get-Content "$modulesPath\31-BitLocker.ps1" -Raw
+
+    # BL-001: Enable prompts a final confirmation naming the volume, before the live Enable-BitLocker.
+    Write-TestResult "31-BitLocker: Enable confirm names volume + one-way encryption" ($blR -match 'Enable BitLocker on \$\(\$vol\.MountPoint\)[\s\S]{0,200}one-way encryption')
+    Write-TestResult "31-BitLocker: Enable confirm precedes the live Enable-BitLocker call" ($blR -match 'Confirm-UserAction -Message "Enable BitLocker on \$\(\$vol\.MountPoint\)[\s\S]{0,600}Enable-BitLocker -MountPoint \$vol\.MountPoint')
+
+    # Regression: the Disable path keeps its own confirmation gate.
+    Write-TestResult "31-BitLocker: Disable still confirms (regression)" ($blR -match 'Confirm-UserAction -Message "Disable BitLocker on \$\(\$vol\.MountPoint\)')
+}
+catch {
+    Write-TestResult "Destructive-Module Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 196: DOWNLOAD → VERIFY → EXECUTE HARDENING (v1.121.9)
+# ============================================================================
+# Guards the seven fixes from the adversarial audit of the download/execute chain (FileServer,
+# AgentInstaller, ISO download, Utilities staging):
+#   A  config/caller ExpectedHash is enforced even when the FileServer has no .sha256 sidecar
+#   B  HashManifest lookup uses .ContainsKey (hashtable), so ExpectedHash is actually populated
+#   C  verified agent EXE is moved to an Admin/SYSTEM-only stage before execution (TOCTOU)
+#   D  reinstall/upgrade timeout & skip no longer falsely report SUCCESS from the pre-existing svc
+#   E  the Cloudflare Access token is never resent on a redirect (all four request paths)
+#   F  space-bearing InstallArgs tokens are quoted so Start-Process doesn't re-split them
+#   G  the ISO re-download free-space bail restores the .old fallback and clears the rollback ptr
+Write-SectionHeader "SECTION 196: DOWNLOAD -> VERIFY -> EXECUTE HARDENING"
+
+try {
+    $fsRaw  = Get-Content "$modulesPath\39-FileServer.ps1" -Raw
+    $aiRaw  = Get-Content "$modulesPath\57-AgentInstaller.ps1" -Raw
+    $utRaw  = Get-Content "$modulesPath\35-Utilities.ps1" -Raw
+    $isoRaw = Get-Content "$modulesPath\42-ISODownload.ps1" -Raw
+
+    # A — ExpectedHash enforced inside the NoSidecar branch, before returning NoSidecar.
+    Write-TestResult "39-FileServer: ExpectedHash enforced even without a sidecar (A)" `
+        ($fsRaw -match 'Reason -eq ''NoSidecar''[\s\S]{0,800}IsNullOrWhiteSpace\(\$ExpectedHash\)[\s\S]{0,900}integrity\.Hash -ne \$ExpectedHash')
+
+    # B — HashManifest existence check uses the hashtable idiom, and the dead PSObject idiom is gone.
+    Write-TestResult "57-AgentInstaller: HashManifest lookup uses .ContainsKey (B)" ($aiRaw -match 'ContainsKey\(''HashManifest''\)')
+    Write-TestResult "57-AgentInstaller: dead PSObject HashManifest idiom removed (B)" (-not ($aiRaw -match 'PSObject\.Properties\.Name -contains ''HashManifest'''))
+
+    # C — protected-staging helper exists (Admin+SYSTEM DACL) and is called before running the EXE.
+    Write-TestResult "35-Utilities: Move-ToProtectedStaging helper exists (C)" ($utRaw -match 'function Move-ToProtectedStaging')
+    Write-TestResult "35-Utilities: staging DACL is Administrators + SYSTEM only (C)" (($utRaw -match 'S-1-5-32-544') -and ($utRaw -match 'S-1-5-18'))
+    Write-TestResult "57-AgentInstaller: stages the EXE before executing it (C)" ($aiRaw -match 'Move-ToProtectedStaging[\s\S]{0,500}Running \$toolName Agent installer')
+
+    # D — reinstall guards on timeout & skip; a skipped-but-running installer isn't killed.
+    Write-TestResult "57-AgentInstaller: >=3 reinstall (-not preInstalled) guards (D)" ((([regex]::Matches($aiRaw, '-not \$preInstalled')).Count) -ge 3)
+    Write-TestResult "57-AgentInstaller: skip result requires fresh install to claim success (D)" ($aiRaw -match 'agentResult\.Installed -and -not \$preInstalled')
+    Write-TestResult "57-AgentInstaller: userSkipped leaves a running installer alone (D)" ($aiRaw -match '\$leaveRunning = \$earlyDetect -or \$installOK -or \$userSkipped')
+
+    # E — no CF token resent on redirect: all four request paths refuse auto-redirect; the main
+    # download streams via HttpWebRequest (no WebClient) and treats a 3xx as a hard failure.
+    Write-TestResult "39-FileServer: >=4 AllowAutoRedirect=false request paths (E)" ((([regex]::Matches($fsRaw, 'AllowAutoRedirect = \$false')).Count) -ge 4)
+    Write-TestResult "39-FileServer: main download streams via HttpWebRequest (E)" ($fsRaw -match 'GetResponseStream\(\)[\s\S]{0,200}CopyTo')
+    Write-TestResult "39-FileServer: a 3xx redirect is refused as failure (E)" ($fsRaw -match 'statusCode -ge 300 -and \$statusCode -lt 400')
+    Write-TestResult "39-FileServer: redirect-following WebClient removed (E)" ((([regex]::Matches($fsRaw, 'New-Object System\.Net\.WebClient')).Count) -eq 0)
+
+    # F — InstallArgs are built into a quoted string and passed as a string (not the raw array).
+    Write-TestResult "57-AgentInstaller: builds a quoted arg string (F)" ($aiRaw -match '\$argString = \(\$argArray \| ForEach-Object')
+    Write-TestResult "57-AgentInstaller: passes the built arg string to Start-Process (F)" ($aiRaw -match '-ArgumentList \$argString -PassThru')
+    Write-TestResult "57-AgentInstaller: no longer passes the raw arg array (F)" ((([regex]::Matches($aiRaw, '-ArgumentList \$argArray')).Count) -eq 0)
+
+    # G — ISO free-space bail restores the .old fallback and clears the script-scope rollback ptr.
+    Write-TestResult "42-ISODownload: free-space bail restores + clears rollback (G)" ($isoRaw -match 'Not enough space for ISO download[\s\S]{0,1500}_isoRollbackPath = \$null[\s\S]{0,80}return \$null')
+}
+catch {
+    Write-TestResult "Download-Execute Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 197: CREDENTIAL & SECRET HANDLING (v1.121.10)
+# ============================================================================
+# Guards three fixes from the credential/secret-handling audit:
+#   H  New-StrongPassword must not RETURN the generated plaintext — a bare-statement caller would
+#      stream it to top-level Out-Default, re-echoing it to the console AND into the on-disk
+#      transcript, defeating the module's own Stop-Transcript display mitigation.
+#   L1 the clipboard auto-clear Timer must be kept rooted (script-scope), or GC cancels it and the
+#      plaintext lingers in the clipboard / Win+V history.
+#   L2 the FileServer CF-Access-Client-Secret must be collected hidden (-AsSecureString) and marshalled
+#      with a zero-freed BSTR, so a plain Read-Host doesn't echo it to console/transcript.
+Write-SectionHeader "SECTION 197: CREDENTIAL & SECRET HANDLING"
+
+try {
+    $pwRaw  = Get-Content "$modulesPath\22-Password.ps1" -Raw
+    $opsRaw = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+    $runnerRaw197 = Get-Content "$modulesPath\49-MenuRunner.ps1" -Raw
+
+    # H — the generated plaintext is returned ONLY under an explicit -PassThru opt-in (tests /
+    # programmatic callers that capture it). The interactive menu action calls New-StrongPassword
+    # WITHOUT -PassThru, so on the default path the password never streams to top-level
+    # Out-Default (which would re-echo it to the console and into the on-disk transcript).
+    Write-TestResult "22-Password: New-StrongPassword has a -PassThru opt-in switch (H)" ($pwRaw -match '\[switch\]\$PassThru')
+    Write-TestResult "22-Password: plaintext return is guarded by -PassThru (H)" ($pwRaw -match 'if \(\$PassThru\) \{ return \$password \}')
+    Write-TestResult "22-Password: interactive menu caller does NOT pass -PassThru (H)" ($runnerRaw197 -match '"11"\s*\{\s*New-StrongPassword;')
+    Write-TestResult "22-Password: still shows the password via [Console]::WriteLine (H)" ($pwRaw -match '\[Console\]::WriteLine\([\s\S]{0,20}\$\(\$password')
+
+    # L1 — clipboard auto-clear timer rooted in script scope; old unrooted form gone.
+    Write-TestResult "22-Password: clipboard clear timer is kept rooted (L1)" ($pwRaw -match '\$script:_clipClearTimer = New-Object System\.Threading\.Timer')
+    Write-TestResult "22-Password: prior clipboard timer disposed on regen (L1)" ($pwRaw -match 'if \(\$script:_clipClearTimer\) \{ try \{ \$script:_clipClearTimer\.Dispose')
+    Write-TestResult "22-Password: no unrooted (`$null =) timer (L1)" (-not ($pwRaw -match '\$null = New-Object System\.Threading\.Timer'))
+
+    # L2 — CF client secret collected hidden and zero-freed.
+    Write-TestResult "56-Ops: CF client secret uses Read-Host -AsSecureString (L2)" ($opsRaw -match 'Enter CF-Access-Client-Secret[\s\S]{0,140}Read-Host -AsSecureString')
+    Write-TestResult "56-Ops: CF client secret BSTR is zero-freed (L2)" ($opsRaw -match 'ClientSecret = \[System\.Runtime\.InteropServices\.Marshal\]::PtrToStringBSTR[\s\S]{0,200}ZeroFreeBSTR')
+}
+catch {
+    Write-TestResult "Credential & Secret Handling Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 198: STATE-INTEGRITY HARDENING (v1.121.11)
+# ============================================================================
+# Guards the fixes from the Dry-Run / config-export / batch-config state-integrity audit:
+#   [0] Dry-Run atomic rollback resets a reverted step to Queued (so a retry re-applies it
+#       instead of silently skipping it and reporting success).
+#   [1] Config-profile network apply (import + remediation) captures the prior IP/gateway and
+#       restores it if New-NetIPAddress fails, instead of leaving the host with no IPv4.
+#   [2] Batch shared-storage honors Initialize-StorageBackendBatch's boolean (no false "applied").
+#   [3] Declining the network sub-step skips only that step (was aborting the whole import);
+#       an invalid domain name likewise falls through to the summary.
+#   [4] Export leaves DNS null when the source has none (no fabricated 8.8.8.8); import skips null.
+#   [5] Batch Windows-Updates checks a status flag (Install-WindowsUpdates returns, not throws).
+#   [6] Interactive text export write uses -ErrorAction Stop (no truncated-file "success").
+#   [7] Batch power-plan failure counts as an error, not a skip.
+#   [8] Batch DNS-only fast path registers an undo so 'Undo all' restores DNS.
+Write-SectionHeader "SECTION 198: STATE-INTEGRITY HARDENING"
+
+try {
+    $drRaw = Get-Content "$modulesPath\70-DryRun.ps1" -Raw
+    $ceRaw = Get-Content "$modulesPath\45-ConfigExport.ps1" -Raw
+    $epRaw = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    $wuRaw = Get-Content "$modulesPath\14-WindowsUpdates.ps1" -Raw
+
+    # [0] rollback resets status
+    Write-TestResult "70-DryRun: atomic rollback resets reverted step to Queued [0]" ($drRaw -match '& \$s\.Undo[\s\S]{0,750}\$s\.Status = "Queued"')
+
+    # [1] network apply rollback (both sites)
+    Write-TestResult "45-ConfigExport: import captures IP/gateway for rollback [1]" ($ceRaw -match '\$rollbackIPs = @\(\$existingIPs')
+    Write-TestResult "45-ConfigExport: import restores network + re-throws on new-IP failure [1]" ($ceRaw -match 'restoring previous network config[\s\S]{0,260}New-NetIPAddress[\s\S]{0,600}throw')
+    Write-TestResult "45-ConfigExport: remediation captures IP/gateway for rollback [1]" ($ceRaw -match '\$rbIP = if \(\$currentIPObj\)')
+
+    # [2] shared-storage boolean honored
+    Write-TestResult "50-EntryPoint: batch shared-storage honors the boolean result [2]" ($epRaw -match '\$storageOk = Initialize-StorageBackendBatch[\s\S]{0,120}if \(\$storageOk\)')
+
+    # [3] decline-network / invalid-domain skip only their step
+    Write-TestResult "45-ConfigExport: decline-network skips only that step (not the import) [3]" (($ceRaw -match '\$proceedNetwork = \$false') -and ($ceRaw -match 'if \(\$proceedNetwork\)'))
+    Write-TestResult "45-ConfigExport: invalid domain falls through to summary [3]" ($ceRaw -match 'is not a valid domain name\. Skipping[\s\S]{0,200}\$errors\+\+[\s\S]{0,120}else \{')
+
+    # [4] export leaves DNS null (no fabricated 8.8.8.8); import guards null
+    Write-TestResult "45-ConfigExport: export does not fabricate Google DNS [4]" (-not ($ceRaw -match 'DnS1" = if[\s\S]{0,120}Google DnS'))
+    Write-TestResult "45-ConfigExport: import skips DNS when profile DnS1 is null [4]" ($ceRaw -match 'IsNullOrWhiteSpace\(\$configProfile\.network\.DnS1\)')
+
+    # [5] Windows Updates status flag
+    Write-TestResult "14-WindowsUpdates: sets a pessimistic status flag [5]" ($wuRaw -match "LastWindowsUpdateStatus = 'Failed'")
+    Write-TestResult "14-WindowsUpdates: marks success at up-to-date + installed [5]" ((([regex]::Matches($wuRaw, "LastWindowsUpdateStatus = 'Success'")).Count) -ge 2)
+    Write-TestResult "50-EntryPoint: batch checks the update status flag [5]" ($epRaw -match "LastWindowsUpdateStatus -eq 'Success'")
+
+    # [6] text export -ErrorAction Stop
+    Write-TestResult "45-ConfigExport: text export write uses -ErrorAction Stop [6]" ($ceRaw -match 'Out-File -LiteralPath \$tmpExportPath -Encoding UTF8 -Force -ErrorAction Stop')
+
+    # [7] power-plan failure is an error
+    Write-TestResult "50-EntryPoint: batch power-plan failure counts as error [7]" ($epRaw -match 'Failed to set power plan \(exit code \$LASTEXITCODE\)\.[\s\S]{0,80}\$errors\+\+')
+
+    # [8] batch DNS-only path registers undo
+    Write-TestResult "50-EntryPoint: batch DNS-only fast path registers an undo [8]" ($epRaw -match 'Restore DNS servers on \$adapterName[\s\S]{0,140}Save-BatchUndoState')
+}
+catch {
+    Write-TestResult "State-Integrity Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 199: BACKUP / UNDO SAFETY-NET HONESTY (v1.121.12)
+# ============================================================================
+# Guards the fixes from the security-feature-module audit (71-76). Common class: a backup/
+# snapshot taken with -EA SilentlyContinue (or its result discarded), then trusted downstream
+# as if it exists — so a silently-failed backup made the exit code lie, missed drift, or (worst)
+# made an "undo" delete the live config.
+#   [0] GPOBackup returns $null (exit 1) when 0 GPOs actually backed up.
+#   [1] GPO drift tracks an Indeterminate bucket instead of calling a missing baseline "unchanged".
+#   [2] JEA dry-run apply throws on a validation failure (return $false) so it isn't marked applied.
+#   [3] NPS import verifies the pre-import backup landed before claiming it / registering undo.
+#   [4] GPO restore only registers an undo when the pre-restore snapshot actually succeeded.
+#   [5] SIEM config write fails closed if it can't back up the prior config (undo never deletes it).
+Write-SectionHeader "SECTION 199: BACKUP / UNDO SAFETY-NET HONESTY"
+
+try {
+    $gpoRaw  = Get-Content "$modulesPath\71-GPOManager.ps1" -Raw
+    $jeaRaw  = Get-Content "$modulesPath\72-JEA.ps1" -Raw
+    $npsRaw  = Get-Content "$modulesPath\73-NPS.ps1" -Raw
+    $siemRaw = Get-Content "$modulesPath\76-SIEMForwarder.ps1" -Raw
+
+    # [0]
+    Write-TestResult "71-GPO: backup returns null when nothing was backed up [0]" ($gpoRaw -match 'if \(\$ok -eq 0\) \{[\s\S]{0,400}return \$null')
+    # [1]
+    Write-TestResult "71-GPO: drift tracks an Indeterminate bucket [1]" (($gpoRaw -match '\$indeterminate = @\(\)') -and ($gpoRaw -match 'Indeterminate = \$indeterminate'))
+    Write-TestResult "71-GPO: unverifiable compare is indeterminate, not unchanged [1]" ($gpoRaw -match 'reliable compare wasn''t possible[\s\S]{0,600}\$indeterminate \+= \$g\.DisplayName')
+    # [2]
+    Write-TestResult "72-JEA: dry-run apply throws on validation failure [2]" ($jeaRaw -match 'if \(-not \(Invoke-JEAEndpointBuild[\s\S]{0,200}throw')
+    # [3]
+    Write-TestResult "73-NPS: import verifies the pre-import backup exists [3]" (($npsRaw -match '\$preBackupOk = Test-Path -LiteralPath \$preFile') -and ($npsRaw -match 'if \(\$preBackupOk\)'))
+    Write-TestResult "73-NPS: dry-run undo warns when no backup was captured [3]" ($npsRaw -match 'Undo unavailable: no pre-import NPS backup')
+    # [4]
+    Write-TestResult "71-GPO: restore undo gated on a successful snapshot [4]" (($gpoRaw -match '\$preSnapshotOk = \(\$null -ne \$snap\)') -and ($gpoRaw -match 'if \(\$preSnapshotOk\)'))
+    Write-TestResult "71-GPO: dry-run restore undo verifies snapshot content [4]" ($gpoRaw -match '\$snapDirs = @\(Get-ChildItem -LiteralPath \$capPre -Directory')
+    # [5]
+    Write-TestResult "76-SIEM: config write fails closed if it can't back up the prior config [5]" ($siemRaw -match 'Copy-Item -LiteralPath \$TargetPath -Destination \$backup -Force -ErrorAction Stop[\s\S]{0,260}return @\{ Ok = \$false; Backup = \$null')
+}
+catch {
+    Write-TestResult "Backup/Undo Safety-Net Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 200: ROLE/SERVICE MODULE HARDENING (v1.121.13)
+# ============================================================================
+# Guards the fixes from the role/service-module audit (ADCS/cert/scheduled-task/Defender/WSUS/RDS):
+#   [0] Self-destruct also unregisters the tool's other SYSTEM/Highest tasks (ScheduledExport,
+#       UpdateCheck) so it doesn't leave privileged tasks orphaned against deleted binaries.
+#   [1] RDS licensing Dry-Run apply uses -EA Stop so a failed registry write isn't reported applied.
+#   [2] WSUS default-config returns $false when no update classification was enabled (syncs nothing).
+#   [3] Task Health no longer flags healthy never-run tasks (0x00041300 / 0x00041303) as FAILED.
+Write-SectionHeader "SECTION 200: ROLE/SERVICE MODULE HARDENING"
+
+try {
+    $ecRaw   = Get-Content "$modulesPath\47-ExitCleanup.ps1" -Raw
+    $rdsRaw  = Get-Content "$modulesPath\80-RemoteDesktopServices.ps1" -Raw
+    $wsusRaw = Get-Content "$modulesPath\67-WSUS.ps1" -Raw
+    $schRaw  = Get-Content "$modulesPath\63-ScheduledTasks.ps1" -Raw
+
+    # [0]
+    Write-TestResult "47-ExitCleanup: self-destruct unregisters the ScheduledExport task [0]" ($ecRaw -match "Unregister-ScheduledTask -TaskName '\`$\(\`$toolNameEsc\)-ScheduledExport'")
+    Write-TestResult "47-ExitCleanup: self-destruct unregisters the UpdateCheck task [0]" ($ecRaw -match "Unregister-ScheduledTask -TaskName '\`$\(\`$toolNameEsc\)_UpdateCheck'")
+    # [1]
+    Write-TestResult "80-RDS: licensing Dry-Run apply uses -EA Stop [1]" ($rdsRaw -match "Set-ItemProperty -Path \`$path -Name 'LicensingMode' -Value \`$mv -Type DWord -ErrorAction Stop")
+    Write-TestResult "80-RDS: licensing Dry-Run apply no longer swallows write errors [1]" (-not ($rdsRaw -match "Name 'LicensingMode' -Value \`$mv -Type DWord -ErrorAction SilentlyContinue"))
+    # [2]
+    Write-TestResult "67-WSUS: tracks whether classifications were enabled [2]" (($wsusRaw -match '\$classificationsEnabled = \$false') -and ($wsusRaw -match '\$classificationsEnabled = \$true'))
+    Write-TestResult "67-WSUS: returns false when no classification enabled [2]" ($wsusRaw -match 'if \(-not \$classificationsEnabled\)[\s\S]{0,400}return \$false')
+    # [3]
+    Write-TestResult "63-ScheduledTasks: never-run tasks are not flagged FAILED [3]" ($schRaw -match '\$lastResult -eq 0x00041300 -or \$lastResult -eq 0x00041303')
+}
+catch {
+    Write-TestResult "Role/Service Module Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 201: VM-LIFECYCLE + STORAGE HARDENING (v1.121.14)
+# ============================================================================
+# Guards the fixes from the VM-lifecycle/storage audit (export/import, offline-VHD, VHD convert,
+# batch S2D, Hyper-V Replica). Recurring class: false success on a cancel/failure path.
+#   [0] A cancelled/timed-out VM export is not reported as a completed successful export.
+#   [1] Offline-VHD customization returns $false when the hive(s) didn't load (nothing applied).
+#   [2] VHD convert gates success on the Move succeeding (not on the dynamic file still existing).
+#   [3] A replica-side planned failover requires explicit confirm the primary was prepared+shut down.
+#   [4] Batch S2D consent flag (AllowS2DDataLoss) is carried to the gate (was silently dropped).
+#   [5] Certificate-based replica resolves + passes a -CertificateThumbprint (was never supplied).
+#   [6] Dry-Run replica undos use -EA Stop so a failed rollback isn't a silent open-receiver no-op.
+Write-SectionHeader "SECTION 201: VM-LIFECYCLE + STORAGE HARDENING"
+
+try {
+    $veiRaw  = Get-Content "$modulesPath\53-VMExportImport.ps1" -Raw
+    $ovhdRaw = Get-Content "$modulesPath\43-OfflineVHD.ps1" -Raw
+    $vhdRaw  = Get-Content "$modulesPath\41-VHDManagement.ps1" -Raw
+    $epRaw2  = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    $replRaw = Get-Content "$modulesPath\62-HyperVReplica.ps1" -Raw
+
+    # [0]
+    Write-TestResult "53-VMExport: cancelled export is not reported complete [0]" ($veiRaw -match 'if \(\$cancelRequested\)[\s\S]{0,700}completion is NOT confirmed[\s\S]{0,450}return')
+    # [1]
+    Write-TestResult "43-OfflineVHD: returns false when SYSTEM hive didn't load (name not applied) [1]" ($ovhdRaw -match '\$ComputerName -and -not \$systemHiveLoaded[\s\S]{0,600}return \$false')
+    Write-TestResult "43-OfflineVHD: returns false when neither hive loaded [1]" ($ovhdRaw -match '-not \$systemHiveLoaded -and -not \$softwareHiveLoaded[\s\S]{0,500}return \$false')
+    # [2]
+    Write-TestResult "41-VHD: convert success gated on the move succeeding [2]" (($vhdRaw -match '\$moveOk = \$false') -and ($vhdRaw -match 'if \(\$moveOk -and \(Test-Path -LiteralPath \$finalPath\)\)'))
+    # [3]
+    Write-TestResult "62-Replica: replica-side planned failover confirms primary prepared [3]" ($replRaw -match 'lossless if, on the PRIMARY[\s\S]{0,500}Confirm-UserAction[\s\S]{0,120}Complete failover now')
+    # [4]
+    Write-TestResult "50-EntryPoint: batch carries the S2D consent flag to the gate [4]" ($epRaw2 -match 'if \(\$Config\.AllowS2DDataLoss\) \{ \$configHash\["AllowS2DDataLoss"\]')
+    # [5]
+    Write-TestResult "62-Replica: certificate auth resolves + passes a thumbprint [5]" (($replRaw -match '\$certThumbprint = \$certs\[0\]\.Thumbprint') -and ($replRaw -match "CertificateThumbprint'\] = \`$certThumbprint"))
+    # [6]
+    Write-TestResult "62-Replica: enable-replica dry-run undo no longer silent (-EA Stop) [6]" (-not ($replRaw -match 'Set-VMReplicationServer -ReplicationEnabled \$false -ErrorAction SilentlyContinue'))
+    Write-TestResult "62-Replica: enable-vm-replication dry-run undo no longer silent (-EA Stop) [6]" (-not ($replRaw -match 'Remove-VMReplication -VMName \$capVM -ErrorAction SilentlyContinue'))
+}
+catch {
+    Write-TestResult "VM-Lifecycle + Storage Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 202: FINAL-SWEEP HARDENING (v1.121.15)
+# ============================================================================
+# Guards the fixes from the final consolidated audit (Firewall/RDP, iSCSI, NetDiag, QoL):
+#   [0] RDP subnet restriction also disables the tool's own custom (no-group, any-address) RDP rules.
+#   [1] WinRM subnet restriction likewise disables the custom WinRM rules.
+#   [2] The [M] Manual option in Connect-to-iSCSI-Targets is matched before the nav check.
+#   [3] iSCSI Auto-Claim status reads the iSCSI key (was truthiness of the hashtable).
+#   [4] Throughput benchmark uses case-distinct Mbps var (was overwriting MB/s -> 8x inflated).
+#   [5] PowerShell-Remoting firewall groups are reported by actual state, not a hardcoded list.
+#   [6] iSCSI connect dry-run undo matches the target-portal via the connection (not initiator IP).
+#   [7] Session-state save writes the CONSUMED file atomically (tmp -> rename).
+Write-SectionHeader "SECTION 202: FINAL-SWEEP HARDENING"
+
+try {
+    $rdpRaw = Get-Content "$modulesPath\15-RDP.ps1" -Raw
+    $iscRaw = Get-Content "$modulesPath\10-iSCSI.ps1" -Raw
+    $ndRaw  = Get-Content "$modulesPath\58-NetworkDiagnostics.ps1" -Raw
+    $qolRaw = Get-Content "$modulesPath\55-QoLFeatures.ps1" -Raw
+
+    # [0]/[1] subnet restriction disables the custom no-group allow rules
+    Write-TestResult "15-RDP: subnet restrict disables custom RDP rules [0]" ($rdpRaw -match 'Get-NetFirewallRule -DisplayName "RDP Inbound TCP 3389", "RDP Inbound UDP 3389" -ErrorAction SilentlyContinue \|[\s\S]{0,80}Disable-NetFirewallRule')
+    Write-TestResult "15-RDP: subnet restrict disables custom WinRM rules [1]" ($rdpRaw -match 'Get-NetFirewallRule -DisplayName "WinRM HTTP Inbound", "WinRM HTTPS Inbound" -ErrorAction SilentlyContinue \|[\s\S]{0,80}Disable-NetFirewallRule')
+    # [2]
+    Write-TestResult "10-iSCSI: Connect [M] matched before nav check [2]" ($iscRaw -match "connectChoice -notmatch '\^\[AaMmPp\]\`$'")
+    # [3]
+    Write-TestResult "10-iSCSI: Auto-Claim reads the iSCSI key [3]" ($iscRaw -match "\`$mpioClaim\['iSCSI'\]")
+    # [4]
+    Write-TestResult "58-NetDiag: throughput uses case-distinct Mbps var [4]" (($ndRaw -match '\$writeMbits = \[math\]::Round\(\$writeMBps \* 8') -and ($ndRaw -cmatch '\$\{writeMbits\} Mbps'))
+    Write-TestResult "58-NetDiag: no case-colliding Mbps display var [4]" (-not ($ndRaw -cmatch '\$\{writeMbps\}'))
+    # [5]
+    Write-TestResult "15-RDP: PS-remoting firewall groups reported by real state [5]" ($rdpRaw -match '\$rmGroups = @\([\s\S]{0,300}foreach \(\$grp in \$rmGroups\)')
+    # [6]
+    Write-TestResult "10-iSCSI: connect undo matches target portal via connection [6]" ($iscRaw -match 'Get-IscsiConnection -ErrorAction SilentlyContinue \| Where-Object \{ \$_\.TargetAddress -eq \$p \}')
+    # [7]
+    Write-TestResult "55-QoL: consumed session-state file written atomically [7]" ($qolRaw -match '\$tmpSession = "\$\(\$script:SessionStatePath\)\.tmp"[\s\S]{0,200}Move-Item -LiteralPath \$tmpSession')
+}
+catch {
+    Write-TestResult "Final-Sweep Hardening Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -9635,6 +10316,20 @@ foreach ($modFile in (Get-ChildItem -Path $modulesPath -Filter "*.ps1")) {
                 }
             }
             if ($isReturnPattern) { continue }
+
+            # Also OK: the "keys-first" pattern — the choice is matched against affirmative menu
+            # keys (a '^[..]' regex match or a 'switch -Regex') BEFORE the nav check, which then
+            # lives in the else / switch-default further down. This is the CORRECT ordering that
+            # avoids the nav-token collision (e.g. [M] Manual vs the 'm' home token), so accept it.
+            $isKeysFirst = $false
+            $keyEnd = [math]::Min($i + 8, $lines.Count - 1)
+            for ($k = $i + 1; $k -le $keyEnd; $k++) {
+                if ($lines[$k] -match "-match\s+'\^\[" -or $lines[$k] -match 'switch\s+-Regex') {
+                    $isKeysFirst = $true
+                    break
+                }
+            }
+            if ($isKeysFirst) { continue }
 
             $foundNav = $false
             $endCheck = [math]::Min($i + 10, $lines.Count - 1)
@@ -11603,7 +12298,7 @@ try {
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles Timezone" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Set-TimeZone")
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles RDP" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,6000}fDenyTSConnections")
     Write-TestResult "45-ConfigExport: Invoke-Remediation handles DNS" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,8000}Set-DnsClientServerAddress")
-    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Hostname" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,14000}Rename-Computer")
+    Write-TestResult "45-ConfigExport: Invoke-Remediation handles Hostname" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,16000}Rename-Computer")
     Write-TestResult "45-ConfigExport: Invoke-Remediation tracks reboot" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,3000}RebootRequired")
     Write-TestResult "45-ConfigExport: Invoke-Remediation calls Add-SessionChange" ($ceContentCLI -match "Invoke-Remediation[\s\S]{0,5000}Add-SessionChange.*Remediation")
     Write-TestResult "45-ConfigExport: Show-RemediationReport function exists" ($ceContentCLI -match "function Show-RemediationReport")

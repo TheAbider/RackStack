@@ -89,49 +89,49 @@ Describe 'New-StrongPassword' {
 
     Context 'Length boundaries' {
         It 'defaults to length 16' {
-            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw.Length | Should -Be 16
         }
 
         It 'respects an explicit length parameter (24)' {
-            $pw = New-StrongPassword -Length 24 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru -Length 24 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw.Length | Should -Be 24
         }
 
         It 'floors length to 12 when caller asks for less' {
-            $pw = New-StrongPassword -Length 4 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru -Length 4 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw.Length | Should -Be 12
         }
 
         It 'caps length at 128 when caller asks for more' {
-            $pw = New-StrongPassword -Length 1000 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru -Length 1000 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw.Length | Should -Be 128
         }
     }
 
     Context 'Generated complexity' {
         It 'contains at least one uppercase letter' {
-            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw | Should -Match '[A-Z]'
         }
 
         It 'contains at least one lowercase letter' {
-            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw | Should -Match '[a-z]'
         }
 
         It 'contains at least one digit (excluding ambiguous 0/1)' {
-            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw | Should -Match '[2-9]'
         }
 
         It 'contains at least one special char from the safe set !@#%^&*-_=+' {
-            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw | Should -Match '[!@#%^&\*\-_=+]'
         }
 
         It 'excludes ambiguous characters 0, 1, I, O, i, l, o (case-sensitive check)' {
-            $pw = New-StrongPassword -Length 64 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru -Length 64 6>$null 4>$null 5>$null 3>$null 2>$null
             # PowerShell -match (and Pester Should -Match) is case-insensitive by default,
             # which would falsely flag uppercase L. Use -cnotmatch for a literal case-sensitive check.
             ($pw -cmatch '[01IOilo]') | Should -BeFalse
@@ -144,7 +144,7 @@ Describe 'New-StrongPassword' {
             # includes # and -, and the Fisher-Yates shuffle can land one of those
             # first — that's an existing generator/validator coherence gap, not
             # something this test should pin. Check the per-class rules directly.
-            $pw = New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+            $pw = New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null
             $pw.Length | Should -BeGreaterOrEqual 12
             ($pw -cmatch '[A-Z]') | Should -BeTrue
             ($pw -cmatch '[a-z]') | Should -BeTrue
@@ -156,7 +156,7 @@ Describe 'New-StrongPassword' {
     Context 'Cryptographic randomness (statistical)' {
         It 'produces distinct passwords across calls' {
             $samples = 1..10 | ForEach-Object {
-                New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null
+                New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null
             }
             ($samples | Select-Object -Unique).Count | Should -Be 10
         }
@@ -166,12 +166,12 @@ Describe 'New-StrongPassword' {
         It 'exercises the clipboard-success branch when Set-Clipboard works' {
             Mock Set-Clipboard { }   # silent success
             Mock Get-Clipboard { 'whatever' }  # for the timer callback path
-            { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+            { New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
         }
 
         It 'exercises the clipboard-failure branch when Set-Clipboard throws' {
             Mock Set-Clipboard { throw 'clipboard locked' }
-            { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+            { New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
         }
     }
 
@@ -187,7 +187,7 @@ Describe 'New-StrongPassword' {
                 Mock Stop-Transcript { 'fake-transcript-path' }   # truthy = was running
                 Mock Start-Transcript { }                          # no-op success
                 Mock Set-Clipboard { }
-                { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+                { New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
             } finally {
                 $script:TranscriptPath = $oldTp
             }
@@ -200,7 +200,7 @@ Describe 'New-StrongPassword' {
                 Mock Stop-Transcript { 'something-truthy' }
                 Mock Start-Transcript { }   # the else branch path
                 Mock Set-Clipboard { }
-                { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+                { New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
             } finally {
                 $script:TranscriptPath = $oldTp
             }
@@ -209,7 +209,7 @@ Describe 'New-StrongPassword' {
         It 'exercises the no-transcript-running path (Stop-Transcript throws)' {
             Mock Stop-Transcript { throw 'no transcript running' }   # catch -> $transcriptWasRunning stays false
             Mock Set-Clipboard { }
-            { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+            { New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
         }
 
         It 'exercises the transcript-restart-fails path (Start-Transcript throws)' {
@@ -219,7 +219,7 @@ Describe 'New-StrongPassword' {
                 Mock Stop-Transcript { 'truthy' }
                 Mock Start-Transcript { throw 'restart failed' }   # outer catch swallows it
                 Mock Set-Clipboard { }
-                { New-StrongPassword 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
+                { New-StrongPassword -PassThru 6>$null 4>$null 5>$null 3>$null 2>$null } | Should -Not -Throw
             } finally {
                 $script:TranscriptPath = $oldTp
             }
