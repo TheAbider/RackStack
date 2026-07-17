@@ -91,7 +91,7 @@ GET https://rackstackfiles.blob.core.windows.net/server-tools?restype=container&
 
 RackStack handles the XML parsing natively with `StorageType: "azure"`.
 
-### defaults.json configuration
+### rackstack.config.json configuration
 
 ```json
 {
@@ -152,7 +152,7 @@ For production, put a CloudFront distribution in front of the S3 bucket:
 2. Use Origin Access Control (OAC) to restrict direct S3 access
 3. Optionally add signed URLs or signed cookies for authentication
 
-### defaults.json configuration
+### rackstack.config.json configuration
 
 For S3 with CloudFront, use the `static` storage type with JSON index files:
 
@@ -197,7 +197,7 @@ Re-run this whenever you add or remove files.
 
 ## Caching
 
-Cloud API calls may have rate limits or costs. RackStack caches file listings for 10 minutes (`$script:CacheTTLMinutes` in `defaults.json`), which limits API calls. Azure Blob list operations are cheap (~$0.004 per 10,000 requests).
+Cloud API calls may have rate limits or costs. RackStack caches file listings for 10 minutes (`$script:CacheTTLMinutes` in `rackstack.config.json`), which limits API calls. Azure Blob list operations are cheap (~$0.004 per 10,000 requests).
 
 ---
 

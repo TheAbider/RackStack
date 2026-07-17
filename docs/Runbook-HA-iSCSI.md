@@ -4,7 +4,7 @@ This runbook covers the end-to-end setup of dual-path iSCSI SAN connectivity wit
 
 > **Note:** As of v1.3.0, RackStack supports six storage backends: iSCSI, Fibre Channel, S2D, SMB3, NVMe-oF, and Local. This runbook covers the iSCSI backend specifically. For other backends, see [Storage Backends](Storage-Backends.md).
 
-> **Note:** IP addresses, subnet (default `172.16.1`), and target mappings shown in this guide are defaults. Configure yours in `defaults.json` via `iSCSISubnet` and `SANTargetMappings`.
+> **Note:** IP addresses, subnet (default `172.16.1`), and target mappings shown in this guide are defaults. Configure yours in `rackstack.config.json` via `iSCSISubnet` and `SANTargetMappings`.
 
 ---
 
@@ -111,7 +111,7 @@ Select `[A] Auto-configure`:
 2. **IP calculation:** IPs are computed using the formula:
    - Port 1 (A-side): `{subnet}.{(host# + 1) * 10 + 1}`
    - Port 2 (B-side): `{subnet}.{(host# + 1) * 10 + 2}`
-   - Default subnet: `172.16.1` (configurable via `iSCSISubnet` in `defaults.json`)
+   - Default subnet: `172.16.1` (configurable via `iSCSISubnet` in `rackstack.config.json`)
 
    Examples:
    | Host | Port 1 (A-side) | Port 2 (B-side) |
@@ -497,7 +497,7 @@ The retry pattern places the "opposite" pair second (primary + 2 mod 4), then fi
 
 ### Custom SAN Target Pairings (v1.5.0)
 
-The default assignment table above can be fully customized via `SANTargetPairings` in `defaults.json`. This lets you:
+The default assignment table above can be fully customized via `SANTargetPairings` in `rackstack.config.json`. This lets you:
 
 - Define custom A/B pairs (different number of controller ports, different IP layouts)
 - Override the host-to-pair assignments and retry order

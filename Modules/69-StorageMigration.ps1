@@ -20,7 +20,7 @@
 # job orchestration is a deliberate WAC workflow and the menu says so.
 #
 # Config: $script:StorageMigration (see 00-Initialization.ps1, overridable
-# via defaults.json "StorageMigration").
+# via rackstack.config.json "StorageMigration").
 
 # Returns $true if the SMS orchestrator role is installed.
 function Test-SMSInstalled {

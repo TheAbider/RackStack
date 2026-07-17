@@ -1,10 +1,14 @@
 # Configuration Guide
 
-RackStack is configured via `defaults.json`, placed alongside the executable or script. On first launch without a config file, the setup wizard walks you through creating one.
+RackStack is configured via `rackstack.config.json`, placed alongside the executable or script. A legacy `defaults.json` from earlier versions is still read automatically when no `rackstack.config.json` exists; whichever file is loaded is the one the tool writes back to when you save from the in-tool editor. On first launch with neither file present, the setup wizard walks you through creating `rackstack.config.json`.
 
-Copy `defaults.example.json` to `defaults.json` and customize for your environment.
+Copy `rackstack.config.example.json` to `rackstack.config.json` and customize for your environment.
 
-> `defaults.json` is gitignored -- your secrets never leave your machine.
+> `rackstack.config.json` (and the legacy `defaults.json`) are gitignored -- your secrets never leave your machine.
+
+## Company Config Files
+
+In addition to the base config, RackStack loads per-company overrides. Name them `<company>.rackstack.config.json` (e.g. `contoso.rackstack.config.json`); the legacy `<company>.defaults.json` name (e.g. `contoso.defaults.json`) is still read as a fallback, per company. When both names exist for the same company, the new name wins. Multiple company files can coexist, and the `_companyDefaults` key in the base config selects which one loads. Saving to the company baseline from the in-tool editor writes to whichever company file is loaded; new company files should use the new naming scheme.
 
 ---
 
@@ -328,11 +332,11 @@ Default specs for non-template (custom) VMs created via the "Custom VM" option i
 Paths excluded from Windows Defender scanning on Hyper-V hosts to improve VM performance.
 
 - `DefenderExclusionPaths` -- Static system-level paths that are always excluded.
-- `DefenderCommonVMPaths` -- VM storage paths. If not set in `defaults.json`, these are **auto-generated dynamically** from the selected host storage drive (see [Dynamic Defender Paths](#dynamic-defender-paths)).
+- `DefenderCommonVMPaths` -- VM storage paths. If not set in `rackstack.config.json`, these are **auto-generated dynamically** from the selected host storage drive (see [Dynamic Defender Paths](#dynamic-defender-paths)).
 
 ### Dynamic Defender Paths
 
-When `DefenderCommonVMPaths` is **not** specified in `defaults.json`, RackStack auto-generates VM exclusion paths based on the selected host storage drive. For example, if drive D: is selected:
+When `DefenderCommonVMPaths` is **not** specified in `rackstack.config.json`, RackStack auto-generates VM exclusion paths based on the selected host storage drive. For example, if drive D: is selected:
 
 ```
 D:\Virtual Machines
@@ -343,7 +347,7 @@ D:\Virtual Machines\_BaseImages
 
 If Cluster Shared Volumes exist, each CSV volume is also added. This ensures Defender exclusions always match the actual storage location without manual configuration.
 
-If `DefenderCommonVMPaths` **is** specified in `defaults.json`, those paths are used as-is and dynamic generation is skipped.
+If `DefenderCommonVMPaths` **is** specified in `rackstack.config.json`, those paths are used as-is and dynamic generation is skipped.
 
 ### FileServer (File Server)
 

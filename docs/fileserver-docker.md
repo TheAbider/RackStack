@@ -199,7 +199,7 @@ docker compose down -v
 
 Your files in `data/` are not affected by `docker compose down` since they're bind-mounted, not Docker volumes.
 
-## Configure defaults.json
+## Configure rackstack.config.json
 
 ```json
 {

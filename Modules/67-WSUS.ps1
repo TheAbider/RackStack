@@ -9,7 +9,7 @@
 # (classifications, languages, sync schedule).
 #
 # Config: $script:WSUS (see 00-Initialization.ps1, overridable via
-# defaults.json "WSUS").
+# rackstack.config.json "WSUS").
 
 # Returns $true if a WSUS content path is configured.
 function Test-WSUSConfigured {
@@ -155,7 +155,7 @@ function Invoke-WSUSPostInstall {
         return $true
     }
     if (-not (Test-WSUSConfigured)) {
-        Write-OutputColor "  Set WSUS.ContentPath in defaults.json before post-install." -color "Error"
+        Write-OutputColor "  Set WSUS.ContentPath in rackstack.config.json before post-install." -color "Error"
         return $false
     }
 
@@ -275,7 +275,7 @@ function Set-WSUSDefaultConfiguration {
         $allClass = $wsus.GetUpdateClassifications()
         $selected = @($allClass | Where-Object { $_.Title -in $wantClassifications })
         # Surface any requested classification that WSUS doesn't recognize —
-        # a typo in defaults.json must NOT be swallowed (a misconfigured WSUS
+        # a typo in rackstack.config.json must NOT be swallowed (a misconfigured WSUS
         # that syncs nothing while reporting success is the worst outcome).
         $matchedTitles = @($selected | ForEach-Object { $_.Title })
         $missing = @($wantClassifications | Where-Object { $_ -notin $matchedTitles })
@@ -284,7 +284,7 @@ function Set-WSUSDefaultConfiguration {
         }
         if ($selected.Count -eq 0) {
             Write-OutputColor "  No requested classification matched a WSUS classification — none enabled." -color "Error"
-            Write-OutputColor "  Check the WSUS.Classifications values in defaults.json." -color "Warning"
+            Write-OutputColor "  Check the WSUS.Classifications values in rackstack.config.json." -color "Warning"
         }
         else {
             $sub = $wsus.GetSubscription()
@@ -323,7 +323,7 @@ function Set-WSUSDefaultConfiguration {
     if (-not $classificationsEnabled) {
         Add-SessionChange -Category "Roles" -Description "WSUS configuration incomplete — no update classifications enabled"
         Write-OutputColor "  WSUS configuration is INCOMPLETE: no update classifications were enabled, so the" -color "Error"
-        Write-OutputColor "  server will sync nothing. Fix WSUS.Classifications in defaults.json and re-run." -color "Warning"
+        Write-OutputColor "  server will sync nothing. Fix WSUS.Classifications in rackstack.config.json and re-run." -color "Warning"
         return $false
     }
 
@@ -380,7 +380,7 @@ function Show-WSUSManagement {
             Write-OutputColor "  │$("  Updates:    $($status.UpdateCount)   Computers: $($status.ComputerCount)".PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("  Last sync:  $($status.LastSync)".PadRight(72))│" -color "Info"
         }
-        $cfg = if (Test-WSUSConfigured) { "configured" } else { "NOT configured (see defaults.json)" }
+        $cfg = if (Test-WSUSConfigured) { "configured" } else { "NOT configured (see rackstack.config.json)" }
         Write-OutputColor "  │$("  Config:     $cfg".PadRight(72))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"

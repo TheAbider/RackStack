@@ -40,7 +40,7 @@ The rest of this document unpacks what that means concretely.
 | Administrator/SYSTEM access on the host running RackStack | High | The operator's identity is the bedrock of every other trust assumption. |
 | Operator-provided credentials (local admin password, AD service-account creds, BitLocker recovery keys) | High | Disclosure breaks domain trust, leaks BitLocker volumes, or enables lateral movement. |
 | Released artifacts (`RackStack.exe`, monolithic `.ps1`) | Medium | Compromise allows supply-chain attack on every downstream operator. |
-| `defaults.json` operator config | Medium | Contains Cloudflare Access secrets, KMS host keys, AD service-account hints. |
+| `rackstack.config.json` operator config (legacy `defaults.json` still read) | Medium | Contains Cloudflare Access secrets, KMS host keys, AD service-account hints. |
 | Audit log file (`<Tool>Config_<host>_<ts>.log`) | Medium | Contains operational history; should not contain plaintext secrets. |
 | Session transcript | Medium | Same as above; PowerShell `Start-Transcript` records every line. |
 
@@ -80,7 +80,7 @@ each one is where defensive code must be applied.
 |  |                   RackStack.exe process                   | |
 |  |              (also runs as Administrator)                 | |
 |  |                                                             | |
-|  |   reads ----> defaults.json   <----- Trust boundary 1     | |
+|  |   reads ----> rackstack.config.json <-- Trust boundary 1  | |
 |  |               (operator-trusted; admin-only DACL by default) |
 |  |                                                             | |
 |  |   reads ----> registry HKLM\...\Uninstall\RackStack       | |
@@ -115,7 +115,7 @@ applied at each:
 
 | # | Boundary | Defense |
 |---|---|---|
-| 1 | `defaults.json` → process | Schema validation via `Test-BatchConfig`; type checking via `ValidateSet`; rejection of unsafe values (`Test-ValidHostname`, `Test-ValidIPAddress`). |
+| 1 | `rackstack.config.json` -> process | Schema validation via `Test-BatchConfig`; type checking via `ValidateSet`; rejection of unsafe values (`Test-ValidHostname`, `Test-ValidIPAddress`). |
 | 2 | Registry → process | Allowlist regex on `InstallLocation` and `OutputPath` (`["`&|<>^%()]`, `..`, `[\x00-\x1F]` all rejected). |
 | 3 | State file → process | DACL-verified directory creation under `%ProgramData%`; `Test-RackStackStateFileAcl` refuses to load if a non-admin SID has write access. |
 | 4 | Temp file → process | Cryptographically random per-process names (`[guid]::NewGuid()`); atomic write-then-rename; cleanup on `Exit-Script`. |
@@ -170,7 +170,7 @@ key but flow into the same code.
 | `Set-Transcript` paused around password display so the plaintext does not enter the session log | `Modules/22-Password.ps1` `New-StrongPassword` lines 393–410; `Modules/31-BitLocker.ps1` BitLocker key display block. |
 | Structured-log secret-key redaction | `Modules/02-Logging.ps1` `Write-StructuredLog` `$secretKeyPattern` — covers `password`, `token`, `secret`, `cookie`, `session`, `sid`, `signature`, `sig`, `private_key`, `pem`, `dsrm`, `recovery`, `webhook_url`, plus their snake_case and CamelCase variants. |
 | gitleaks scans every push for accidentally-committed secrets | `.github/workflows/gitleaks.yml` — weekly full-history sweep too. |
-| `defaults.json` is gitignored; only `defaults.example.json` ships with placeholder values | `.gitignore`. |
+| `rackstack.config.json` and the legacy `defaults.json` are gitignored; only `rackstack.config.example.json` ships with placeholder values | `.gitignore`. |
 
 **Counter-argument considered.** A future caller could route a credential
 through `Write-StructuredLog -Data` under a key not in the redact
@@ -259,7 +259,7 @@ following are acknowledged and tracked:
   planned to fork.
 
 ### CR-5: Operator can disable defenses
-- An operator with admin rights can edit `defaults.json` to skip
+- An operator with admin rights can edit `rackstack.config.json` to skip
   BitLocker recovery checks, disable Defender exclusions, or run
   destructive operations without confirmation prompts via `-Silent`.
 - Mitigation: documented defaults are safe; out-of-scope per the

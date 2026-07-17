@@ -108,7 +108,7 @@ Common issues encountered during server configuration with RackStack, organized 
 
 **Resolution:**
 1. Navigate to **iSCSI & SAN Management > [1] Configure iSCSI NICs**.
-2. Use auto-configuration (recommended) which detects host number from the hostname (e.g., `123456-HV2` = Host #2) and calculates IPs using the formula: `{subnet}.{(host# + 1) * 10 + port#}` (default subnet: `172.16.1`, configurable via `defaults.json`).
+2. Use auto-configuration (recommended) which detects host number from the hostname (e.g., `123456-HV2` = Host #2) and calculates IPs using the formula: `{subnet}.{(host# + 1) * 10 + port#}` (default subnet: `172.16.1`, configurable via `rackstack.config.json`).
 3. Use **[2] Identify NICs** to temporarily disable a NIC and watch which switch port light goes out to confirm physical cabling.
 4. Use **[3] Discover SAN Targets** to ping-test all known SAN target IPs.
 
@@ -378,7 +378,7 @@ Hosts 5-24 cycle through the same pattern (host 5 = same as host 1, etc.).
 
 **Resolution:**
 1. Role templates are designed for Windows Server deployments. They cannot be installed on client operating systems.
-2. To test template functionality on a client, create a custom template in `defaults.json` with `ServerOnly: false` and client-compatible features.
+2. To test template functionality on a client, create a custom template in `rackstack.config.json` with `ServerOnly: false` and client-compatible features.
 
 ---
 

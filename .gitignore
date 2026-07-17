@@ -1,6 +1,10 @@
 # Credentials (org-specific URLs, keys, passwords)
+# Base + company config under both naming schemes; only the example is tracked
+rackstack.config.json
+*.rackstack.config.json
 defaults.json
 *.defaults.json
+!rackstack.config.example.json
 !defaults.example.json
 
 # Build artifacts (monolithic, exe, archives)

@@ -1,6 +1,7 @@
 {
     "_description": "RackStack Configuration File",
-    "_setup": "Copy this file to 'defaults.json' (same folder as RackStack) and fill in YOUR values. RackStack will never overwrite your defaults.json during updates. Lines starting with _ are comments -- RackStack ignores them.",
+    "_setup": "Copy this file to 'rackstack.config.json' (same folder as RackStack) and fill in YOUR values. RackStack will never overwrite your rackstack.config.json during updates. A legacy 'defaults.json' is still read when no rackstack.config.json exists. Lines starting with _ are comments -- RackStack ignores them.",
+    "_companyConfig_help": "Optional per-company overrides live in '<company>.rackstack.config.json' next to this file (e.g. contoso.rackstack.config.json; the legacy '<company>.defaults.json' name is still read as a fallback). Multiple company files can coexist; the _companyDefaults key in the base config selects which one loads.",
 
     "_section_basic": "========== BASIC SERVER SETTINGS ==========",
 
@@ -90,7 +91,7 @@
         "ServicePrincipalId": "",
         "_ServicePrincipalId_help": "Application (client) ID of a service principal granted the 'Azure Connected Machine Onboarding' role on the resource group.",
         "ServicePrincipalSecret": "",
-        "_ServicePrincipalSecret_help": "SP client secret. STRONGLY PREFER leaving this blank here and setting the RACKSTACK_ARC_SECRET environment variable at runtime instead, so the secret never lands in a config file. defaults.json is gitignored, but env-var injection is still the safer pattern.",
+        "_ServicePrincipalSecret_help": "SP client secret. STRONGLY PREFER leaving this blank here and setting the RACKSTACK_ARC_SECRET environment variable at runtime instead, so the secret never lands in a config file. rackstack.config.json is gitignored, but env-var injection is still the safer pattern.",
         "Cloud": "AzureCloud",
         "_Cloud_help": "Azure cloud instance: 'AzureCloud' (default, commercial), 'AzureUSGovernment', or 'AzureChinaCloud'.",
         "AgentInstallerUrl": "https://aka.ms/AzureConnectedMachineAgent",

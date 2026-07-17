@@ -66,8 +66,8 @@ body:
   - type: textarea
     id: defaults
     attributes:
-      label: Relevant defaults.json snippet (REDACT SECRETS)
-      description: If the bug involves config (network, agents, file-server, etc.), paste the matching defaults.json fragment. **Remove any credentials, tokens, or client secrets first.**
+      label: Relevant rackstack.config.json snippet (REDACT SECRETS)
+      description: If the bug involves config (network, agents, file-server, etc.), paste the matching rackstack.config.json (or legacy defaults.json) fragment. **Remove any credentials, tokens, or client secrets first.**
       render: json
 
   - type: checkboxes

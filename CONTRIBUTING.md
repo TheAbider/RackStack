@@ -5,7 +5,7 @@ Thanks for your interest in contributing! Here's how to get started.
 ## Getting Started
 
 1. Fork the repo and clone it locally
-2. Copy `defaults.example.json` to `defaults.json` and fill in your environment details
+2. Copy `rackstack.config.example.json` to `rackstack.config.json` and fill in your environment details (a legacy `defaults.json` is still read when present)
 3. Make your changes in the `Modules/` directory
 4. Run the test suite before submitting
 
@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 ## Pull Request Checklist
 
-- [ ] All 5,048 tests pass (`Run-Tests.ps1` exits with code 0)
+- [ ] The full structural test suite passes (`Run-Tests.ps1` exits with code 0)
 - [ ] PSScriptAnalyzer reports 0 errors (`pssa-check.ps1`)
 - [ ] Monolithic synced (`sync-to-monolithic.ps1` shows 0 parse errors)
 - [ ] New functions follow PowerShell verb-noun naming (`Get-`, `Set-`, `Test-`, `Show-`)
@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File Tests\pssa-check.ps1
 
 ## Configuration Safety
 
-Never hardcode organization names, domains, contact info, or credentials in module code. Use the `$script:` variables that are loaded from `defaults.json`:
+Never hardcode organization names, domains, contact info, or credentials in module code. Use the `$script:` variables that are loaded from `rackstack.config.json`:
 
 - `$script:Domain` for domain operations
 - `$script:SupportContact` for error messages

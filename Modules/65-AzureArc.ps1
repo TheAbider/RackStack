@@ -6,7 +6,7 @@
 # all without the server living in Azure.
 #
 # Config comes from $script:AzureArc (see 00-Initialization.ps1, overridable
-# via defaults.json "AzureArc"). The service-principal secret is treated as
+# via rackstack.config.json "AzureArc"). The service-principal secret is treated as
 # sensitive throughout: the transcript is paused around the azcmagent call,
 # azcmagent's output is discarded (not merged into any captured stream), it
 # is never structured-logged in plaintext, and the plaintext copy is
@@ -25,8 +25,8 @@ function Test-AzureArcConfigured {
 }
 
 # Resolve the service-principal secret as a SecureString. Priority order:
-#   1. $env:RACKSTACK_ARC_SECRET   (preferred — keeps the secret out of defaults.json)
-#   2. $script:AzureArc.ServicePrincipalSecret  (from defaults.json — discouraged for source-controlled files)
+#   1. $env:RACKSTACK_ARC_SECRET   (preferred - keeps the secret out of rackstack.config.json)
+#   2. $script:AzureArc.ServicePrincipalSecret  (from rackstack.config.json - discouraged for source-controlled files)
 # Returns $null if neither is set.
 function Resolve-AzureArcSecret {
     $raw = $null
@@ -190,7 +190,7 @@ function Install-AzureArcAgent {
 function Invoke-AzureArcOnboard {
     if (-not (Test-AzureArcConfigured)) {
         Write-OutputColor "  Azure Arc is not configured. Set TenantId, SubscriptionId," -color "Error"
-        Write-OutputColor "  ResourceGroup, and ServicePrincipalId in defaults.json (AzureArc)." -color "Warning"
+        Write-OutputColor "  ResourceGroup, and ServicePrincipalId in rackstack.config.json (AzureArc)." -color "Warning"
         return $false
     }
 
@@ -235,7 +235,7 @@ function Invoke-AzureArcOnboard {
     $secureSecret = Resolve-AzureArcSecret
     if ($null -eq $secureSecret) {
         Write-OutputColor "  No service-principal secret available. Set the RACKSTACK_ARC_SECRET" -color "Error"
-        Write-OutputColor "  environment variable, or AzureArc.ServicePrincipalSecret in defaults.json." -color "Warning"
+        Write-OutputColor "  environment variable, or AzureArc.ServicePrincipalSecret in rackstack.config.json." -color "Warning"
         return $false
     }
 
@@ -420,7 +420,7 @@ function Show-AzureArcManagement {
             Write-OutputColor "  │$("  Agent:      installed (v$($status.AgentVersion))".PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("  State:      not connected".PadRight(72))│" -color "Warning"
         }
-        $cfg = if (Test-AzureArcConfigured) { "configured" } else { "NOT configured (see defaults.json)" }
+        $cfg = if (Test-AzureArcConfigured) { "configured" } else { "NOT configured (see rackstack.config.json)" }
         Write-OutputColor "  │$("  Config:     $cfg".PadRight(72))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"

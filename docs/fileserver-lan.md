@@ -10,7 +10,7 @@ See [FileServer-Setup.md](FileServer-Setup.md) for architecture overview and alt
 RackStack (workstation) --HTTP--> File server (LAN IP) --serves--> ISOs, VHDs, Agents
 ```
 
-No internet exposure. No authentication. Just a web server on your LAN serving static files. Point `defaults.json` at the server's LAN IP and you're done.
+No internet exposure. No authentication. Just a web server on your LAN serving static files. Point `rackstack.config.json` at the server's LAN IP and you're done.
 
 ## Prerequisites
 
@@ -190,7 +190,7 @@ Invoke-RestMethod -Uri "http://localhost/server-tools/ISOs/"
 
 ---
 
-## Configure defaults.json
+## Configure rackstack.config.json
 
 No `ClientId` or `ClientSecret` needed for LAN-only setups:
 

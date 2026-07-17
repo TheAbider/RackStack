@@ -591,10 +591,27 @@ function Initialize-SANTargetPairs {
     }
 }
 
-# Get available company defaults files (*.defaults.json excluding defaults.json and defaults.example.json)
+# Get available company config files. The namespaced <company>.rackstack.config.json
+# is preferred; the legacy <company>.defaults.json is still recognized. When both
+# names exist for the same company key, the new name wins (one entry per company).
 function Get-CompanyDefaultsFiles {
     $results = @()
     if (-not $script:ModuleRoot) { return $results }
+
+    # Plain hashtable (case-insensitive) + a List for names: an [ordered]
+    # dictionary's Keys collection does not enumerate through the pipeline
+    # under PowerShell 5.1, so Sort-Object would see it as a single object.
+    $companyPaths = @{}
+    $companyNames = New-Object System.Collections.Generic.List[string]
+
+    $files = Get-ChildItem -LiteralPath $script:ModuleRoot -Filter "*.rackstack.config.json" -File -ErrorAction SilentlyContinue
+    foreach ($f in $files) {
+        # Exclude rackstack.config.json itself and rackstack.config.example.json
+        if ($f.Name -eq "rackstack.config.json" -or $f.Name -eq "rackstack.config.example.json") { continue }
+        $name = $f.Name -replace '\.rackstack\.config\.json$', ''
+        if (-not $name) { continue }  # Skip files with empty extracted name
+        if (-not $companyPaths.ContainsKey($name)) { $companyPaths[$name] = $f.FullName; $companyNames.Add($name) }
+    }
 
     $files = Get-ChildItem -LiteralPath $script:ModuleRoot -Filter "*.defaults.json" -File -ErrorAction SilentlyContinue
     foreach ($f in $files) {
@@ -602,9 +619,16 @@ function Get-CompanyDefaultsFiles {
         if ($f.Name -eq "defaults.json" -or $f.Name -eq "defaults.example.json") { continue }
         $name = $f.BaseName -replace '\.defaults$', ''
         if (-not $name) { continue }  # Skip files with empty extracted name
-        $results += @{ Name = $name; Path = $f.FullName }
+        if (-not $companyPaths.ContainsKey($name)) { $companyPaths[$name] = $f.FullName; $companyNames.Add($name) }
     }
-    return ,$results
+
+    foreach ($name in ($companyNames | Sort-Object)) {
+        $results += @{ Name = $name; Path = $companyPaths[$name] }
+    }
+    # Plain return (no comma-wrap): every caller wraps in @(), and a
+    # comma-wrapped return nests the array there, collapsing N companies
+    # into one Object[] entry. Masked historically by single-company use.
+    return $results
 }
 
 # Show interactive picker for company defaults files
@@ -612,7 +636,7 @@ function Show-CompanyDefaultsPicker {
     $files = @(Get-CompanyDefaultsFiles)
     if ($files.Count -eq 0) {
         Write-OutputColor "  No company defaults files found." -color "Warning"
-        Write-OutputColor "  Place <name>.defaults.json files in the script directory." -color "Debug"
+        Write-OutputColor "  Place <company>.rackstack.config.json files in the script directory (legacy <company>.defaults.json also works)." -color "Debug"
         return $null
     }
 
@@ -681,7 +705,7 @@ function Import-CompanyDefaults {
     }
 }
 
-# Import environment defaults from defaults.json (merges with built-in generics)
+# Import environment defaults from the base config file (merges with built-in generics)
 function Import-Defaults {
 
     # Reset agent installer to factory defaults before re-merge (prevents stale config from previous company)
@@ -703,7 +727,7 @@ function Import-Defaults {
     # Check for company defaults files
     $companyFiles = @(Get-CompanyDefaultsFiles)
 
-    # Run first-run wizard if no defaults.json exists. Skip in batch, CLI-silent,
+    # Run first-run wizard if no base config file exists. Skip in batch, CLI-silent,
     # and test-runner contexts so non-interactive callers don't block on Read-Host.
     if (-not (Test-Path -LiteralPath $script:DefaultsPath) -and
         -not $script:CLISilent -and
@@ -764,7 +788,7 @@ function Import-Defaults {
                         }
                     }
                 } catch {
-                    Write-OutputColor "  Warning: Could not read defaults.json for company defaults: $_" -color "Warning"
+                    Write-OutputColor "  Warning: Could not read $(Split-Path -Leaf $script:DefaultsPath) for company defaults: $_" -color "Warning"
                 }
             }
             # If not auto-resolved, show picker
@@ -790,7 +814,7 @@ function Import-Defaults {
             foreach ($prop in $fileDefaults.PSObject.Properties) {
                 if ($prop.Name -like "_*") { continue }  # Skip metadata fields
                 # When company defaults are active, don't let personal defaults override agent config
-                # (old defaults.json files may have stale AgentInstaller with ToolName="MSP")
+                # (old config files may have stale AgentInstaller with ToolName="MSP")
                 if ($script:CompanyDefaultsPath -and $prop.Name -in @('AgentInstaller', 'AdditionalAgents')) { continue }
                 # Skip ONLY null and empty STRINGS — not falsy values. `$prop.Value -ne ""`
                 # silently dropped a boolean $false (PowerShell coerces "" to [bool]$false, so
@@ -825,17 +849,17 @@ function Import-Defaults {
     # Apply tool identity from defaults. ToolName is the seed for ConfigDirName and AppConfigDir
     # below, AND is used as the safety check in 47-ExitCleanup's self-destruct path filter.
     # Whoever controls ToolName controls both sides of that guard. Strict-validate it here so
-    # a hostile defaults.json can't set ToolName='Documents' and have the self-destruct walker
+    # a hostile config file can't set ToolName='Documents' and have the self-destruct walker
     # match every folder under C:\Users\Administrator\Documents. Reject names that match
     # Windows-reserved tokens or are too short/long.
     $reservedToolNames = @('windows', 'system', 'system32', 'users', 'documents', 'desktop', 'temp', 'admin', 'administrator', 'config', 'program', 'programs', 'programfiles', 'programdata', 'appdata', 'roaming', 'local', 'public')
     if ($merged.ToolName) {
         $proposedName = "$($merged.ToolName)"
         if ($proposedName -notmatch '^[A-Za-z][A-Za-z0-9_-]{2,32}$') {
-            Write-OutputColor "  defaults.json: rejecting ToolName '$proposedName' (must be 3-32 chars, letters/digits/underscore/hyphen, must start with a letter)." -color "Error"
+            Write-OutputColor "  Config: rejecting ToolName '$proposedName' (must be 3-32 chars, letters/digits/underscore/hyphen, must start with a letter)." -color "Error"
         }
         elseif ($proposedName.ToLowerInvariant() -in $reservedToolNames) {
-            Write-OutputColor "  defaults.json: rejecting ToolName '$proposedName' (collides with a Windows-reserved path token)." -color "Error"
+            Write-OutputColor "  Config: rejecting ToolName '$proposedName' (collides with a Windows-reserved path token)." -color "Error"
         }
         else {
             $script:ToolName = $proposedName
@@ -1017,7 +1041,7 @@ function Import-Defaults {
     # Unpack MonitoredServices into $script:MonitoredServices for the service-audit
     # consumers (30-ServiceManager, 50-EntryPoint health/export). Previously consumers
     # read `$script:Defaults.MonitoredServices` but $script:Defaults was never set, so
-    # operator customization in defaults.json silently did nothing.
+    # operator customization in the config file silently did nothing.
     if ($merged.MonitoredServices) {
         $msList = @()
         foreach ($svc in $merged.MonitoredServices) {
@@ -1067,7 +1091,7 @@ function Import-Defaults {
         }
     }
 
-    # Update Azure Arc onboarding settings (deep-merge from defaults.json "AzureArc")
+    # Update Azure Arc onboarding settings (deep-merge from rackstack.config.json "AzureArc")
     $acArc = $merged.AzureArc
     if ($acArc) {
         if ($acArc -is [PSCustomObject]) {
@@ -1082,7 +1106,7 @@ function Import-Defaults {
         }
     }
 
-    # Update Defender for Endpoint onboarding settings (deep-merge from defaults.json "DefenderEndpoint")
+    # Update Defender for Endpoint onboarding settings (deep-merge from rackstack.config.json "DefenderEndpoint")
     $acMde = $merged.DefenderEndpoint
     if ($acMde) {
         if ($acMde -is [PSCustomObject]) {
@@ -1097,7 +1121,7 @@ function Import-Defaults {
         }
     }
 
-    # Update WSUS server setup settings (deep-merge from defaults.json "WSUS")
+    # Update WSUS server setup settings (deep-merge from rackstack.config.json "WSUS")
     $acWsus = $merged.WSUS
     if ($acWsus) {
         if ($acWsus -is [PSCustomObject]) {
@@ -1112,7 +1136,7 @@ function Import-Defaults {
         }
     }
 
-    # Update AD CS Certification Authority settings (deep-merge from defaults.json "ADCS")
+    # Update AD CS Certification Authority settings (deep-merge from rackstack.config.json "ADCS")
     $acAdcs = $merged.ADCS
     if ($acAdcs) {
         if ($acAdcs -is [PSCustomObject]) {
@@ -1127,7 +1151,7 @@ function Import-Defaults {
         }
     }
 
-    # Update Storage Migration Service settings (deep-merge from defaults.json "StorageMigration")
+    # Update Storage Migration Service settings (deep-merge from rackstack.config.json "StorageMigration")
     $acSms = $merged.StorageMigration
     if ($acSms) {
         if ($acSms -is [PSCustomObject]) {
@@ -1299,7 +1323,7 @@ function Import-Defaults {
             }
         }
         catch {
-            Write-OutputColor "  Warning: Could not load VM defaults from defaults.json: $($_.Exception.Message)" -color "Warning"
+            Write-OutputColor "  Warning: Could not load VM defaults from $(Split-Path -Leaf $script:DefaultsPath): $($_.Exception.Message)" -color "Warning"
         }
     }
 
@@ -1341,7 +1365,7 @@ function Import-Defaults {
 }
 
 # Export current defaults to a defaults file (includes custom license keys).
-# TargetPath defaults to the personal defaults.json; pass $script:CompanyDefaultsPath
+# TargetPath defaults to the personal base config file; pass $script:CompanyDefaultsPath
 # to update the shared company baseline instead.
 function Export-Defaults {
     param(
@@ -1413,23 +1437,23 @@ function Export-Defaults {
     }
 }
 
-# Save the current defaults, letting the operator pick the personal defaults.json
+# Save the current defaults, letting the operator pick the personal base config
 # or (when a company defaults file is active) the shared company baseline. The
 # editor already updates the in-memory $script:* values as fields are changed, so
 # the running session uses the new values immediately — this just persists them.
 function Save-DefaultsInteractive {
     $target = $script:DefaultsPath
-    $targetLabel = "defaults.json"
+    $targetLabel = Split-Path -Leaf $script:DefaultsPath
     if ($script:CompanyDefaultsPath) {
         Write-OutputColor "  Save to which file?" -color "Info"
-        Write-OutputColor "  [1] Personal — defaults.json (this machine only)" -color "Info"
-        Write-OutputColor "  [2] Company  — $($script:CompanyDefaultsName).defaults.json (shared fleet baseline)" -color "Info"
+        Write-OutputColor "  [1] Personal - $(Split-Path -Leaf $script:DefaultsPath) (this machine only)" -color "Info"
+        Write-OutputColor "  [2] Company  - $(Split-Path -Leaf $script:CompanyDefaultsPath) (shared fleet baseline)" -color "Info"
         $sel = Read-Host "  Select [1/2] (default 1)"
         $navResult = Test-NavigationCommand -UserInput $sel
         if ($navResult.ShouldReturn) { return }
         if ("$sel".Trim() -eq "2") {
             $target = $script:CompanyDefaultsPath
-            $targetLabel = "$($script:CompanyDefaultsName).defaults.json"
+            $targetLabel = Split-Path -Leaf $script:CompanyDefaultsPath
         }
     }
     if (Export-Defaults -TargetPath $target) {
@@ -1438,14 +1462,14 @@ function Save-DefaultsInteractive {
     Start-Sleep -Seconds 1
 }
 
-# Import-CustomLicenses is handled by Import-Defaults (licenses stored in defaults.json)
+# Import-CustomLicenses is handled by Import-Defaults (licenses stored in the base config)
 # This wrapper exists for backward compatibility
 function Import-CustomLicenses {
-    # License keys are loaded as part of Import-Defaults from defaults.json
+    # License keys are loaded as part of Import-Defaults from the base config
     # No separate file needed
 }
 
-# Export-CustomLicenses saves via Export-Defaults (licenses stored in defaults.json)
+# Export-CustomLicenses saves via Export-Defaults (licenses stored in the base config)
 function Export-CustomLicenses {
     Export-Defaults
 }
@@ -1686,7 +1710,7 @@ function Show-EditDefaults {
                 $companyFiles = @(Get-CompanyDefaultsFiles)
                 if ($companyFiles.Count -eq 0) {
                     Write-OutputColor "  No company defaults files found." -color "Warning"
-                    Write-OutputColor "  Place <name>.defaults.json files in the script directory." -color "Debug"
+                    Write-OutputColor "  Place <company>.rackstack.config.json files in the script directory (legacy <company>.defaults.json also works)." -color "Debug"
                     Start-Sleep -Seconds 1
                 }
                 else {
@@ -2016,7 +2040,7 @@ function Show-FirstRunWizard {
             # Multiple company files: show picker
             Write-OutputColor "  Multiple company defaults files detected:" -color "Info"
             foreach ($cf in $companyFiles) {
-                Write-OutputColor "    - $($cf.Name).defaults.json" -color "Info"
+                Write-OutputColor "    - $(Split-Path -Leaf $cf.Path)" -color "Info"
             }
             Write-OutputColor "" -color "Info"
             $picked = Show-CompanyDefaultsPicker
@@ -2028,7 +2052,7 @@ function Show-FirstRunWizard {
         }
 
         if ($script:CompanyDefaultsPath) {
-            # Save minimal defaults.json that just references the company defaults file
+            # Save a minimal base config that just references the company config file
             # Do NOT use Export-Defaults here — script variables haven't been merged yet,
             # so it would save built-in defaults (empty FileServer/AgentInstaller) that
             # would overwrite company values on subsequent loads.

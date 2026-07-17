@@ -380,8 +380,8 @@ function New-SwitchEmbeddedTeam {
         }
 
         if ($vnicReady) {
-            # Use $script:ManagementName (defaults.json override-able) rather than the
-            # function param default of "Management" — operators who set defaults.json
+            # Use $script:ManagementName (rackstack.config.json override-able) rather than the
+            # function param default of "Management" - operators who set rackstack.config.json
             # ManagementName were having it silently ignored by this SET branch even
             # though the External-switch branch already used $script:ManagementName.
             $resolvedMgmtName = if ($script:ManagementName) { $script:ManagementName } else { $ManagementName }
@@ -804,7 +804,7 @@ function New-StandardVSwitch {
                 }
                 if ($vnicReady) {
                     # $script:ManagementName is initialized in 00-Initialization.ps1 and
-                    # overridable via defaults.json. The bare `$ManagementName` here was a
+                    # overridable via rackstack.config.json. The bare `$ManagementName` here was a
                     # typo that silently no-op'd the rename on every External vSwitch.
                     Rename-VMNetworkAdapter -ManagementOS -Name $SwitchName -NewName $script:ManagementName -ErrorAction SilentlyContinue
                 }

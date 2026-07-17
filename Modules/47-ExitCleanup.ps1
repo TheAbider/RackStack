@@ -136,7 +136,7 @@ function Exit-Script {
                 ($_.Name -like "$toolName*.exe") -or
                 # Only treat the listed config files as ours when they sit inside a directory
                 # whose path contains the tool name — protects unrelated dev work in other repos.
-                ((($_.Name -eq "RackStack.ps1") -or ($_.Name -eq "defaults.json") -or ($_.Name -eq "defaults.example.json") -or ($_.Name -eq "PSScriptAnalyzerSettings.psd1") -or ($_.Name -eq "Header.ps1")) -and ($_.DirectoryName -like "*$toolName*"))
+                ((($_.Name -eq "RackStack.ps1") -or ($_.Name -eq "rackstack.config.json") -or ($_.Name -eq "rackstack.config.example.json") -or ($_.Name -eq "defaults.json") -or ($_.Name -eq "defaults.example.json") -or ($_.Name -like "*.rackstack.config.json") -or ($_.Name -like "*.defaults.json") -or ($_.Name -eq "rackstack.config.json.tmp") -or ($_.Name -eq "defaults.json.tmp") -or ($_.Name -like "*.rackstack.config.json.tmp") -or ($_.Name -like "*.defaults.json.tmp") -or ($_.Name -eq "PSScriptAnalyzerSettings.psd1") -or ($_.Name -eq "Header.ps1")) -and ($_.DirectoryName -like "*$toolName*"))
             }
             foreach ($f in $monoFiles) { $pathsToDelete.Add($f.FullName) }
 
@@ -161,12 +161,32 @@ function Exit-Script {
             if (Test-Path -LiteralPath $modulesDir) { $pathsToDelete.Add($modulesDir) }
             $loaderPath = Join-Path $script:ModuleRoot "RackStack.ps1"
             if (Test-Path -LiteralPath $loaderPath) { $pathsToDelete.Add($loaderPath) }
-            $defaultsPath = Join-Path $script:ModuleRoot "defaults.json"
-            if (Test-Path -LiteralPath $defaultsPath) { $pathsToDelete.Add($defaultsPath) }
+            # Config files under the module root: base + example under both naming
+            # schemes, plus crash-leftover .tmp siblings from the atomic write path
+            # (Out-File to <config>.tmp, then Move-Item) - these can hold credentials.
+            foreach ($cfgName in @("rackstack.config.json", "rackstack.config.example.json", "defaults.json", "defaults.example.json", "rackstack.config.json.tmp", "defaults.json.tmp")) {
+                $cfgPath = Join-Path $script:ModuleRoot $cfgName
+                if (Test-Path -LiteralPath $cfgPath) { $pathsToDelete.Add($cfgPath) }
+            }
+            # Company-file wildcard sweep only when the directory is identifiably the
+            # tool's own home: named after the runtime brand OR the literal product
+            # (package managers pin the install path to "rackstack" regardless of a
+            # ToolName rebrand), OR this tool's own modular layout is present (checked
+            # via Modules\00-Initialization.ps1 so a foreign project's Modules folder
+            # in a shared directory does not count). The monolithic .ps1 or EXE can
+            # run from a shared folder (e.g. Downloads), and an ungated
+            # *.defaults.json glob there would delete another application's config -
+            # the same hazard the profile scan's DirectoryName gate avoids.
+            if (($script:ModuleRoot -like "*$toolName*") -or ($script:ModuleRoot -like "*RackStack*") -or (Test-Path -LiteralPath (Join-Path $script:ModuleRoot "Modules\00-Initialization.ps1"))) {
+                foreach ($cfgFilter in @("*.rackstack.config.json", "*.defaults.json", "*.rackstack.config.json.tmp", "*.defaults.json.tmp")) {
+                    $companyCfgs = Get-ChildItem -LiteralPath $script:ModuleRoot -Filter $cfgFilter -File -ErrorAction SilentlyContinue
+                    foreach ($cc in $companyCfgs) { $pathsToDelete.Add($cc.FullName) }
+                }
+            }
         }
 
         # AppConfigDir cleanup — only if the directory's path matches the tool name (defensive
-        # check; AppConfigDir is configured at init and shouldn't drift, but a wrong defaults.json
+        # check; AppConfigDir is configured at init and shouldn't drift, but a wrong rackstack.config.json
         # value pointing at C:\ would otherwise wipe everything).
         if ($script:AppConfigDir -and (Test-Path -LiteralPath $script:AppConfigDir) -and $script:AppConfigDir -like "*$($script:ConfigDirName)*") {
             $pathsToDelete.Add($script:AppConfigDir)
@@ -174,10 +194,20 @@ function Exit-Script {
 
         if ($currentScriptPath -and $currentScriptPath -match '\.exe$') {
             $exeDir = Split-Path $currentScriptPath -Parent
-            $adjacentDefaults = Join-Path $exeDir "defaults.json"
-            if (Test-Path -LiteralPath $adjacentDefaults) { $pathsToDelete.Add($adjacentDefaults) }
-            $adjacentExample = Join-Path $exeDir "defaults.example.json"
-            if (Test-Path -LiteralPath $adjacentExample) { $pathsToDelete.Add($adjacentExample) }
+            foreach ($cfgName in @("rackstack.config.json", "rackstack.config.example.json", "defaults.json", "defaults.example.json", "rackstack.config.json.tmp", "defaults.json.tmp")) {
+                $adjacentCfg = Join-Path $exeDir $cfgName
+                if (Test-Path -LiteralPath $adjacentCfg) { $pathsToDelete.Add($adjacentCfg) }
+            }
+            # Same tool-named-directory gate as the module-root sweep above (runtime
+            # brand OR literal product name, since package-manager install paths keep
+            # the product name even when ToolName is rebranded): never glob-delete
+            # company-style config files from a shared folder.
+            if (($exeDir -like "*$toolName*") -or ($exeDir -like "*RackStack*")) {
+                foreach ($cfgFilter in @("*.rackstack.config.json", "*.defaults.json", "*.rackstack.config.json.tmp", "*.defaults.json.tmp")) {
+                    $adjacentCompanyCfgs = Get-ChildItem -LiteralPath $exeDir -Filter $cfgFilter -File -ErrorAction SilentlyContinue
+                    foreach ($cc in $adjacentCompanyCfgs) { $pathsToDelete.Add($cc.FullName) }
+                }
+            }
         }
 
         $uniquePaths = @($pathsToDelete | Sort-Object -Unique)

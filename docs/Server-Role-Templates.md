@@ -1,6 +1,6 @@
 # Server Role Templates
 
-RackStack includes 10 built-in server role templates for common Windows Server roles, plus support for custom templates defined in `defaults.json`. Templates automate the installation of Windows features and provide post-install guidance where applicable.
+RackStack includes 10 built-in server role templates for common Windows Server roles, plus support for custom templates defined in `rackstack.config.json`. Templates automate the installation of Windows features and provide post-install guidance where applicable.
 
 > **New in v1.4.0:** Server role templates with built-in and custom template support.
 
@@ -87,7 +87,7 @@ The template selector shows all available templates with their current installat
 
 ## Custom Templates
 
-Define custom templates in `defaults.json` under `CustomRoleTemplates`. Custom templates appear in the selector alongside built-in templates.
+Define custom templates in `rackstack.config.json` under `CustomRoleTemplates`. Custom templates appear in the selector alongside built-in templates.
 
 ```json
 "CustomRoleTemplates": {
@@ -177,7 +177,7 @@ Use the `ServerRoleTemplate` key in your batch config to install a role template
 
 In batch mode:
 - The template key is case-insensitive (converted to uppercase)
-- Both built-in and custom templates (from `defaults.json`) are available
+- Both built-in and custom templates (from `rackstack.config.json`) are available
 - Invalid template keys cause a validation warning
 - Features are installed sequentially via `Install-WindowsFeature`
 - The reboot flag is set if the template requires it and features were actually installed

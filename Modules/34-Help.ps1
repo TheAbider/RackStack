@@ -74,7 +74,7 @@ function Show-Help {
     Write-OutputColor "  │$("  VM DEPLOYMENT".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
     Write-OutputColor "  │$("  Connection modes:  Local host, Remote host, Failover Cluster".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  Built-in templates (add more via CustomVMTemplates in defaults.json):".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("  Built-in templates (CustomVMTemplates in rackstack.config.json):".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("    DC  (Domain Controller) Win  4 CPU   8GB  C:100GB".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("    FS  (File Server)       Win  4 CPU   8GB  C:100GB  D:200GB".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("    WEB (Web Server)        Win  4 CPU   8GB  C:100GB".PadRight(72))│" -color "Success"
@@ -145,8 +145,8 @@ function Show-Help {
     Write-OutputColor "  │$("  [5]-[8]   Compare Profiles, Check Updates, Credentials, Remote Apply".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [9]  Favorites              Save and recall frequently used menus".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [10] Command History         Last 100 operations".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [11] Edit Environment Defaults  Organization values in defaults.json".PadRight(72))│" -color "Success"
-    Write-OutputColor "  │$("  [12] Edit Custom Licenses       KMS/AVMA keys in defaults.json".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [11] Edit Environment Defaults  Org values in rackstack.config.json".PadRight(72))│" -color "Success"
+    Write-OutputColor "  │$("  [12] Edit Custom Licenses       KMS/AVMA in rackstack.config.json".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [13]     View Audit Log         JSON audit log with rotation".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [14]     What's New             Highlights for the current version".PadRight(72))│" -color "Success"
     Write-OutputColor "  │$("  [15]     System Info Banner     Hostname, IP, domain, OS, uptime".PadRight(72))│" -color "Success"
@@ -255,7 +255,7 @@ function Search-HelpTopics {
         @{ Title = "Licensing & NTP"; Keywords = @("license", "activation", "kms", "avma", "ntp", "time", "timezone", "clock"); Description = "Windows licensing status (KMS/AVMA/Retail), NTP configuration, time sync, and timezone setup" }
         @{ Title = "VM Management"; Keywords = @("checkpoint", "snapshot", "export", "import", "migration", "vhd", "iso"); Description = "VM checkpoints, export/import, migration readiness, VHD health, and ISO inventory" }
         @{ Title = "CLI Actions"; Keywords = @("cli", "action", "headless", "automation", "fleet", "json", "audit", "scan", "score", "dashboard", "monitor", "policy", "sla", "netmap", "validate"); Description = "201 CLI actions for headless automation. Run -ListActions to see all. JSON output via -OutputFormat JSON. Key: ServerScore, HealthDashboard, FleetReport, CISScan, NPSSetup, AlwaysOnVPNSetup, SIEMStatus." }
-        @{ Title = "SelfTest Action"; Keywords = @("selftest", "self-test", "diagnose", "diagnostic", "verify", "healthcheck", "sanity"); Description = "Internal diagnostic. -Action SelfTest checks PS version, elevation, module count, version consistency, defaults.json validity, temp path writability, FileServer reachability, and agent installer config. Exit 1 on any failure. Use -OutputFormat JSON for structured output." }
+        @{ Title = "SelfTest Action"; Keywords = @("selftest", "self-test", "diagnose", "diagnostic", "verify", "healthcheck", "sanity"); Description = "Internal diagnostic. -Action SelfTest checks PS version, elevation, module count, version consistency, rackstack.config.json validity, temp path writability, FileServer reachability, and agent installer config. Exit 1 on any failure. Use -OutputFormat JSON for structured output." }
         @{ Title = "Security Audits"; Keywords = @("security", "audit", "hardening", "compliance", "tls", "smb", "kerberos", "credguard", "applocker", "bitlockeraudit", "defenderexclusionaudit", "audit-policy", "secureboot", "tpm"); Description = "Security-focused CLI audits: TLSAudit, SMBAudit, KerberosAudit, CredGuardAudit, AppLockerAudit, BitLockerAudit, DefenderExclusionAudit, AuditPolicyAudit, SecureBootAudit, TPMAudit, UserAudit, LogonAudit, InsecureServiceAudit, RegistryAudit. All support -OutputFormat JSON." }
         @{ Title = "Network Audits"; Keywords = @("netaudit", "dns", "firewall-audit", "firewalllog", "arp", "route", "tcp", "netstat", "dhcp", "netprofile", "winrm", "qos", "nicoffload"); Description = "Network audits: DNSAudit, DNSCacheAudit, FirewallAudit, FirewallRuleAudit, FirewallLogAudit, ARPTableAudit, RouteTableAudit, TcpSettingsAudit, NetStatAudit, DHCPAudit, NetworkProfileAudit, WinRMAudit, QoSPolicyAudit, NICOffloadAudit, NICErrorAudit, HostsFileAudit, VPNAudit, ProxyAudit." }
         @{ Title = "Storage & Cluster Audits"; Keywords = @("storage-audit", "cluster-audit", "csv", "s2d", "iscsi-audit", "mpio", "dedup-audit", "shadow", "shadowcopy", "vss", "volumelabel", "disklatency", "storagetimeout", "storage-health"); Description = "Storage/cluster audits: DiskAudit, DiskLatencyAudit, iSCSIAudit, MPIOPathAudit, CSVSpaceAudit, S2DAudit, DedupAudit, StorageAudit, StorageHealthScore, StorageTimeoutAudit, ShadowCopyAudit, VolumeLabelAudit, ClusterAudit, ClusterQuorumAudit, ClusterNetworkAudit, ClusterHealthScore, NTFSAudit." }
@@ -485,8 +485,8 @@ function Show-SettingsMenu {
     Write-OutputColor "  ┌────────────────────────────────────────────────────────────────────────┐" -color "Info"
     Write-OutputColor "  │$("  CONFIGURATION".PadRight(72))│" -color "Info"
     Write-OutputColor "  ├────────────────────────────────────────────────────────────────────────┤" -color "Info"
-    Write-MenuItem "[11] Edit Environment Defaults" -Status "File: defaults.json" -StatusColor "Info"
-    Write-MenuItem "[12] Edit Custom Licenses" -Status "In: defaults.json" -StatusColor "Info"
+    Write-MenuItem "[11] Edit Environment Defaults" -Status "File: $(Split-Path -Leaf $script:DefaultsPath)" -StatusColor "Info"
+    Write-MenuItem "[12] Edit Custom Licenses" -Status "In: $(Split-Path -Leaf $script:DefaultsPath)" -StatusColor "Info"
     Write-MenuItem "[13] View Audit Log"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
     Write-OutputColor "" -color "Info"

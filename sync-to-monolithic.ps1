@@ -1,12 +1,14 @@
-param(
+﻿param(
     [switch]$DryRun
 )
 
 $modulesDir = Join-Path $PSScriptRoot "Modules"
 $utf8Bom = New-Object System.Text.UTF8Encoding $true
 
-# Derive monolithic filename from defaults.json (or fall back to reading version from 00-Initialization.ps1)
-$defaultsJsonPath = Join-Path $PSScriptRoot "defaults.json"
+# Derive monolithic filename from the base config (rackstack.config.json, legacy
+# defaults.json fallback), or fall back to reading version from 00-Initialization.ps1
+$defaultsJsonPath = Join-Path $PSScriptRoot "rackstack.config.json"
+if (-not (Test-Path $defaultsJsonPath)) { $defaultsJsonPath = Join-Path $PSScriptRoot "defaults.json" }
 $toolFullName = "RackStack"
 $scriptVersion = "1.0.0"
 if (Test-Path $defaultsJsonPath) {

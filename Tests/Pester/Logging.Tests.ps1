@@ -349,7 +349,7 @@ Describe 'Write-RackStackError' {
         { Write-RackStackError -Code 'RS-1001' } | Should -Not -Throw
     }
 
-    It 'renders RS-1002 (defaults.json parse error)' {
+    It 'renders RS-1002 (config file parse error)' {
         { Write-RackStackError -Code 'RS-1002' -Detail 'JSON line 14 col 5' } | Should -Not -Throw
     }
 

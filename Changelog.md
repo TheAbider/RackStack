@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.122.0
+
+Namespaced config-file naming. The base config is now `rackstack.config.json` and company overrides are `<company>.rackstack.config.json` -- names that stay unambiguous when the EXE runs from a shared or busy folder. Nothing breaks for existing setups: the legacy `defaults.json` and `<company>.defaults.json` names are still read whenever the new-named file is absent, and the tool keeps saving to whichever file it loaded.
+
+- **New config names, per-file preference.** `rackstack.config.json` is used when it exists; otherwise a legacy `defaults.json` is read. The same rule applies per company file, and when both names exist for the same company the new name wins. Company selection via `_companyDefaults` is unchanged, and multiple company files are still supported.
+- **New installs get the new names.** The first-run wizard and the in-tool defaults editor create `rackstack.config.json`; existing legacy files keep working in place with no migration step.
+- **The example template is now `rackstack.config.example.json`** (renamed from `defaults.example.json`) and ships in releases under that name.
+- **Menus and prompts show the actual loaded filename**, so a machine still running on `defaults.json` sees that name in the save picker and settings screens.
+- **Uninstall/self-destruct cleans up config files under both naming schemes**, including company override files, which it previously left behind.
+- **Docs, issue templates, and the config guide updated** to the new naming with the fallback behavior documented.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.121.15
 
 Final audit sweep — remaining fixes across the firewall/RDP, iSCSI, network-diagnostics, and session modules.

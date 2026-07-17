@@ -60,7 +60,7 @@ function Show-ServiceManager {
         Write-OutputColor "  ╚════════════════════════════════════════════════════════════════════════╝" -color "Info"
         Write-OutputColor "" -color "Info"
 
-        # Key services to monitor (configurable via defaults.json MonitoredServices,
+        # Key services to monitor (configurable via rackstack.config.json MonitoredServices,
         # unpacked by Import-Defaults into $script:MonitoredServices).
         $keyServices = if ($script:MonitoredServices) {
             $script:MonitoredServices

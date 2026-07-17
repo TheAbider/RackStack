@@ -15,7 +15,7 @@ The tool expects:
 
 ## Folder Structure
 
-All setups use the same layout. The `BaseURL` in `defaults.json` points to the root (e.g., `server-tools/`).
+All setups use the same layout. The `BaseURL` in `rackstack.config.json` points to the root (e.g., `server-tools/`).
 
 **Linux:**
 ```
@@ -74,9 +74,9 @@ C:\FileServer\server-tools\
 - **Enterprise Linux policy** -- [Rocky/Alma/RHEL](fileserver-rhel.md).
 - **Already in Azure/AWS** -- [Cloud Storage](fileserver-cloud.md) (Azure Blob native, S3 via CloudFront + index.json).
 
-## defaults.json Reference
+## rackstack.config.json Reference
 
-All setups end with the same `defaults.json` configuration:
+All setups end with the same `rackstack.config.json` configuration:
 
 ```json
 {
@@ -107,7 +107,7 @@ Drop files into the appropriate directory. The tool caches file listings for 10 
 ### Rotating service tokens
 
 1. Create a new token in Cloudflare Zero Trust
-2. Update `defaults.json` with the new `ClientId` / `ClientSecret`
+2. Update `rackstack.config.json` with the new `ClientId` / `ClientSecret`
 3. Delete the old token
 
 ## Setup Guides

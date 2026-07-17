@@ -7,7 +7,7 @@ $script:VMCredentialTimestamp = $null     # When credentials were stored
 $script:VMDeploymentSiteNumber = $null   # Site number (e.g., "123456")
 $script:VMDeploymentConnected = $false   # Connection status
 
-# Standard VM templates (generic built-ins; override or add more via CustomVMTemplates in defaults.json)
+# Standard VM templates (generic built-ins; override or add more via CustomVMTemplates in rackstack.config.json)
 $script:StandardVMTemplates = @{
     "DC" = @{
         FullName = "Domain Controller"
@@ -1051,7 +1051,7 @@ function New-VMConfiguration {
         }
     }
     else {
-        # Custom VM defaults (overridable via CustomVMDefaults in defaults.json)
+        # Custom VM defaults (overridable via CustomVMDefaults in rackstack.config.json)
         $cvd = $script:CustomVMDefaults
         $config = @{
             VMName = ""

@@ -237,7 +237,7 @@ Verify: `curl https://files.yourdomain.com/health` should return "OK" (if not ye
 4. **Duration**: Non-expiring (or set a rotation schedule)
 5. Copy the **Client ID** and **Client Secret** -- you won't see the secret again!
 
-## Configure defaults.json
+## Configure rackstack.config.json
 
 ```json
 {

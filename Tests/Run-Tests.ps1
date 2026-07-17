@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.121.15
+    Automated Test Runner for RackStack v1.122.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -97,8 +97,9 @@ $script:ModuleRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $modulesPath = Join-Path $script:ModuleRoot "Modules"
 $loaderPath = Join-Path $script:ModuleRoot "RackStack.ps1"
 
-# Derive monolithic path from defaults.json
-$_testDefaultsJson = Join-Path $script:ModuleRoot "defaults.json"
+# Derive monolithic path from the base config (rackstack.config.json, legacy defaults.json)
+$_testDefaultsJson = Join-Path $script:ModuleRoot "rackstack.config.json"
+if (-not (Test-Path $_testDefaultsJson)) { $_testDefaultsJson = Join-Path $script:ModuleRoot "defaults.json" }
 $_testToolFullName = "RackStack"
 $_testScriptVersion = "1.0.0"
 if (Test-Path $_testDefaultsJson) {
@@ -2498,25 +2499,27 @@ try {
     $script:AppConfigDir = $origConfigDir
 }
 
-# Test defaults.json ships alongside the tool (skip in CI / public repo where it's gitignored)
-$defaultsFilePath = Join-Path (Split-Path $PSScriptRoot) 'defaults.json'
+# Test the base config ships alongside the tool (rackstack.config.json preferred, legacy
+# defaults.json fallback; skip in CI / public repo where it's gitignored)
+$defaultsFilePath = Join-Path (Split-Path $PSScriptRoot) 'rackstack.config.json'
+if (-not (Test-Path $defaultsFilePath)) { $defaultsFilePath = Join-Path (Split-Path $PSScriptRoot) 'defaults.json' }
 if (Test-Path $defaultsFilePath) {
-    Write-TestResult "defaults.json file exists" $true "Path: $defaultsFilePath"
+    Write-TestResult "base config file exists" $true "Path: $defaultsFilePath"
     try {
         $shippedDefaults = Get-Content $defaultsFilePath -Raw | ConvertFrom-Json
-        Write-TestResult "defaults.json: valid JSON" $true
-        Write-TestResult "defaults.json: has Domain" ($null -ne $shippedDefaults.Domain)
-        Write-TestResult "defaults.json: has FileServer" ($null -ne $shippedDefaults.FileServer)
-        Write-TestResult "defaults.json: has iSCSISubnet" ($null -ne $shippedDefaults.iSCSISubnet)
-        Write-TestResult "defaults.json: has CustomKMSKeys" ($null -ne $shippedDefaults.CustomKMSKeys)
+        Write-TestResult "base config: valid JSON" $true
+        Write-TestResult "base config: has Domain" ($null -ne $shippedDefaults.Domain)
+        Write-TestResult "base config: has FileServer" ($null -ne $shippedDefaults.FileServer)
+        Write-TestResult "base config: has iSCSISubnet" ($null -ne $shippedDefaults.iSCSISubnet)
+        Write-TestResult "base config: has CustomKMSKeys" ($null -ne $shippedDefaults.CustomKMSKeys)
         $has2019 = $null -ne $shippedDefaults.CustomKMSKeys.'Windows Server 2019'
         $has2022 = $null -ne $shippedDefaults.CustomKMSKeys.'Windows Server 2022'
-        Write-TestResult "defaults.json: CustomKMSKeys has 2019+2022" ($has2019 -and $has2022) "2019=$has2019, 2022=$has2022"
+        Write-TestResult "base config: CustomKMSKeys has 2019+2022" ($has2019 -and $has2022) "2019=$has2019, 2022=$has2022"
     } catch {
-        Write-TestResult "defaults.json: valid JSON" $false $_.Exception.Message
+        Write-TestResult "base config: valid JSON" $false $_.Exception.Message
     }
 } else {
-    Write-TestResult "defaults.json file exists" -Skipped -Message "gitignored - not present in public repo"
+    Write-TestResult "base config file exists" -Skipped -Message "gitignored - not present in public repo"
 }
 
 # ============================================================================
@@ -2742,8 +2745,9 @@ try {
     Write-TestResult "Monolithic region name check" $false $_.Exception.Message
 }
 
-# --- 35d: defaults.json FileServer structure ---
-$defaultsFilePath2 = Join-Path (Split-Path $PSScriptRoot) 'defaults.json'
+# --- 35d: base config FileServer structure ---
+$defaultsFilePath2 = Join-Path (Split-Path $PSScriptRoot) 'rackstack.config.json'
+if (-not (Test-Path $defaultsFilePath2)) { $defaultsFilePath2 = Join-Path (Split-Path $PSScriptRoot) 'defaults.json' }
 if (Test-Path $defaultsFilePath2) {
     try {
         $defaults = Get-Content $defaultsFilePath2 -Raw | ConvertFrom-Json
@@ -2754,29 +2758,40 @@ if (Test-Path $defaultsFilePath2) {
         $hasAll = $hasAll -and ($ac.ISOsFolder -eq "ISOs")
         $hasAll = $hasAll -and ($ac.VHDsFolder -eq "VirtualHardDrives")
         $hasAll = $hasAll -and (($ac.AgentFolder -eq "Agents") -or ($ac.KaseyaFolder -eq "KaseyaAgents"))
-        Write-TestResult "defaults.json: FileServer has required keys" $hasAll
+        Write-TestResult "base config: FileServer has required keys" $hasAll
     } catch {
-        Write-TestResult "defaults.json: FileServer structure" $false $_.Exception.Message
+        Write-TestResult "base config: FileServer structure" $false $_.Exception.Message
     }
 } else {
-    Write-TestResult "defaults.json: FileServer structure" -Skipped -Message "defaults.json not present"
+    Write-TestResult "base config: FileServer structure" -Skipped -Message "base config not present"
 }
 
-# No credentials in script files - check that defaults.json values don't appear in code
+# No credentials in script files - check that base config values don't appear in code
 try {
     $credFound = @()
-    # Load actual credential values from defaults.json (if it exists) to verify they don't leak
-    $defaultsFile = Join-Path $script:ModuleRoot "defaults.json"
+    # Load actual credential values from EVERY base config present (both naming
+    # schemes - a legacy defaults.json can coexist with rackstack.config.json,
+    # and both files' values must be scanned) to verify they don't leak
     $credPatterns = @()
-    if (Test-Path $defaultsFile) {
-        $dj = Get-Content $defaultsFile -Raw | ConvertFrom-Json
-        if ($dj.FileServer.ClientId -and $dj.FileServer.ClientId.Length -gt 10) {
-            $credPatterns += $dj.FileServer.ClientId
-        }
-        if ($dj.FileServer.ClientSecret -and $dj.FileServer.ClientSecret.Length -gt 10) {
-            $credPatterns += $dj.FileServer.ClientSecret
+    foreach ($credCfgName in @("rackstack.config.json", "defaults.json")) {
+        $credCfgFile = Join-Path $script:ModuleRoot $credCfgName
+        if (Test-Path $credCfgFile) {
+            try {
+                $dj = Get-Content $credCfgFile -Raw | ConvertFrom-Json
+                if ($dj.FileServer.ClientId -and $dj.FileServer.ClientId.Length -gt 10) {
+                    $credPatterns += $dj.FileServer.ClientId
+                }
+                if ($dj.FileServer.ClientSecret -and $dj.FileServer.ClientSecret.Length -gt 10) {
+                    $credPatterns += $dj.FileServer.ClientSecret
+                }
+            } catch {
+                # A present-but-unparseable config must fail loudly, not silently
+                # degrade the value-based credential scan to the pattern scan.
+                Write-TestResult "Credential harvest: $credCfgName parses" $false $_.Exception.Message
+            }
         }
     }
+    $credPatterns = @($credPatterns | Sort-Object -Unique)
     if ($credPatterns.Count -gt 0) {
         foreach ($moduleFile in $moduleFiles) {
             $content = Get-Content $moduleFile.FullName -Raw
@@ -2787,7 +2802,7 @@ try {
         $pass = $credFound.Count -eq 0
         Write-TestResult "No hardcoded credentials in module files" $pass $(if (-not $pass) { $credFound -join '; ' } else { "Clean" })
     } else {
-        # No defaults.json on this host (public repo / CI without secrets). We can't
+        # No local config on this host (public repo / CI without secrets). We can't
         # scan for specific known values, but we CAN scan for likely-credential
         # *patterns* in the tracked source so the check isn't vacuous.
         $patternHits = @()
@@ -2799,7 +2814,7 @@ try {
             }
         }
         $pass = $patternHits.Count -eq 0
-        Write-TestResult "No hardcoded credentials in module files (pattern scan)" $pass $(if (-not $pass) { $patternHits -join '; ' } else { "Clean (no defaults.json — pattern scan only)" })
+        Write-TestResult "No hardcoded credentials in module files (pattern scan)" $pass $(if (-not $pass) { $patternHits -join '; ' } else { "Clean (no local config - pattern scan only)" })
     }
 } catch {
     Write-TestResult "Credential leak check" $false $_.Exception.Message
@@ -2821,7 +2836,7 @@ try {
             $credLeaks += "looks-like-credential pattern in monolithic"
         }
         $pass = $credLeaks.Count -eq 0
-        Write-TestResult "No hardcoded credentials in monolithic (pattern scan)" $pass $(if (-not $pass) { $credLeaks -join '; ' } else { "Clean (no defaults.json — pattern scan only)" })
+        Write-TestResult "No hardcoded credentials in monolithic (pattern scan)" $pass $(if (-not $pass) { $credLeaks -join '; ' } else { "Clean (no local config - pattern scan only)" })
     }
 } catch {
     Write-TestResult "Credential leak check (monolithic)" $false $_.Exception.Message
@@ -2841,7 +2856,7 @@ try {
 }
 
 Write-TestResult "FileServer: VHDsFolder defaults to 'VirtualHardDrives'" ($script:FileServer.VHDsFolder -eq "VirtualHardDrives")
-# AgentFolder may be overridden by KaseyaFolder remap from defaults.json
+# AgentFolder may be overridden by KaseyaFolder remap from the base config
 Write-TestResult "FileServer: AgentFolder is non-empty string" (-not [string]::IsNullOrWhiteSpace($script:FileServer.AgentFolder))
 # ClientId/ClientSecret may be populated by company defaults — check they're strings (empty or from company file)
 $clientIdIsString = $script:FileServer.ClientId -is [string]
@@ -4496,7 +4511,7 @@ try {
     Write-TestResult "README: mentions 78 modules" ($readmeContent -match '81 module')
     Write-TestResult "README: has batch mode section" ($readmeContent -match 'Batch Mode')
     Write-TestResult "README: has testing section" ($readmeContent -match 'Testing')
-    Write-TestResult "README: has defaults.json example" ($readmeContent -match 'defaults\.json')
+    Write-TestResult "README: has rackstack.config.json example" ($readmeContent -match 'rackstack\.config\.json')
 } catch {
     Write-TestResult "README: content" $false $_.Exception.Message
 }
@@ -5247,7 +5262,7 @@ try {
     Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
 
     # Verify SQL template removed after restore (only built-in + real defaults remain)
-    # SQL only exists if the real defaults.json defines it
+    # SQL only exists if the real base config defines it
 } catch {
     Write-TestResult "Custom VM Templates merge" $false $_.Exception.Message
     $script:DefaultsPath = $origDefaultsPath
@@ -5278,21 +5293,21 @@ try {
     Import-Defaults
 }
 
-# defaults.example.json has new sections
-$examplePath = Join-Path (Split-Path $PSScriptRoot) 'defaults.example.json'
+# rackstack.config.example.json has new sections
+$examplePath = Join-Path (Split-Path $PSScriptRoot) 'rackstack.config.example.json'
 if (Test-Path $examplePath) {
     try {
         $exampleData = Get-Content $examplePath -Raw | ConvertFrom-Json
-        Write-TestResult "defaults.example.json: has CustomVMTemplates" ($null -ne $exampleData.CustomVMTemplates)
-        Write-TestResult "defaults.example.json: has CustomVMDefaults" ($null -ne $exampleData.CustomVMDefaults)
-        Write-TestResult "defaults.example.json: CustomVMTemplates has FS example" ($null -ne $exampleData.CustomVMTemplates.FS)
-        Write-TestResult "defaults.example.json: CustomVMTemplates has SQL example" ($null -ne $exampleData.CustomVMTemplates.SQL)
-        Write-TestResult "defaults.example.json: CustomVMDefaults has vCPU" ($null -ne $exampleData.CustomVMDefaults.vCPU)
-        Write-TestResult "defaults.example.json: has VMNaming" ($null -ne $exampleData.VMNaming)
-        Write-TestResult "defaults.example.json: VMNaming has Pattern" ($null -ne $exampleData.VMNaming.Pattern)
-        Write-TestResult "defaults.example.json: CustomVMTemplates has APP example" ($null -ne $exampleData.CustomVMTemplates.APP)
+        Write-TestResult "rackstack.config.example.json: has CustomVMTemplates" ($null -ne $exampleData.CustomVMTemplates)
+        Write-TestResult "rackstack.config.example.json: has CustomVMDefaults" ($null -ne $exampleData.CustomVMDefaults)
+        Write-TestResult "rackstack.config.example.json: CustomVMTemplates has FS example" ($null -ne $exampleData.CustomVMTemplates.FS)
+        Write-TestResult "rackstack.config.example.json: CustomVMTemplates has SQL example" ($null -ne $exampleData.CustomVMTemplates.SQL)
+        Write-TestResult "rackstack.config.example.json: CustomVMDefaults has vCPU" ($null -ne $exampleData.CustomVMDefaults.vCPU)
+        Write-TestResult "rackstack.config.example.json: has VMNaming" ($null -ne $exampleData.VMNaming)
+        Write-TestResult "rackstack.config.example.json: VMNaming has Pattern" ($null -ne $exampleData.VMNaming.Pattern)
+        Write-TestResult "rackstack.config.example.json: CustomVMTemplates has APP example" ($null -ne $exampleData.CustomVMTemplates.APP)
     } catch {
-        Write-TestResult "defaults.example.json VM sections" $false $_.Exception.Message
+        Write-TestResult "rackstack.config.example.json VM sections" $false $_.Exception.Message
     }
 }
 
@@ -5893,7 +5908,7 @@ try {
         Write-TestResult "AgentInstaller has '$key' key" ($script:AgentInstaller.ContainsKey($key))
     }
 
-    # Default values (MSP generic when no defaults.json override)
+    # Default values (MSP generic when no config override)
     Write-TestResult "AgentInstaller: ToolName is string" ($script:AgentInstaller.ToolName -is [string])
     Write-TestResult "AgentInstaller: InstallPaths is array" ($script:AgentInstaller.InstallPaths -is [array])
     Write-TestResult "AgentInstaller: SuccessExitCodes is array" ($script:AgentInstaller.SuccessExitCodes -is [array])
@@ -6125,8 +6140,20 @@ try {
     # Cleanup targets config directory
     Write-TestResult "47-ExitCleanup: cleans up AppConfigDir" ($ecContent -match 'script:AppConfigDir')
 
-    # Searches for defaults.json in cleanup paths
-    Write-TestResult "47-ExitCleanup: targets defaults.json" ($ecContent -match 'defaults\.json')
+    # Searches for config files in cleanup paths (both naming schemes + company files)
+    Write-TestResult "47-ExitCleanup: targets rackstack.config.json" ($ecContent -match 'rackstack\.config\.json')
+    Write-TestResult "47-ExitCleanup: targets legacy defaults.json" ($ecContent -match '"defaults\.json"')
+    Write-TestResult "47-ExitCleanup: sweeps company config files" ($ecContent -match '\*\.rackstack\.config\.json')
+
+    # Company-config wildcard sweeps must stay gated to the tool's own home
+    # (shared-folder glob-deletes would hit other applications' config files),
+    # and the gates must match the literal product name too (package-manager
+    # install paths keep "rackstack" even when ToolName is rebranded).
+    Write-TestResult "47-ExitCleanup: module-root company sweep is tool-home gated" ($ecContent -match '\(\$script:ModuleRoot -like "\*\$toolName\*"\) -or \(\$script:ModuleRoot -like "\*RackStack\*"\)')
+    Write-TestResult "47-ExitCleanup: module-root gate requires this tool's modular layout" ($ecContent -match 'Join-Path \$script:ModuleRoot "Modules\\00-Initialization\.ps1"')
+    Write-TestResult "47-ExitCleanup: exe-adjacent company sweep is tool-home gated" ($ecContent -match '\(\$exeDir -like "\*\$toolName\*"\) -or \(\$exeDir -like "\*RackStack\*"\)')
+    Write-TestResult "47-ExitCleanup: cleans crash-leftover config .tmp files" ($ecContent -match 'rackstack\.config\.json\.tmp')
+    Write-TestResult "47-ExitCleanup: sweeps company config .tmp files" ($ecContent -match '\*\.defaults\.json\.tmp')
 
     # Uses scheduled task for post-reboot cleanup
     Write-TestResult "47-ExitCleanup: schedules cleanup task" ($ecContent -match 'Register-ScheduledTask')
@@ -6663,13 +6690,13 @@ try {
     $qolContent = Get-Content (Join-Path $modulesPath "55-QoLFeatures.ps1") -Raw
     Write-TestResult "55-QoLFeatures: FavoriteDispatch has Add Virtual NIC" ($qolContent -match '"Add Virtual NIC"')
 
-    # defaults.example.json has CustomVNICs
-    $defaultsExamplePath = Join-Path (Join-Path $PSScriptRoot "..") "defaults.example.json"
+    # rackstack.config.example.json has CustomVNICs
+    $defaultsExamplePath = Join-Path (Join-Path $PSScriptRoot "..") "rackstack.config.example.json"
     $defaultsContent = Get-Content $defaultsExamplePath -Raw
     # CustomVNICs was removed from defaults.example.json in v1.98.9 — the documented schema
     # was a lie (Import-Defaults never read it; the only consumer is batch_config.json's
     # separate schema). Test inverted to assert the lie is gone.
-    Write-TestResult "defaults.example.json: CustomVNICs schema lie removed" (-not ($defaultsContent -match '"CustomVNICs"'))
+    Write-TestResult "rackstack.config.example.json: CustomVNICs schema lie removed" (-not ($defaultsContent -match '"CustomVNICs"'))
 
 } catch {
     Write-TestResult "Custom vNIC Feature Tests" $false $_.Exception.Message
@@ -6897,14 +6924,14 @@ try {
     Write-TestResult "50-Entry: backward compat ConfigureiSCSI" ($entryContent -match 'ConfigureiSCSI')
     Write-TestResult "50-Entry: Initialize-StorageBackendBatch for non-iSCSI" ($entryContent -match 'Initialize-StorageBackendBatch')
 
-    # defaults.example.json: storage backend section
-    $examplePath = Join-Path $script:ModuleRoot "defaults.example.json"
+    # rackstack.config.example.json: storage backend section
+    $examplePath = Join-Path $script:ModuleRoot "rackstack.config.example.json"
     if (Test-Path $examplePath) {
         $exampleContent = Get-Content $examplePath -Raw
-        Write-TestResult "defaults.example.json: has StorageBackendType" ($exampleContent -match 'StorageBackendType')
-        Write-TestResult "defaults.example.json: has storage backend help" ($exampleContent -match '_StorageBackendType_help')
+        Write-TestResult "rackstack.config.example.json: has StorageBackendType" ($exampleContent -match 'StorageBackendType')
+        Write-TestResult "rackstack.config.example.json: has storage backend help" ($exampleContent -match '_StorageBackendType_help')
     } else {
-        Write-TestResult "defaults.example.json: exists" $false "File not found"
+        Write-TestResult "rackstack.config.example.json: exists" $false "File not found"
     }
 
     # RackStack.ps1 loader includes 62-HyperVReplica.ps1
@@ -7009,7 +7036,7 @@ try {
     $opsContent = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
     $iscsiContent = Get-Content (Join-Path $modulesPath "10-iSCSI.ps1") -Raw
     $batchContent = Get-Content (Join-Path $modulesPath "36-BatchConfig.ps1") -Raw
-    $exampleContent = Get-Content (Join-Path $script:ModuleRoot "defaults.example.json") -Raw
+    $exampleContent = Get-Content (Join-Path $script:ModuleRoot "rackstack.config.example.json") -Raw
 
     # Initialization
     Write-TestResult "00-Init: SANTargetPairings variable declared" ($initContent -match '\$script:SANTargetPairings')
@@ -7035,12 +7062,12 @@ try {
     # Batch template has SANTargetPairings
     Write-TestResult "36-BatchConfig: template has SANTargetPairings field" ($batchContent -match '"SANTargetPairings"')
 
-    # defaults.example.json documents SANTargetPairings
-    Write-TestResult "defaults.example.json: has SANTargetPairings section" ($exampleContent -match '"SANTargetPairings"')
-    Write-TestResult "defaults.example.json: has Pairs with A/B" ($exampleContent -match '"Pairs"[\s\S]*?"A".*?"B"')
-    Write-TestResult "defaults.example.json: has HostAssignments with HostMod" ($exampleContent -match '"HostAssignments"[\s\S]*?"HostMod"')
-    Write-TestResult "defaults.example.json: has CycleSize" ($exampleContent -match '"CycleSize":\s*4')
-    Write-TestResult "defaults.example.json: pairs use A0/B0 labeling" ($exampleContent -match '"ALabel":\s*"A0"')
+    # rackstack.config.example.json documents SANTargetPairings
+    Write-TestResult "rackstack.config.example.json: has SANTargetPairings section" ($exampleContent -match '"SANTargetPairings"')
+    Write-TestResult "rackstack.config.example.json: has Pairs with A/B" ($exampleContent -match '"Pairs"[\s\S]*?"A".*?"B"')
+    Write-TestResult "rackstack.config.example.json: has HostAssignments with HostMod" ($exampleContent -match '"HostAssignments"[\s\S]*?"HostMod"')
+    Write-TestResult "rackstack.config.example.json: has CycleSize" ($exampleContent -match '"CycleSize":\s*4')
+    Write-TestResult "rackstack.config.example.json: pairs use A0/B0 labeling" ($exampleContent -match '"ALabel":\s*"A0"')
 
     # Test Get-SANTargetsForHost default behavior still works
     $script:SANTargetPairings = $null
@@ -7757,7 +7784,7 @@ try {
     $aiContent2  = Get-Content "$modulesPath\57-AgentInstaller.ps1" -Raw
     $initContent2 = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
     $opsContent2 = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
-    $exampleJson = Get-Content (Join-Path (Split-Path $PSScriptRoot) 'defaults.example.json') -Raw
+    $exampleJson = Get-Content (Join-Path (Split-Path $PSScriptRoot) 'rackstack.config.example.json') -Raw
 
     # Integrity gate distinguishes recoverable "no sidecar" from genuine tamper
     Write-TestResult "39-FS: Test-FileIntegrity result carries a Reason field" ($fsContent2 -match 'Reason\s*=\s*\$null')
@@ -7779,7 +7806,7 @@ try {
     # Defaults: fail-closed out of the box, surfaced in the example config
     Write-TestResult "00-Init: AgentInstaller default RequireHash = true" ($initContent2 -match 'RequireHash\s*=\s*\$true')
     Write-TestResult "56-Ops: Import-Defaults reset includes RequireHash" ($opsContent2 -match 'RequireHash\s*=\s*\$true')
-    Write-TestResult "defaults.example.json: documents RequireHash" ($exampleJson -match '"RequireHash"')
+    Write-TestResult "rackstack.config.example.json: documents RequireHash" ($exampleJson -match '"RequireHash"')
 
 } catch {
     Write-TestResult "Agent Installer Hash-Verification Policy Tests" $false $_.Exception.Message
@@ -8035,8 +8062,13 @@ try {
     Write-TestResult "Company: CompanyDefaultsName variable declared" ($initContent -match '\$script:CompanyDefaultsName\s*=\s*\$null')
     Write-TestResult "Company: CompanyDefaultsPath variable declared" ($initContent -match '\$script:CompanyDefaultsPath\s*=\s*\$null')
 
-    # Get-CompanyDefaultsFiles: scans for *.defaults.json, excludes defaults.json and defaults.example.json
-    Write-TestResult "Company: Get-CompanyDefaultsFiles scans *.defaults.json" ($opsContent -match 'Get-ChildItem.*\*\.defaults\.json')
+    # Get-CompanyDefaultsFiles: scans *.rackstack.config.json plus legacy *.defaults.json;
+    # excludes the base and example configs under both naming schemes; dedupes per key
+    Write-TestResult "Company: Get-CompanyDefaultsFiles scans *.rackstack.config.json" ($opsContent -match 'Get-ChildItem.*\*\.rackstack\.config\.json')
+    Write-TestResult "Company: Get-CompanyDefaultsFiles scans legacy *.defaults.json" ($opsContent -match 'Get-ChildItem.*\*\.defaults\.json')
+    Write-TestResult "Company: Get-CompanyDefaultsFiles excludes rackstack.config.json" ($opsContent -match '\$f\.Name\s*-eq\s*"rackstack\.config\.json"')
+    Write-TestResult "Company: Get-CompanyDefaultsFiles excludes rackstack.config.example.json" ($opsContent -match '\$f\.Name\s*-eq\s*"rackstack\.config\.example\.json"')
+    Write-TestResult "Company: Get-CompanyDefaultsFiles dedupes per company key" ($opsContent -match 'companyPaths\.ContainsKey\(\$name\)')
     Write-TestResult "Company: Get-CompanyDefaultsFiles excludes defaults.json" ($opsContent -match '\$f\.Name\s*-eq\s*"defaults\.json"')
     Write-TestResult "Company: Get-CompanyDefaultsFiles excludes defaults.example.json" ($opsContent -match '\$f\.Name\s*-eq\s*"defaults\.example\.json"')
 
@@ -10081,7 +10113,7 @@ try {
     Write-TestResult "80-RDS: licensing Dry-Run apply no longer swallows write errors [1]" (-not ($rdsRaw -match "Name 'LicensingMode' -Value \`$mv -Type DWord -ErrorAction SilentlyContinue"))
     # [2]
     Write-TestResult "67-WSUS: tracks whether classifications were enabled [2]" (($wsusRaw -match '\$classificationsEnabled = \$false') -and ($wsusRaw -match '\$classificationsEnabled = \$true'))
-    Write-TestResult "67-WSUS: returns false when no classification enabled [2]" ($wsusRaw -match 'if \(-not \$classificationsEnabled\)[\s\S]{0,400}return \$false')
+    Write-TestResult "67-WSUS: returns false when no classification enabled [2]" ($wsusRaw -match 'if \(-not \$classificationsEnabled\)[\s\S]{0,450}return \$false')
     # [3]
     Write-TestResult "63-ScheduledTasks: never-run tasks are not flagged FAILED [3]" ($schRaw -match '\$lastResult -eq 0x00041300 -or \$lastResult -eq 0x00041303')
 }
@@ -10170,6 +10202,111 @@ try {
 }
 catch {
     Write-TestResult "Final-Sweep Hardening Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 203: NAMESPACED CONFIG FILES (v1.122.0)
+# ============================================================================
+# The base config is rackstack.config.json with legacy defaults.json fallback;
+# company overrides are <company>.rackstack.config.json with legacy
+# <company>.defaults.json fallback, deduped per company key (new name wins).
+# Resolution happens once at init (Get-RackStackConfigPath); saves target the
+# resolved (loaded) file so legacy setups keep writing to their legacy file.
+Write-SectionHeader "SECTION 203: NAMESPACED CONFIG FILES"
+
+try {
+    $initContent203 = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    $opsContent203 = Get-Content "$modulesPath\56-OperationsMenu.ps1" -Raw
+
+    # Structural: resolver exists and drives DefaultsPath
+    Write-TestResult "Config: Get-RackStackConfigPath function exists" ($initContent203 -match 'function\s+Get-RackStackConfigPath\b')
+    Write-TestResult "Config: resolver prefers rackstack.config.json" ($initContent203 -match 'Join-Path \$Root "rackstack\.config\.json"')
+    Write-TestResult "Config: resolver falls back to defaults.json" ($initContent203 -match 'Join-Path \$Root "defaults\.json"')
+    Write-TestResult "Config: DefaultsPath assigned via resolver" ($initContent203 -match '\$script:DefaultsPath\s*=\s*Get-RackStackConfigPath\s+-Root\s+\$script:ModuleRoot')
+
+    # Behavioral: resolution order in a sandbox
+    $cfgDir = Join-Path $env:TEMP "rackstack-test-cfgres-$(Get-Random)"
+    New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
+    try {
+        $resolved = Get-RackStackConfigPath -Root $cfgDir
+        Write-TestResult "Config: neither file -> new name for creation" ($resolved -eq (Join-Path $cfgDir "rackstack.config.json"))
+
+        Set-Content -LiteralPath (Join-Path $cfgDir "defaults.json") -Value '{}' -Encoding UTF8
+        $resolved = Get-RackStackConfigPath -Root $cfgDir
+        Write-TestResult "Config: legacy only -> legacy path" ($resolved -eq (Join-Path $cfgDir "defaults.json"))
+
+        Set-Content -LiteralPath (Join-Path $cfgDir "rackstack.config.json") -Value '{}' -Encoding UTF8
+        $resolved = Get-RackStackConfigPath -Root $cfgDir
+        Write-TestResult "Config: both files -> new name wins" ($resolved -eq (Join-Path $cfgDir "rackstack.config.json"))
+
+        Remove-Item -LiteralPath (Join-Path $cfgDir "defaults.json") -Force
+        $resolved = Get-RackStackConfigPath -Root $cfgDir
+        Write-TestResult "Config: new only -> new path" ($resolved -eq (Join-Path $cfgDir "rackstack.config.json"))
+    } finally {
+        Remove-Item -LiteralPath $cfgDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # Behavioral: company discovery under both naming schemes, deduped per key
+    $coDir = Join-Path $env:TEMP "rackstack-test-cfgco-$(Get-Random)"
+    New-Item -ItemType Directory -Path $coDir -Force | Out-Null
+    $origModuleRoot203 = $script:ModuleRoot
+    try {
+        Set-Content -LiteralPath (Join-Path $coDir "alpha.rackstack.config.json") -Value '{}' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $coDir "alpha.defaults.json") -Value '{}' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $coDir "beta.defaults.json") -Value '{}' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $coDir "gamma.rackstack.config.json") -Value '{}' -Encoding UTF8
+        # Base + example files must be excluded from company discovery
+        Set-Content -LiteralPath (Join-Path $coDir "rackstack.config.json") -Value '{}' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $coDir "rackstack.config.example.json") -Value '{}' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $coDir "defaults.json") -Value '{}' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $coDir "defaults.example.json") -Value '{}' -Encoding UTF8
+
+        $script:ModuleRoot = $coDir
+        $companies = @(Get-CompanyDefaultsFiles)
+        $script:ModuleRoot = $origModuleRoot203
+
+        Write-TestResult "Config: company discovery finds 3 companies" ($companies.Count -eq 3) "Found: $($companies.Count)"
+        $alpha = $companies | Where-Object { $_.Name -eq 'alpha' }
+        $beta = $companies | Where-Object { $_.Name -eq 'beta' }
+        $gamma = $companies | Where-Object { $_.Name -eq 'gamma' }
+        Write-TestResult "Config: company keys are bare names" ($null -ne $alpha -and $null -ne $beta -and $null -ne $gamma)
+        Write-TestResult "Config: new name wins when both exist" ($alpha.Path -like '*alpha.rackstack.config.json')
+        Write-TestResult "Config: legacy-only company still discovered" ($beta.Path -like '*beta.defaults.json')
+        Write-TestResult "Config: new-only company discovered" ($gamma.Path -like '*gamma.rackstack.config.json')
+    } finally {
+        $script:ModuleRoot = $origModuleRoot203
+        Remove-Item -LiteralPath $coDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # Structural: labels use the resolved filename, not a hard-coded one
+    Write-TestResult "Config: save picker label uses resolved leaf" ($opsContent203 -match '\$targetLabel\s*=\s*Split-Path\s+-Leaf\s+\$script:DefaultsPath')
+    Write-TestResult "Config: company save label uses resolved leaf" ($opsContent203 -match '\$targetLabel\s*=\s*Split-Path\s+-Leaf\s+\$script:CompanyDefaultsPath')
+
+    # Public-repo layout checks (the work mirror has its own .gitignore and CI;
+    # detect the public layout via dist/ and skip there, mirroring Section 174)
+    $isPublicLayout = Test-Path (Join-Path $script:ModuleRoot "dist\scoop\rackstack.json")
+    if ($isPublicLayout) {
+        $gitignore203 = Get-Content (Join-Path $script:ModuleRoot ".gitignore") -Raw
+        Write-TestResult "Config: .gitignore ignores rackstack.config.json" ($gitignore203 -match '(?m)^rackstack\.config\.json\s*$')
+        Write-TestResult "Config: .gitignore ignores *.rackstack.config.json" ($gitignore203 -match '(?m)^\*\.rackstack\.config\.json\s*$')
+        Write-TestResult "Config: .gitignore keeps legacy defaults.json ignored" ($gitignore203 -match '(?m)^defaults\.json\s*$')
+        Write-TestResult "Config: .gitignore keeps legacy *.defaults.json ignored" ($gitignore203 -match '(?m)^\*\.defaults\.json\s*$')
+        Write-TestResult "Config: .gitignore un-ignores the tracked example" ($gitignore203 -match '(?m)^!rackstack\.config\.example\.json\s*$')
+
+        Write-TestResult "Config: rackstack.config.example.json exists" (Test-Path (Join-Path $script:ModuleRoot "rackstack.config.example.json"))
+        Write-TestResult "Config: legacy defaults.example.json removed" (-not (Test-Path (Join-Path $script:ModuleRoot "defaults.example.json")))
+
+        # Release-only CI steps never run on PR CI, so pin the renamed asset here
+        $ciYml203 = Get-Content (Join-Path $script:ModuleRoot ".github\workflows\ci.yml") -Raw
+        Write-TestResult "Config: ci.yml hashes rackstack.config.example.json" ($ciYml203 -match "Name = 'rackstack\.config\.example\.json'")
+        Write-TestResult "Config: ci.yml uploads rackstack.config.example.json" ($ciYml203 -match '"rackstack\.config\.example\.json"')
+        Write-TestResult "Config: ci.yml has no stale defaults.example.json refs" (-not ($ciYml203 -match 'defaults\.example\.json'))
+    } else {
+        Write-TestResult "Config: public-layout gitignore/CI checks" -Skipped -Message "work-mirror layout - dist/ not present"
+    }
+}
+catch {
+    Write-TestResult "Namespaced Config Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
@@ -11252,7 +11389,7 @@ Write-TestResult "35-Utilities: task audit uses List<T> instead of array +=" ($u
 $htmlContent3 = Get-Content (Join-Path $modulesPath "54-HTMLReports.ps1") -Raw
 Write-TestResult "54-HTMLReports: snapshot loading uses List<T> instead of array +=" ($htmlContent3 -match 'snapshotList\s*=\s*\[System\.Collections\.Generic\.List')
 
-# v1.21.2: Atomic defaults.json write (temp file + move)
+# v1.21.2: Atomic config write (temp file + move)
 $opsContent2 = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
 Write-TestResult "56-OperationsMenu: Export-Defaults writes to temp file first" ($opsContent2 -match 'Export-Defaults[\s\S]*?DefaultsPath\)\.tmp')
 Write-TestResult "56-OperationsMenu: Export-Defaults moves temp to final path" ($opsContent2 -match 'Export-Defaults[\s\S]*?Move-Item.*tempPath.*DefaultsPath')
@@ -11312,15 +11449,15 @@ Write-TestResult "03-InputValidation: reports invalid characters" ($ivContent -m
 $hnContent = Get-Content (Join-Path $modulesPath "11-Hostname.ps1") -Raw
 Write-TestResult "11-Hostname: shows specific validation reason" ($hnContent -match 'Get-HostnameValidationError')
 
-# v1.21.2: First-run wizard saves minimal defaults.json when adopting company defaults
+# v1.21.2: First-run wizard saves a minimal base config when adopting company defaults
 $opsContent2 = Get-Content (Join-Path $modulesPath "56-OperationsMenu.ps1") -Raw
 Write-TestResult "56-OperationsMenu: wizard saves minimal defaults for company adoption" ($opsContent2 -match '\$minimalDefaults\s*=' -and $opsContent2 -match 'Do NOT use Export-Defaults here')
 
 # v1.21.2: Import-Defaults Tier 3 does deep merge for nested objects
 Write-TestResult "56-OperationsMenu: Tier 3 deep-merges nested objects" ($opsContent2 -match 'Deep-merge nested objects')
 
-# v1.21.2: Import-Defaults prompts for company defaults even when defaults.json exists without _companyDefaults
-Write-TestResult "56-OperationsMenu: prompts for company defaults when missing from existing defaults.json" ($opsContent2 -match 'companyDefaultsResolved')
+# v1.21.2: Import-Defaults prompts for company defaults even when a base config exists without _companyDefaults
+Write-TestResult "56-OperationsMenu: prompts for company defaults when missing from existing base config" ($opsContent2 -match 'companyDefaultsResolved')
 
 # ============================================================================
 # SECTION 144: FUNCTION PARITY (modular vs monolithic)
