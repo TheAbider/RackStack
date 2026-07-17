@@ -87,7 +87,7 @@ function Get-FileServerFiles {
 
     # Validate FileServer is configured
     if (-not (Test-FileServerConfigured)) {
-        Write-OutputColor "  FileServer not configured. Update settings in defaults.json." -color "Error"
+        Write-OutputColor "  FileServer not configured. Update settings in rackstack.config.json." -color "Error"
         return @()
     }
 
@@ -281,7 +281,7 @@ function Get-FileServerFile {
     if (-not (Test-FileServerConfigured)) {
         return @{
             Success = $false
-            Error = "FileServer not configured. Update the settings in defaults.json."
+            Error = "FileServer not configured. Update the settings in rackstack.config.json."
             FilePath = $null
         }
     }
@@ -640,7 +640,7 @@ function Get-FileServerFile {
             # show the error and delete so a tampered/unverifiable file never lingers on disk.
             if ($integrity.Reason -eq 'NoSidecar') {
                 # No server-published .sha256 sidecar. But if the CALLER supplied a locally-trusted
-                # reference hash (e.g. the AgentInstaller HashManifest configured in defaults.json),
+                # reference hash (e.g. the AgentInstaller HashManifest configured in rackstack.config.json),
                 # that hash is authoritative and independent of the server — enforce it HERE rather
                 # than deferring to a weak size-only trust-on-first-use prompt. This is the documented
                 # RMM primary path (unique per-site installers with no pre-published sidecar). A match

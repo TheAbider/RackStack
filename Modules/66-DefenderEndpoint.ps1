@@ -11,7 +11,7 @@
 # to handle — the tenant binding is inside the Microsoft-signed package.
 #
 # Config: $script:DefenderEndpoint (see 00-Initialization.ps1, overridable
-# via defaults.json "DefenderEndpoint").
+# via rackstack.config.json "DefenderEndpoint").
 
 # Registry locations MDE writes its onboarding state to.
 $script:MDEStatusKey = 'HKLM:\SOFTWARE\Microsoft\Windows Advanced Threat Protection\Status'
@@ -107,7 +107,7 @@ function Test-MDEScriptPath {
 function Invoke-DefenderEndpointOnboard {
     if (-not (Test-DefenderEndpointConfigured)) {
         Write-OutputColor "  Defender for Endpoint is not configured. Set OnboardingScriptPath" -color "Error"
-        Write-OutputColor "  in defaults.json (DefenderEndpoint) to the .cmd downloaded from" -color "Warning"
+        Write-OutputColor "  in rackstack.config.json (DefenderEndpoint) to the .cmd downloaded from" -color "Warning"
         Write-OutputColor "  security.microsoft.com > Settings > Endpoints > Onboarding." -color "Warning"
         return $false
     }
@@ -189,7 +189,7 @@ function Invoke-DefenderEndpointOnboard {
 function Invoke-DefenderEndpointOffboard {
     if ($null -eq $script:DefenderEndpoint -or [string]::IsNullOrWhiteSpace($script:DefenderEndpoint.OffboardingScriptPath)) {
         Write-OutputColor "  No offboarding script configured. Set OffboardingScriptPath in" -color "Error"
-        Write-OutputColor "  defaults.json (DefenderEndpoint). Offboarding packages expire ~30 days" -color "Warning"
+        Write-OutputColor "  rackstack.config.json (DefenderEndpoint). Offboarding packages expire ~30 days" -color "Warning"
         Write-OutputColor "  after generation — download a current one from the Defender portal." -color "Warning"
         return $false
     }
@@ -291,7 +291,7 @@ function Show-DefenderEndpointManagement {
         if ($status.OrgId) {
             Write-OutputColor "  │$("  Org ID:     $($status.OrgId)".PadRight(72))│" -color "Info"
         }
-        $cfg = if (Test-DefenderEndpointConfigured) { "configured" } else { "NOT configured (see defaults.json)" }
+        $cfg = if (Test-DefenderEndpointConfigured) { "configured" } else { "NOT configured (see rackstack.config.json)" }
         Write-OutputColor "  │$("  Config:     $cfg".PadRight(72))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"

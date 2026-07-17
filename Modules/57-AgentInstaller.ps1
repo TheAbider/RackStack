@@ -199,7 +199,7 @@ function ConvertFrom-AgentFilename {
 
     # Remove any environment / tier suffix (e.g. `name.staging.exe`, `name.workstations.exe`)
     # before the .exe extension so the site-number regex below sees the canonical filename.
-    # The accepted suffixes can be overridden via defaults.json AgentInstaller.SuffixesToStrip;
+    # The accepted suffixes can be overridden via rackstack.config.json AgentInstaller.SuffixesToStrip;
     # if unset, fall back to the two generic tokens. Site-specific suffixes do not belong here.
     $stripSuffixes = if ($script:AgentInstallerSuffixesToStrip) { $script:AgentInstallerSuffixesToStrip } else { @('staging', 'workstations') }
     $suffixPattern = '\.(' + (($stripSuffixes | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\.exe$'
@@ -530,7 +530,7 @@ function Install-SelectedAgent {
     # must never reach Start-Process as SYSTEM. Operators whose FileServer doesn't publish
     # per-agent .sha256 sidecars — common for RMM consoles (Kaseya, ConnectWise, Datto…)
     # that mint a unique installer per site — can set AgentInstaller.RequireHash = false in
-    # defaults.json to fall back to size-only verification, or publish a sidecar / supply an
+    # rackstack.config.json to fall back to size-only verification, or publish a sidecar / supply an
     # ExpectedHash per agent entry for full cryptographic verification.
     $requireHash = if ($script:AgentInstaller.ContainsKey('RequireHash')) { [bool]$script:AgentInstaller.RequireHash } else { $true }
 
@@ -951,11 +951,11 @@ function Install-Agent {
         }
         elseif (-not (Test-FileServerConfigured)) {
             Write-OutputColor "  FileServer is not configured. Set FileServer.BaseURL in" -color "Warning"
-            Write-OutputColor "  defaults.json or company defaults to enable agent downloads." -color "Warning"
+            Write-OutputColor "  rackstack.config.json or company defaults to enable agent downloads." -color "Warning"
         }
         elseif ($script:AgentInstaller.ToolName -eq "MSP") {
             Write-OutputColor "  Agent installer has not been customized. Set AgentInstaller.ToolName" -color "Warning"
-            Write-OutputColor "  in defaults.json or company defaults to enable this feature." -color "Warning"
+            Write-OutputColor "  in rackstack.config.json or company defaults to enable this feature." -color "Warning"
         }
         Write-OutputColor "" -color "Info"
         Write-PressEnter
@@ -1324,7 +1324,7 @@ function Install-Agent {
 # MULTI-AGENT SUPPORT (v1.8.0)
 # ============================================================================
 
-# Get all agent configs (primary + additional agents from defaults.json)
+# Get all agent configs (primary + additional agents from rackstack.config.json)
 function Get-AllAgentConfigs {
     $configs = @()
 
@@ -1341,7 +1341,7 @@ function Get-AllAgentConfigs {
         IsPrimary = $true
     }
 
-    # Additional agents from defaults.json
+    # Additional agents from rackstack.config.json
     if ($script:AdditionalAgents -and $script:AdditionalAgents.Count -gt 0) {
         foreach ($agent in $script:AdditionalAgents) {
             $configs += @{

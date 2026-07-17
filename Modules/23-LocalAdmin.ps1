@@ -42,7 +42,7 @@ function Add-LocalAdminAccount {
     if ([string]::IsNullOrWhiteSpace($accountName)) { $accountName = $localadminaccountname }
     if ([string]::IsNullOrWhiteSpace($accountName)) {
         Write-OutputColor "  Configuration error: localadminaccountname is not set." -color "Error"
-        Write-OutputColor "  Set 'LocalAdminAccountName' in defaults.json and restart $script:ToolFullName." -color "Warning"
+        Write-OutputColor "  Set 'LocalAdminAccountName' in rackstack.config.json and restart $script:ToolFullName." -color "Warning"
         Write-PressEnter
         return
     }

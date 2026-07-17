@@ -195,7 +195,7 @@ function Assert-Elevation {
         # Check for session to restore (v2.8.0)
         $null = Restore-SessionState
 
-        # Load environment defaults and custom licenses from defaults.json
+        # Load environment defaults and custom licenses from rackstack.config.json
         Import-Defaults
 
         # Silent update check (non-blocking, 5s timeout)
@@ -394,9 +394,9 @@ function Assert-Elevation {
                 @{ Action = 'Dashboard';        Description = 'Serve HealthDashboard as HTML + JSON via HttpListener (default 127.0.0.1:8080)' }
                 @{ Action = 'History';          Description = 'Show the last N CLI invocations (rolling log of 50 entries)' }
                 @{ Action = 'Replay';           Description = 'Re-run a prior invocation by index (1 = most recent; see History)' }
-                @{ Action = 'AzureArcEnroll';   Description = 'Onboard this server to Azure Arc (service-principal auth; config from defaults.json AzureArc)' }
-                @{ Action = 'DefenderEndpointOnboard'; Description = 'Onboard this server to Microsoft Defender for Endpoint (runs the onboarding .cmd from defaults.json DefenderEndpoint)' }
-                @{ Action = 'WSUSSetup';        Description = 'Install + post-install + default-configure the WSUS update server (config from defaults.json WSUS)' }
+                @{ Action = 'AzureArcEnroll';   Description = 'Onboard this server to Azure Arc (service-principal auth; config from rackstack.config.json AzureArc)' }
+                @{ Action = 'DefenderEndpointOnboard'; Description = 'Onboard this server to Microsoft Defender for Endpoint (runs the onboarding .cmd from rackstack.config.json DefenderEndpoint)' }
+                @{ Action = 'WSUSSetup';        Description = 'Install + post-install + default-configure the WSUS update server (config from rackstack.config.json WSUS)' }
                 @{ Action = 'ADCSSetup';        Description = 'Install the AD CS role (CA configuration is interactive-only — it needs a typed confirmation)' }
                 @{ Action = 'StorageMigrationSetup'; Description = 'Install the Storage Migration Service orchestrator role (+proxy if StorageMigration.InstallProxy is set)' }
                 @{ Action = 'GPOBackup';        Description = 'Back up all GPOs (+reports +manifest) to -Config <folder> (default: <TempPath>\GPOBackups)' }
@@ -1195,8 +1195,8 @@ function Invoke-CLIAction {
             $taskName = "$($script:ToolName)_UpdateCheck"
             $outputJsonPath = Join-Path $script:TempPath "$($script:ToolName)_UpdateCheck.json"
             # Also validate $outputJsonPath — it's built from $script:TempPath which can be
-            # influenced via defaults.json (post-v1.98.25 we strict-validate ToolName but not
-            # TempPath; an attacker who's already an admin and can edit defaults.json could
+            # influenced via rackstack.config.json (post-v1.98.25 we strict-validate ToolName but not
+            # TempPath; an attacker who's already an admin and can edit rackstack.config.json could
             # poison this path with quote characters to break out of the cmd arg).
             if ($outputJsonPath -match '["`&|<>^%()]' -or $outputJsonPath -match '[\x00-\x1F]') {
                 Write-OutputColor "  ScheduleUpdateCheck: output path '$outputJsonPath' contains unsafe characters." -color "Error"
@@ -1780,7 +1780,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
                 $checks += @{ Name = 'ModuleCount'; Passed = $true; Detail = 'Skipped (monolithic/EXE mode)' }
             }
 
-            # Check 5: defaults.json validity — parses if present, missing is acceptable
+            # Check 5: base config (rackstack.config.json, legacy defaults.json) validity - parses if present, missing is acceptable
             $defOk = $true
             $defDetail = 'Not present (optional)'
             if ($script:DefaultsPath -and (Test-Path -LiteralPath $script:DefaultsPath)) {
@@ -1864,9 +1864,9 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
         }
         'AzureArcEnroll' {
             # Onboard this server to Azure Arc. Config (tenant, subscription,
-            # resource group, service principal) comes from defaults.json
+            # resource group, service principal) comes from rackstack.config.json
             # "AzureArc"; the SP secret comes from $env:RACKSTACK_ARC_SECRET
-            # or defaults.json. Exit 0 on a confirmed Connected state, 1 otherwise.
+            # or rackstack.config.json. Exit 0 on a confirmed Connected state, 1 otherwise.
             $arcOk = Invoke-AzureArcOnboard
             if ($script:CLIOutputFormat -eq 'JSON') {
                 $arcStatus = Get-AzureArcStatus
@@ -1888,7 +1888,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
         }
         'DefenderEndpointOnboard' {
             # Onboard this server to Microsoft Defender for Endpoint by running
-            # the operator-supplied onboarding .cmd (path from defaults.json
+            # the operator-supplied onboarding .cmd (path from rackstack.config.json
             # "DefenderEndpoint"). Exit 0 on a confirmed onboarded state, 1 otherwise.
             $mdeOk = Invoke-DefenderEndpointOnboard
             if ($script:CLIOutputFormat -eq 'JSON') {
@@ -1911,7 +1911,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
         'WSUSSetup' {
             # Stand up a WSUS update server end-to-end: install the role, run
             # post-install, and apply the default configuration. Config from
-            # defaults.json "WSUS". Exit 0 only if the server is post-installed.
+            # rackstack.config.json "WSUS". Exit 0 only if the server is post-installed.
             Write-OutputColor "  Setting up WSUS update server..." -color "Info"
             $wsusRole = Install-WSUSRole
             $wsusPost = $false
@@ -1971,7 +1971,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
         }
         'StorageMigrationSetup' {
             # Install the Storage Migration Service orchestrator role, and the
-            # proxy too if defaults.json StorageMigration.InstallProxy is set.
+            # proxy too if rackstack.config.json StorageMigration.InstallProxy is set.
             # Migration jobs themselves run interactively via Windows Admin
             # Center. Exit 0 if the orchestrator role is installed.
             Write-OutputColor "  Installing Storage Migration Service..." -color "Info"
@@ -3302,7 +3302,7 @@ footer{text-align:center;color:#999;font-size:12px;padding:16px}
             Write-OutputColor "  Auditing key service status..." -color "Info"
             Write-OutputColor "" -color "Info"
 
-            # Configurable service list (from defaults.json MonitoredServices, unpacked
+            # Configurable service list (from rackstack.config.json MonitoredServices, unpacked
             # by Import-Defaults into $script:MonitoredServices) or built-in fallback.
             $auditServices = if ($script:MonitoredServices) {
                 $script:MonitoredServices
@@ -13123,7 +13123,7 @@ function Start-BatchMode {
     # Start transcript for batch mode too
     $null = Start-ScriptTranscript
 
-    # Load environment defaults and custom licenses from defaults.json (no wizard in batch mode)
+    # Load environment defaults and custom licenses from rackstack.config.json (no wizard in batch mode)
     Import-Defaults
 
     Write-OutputColor "" -color "Info"
@@ -13955,7 +13955,7 @@ function Start-BatchMode {
         Write-OutputColor "  [$stepNum/$totalSteps] Joining domain '$($Config.DomainName)'..." -color "Info"
         # Validate the supplied DomainName before invoking Add-Computer. The DC-promote
         # path already calls Test-ValidDomainName; this batch step was missing the same
-        # gate, so a malformed value in defaults.json reached Add-Computer with a
+        # gate, so a malformed value in rackstack.config.json reached Add-Computer with a
         # generic failure instead of a clear "bad domain name" error.
         if (-not (Test-ValidDomainName -DomainName $Config.DomainName)) {
             Write-OutputColor "           ERROR: '$($Config.DomainName)' is not a valid domain name. Skipping join." -color "Error"

@@ -721,7 +721,7 @@ function Show-SysprepGuide {
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("  3. Upload to the FileServer VHDs folder:".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("     - Include the OS version year in the filename (e.g. 2025)".PadRight(72))│" -color "Info"
-    Write-OutputColor "  │$("     - Ensure FileServer is configured in defaults.json".PadRight(72))│" -color "Info"
+    Write-OutputColor "  │$("     - Ensure FileServer is configured in rackstack.config.json".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$("     - The script discovers files automatically from the server".PadRight(72))│" -color "Info"
     Write-OutputColor "  │$(' '.PadRight(72))│" -color "Info"
     Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"

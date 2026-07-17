@@ -15,7 +15,7 @@
 # therefore requires a typed confirmation.
 #
 # Config: $script:ADCS (see 00-Initialization.ps1, overridable via
-# defaults.json "ADCS").
+# rackstack.config.json "ADCS").
 
 # Returns $true if a CA common name is configured.
 function Test-ADCSConfigured {
@@ -144,11 +144,11 @@ function Install-ADCSCertificationAuthority {
         return $true
     }
     if (-not (Test-ADCSConfigured)) {
-        Write-OutputColor "  Set ADCS.CACommonName in defaults.json before configuring the CA." -color "Error"
+        Write-OutputColor "  Set ADCS.CACommonName in rackstack.config.json before configuring the CA." -color "Error"
         return $false
     }
 
-    # Trim the CN so a stray leading/trailing space in defaults.json does not
+    # Trim the CN so a stray leading/trailing space in rackstack.config.json does not
     # become part of a decade-lived certificate subject (and so the typed
     # confirmation below compares against a clean value).
     $caName    = ([string]$script:ADCS.CACommonName).Trim()
@@ -192,7 +192,7 @@ function Install-ADCSCertificationAuthority {
         try { $isDomainJoined = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).PartOfDomain } catch { }
         if (-not $isDomainJoined) {
             Write-OutputColor "  EnterpriseRootCA requires the machine to be domain-joined." -color "Error"
-            Write-OutputColor "  Join the domain first, or use 'StandaloneRootCA' in defaults.json." -color "Warning"
+            Write-OutputColor "  Join the domain first, or use 'StandaloneRootCA' in rackstack.config.json." -color "Warning"
             return $false
         }
     }
@@ -299,7 +299,7 @@ function Show-ADCSManagement {
             Write-OutputColor "  │$("  Type:       $($status.CAType)".PadRight(72))│" -color "Info"
             Write-OutputColor "  │$("  CertSvc:    $($status.ServiceStatus)".PadRight(72))│" -color "Info"
         }
-        $cfg = if (Test-ADCSConfigured) { "configured" } else { "NOT configured (see defaults.json)" }
+        $cfg = if (Test-ADCSConfigured) { "configured" } else { "NOT configured (see rackstack.config.json)" }
         Write-OutputColor "  │$("  Settings:   $cfg".PadRight(72))│" -color "Info"
         Write-OutputColor "  └────────────────────────────────────────────────────────────────────────┘" -color "Info"
         Write-OutputColor "" -color "Info"

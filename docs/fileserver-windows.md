@@ -227,7 +227,7 @@ New-IISSiteBinding -Name "FileServer" -BindingInformation "*:443:" -Protocol htt
 
 > **Important:** With direct HTTPS (no Cloudflare), you won't have Cloudflare Access service token auth. You'll need another auth mechanism or restrict access by IP/VPN. For the simplest setup, combine this with [Tailscale](fileserver-tailscale.md).
 
-## Configure defaults.json
+## Configure rackstack.config.json
 
 ```json
 {

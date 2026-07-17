@@ -42,7 +42,7 @@ body:
         - Hyper-V (VM deployment, replica, checkpoints)
         - Clustering (failover, quorum)
         - Active Directory / Identity
-        - Configuration (defaults.json, batch mode)
+        - Configuration (rackstack.config.json, batch mode)
         - CLI / Headless surface
         - Health / Monitoring / Reports
         - Security hardening

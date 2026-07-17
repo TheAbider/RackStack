@@ -91,7 +91,7 @@ All storage paths are dynamically generated based on the selected drive letter. 
 | `VHDCachePath` | `E:\Virtual Machines\_BaseImages` |
 | `HostISOPath` | `E:\ISOs` |
 
-You can also pre-configure storage paths in `defaults.json`:
+You can also pre-configure storage paths in `rackstack.config.json`:
 
 ```json
 "StoragePaths": {
@@ -137,7 +137,7 @@ RackStack manages sysprepped VHD templates used for VM deployment. VHDs are cach
 
 ### File Server Configuration
 
-VHD downloads require a file server configured in `defaults.json`:
+VHD downloads require a file server configured in `rackstack.config.json`:
 
 ```json
 "FileServer": {
@@ -188,7 +188,7 @@ These Hyper-V processes are excluded from Defender scanning:
 
 ### Static Exclusions
 
-Additional static paths can be configured in `defaults.json`:
+Additional static paths can be configured in `rackstack.config.json`:
 
 ```json
 "DefenderExclusionPaths": [
@@ -199,7 +199,7 @@ Additional static paths can be configured in `defaults.json`:
 ]
 ```
 
-If `DefenderCommonVMPaths` is specified in `defaults.json`, those paths are used as-is and dynamic path generation is skipped.
+If `DefenderCommonVMPaths` is specified in `rackstack.config.json`, those paths are used as-is and dynamic path generation is skipped.
 
 ### Interactive Defender Management
 

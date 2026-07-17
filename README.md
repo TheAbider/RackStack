@@ -28,7 +28,7 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="5366 structural tests" src="https://img.shields.io/badge/structural%20tests-5366-brightgreen">
+  <img alt="5402 structural tests" src="https://img.shields.io/badge/structural%20tests-5402-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
@@ -53,7 +53,7 @@ Built for MSPs, sysadmins, and infrastructure teams who build servers repeatedly
 
 **Storage Backends** -- Pluggable storage backend (iSCSI, Fibre Channel, Storage Spaces Direct, SMB3, NVMe-oF, Local); auto-detection from system state; per-backend management menus; generalized MPIO dispatching; all batch mode steps adapt to the selected backend
 
-**Hyper-V** -- Role install, configurable VM templates (override specs or add new via `defaults.json`), batch queue deployment, VHD management, offline registry injection, Secure Boot Gen 2, cluster CSV support
+**Hyper-V** -- Role install, configurable VM templates (override specs or add new via `rackstack.config.json`), batch queue deployment, VHD management, offline registry injection, Secure Boot Gen 2, cluster CSV support
 
 **Server Roles** -- Failover Clustering, MPIO, BitLocker, Deduplication, Storage Replica, 14 disk operations
 
@@ -120,7 +120,7 @@ Grab `RackStack.exe` from the [latest release](https://github.com/TheAbider/Rack
 
 Every release artifact is signed with [Sigstore](https://www.sigstore.dev/) cosign (keyless) and carries [SLSA Level 3](https://slsa.dev/) build provenance; each release page lists SHA-256 hashes and the verification commands. The EXE is not Authenticode-signed, so Windows SmartScreen may show an "Unknown publisher" prompt on first run.
 
-On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `defaults.json` next to the exe. To pre-configure, download `defaults.example.json` from the release, rename it to `defaults.json`, fill in your values, and place it alongside the exe.
+On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `rackstack.config.json` next to the exe. To pre-configure, download `rackstack.config.example.json` from the release, rename it to `rackstack.config.json`, fill in your values, and place it alongside the exe. A legacy `defaults.json` from an earlier version is still read automatically when no `rackstack.config.json` exists -- no migration needed.
 
 <!--
 <p align="center">
@@ -128,7 +128,7 @@ On first launch, a setup wizard walks you through configuring your environment (
 </p>
 -->
 
-The exe auto-checks for updates from GitHub releases. Your `defaults.json` is never overwritten by updates.
+The exe auto-checks for updates from GitHub releases. Your `rackstack.config.json` (or legacy `defaults.json`) is never overwritten by updates.
 
 ### From Source (Development)
 
@@ -136,7 +136,7 @@ The exe auto-checks for updates from GitHub releases. Your `defaults.json` is ne
 git clone https://github.com/TheAbider/RackStack.git
 cd RackStack
 
-# Run it (requires Administrator) -- first-run wizard creates defaults.json
+# Run it (requires Administrator) -- first-run wizard creates rackstack.config.json
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\RackStack.ps1
 ```
@@ -187,7 +187,7 @@ In-depth guides live in [`docs/`](docs/):
 
 ## Configuration
 
-Copy `defaults.example.json` to `defaults.json` and customize. The example file has every configurable field with comments — here's a quick-start subset:
+Copy `rackstack.config.example.json` to `rackstack.config.json` and customize. The example file has every configurable field with comments - here's a quick-start subset. A legacy `defaults.json` is still read when no `rackstack.config.json` exists, and the same per-file preference applies to company overrides: `contoso.rackstack.config.json` wins over a legacy `contoso.defaults.json`.
 
 ```json
 {
@@ -337,7 +337,7 @@ Copy `defaults.example.json` to `defaults.json` and customize. The example file 
 | `Timeouts` | Override per-operation timeouts (CIM queries, DNS resolves, network probes); seconds |
 | `CLIDefaults` | Per-action defaults for headless invocations (e.g. default `Tier` for `Cleanup`, default `Config` path) |
 
-> `defaults.json` is gitignored -- your secrets never leave your machine.
+> `rackstack.config.json` (and the legacy `defaults.json`) are gitignored -- your secrets never leave your machine.
 
 ## Batch Mode
 
@@ -475,23 +475,23 @@ Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JS
 
 ```
 RackStack/
-├── RackStack.ps1               # Modular loader -- dot-sources 81 modules (dev use)
-├── RackStack v{version}.ps1    # Monolithic build -- all modules in one file (deploy/compile)
-├── RackStack.exe               # Compiled from the monolithic .ps1 via ps2exe
-├── defaults.json               # Your environment config (gitignored)
-├── defaults.example.json       # Config template with examples
-├── sync-to-monolithic.ps1      # Builds monolithic from Header.ps1 + Modules/
+├── RackStack.ps1                  # Modular loader -- dot-sources 81 modules (dev use)
+├── RackStack v{version}.ps1       # Monolithic build -- all modules in one file (deploy/compile)
+├── RackStack.exe                  # Compiled from the monolithic .ps1 via ps2exe
+├── rackstack.config.json          # Your environment config (gitignored; legacy defaults.json still read)
+├── rackstack.config.example.json  # Config template with examples
+├── sync-to-monolithic.ps1         # Builds monolithic from Header.ps1 + Modules/
 ├── Modules/
-│   ├── 00-Initialization.ps1   # Constants, variables, config loading
-│   ├── 01-Console.ps1          # Console window management
-│   ├── ...                     # 75 more modules
+│   ├── 00-Initialization.ps1      # Constants, variables, config loading
+│   ├── 01-Console.ps1             # Console window management
+│   ├── ...                        # 75 more modules
 │   └── 77-WindowsAdminCenter.ps1
 ├── Tests/
-│   ├── Run-Tests.ps1           # 5,048 automated tests
-│   ├── Validate-Release.ps1    # Pre-release validation suite
+│   ├── Run-Tests.ps1              # Automated structural test suite (count in badge above)
+│   ├── Validate-Release.ps1       # Pre-release validation suite
 │   └── ...
 └── docs/
-    └── FileServer-Setup.md     # Set up your own ISO/VHD file server
+    └── FileServer-Setup.md        # Set up your own ISO/VHD file server
 ```
 
 ### Module Architecture
@@ -525,7 +525,7 @@ RackStack/
 ## Testing
 
 ```powershell
-# Full test suite (5,048 tests, ~4 minutes)
+# Full structural test suite (count in the badge above, ~6 minutes)
 powershell -ExecutionPolicy Bypass -File Tests\Run-Tests.ps1
 
 # PSScriptAnalyzer (0 errors on all 81 modules + monolithic)

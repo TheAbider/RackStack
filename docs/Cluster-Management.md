@@ -182,7 +182,7 @@ Several RackStack features are cluster-aware and adapt their behavior when runni
 
 ### Storage Path Configuration
 
-Configure cluster paths in `defaults.json`:
+Configure cluster paths in `rackstack.config.json`:
 
 ```json
 "StoragePaths": {

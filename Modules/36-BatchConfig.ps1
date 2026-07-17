@@ -141,7 +141,7 @@ function New-BatchConfigTemplate {
     "_iSCSIHostNumber_Help": "Host number for iSCSI IP calculation (1-24). null = auto-detect from hostname.",
 
     "SANTargetPairings": null,
-    "_SANTargetPairings_Help": "Custom SAN target pair definitions. Overrides default A0/B1 cycling pattern. Set to null for defaults. See defaults.example.json for full example with Pairs, HostAssignments, and CycleSize.",
+    "_SANTargetPairings_Help": "Custom SAN target pair definitions. Overrides default A0/B1 cycling pattern. Set to null for defaults. See rackstack.config.example.json for full example with Pairs, HostAssignments, and CycleSize.",
 
     "SMB3SharePath": null,
     "_SMB3SharePath_Help": "UNC path to SMB3 share (e.g., '\\\\\\\\server\\\\share'). Only used when StorageBackendType=SMB3.",

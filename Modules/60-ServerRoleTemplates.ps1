@@ -85,10 +85,10 @@ $script:ServerRoleTemplates = @{
     }
 }
 
-# Custom role templates (loaded from defaults.json or user-defined)
+# Custom role templates (loaded from rackstack.config.json or user-defined)
 $script:CustomRoleTemplates = @{}
 
-# Validate a user-provided custom role template from defaults.json
+# Validate a user-provided custom role template from rackstack.config.json
 function Test-CustomRoleTemplate {
     param(
         [Parameter(Mandatory=$true)]
@@ -126,7 +126,7 @@ function Test-CustomRoleTemplate {
     }
 
     # Validate PostInstall. Must be a single token (no spaces / no args) that starts
-    # with an approved setup verb so a malicious defaults.json can't smuggle an
+    # with an approved setup verb so a malicious rackstack.config.json can't smuggle an
     # arbitrary cmdlet through `& $template.PostInstall`.
     if ($null -ne $Template.PostInstall) {
         if ($Template.PostInstall -isnot [string]) {

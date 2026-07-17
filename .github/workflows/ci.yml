@@ -184,7 +184,7 @@ jobs:
           $assets = @(
             @{ Name = 'RackStack.exe';          Path = 'builds\RackStack.exe' }
             @{ Name = "RackStack v$ver.ps1";    Path = "builds\RackStack v$ver.ps1" }
-            @{ Name = 'defaults.example.json';  Path = 'defaults.example.json' }
+            @{ Name = 'rackstack.config.example.json';  Path = 'rackstack.config.example.json' }
           )
           $lines = foreach ($a in $assets) {
             $h = (Get-FileHash -LiteralPath $a.Path -Algorithm SHA256).Hash.ToLower()
@@ -371,7 +371,7 @@ jobs:
             $assetArgs = @(
               "builds\RackStack.exe"
               "builds\RackStack v$ver.ps1"
-              "defaults.example.json"
+              "rackstack.config.example.json"
               'release-hashes.txt'
             )
             $sbomPath = "builds\RackStack-$ver-sbom.cyclonedx.json"

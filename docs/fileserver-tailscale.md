@@ -174,7 +174,7 @@ ping 100.64.0.5
 ping fileserver.tail1234.ts.net
 ```
 
-## Configure defaults.json
+## Configure rackstack.config.json
 
 Use the Tailscale IP or MagicDNS hostname. No auth headers needed -- Tailscale handles identity and encryption:
 
@@ -262,7 +262,7 @@ AllowedIPs = 10.0.0.0/24
 PersistentKeepalive = 25
 ```
 
-Then point `defaults.json` at the WireGuard IP:
+Then point `rackstack.config.json` at the WireGuard IP:
 
 ```json
 {

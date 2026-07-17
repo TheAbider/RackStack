@@ -164,7 +164,7 @@ function Write-CenteredOutput {
 $script:ErrorCodes = @{
     # Core / System (1000-1999)
     "RS-1001" = @{ Message = "Script requires administrative privileges"; Category = "Core" }
-    "RS-1002" = @{ Message = "defaults.json parse error"; Category = "Core" }
+    "RS-1002" = @{ Message = "config file parse error"; Category = "Core" }
     "RS-1003" = @{ Message = "Module load failure"; Category = "Core" }
     "RS-1004" = @{ Message = "PowerShell version unsupported"; Category = "Core" }
     "RS-1005" = @{ Message = "Transcript start failed"; Category = "Core" }

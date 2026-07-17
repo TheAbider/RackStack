@@ -9,7 +9,7 @@
   "bin": "RackStack.exe",
   "notes": [
     "RackStack requires Administrator privileges and auto-elevates when launched.",
-    "First-run wizard creates defaults.json next to the EXE under the scoop shims dir.",
+    "First-run wizard creates rackstack.config.json next to the EXE under the scoop shims dir.",
     "Releases are cosign-signed (Sigstore) — verify with `gh attestation verify RackStack.exe --owner TheAbider`."
   ],
   "checkver": {

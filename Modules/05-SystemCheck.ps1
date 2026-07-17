@@ -434,7 +434,7 @@ function Test-AllConnectivity {
     }
 
     # DNS resolution test. The target is configurable via $script:NetworkTestDnsTarget
-    # (defaults.json key NetworkTestDnsTarget) so air-gapped / restricted environments that
+    # (rackstack.config.json key NetworkTestDnsTarget) so air-gapped / restricted environments that
     # block public hostnames but allow internal DNS aren't forced into a false-negative.
     # Default falls back to a public name for the common case.
     $dnsTarget = if ($script:NetworkTestDnsTarget) { $script:NetworkTestDnsTarget } else { "google.com" }

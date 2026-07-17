@@ -131,7 +131,7 @@ If you plan to use pre-installed OS images:
 
 1. Enter a VM prefix (e.g., VM, APP, TEST).
 2. Configure name, OS method, CPU, memory, disks, and NICs through guided prompts.
-3. Custom VMs use defaults from `defaults.json` if configured (`CustomVMDefaults` section), otherwise: 4 vCPU, 8 GB dynamic memory, 100 GB fixed OS disk.
+3. Custom VMs use defaults from `rackstack.config.json` if configured (`CustomVMDefaults` section), otherwise: 4 vCPU, 8 GB dynamic memory, 100 GB fixed OS disk.
 4. Review and add to queue.
 
 ### Editing Queued VMs
@@ -206,13 +206,13 @@ RackStack ships with three generic built-in templates:
 | 2 | File Server (FS) | Windows | 4 | 8 GB Dynamic | 100 GB Fixed | 200 GB Fixed | |
 | 3 | Web Server (WEB) | Windows | 4 | 8 GB Dynamic | 100 GB Fixed | -- | IIS |
 
-Add custom templates (SQL, APP, etc.) or override built-in specs via `CustomVMTemplates` in `defaults.json`. See the [Configuration Guide](Configuration#custom-vm-templates) for details.
+Add custom templates (SQL, APP, etc.) or override built-in specs via `CustomVMTemplates` in `rackstack.config.json`. See the [Configuration Guide](Configuration#custom-vm-templates) for details.
 
 ---
 
 ## Naming Conventions
 
-VM names follow a configurable token-based pattern (default: `{Site}-{Prefix}{Seq}`). The pattern, site identifier, and detection regex are all configurable via `VMNaming` in `defaults.json`. See the [Configuration Guide](Configuration#vm-naming) for details.
+VM names follow a configurable token-based pattern (default: `{Site}-{Prefix}{Seq}`). The pattern, site identifier, and detection regex are all configurable via `VMNaming` in `rackstack.config.json`. See the [Configuration Guide](Configuration#vm-naming) for details.
 
 Examples:
 - `123456-FS1` — numeric site ID, default pattern

@@ -261,7 +261,7 @@ function Add-HyperVDefenderExclusions {
     $addedProcesses = @()
     $addedExtensions = @()
 
-    # Path exclusions (configurable via defaults.json DefenderExclusionPaths)
+    # Path exclusions (configurable via rackstack.config.json DefenderExclusionPaths)
     $pathsToExclude = @($script:DefenderExclusionPaths)
 
     # Add custom VM storage path if set
@@ -269,7 +269,7 @@ function Add-HyperVDefenderExclusions {
         $pathsToExclude += $script:HostVMStoragePath
     }
 
-    # Check common VM storage locations (configurable via defaults.json DefenderCommonVMPaths)
+    # Check common VM storage locations (configurable via rackstack.config.json DefenderCommonVMPaths)
     foreach ($vmPath in $script:DefenderCommonVMPaths) {
         if (Test-Path -LiteralPath $vmPath) {
             $pathsToExclude += $vmPath

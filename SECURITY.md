@@ -63,7 +63,7 @@ In scope:
 - Any code path that runs with the Administrator privileges the tool requires
 
 Issues of particular concern:
-- Command / argument injection via operator input or `defaults.json` fields
+- Command / argument injection via operator input or `rackstack.config.json` fields
 - Credential exposure in transcripts, logs, exports, or error messages
 - Privilege escalation beyond the intended Administrator scope (or across
   a remote-PowerShell trust boundary)
@@ -80,7 +80,7 @@ Out of scope:
 ## Verifying releases
 
 Every release publishes a `release-hashes.txt` containing SHA-256 hashes
-for the EXE, the monolithic `.ps1`, and `defaults.example.json`. Verify
+for the EXE, the monolithic `.ps1`, and `rackstack.config.example.json`. Verify
 before running:
 
 ```powershell
@@ -111,13 +111,16 @@ The EXE is not Authenticode-signed, so Windows SmartScreen may show an
 download reputation. The SHA-256 hash, cosign signature, and SLSA
 provenance are the integrity guarantees in the meantime.
 
-## defaults.json
+## rackstack.config.json
 
-The `defaults.json` file may contain sensitive data (Cloudflare Access
-client secrets, KMS host keys, AD service-account hints). It is gitignored
-by default. `defaults.example.json` contains only placeholder values; that
+The `rackstack.config.json` file (or the legacy `defaults.json` it supersedes)
+may contain sensitive data (Cloudflare Access client secrets, KMS host keys,
+AD service-account hints). Company override files
+(`<company>.rackstack.config.json`, legacy `<company>.defaults.json`) carry the
+same sensitivity. All of them are gitignored by default.
+`rackstack.config.example.json` contains only placeholder values; that
 is the file that ships in releases. Never commit a populated
-`defaults.json` to a public repository.
+config file to a public repository.
 
 ## Acknowledgements
 

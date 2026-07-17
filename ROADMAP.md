@@ -36,7 +36,7 @@ rationale rather than shipped untested** — see "Deferred" below.
 | Item | Status | Why |
 |---|---|---|
 | OpenSSF Best Practices **Silver** badge | **Earned** (Passing + Silver both achieved) | Gold is structurally blocked by the single-maintainer bus factor. |
-| In-program defaults editor + Extended Undo | Planned | Edit `defaults.json` / `<company>.defaults.json` from inside the tool with hot-reload, and extend the single-level undo to multi-step. Both compose with the Dry-Run queue and need no schema break. Still unbuilt as of v1.119.x. |
+| In-program defaults editor + Extended Undo | Planned | Edit `rackstack.config.json` / `<company>.rackstack.config.json` from inside the tool with hot-reload, and extend the single-level undo to multi-step. Both compose with the Dry-Run queue and need no schema break. Still unbuilt as of v1.119.x. |
 | GPG-signed git tags | Planned | Closes the OpenSSF `version_tags_signed` criterion. One-time `git config commit.gpgsign true` + `tag.gpgsign true` + key registration at https://github.com/TheAbider.gpg. CI currently auto-tags releases without a maintainer GPG signature. |
 
 ## Next quarter (June–August 2026)
@@ -79,7 +79,7 @@ of the next feature releases once they can be validated safely.
 | GUI front-end | The 72-char box-drawing console UI is intentional; it works over RDP, SSH-tunneled PowerShell, and emergency console-only scenarios where a GUI cannot. |
 | Web dashboard | Out of scope. Operators integrate via the `-OutputFormat JSON` CLI surface and route into their own dashboards. |
 | External REST API | Same as above — `-OutputFormat JSON` is the integration surface. |
-| Major version bumps without operator pain | The 1.x line will continue with backwards-compatible additions. A 2.0 release would only happen for a `defaults.json` schema break, and would include a documented one-shot migration tool. |
+| Major version bumps without operator pain | The 1.x line will continue with backwards-compatible additions. A 2.0 release would only happen for a `rackstack.config.json` schema break, and would include a documented one-shot migration tool. |
 | OSS-Fuzz integration | OSS-Fuzz primarily supports C/C++/Go/Python/JVM. PowerShell is not supported. The existing Pester property-based fuzz harness covers the validator surface; expanding it to more functions is a maintenance task, not a roadmap item. |
 | Multi-maintainer transition | Not currently planned. If the project grows beyond solo development, `GOVERNANCE.md` documents the transition path. |
 
@@ -87,7 +87,7 @@ of the next feature releases once they can be validated safely.
 
 - **Patch releases** (`x.y.Z`) ship as needed for security fixes (Tier 1: within 14 days of confirmed disclosure, per `SECURITY.md`) and for CI/maintenance fixes (e.g. v1.119.1).
 - **Minor releases** (`x.Y.0`) — feature batches; the v1.109–v1.119 arc shipped them one feature at a time.
-- **Major releases** (`X.0.0`) — only when a backwards-incompatible `defaults.json` schema or CLI surface change is unavoidable. None currently planned.
+- **Major releases** (`X.0.0`) - only when a backwards-incompatible `rackstack.config.json` schema or CLI surface change is unavoidable. None currently planned.
 - The current line is **1.119.x**. CI auto-bumps and auto-releases on every commit to `master` that bumps `Header.ps1` `.VERSION`.
 
 ## How this roadmap is maintained

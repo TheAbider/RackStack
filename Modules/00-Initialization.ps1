@@ -1,11 +1,11 @@
 ﻿#region ===== SCRIPT INITIALIZATION =====
-# Tool identity (override via defaults.json)
+# Tool identity (override via rackstack.config.json)
 $script:ToolName = "RackStack"                     # Short name (used in filenames, scheduled tasks)
 $script:ToolFullName = "RackStack"                 # Display name (used in UI banners, reports)
-$script:SupportContact = ""                          # Support contact shown in agent installer messages (set via defaults.json)
+$script:SupportContact = ""                          # Support contact shown in agent installer messages (set via rackstack.config.json)
 $script:ConfigDirName = "rackstackconfig"           # Derived: config directory under USERPROFILE
 
-# Company/Environment Variables (generic defaults - override via defaults.json)
+# Company/Environment Variables (generic defaults - override via rackstack.config.json)
 $domain = ""                             # Default primary domain (empty = not configured)
 $localadminaccountname = 'localadmin'    # Local administrator account name
 $FullName = "Local Administrator"        # Full name for the new local admin account
@@ -15,7 +15,7 @@ $BackupName = "Backup"                   # Backup NIC name made by SET
 $script:logFilePath = $null              # Path for log file (set to enable logging)
 $script:emailAddress = $null             # Email address for log notifications
 
-# DNS Presets for quick configuration (custom presets merged from defaults.json)
+# DNS Presets for quick configuration (custom presets merged from rackstack.config.json)
 $script:DNSPresets = [ordered]@{
     "Google DNS" = @("8.8.8.8", "8.8.4.4")
     "Cloudflare" = @("1.1.1.1", "1.0.0.1")
@@ -34,7 +34,7 @@ $script:DefaultDownloadTimeoutSeconds = 1800    # 30 minutes for standard downlo
 $script:MaxDownloadRetries = 3                      # Max retry attempts for large file downloads (>500MB)
 
 # Centralized timeout configuration (seconds)
-# These can be overridden via defaults.json "Timeouts" section
+# These can be overridden via rackstack.config.json "Timeouts" section
 $script:Timeouts = @{
     CIMQuery            = 10      # Standard CIM/WMI queries
     CIMQuerySlow        = 15      # CIM queries on older/slower systems
@@ -53,7 +53,7 @@ $script:Timeouts = @{
     HealthCheckCache    = 30      # Health check result cache TTL
 }
 
-# Configurable MSP agent installer (override via defaults.json AgentInstaller)
+# Configurable MSP agent installer (override via rackstack.config.json AgentInstaller)
 $script:AgentInstaller = @{
     ToolName        = "MSP"
     FolderName      = "Agents"
@@ -73,7 +73,7 @@ $script:AgentInstaller = @{
 # service registers (which left agents installed-but-unenrolled). Bounded by the install timeout.
 $script:AgentEarlyDetectGraceSeconds = 90
 
-# Additional agent installers (v1.8.0, override via defaults.json AdditionalAgents array)
+# Additional agent installers (v1.8.0, override via rackstack.config.json AdditionalAgents array)
 $script:AdditionalAgents = @()
 
 # Agent installer cache
@@ -90,10 +90,10 @@ $script:PowerPlanGUID = @{
 # Default connectivity test target (used by SystemCheck, SET internet detection)
 $script:DefaultConnectivityTarget = "8.8.8.8"
 
-# Default temp directory for transcripts, reports, and exports (override via defaults.json TempPath)
+# Default temp directory for transcripts, reports, and exports (override via rackstack.config.json TempPath)
 $script:TempPath = "$env:SystemDrive\Temp"
 
-# SAN target IP mappings - last octet suffixes paired with labels (override via defaults.json SANTargetMappings)
+# SAN target IP mappings - last octet suffixes paired with labels (override via rackstack.config.json SANTargetMappings)
 $script:SANTargetMappings = @(
     @{ Suffix = 10; Label = "A0" }
     @{ Suffix = 11; Label = "B1" }
@@ -105,13 +105,13 @@ $script:SANTargetMappings = @(
     @{ Suffix = 17; Label = "A3" }
 )
 
-# Custom SAN target pairings - defines A/B pairs and host-to-pair assignments (override via defaults.json SANTargetPairings)
+# Custom SAN target pairings - defines A/B pairs and host-to-pair assignments (override via rackstack.config.json SANTargetPairings)
 # When set, this overrides the default Initialize-SANTargetPairs logic and Get-SANTargetsForHost retry order.
 # A side = even suffixes, B side = odd suffixes by convention.
 # CycleSize controls the modulo: host 5 maps the same as host 1, host 6 as host 2, etc.
 $script:SANTargetPairings = $null
 
-# Defender exclusion paths for Hyper-V hosts (override via defaults.json)
+# Defender exclusion paths for Hyper-V hosts (override via rackstack.config.json)
 $script:DefenderExclusionPaths = @(
     "C:\ProgramData\Microsoft\Windows\Hyper-V"
     "C:\ProgramData\Microsoft\Windows\Hyper-V\Snapshots"
@@ -122,7 +122,7 @@ $script:DefenderCommonVMPaths = @()  # Populated dynamically by Update-DefenderV
 
 # Operator-configurable list of services to surface in service-audit views. Set to $null
 # at init so callers can detect "not configured" and fall back to the built-in list (vmms,
-# vmcompute, ClusSvc, MSiSCSI, etc.). Populated by Import-Defaults when defaults.json
+# vmcompute, ClusSvc, MSiSCSI, etc.). Populated by Import-Defaults when rackstack.config.json
 # contains a `MonitoredServices` array. Prior to v1.98.8 callers read `$script:Defaults.
 # MonitoredServices` but $script:Defaults was never assigned, so the documented field
 # was dead code.
@@ -132,7 +132,7 @@ $script:MonitoredServices = $null
 $script:WindowsLicensingAppId = "55c92734-d682-4d71-983e-d6ec3f16059f"
 
 # FileServer - Cloudflare Access-protected file server
-# Override via defaults.json - empty BaseURL = cloud features disabled
+# Override via rackstack.config.json - empty BaseURL = cloud features disabled
 $script:FileServer = @{
     StorageType    = "nginx"  # nginx (default), azure, static
     BaseURL        = ""
@@ -146,10 +146,10 @@ $script:FileServer = @{
     AgentFolder    = "Agents"
 }
 
-# Azure Arc server onboarding (override via defaults.json "AzureArc" section)
+# Azure Arc server onboarding (override via rackstack.config.json "AzureArc" section)
 # Empty TenantId/SubscriptionId/ResourceGroup = Arc onboarding not configured.
-# ServicePrincipalSecret should be left empty in defaults.json committed to
-# source control — supply it at runtime, via an environment variable, or via
+# ServicePrincipalSecret should be left empty in any rackstack.config.json kept
+# under source control - supply it at runtime, via an environment variable, or via
 # a secrets manager. See 65-AzureArc.ps1 Resolve-AzureArcSecret.
 $script:AzureArc = @{
     TenantId               = ""          # Azure AD / Entra tenant ID (GUID)
@@ -163,7 +163,7 @@ $script:AzureArc = @{
     Tags                   = ""          # Optional Arc resource tags, "key1=val1,key2=val2"
 }
 
-# Microsoft Defender for Endpoint onboarding (override via defaults.json "DefenderEndpoint")
+# Microsoft Defender for Endpoint onboarding (override via rackstack.config.json "DefenderEndpoint")
 # Paths point to the per-tenant onboarding/offboarding .cmd scripts downloaded
 # from the Defender portal (security.microsoft.com). Empty = MDE not configured.
 $script:DefenderEndpoint = @{
@@ -171,7 +171,7 @@ $script:DefenderEndpoint = @{
     OffboardingScriptPath = ""   # Path to the offboarding .cmd (expires ~30 days after generation)
 }
 
-# WSUS server setup (override via defaults.json "WSUS")
+# WSUS server setup (override via rackstack.config.json "WSUS")
 # Empty ContentPath = WSUS setup not configured. ContentPath must be an
 # absolute local path; it holds downloaded update binaries (can grow large).
 $script:WSUS = @{
@@ -181,7 +181,7 @@ $script:WSUS = @{
     SyncHour        = 3                           # Hour (0-23) for the daily automatic catalog sync
 }
 
-# AD CS Certification Authority bootstrap (override via defaults.json "ADCS")
+# AD CS Certification Authority bootstrap (override via rackstack.config.json "ADCS")
 # Empty CACommonName = AD CS setup not configured. Configuring a CA is hard
 # to reverse — the CA install requires a typed confirmation regardless.
 $script:ADCS = @{
@@ -192,7 +192,7 @@ $script:ADCS = @{
     ValidityYears = 10                  # Root CA certificate validity (1-25 years)
 }
 
-# Storage Migration Service (override via defaults.json "StorageMigration")
+# Storage Migration Service (override via rackstack.config.json "StorageMigration")
 # InstallProxy controls whether the StorageMigrationSetup CLI action also
 # installs the SMS-Proxy feature (run the proxy on the destination server).
 $script:StorageMigration = @{
@@ -211,11 +211,11 @@ $script:VHDCachePath = "D:\Virtual Machines\_BaseImages"    # Cached sysprepped 
 $script:ClusterVHDCachePath = "C:\ClusterStorage\Volume1\_BaseImages"  # Cached VHDs on clusters
 $script:StorageInitialized = $false                                    # Whether host storage has been initialized
 
-# Dashboard color thresholds for CPU/memory/disk usage (override via defaults.json DashboardWarningPercent / DashboardCriticalPercent)
+# Dashboard color thresholds for CPU/memory/disk usage (override via rackstack.config.json DashboardWarningPercent / DashboardCriticalPercent)
 $script:DashboardWarningPercent = 70
 $script:DashboardCriticalPercent = 90
 
-# Storage backend type: iSCSI, FC, S2D, SMB3, NVMeoF, Local (override via defaults.json StorageBackendType)
+# Storage backend type: iSCSI, FC, S2D, SMB3, NVMeoF, Local (override via rackstack.config.json StorageBackendType)
 $script:StorageBackendType = "iSCSI"
 
 # Store script path at startup (MUST be before functions for Exit-Script to work)
@@ -233,7 +233,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.121.15"
+$script:ScriptVersion = "1.122.0"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.
@@ -294,7 +294,7 @@ $script:RebootNeeded = $false
 $script:DisabledAdminReboot = $false
 $script:ReturnToMainMenu = $false  # Flag to signal "go straight to main menu"
 
-# Auto-update: if true, automatically download and install updates on startup (override via defaults.json)
+# Auto-update: if true, automatically download and install updates on startup (override via rackstack.config.json)
 $script:AutoUpdate = $false
 
 # Auto-update state (populated by Test-StartupUpdateCheck on launch)
@@ -323,9 +323,23 @@ $script:AppConfigDir = "$env:USERPROFILE\.$($script:ConfigDirName)"
 $script:FavoritesPath = "$script:AppConfigDir\favorites.json"
 $script:HistoryPath = "$script:AppConfigDir\history.json"
 $script:SessionStatePath = "$script:AppConfigDir\session.json"
-$script:DefaultsPath = "$script:ModuleRoot\defaults.json"
-$script:CompanyDefaultsName = $null             # e.g., "acme" (loaded from acme.defaults.json)
-$script:CompanyDefaultsPath = $null             # e.g., "C:\...\acme.defaults.json"
+# Base config resolution: the namespaced rackstack.config.json is preferred; the
+# legacy defaults.json is still read when only it exists. New config files are
+# always created under the new name, and saves target the resolved (loaded) file.
+function Get-RackStackConfigPath {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Root
+    )
+    $preferredPath = Join-Path $Root "rackstack.config.json"
+    $legacyPath = Join-Path $Root "defaults.json"
+    if (Test-Path -LiteralPath $preferredPath) { return $preferredPath }
+    if (Test-Path -LiteralPath $legacyPath) { return $legacyPath }
+    return $preferredPath
+}
+$script:DefaultsPath = Get-RackStackConfigPath -Root $script:ModuleRoot
+$script:CompanyDefaultsName = $null             # e.g., "acme" (loaded from acme.rackstack.config.json, or legacy acme.defaults.json)
+$script:CompanyDefaultsPath = $null             # e.g., "C:\...\acme.rackstack.config.json"
 $script:Favorites = @()
 $script:CommandHistory = @()
 $script:MaxHistoryItems = 100
@@ -338,7 +352,7 @@ $script:BuiltInVMTemplates = $null
 $script:CustomRoleTemplates = @{}
 $script:TimeZoneRegion = ""
 
-# VM naming convention (override via defaults.json VMNaming)
+# VM naming convention (override via rackstack.config.json VMNaming)
 $script:VMNaming = @{
     SiteId       = ""
     Pattern      = "{Site}-{Prefix}{Seq}"
