@@ -4,13 +4,16 @@ The very first submission of `TheAbider.RackStack` to winget had to be
 done by hand -- `wingetcreate update` (the CI automation in `ci.yml`) only
 works once the package already exists in `microsoft/winget-pkgs`.
 
-**That first submission has been made** with version 1.122.0:
-https://github.com/microsoft/winget-pkgs/pull/403660
+A first submission was made with version 1.122.0
+(https://github.com/microsoft/winget-pkgs/pull/403660) and then
+voluntarily withdrawn before review; it will be resubmitted later.
+The manifests in `1.122.0/` validated cleanly with `winget validate`
+and the CLA is already signed for this account, so resubmitting is
+just: re-author the folder for the current version (version, URL,
+SHA-256, ReleaseDate), fork/branch, open the PR.
 
-`1.122.0/` contains the three manifest files exactly as submitted, kept
-only as a record of the initial submission. Once the PR merges, every
-future release auto-submits via the ci.yml step -- do not hand-maintain
-these files.
+Once a first PR merges, every future release auto-submits via the
+ci.yml step -- do not hand-maintain these files after that.
 
 ## Notes on the manifest choices
 
