@@ -17,6 +17,7 @@ Common issues encountered during server configuration with RackStack, organized 
 - [NIC Auto-Select for SET and iSCSI](#nic-auto-select-for-set-and-iscsi)
 - [Common Errors](#common-errors)
 - [Network Diagnostics Walkthrough](#network-diagnostics-walkthrough)
+- [Antivirus Blocked or Quarantined RackStack](#antivirus-blocked-or-quarantined-rackstack)
 
 ---
 
@@ -652,3 +653,39 @@ The sweep tool uses parallel background jobs for speed:
 - Custom start/end octets can be specified.
 - Results show IP, reverse DNS hostname (if available), and total hosts alive.
 - 30-second timeout for the entire sweep.
+
+---
+
+## Antivirus Blocked or Quarantined RackStack
+
+### Symptoms
+
+- The EXE disappears mid-run, or Defender reports `Behavior:Win32/DefenseEvasion.A!ml`
+- A static scan flags `Trojan:Win32/Sabsik.EN.A!ml` or a generic `MSIL` / `Ransom` label
+- VirusTotal shows detections from several machine-learning engines
+
+### Cause
+
+`RackStack.exe` is unsigned, packed by ps2exe into a .NET assembly, and manages Windows Defender
+exclusions as a documented feature. That combination scores as evasion behaviour to ML
+classifiers. These are false positives.
+
+### Resolution
+
+Verify the binary first — the SHA-256 hash, cosign signature, and SLSA build provenance settle
+the question regardless of what any engine says:
+
+```powershell
+(Get-FileHash RackStack.exe -Algorithm SHA256).Hash.ToLower()   # compare to release-hashes.txt
+gh attestation verify RackStack.exe --owner TheAbider
+```
+
+If the tool was quarantined **mid-run**, check `%ProgramData%\RackStack\state\` for
+partially-applied configuration before continuing.
+
+To avoid the problem entirely, run the monolithic `.ps1` from the same release instead of the
+EXE — identical code, unpacked, and not scored by the PE classifiers that produce these
+detections.
+
+**Full detail, including how to tell a false positive from a genuinely tampered file and how to
+restore from quarantine:** [Antivirus Detections](Antivirus-Detections.md).

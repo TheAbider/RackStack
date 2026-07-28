@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.122.1
+
+Self-update integrity fix, plus guidance for antivirus false positives.
+
+- **The self-updater no longer installs an unverified update.** When updating the `.ps1`, the SHA-256 check was silently skipped and the download was installed anyway. GitHub rewrites spaces to dots in release asset names, so the published `RackStack v1.2.3.ps1` is served as `RackStack.v1.2.3.ps1`, while the hash manifest in the release notes still lists the original spaced filename -- the lookup compared the two directly and never matched. Filenames are now normalized before comparison so both spellings resolve, and an update whose hash cannot be found is **refused** rather than installed with a warning. Updating the `.exe` was never affected.
+- **New guide: [Antivirus Detections](docs/Antivirus-Detections.md).** Because the EXE is unsigned, packed by ps2exe, and manages Defender exclusions, machine-learning antivirus engines periodically flag it. The guide explains why, walks through verifying that the binary you hold is the genuine published build (SHA-256, Sigstore cosign, SLSA provenance), covers restoring from quarantine, and notes that running the monolithic `.ps1` avoids the packed binary entirely. `SECURITY.md` and the troubleshooting guide now point at it.
+
+No module or CLI action changes (81 modules, 201 actions). 5417 structural tests.
+
 ## v1.122.0
 
 Namespaced config-file naming. The base config is now `rackstack.config.json` and company overrides are `<company>.rackstack.config.json` -- names that stay unambiguous when the EXE runs from a shared or busy folder. Nothing breaks for existing setups: the legacy `defaults.json` and `<company>.defaults.json` names are still read whenever the new-named file is absent, and the tool keeps saving to whichever file it loaded.

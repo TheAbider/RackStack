@@ -28,7 +28,7 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="5402 structural tests" src="https://img.shields.io/badge/structural%20tests-5402-brightgreen">
+  <img alt="5417 structural tests" src="https://img.shields.io/badge/structural%20tests-5417-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
@@ -120,6 +120,8 @@ Grab `RackStack.exe` from the [latest release](https://github.com/TheAbider/Rack
 
 Every release artifact is signed with [Sigstore](https://www.sigstore.dev/) cosign (keyless) and carries [SLSA Level 3](https://slsa.dev/) build provenance; each release page lists SHA-256 hashes and the verification commands. The EXE is not Authenticode-signed, so Windows SmartScreen may show an "Unknown publisher" prompt on first run.
 
+> **Antivirus false positives:** because the EXE is unsigned, packed by ps2exe, and manages Defender exclusions, ML-based engines sometimes flag it. See [Antivirus Detections](docs/Antivirus-Detections.md) for why it happens and how to verify the binary you hold is the genuine published build. If AV alerts are a problem in your environment, run the `.ps1` from the same release instead — it is the same code, unpacked.
+
 On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `rackstack.config.json` next to the exe. To pre-configure, download `rackstack.config.example.json` from the release, rename it to `rackstack.config.json`, fill in your values, and place it alongside the exe. A legacy `defaults.json` from an earlier version is still read automatically when no `rackstack.config.json` exists -- no migration needed.
 
 <!--
@@ -181,6 +183,7 @@ In-depth guides live in [`docs/`](docs/):
 | Preparing VHD templates | [VHD Preparation](docs/VHD-Preparation.md) |
 | File server for ISO / VHD / agent distribution | [File Server Setup](docs/FileServer-Setup.md) |
 | Diagnostics and recovery | [Troubleshooting](docs/Troubleshooting.md) |
+| Antivirus flags and how to verify a release | [Antivirus Detections](docs/Antivirus-Detections.md) |
 | Runbook: HA iSCSI build | [Runbook: HA iSCSI](docs/Runbook-HA-iSCSI.md) |
 | Runbook: live host migration | [Runbook: Host Migration](docs/Runbook-Host-Migration.md) |
 | Runbook: VM deployment | [Runbook: VM Deployment](docs/Runbook-VM-Deployment.md) |
