@@ -156,7 +156,7 @@ is never scored by the PE classifiers that produce these detections.
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
-& '.\RackStack v1.122.0.ps1'
+& '.\RackStack v{version}.ps1'   # substitute the version you downloaded
 ```
 
 The PowerShell Gallery module (`Install-Module RackStack`) is another script-based route that
