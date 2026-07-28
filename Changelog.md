@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.122.2
+
+Packaging fix for the v1.122.1 release.
+
+- **The PowerShell Gallery module now publishes again.** `RackStack.psd1` was not in the version-sensitive file list, so its `ModuleVersion` stayed on 1.122.0 while everything else moved to 1.122.1. The publish step correctly refused to push a manifest whose version disagreed with the build, which also skipped the package-manager and retention steps behind it -- so v1.122.1 reached GitHub Releases but not the Gallery. The manifest is now bumped in step with the rest, and the test suite asserts that every version touchpoint agrees, so a mismatch fails CI on the pull request instead of part-way through a release.
+- **The Gallery listing no longer advertises a stale action count** (it said 176; there are 201). The manifest is now covered by the documentation-freshness checks that already guard the README, help text, and package manifests.
+
+Contains everything in v1.122.1: the self-update integrity fix and the antivirus documentation.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.122.1
 
 Self-update integrity fix, plus guidance for antivirus false positives.
