@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.122.3
+
+Closes the second self-update path, and corrects a packaging claim.
+
+- **`UpdateSelf` now refuses an update it cannot verify.** v1.122.1 fixed the interactive updater, but the `UpdateSelf` CLI action is a separate implementation and kept the same fail-open shape: if no SHA-256 for `RackStack.exe` appeared in the release body it warned and replaced the running executable anyway. It now refuses and exits, matching the policy `Install-RackStack.ps1` already applied. In practice the hash has always been present, so this closes a latent gap rather than a live exposure -- but v1.122.1's notes described the fix more broadly than what actually shipped, and this makes that description true.
+- **The test suite now asserts no module has a fail-open verification path**, rather than checking the one module that was edited. The narrower check passed while this second path survived; only verifying the shipped artifact caught it.
+- **The Scoop manifest no longer claims the EXE is code-signed.** It is not Authenticode-signed -- that is precisely why antivirus engines flag it. The description now states what is actually true: Sigstore cosign signatures and SLSA Level 3 build provenance.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.122.2
 
 Packaging fix for the v1.122.1 release.

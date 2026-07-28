@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.122.2
+    Automated Test Runner for RackStack v1.122.3
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10333,8 +10333,25 @@ try {
     Write-TestResult "Update: Get-ReleaseAssetHash function exists" ($utilContent204 -match 'function\s+Get-ReleaseAssetHash\b')
     Write-TestResult "Update: hash lookup is delegated, not inlined" ($utilContent204 -match '\$expectedHash\s*=\s*Get-ReleaseAssetHash\s')
     Write-TestResult "Update: asset selection normalizes space/dot" ($utilContent204 -match '\$assetKey\s*=\s*\$assetName\s*-replace\s*''\[\\s\.\]'',\s*''\.''')
-    # The old fail-open text must never come back.
-    Write-TestResult "Update: no 'skipping verification' fail-open path" (-not ($utilContent204 -match 'skipping verification'))
+    # The old fail-open text must never come back — REPO-WIDE, not just in this module.
+    # Scoping this to 35-Utilities was a mistake: it passed while an identical fail-open
+    # survived in 50-EntryPoint's UpdateSelf action, and only an end-to-end check against the
+    # shipped monolithic caught it. Any code path that replaces a running binary or script must
+    # refuse an update it cannot verify, so assert across every module.
+    $failOpenHits204 = @(
+        Get-ChildItem -Path $modulesPath -Filter '*.ps1' -File |
+            Where-Object { (Get-Content $_.FullName -Raw) -match 'skipping verification' } |
+            ForEach-Object { $_.Name }
+    )
+    Write-TestResult "Update: no 'skipping verification' fail-open path in ANY module" `
+        ($failOpenHits204.Count -eq 0) $(if ($failOpenHits204.Count) { "found in: $($failOpenHits204 -join ', ')" } else { "" })
+
+    # Both self-update implementations must refuse rather than warn-and-continue.
+    $entryContent204 = Get-Content "$modulesPath\50-EntryPoint.ps1" -Raw
+    Write-TestResult "Update: UpdateSelf refuses an unverified EXE" `
+        ($entryContent204 -match 'refusing to install an unverified update')
+    Write-TestResult "Update: UpdateSelf exits rather than continuing" `
+        ($entryContent204 -match 'refusing to install an unverified update[\s\S]{0,400}\[Environment\]::Exit\(1\)')
     Write-TestResult "Update: missing hash refuses the install" ($utilContent204 -match 'refusing to install an unverified update')
     # A refusal must actually return, not just print.
     Write-TestResult "Update: refusal path returns before install" ($utilContent204 -match 'refusing to install an unverified update[\s\S]{0,400}\breturn\b')

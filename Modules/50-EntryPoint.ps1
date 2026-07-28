@@ -1078,7 +1078,15 @@ function Invoke-CLIAction {
                     }
                     Write-OutputColor "  SHA256 verified." -color "Success"
                 } else {
-                    Write-OutputColor "  WARNING: No SHA256 in release body — skipping verification." -color "Warning"
+                    # Fail closed, matching Install-RackStack.ps1's bootstrap policy: refusal is the
+                    # default outcome of any verification failure, including a missing manifest entry.
+                    # This replaces the running EXE, so an update whose integrity cannot be
+                    # established must not be installed. (The interactive updater in 35-Utilities
+                    # had the same fail-open shape and was fixed in v1.122.1.)
+                    Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-OutputColor "  No SHA256 for RackStack.exe in the release body — refusing to install an unverified update." -color "Error"
+                    Write-OutputColor "  Download and verify manually from: https://github.com/TheAbider/RackStack/releases/tag/$latestTag" -color "Info"
+                    [Environment]::Exit(1)
                 }
 
                 # If a previous .old still exists (user ran UpdateSelf twice without launching in between),
