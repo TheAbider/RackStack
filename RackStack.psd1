@@ -1,11 +1,11 @@
 ﻿@{
     RootModule           = 'RackStack.psm1'
-    ModuleVersion        = '1.122.0'
+    ModuleVersion        = '1.122.2'
     GUID                 = 'c19b8e71-4a35-4f2b-9d06-8a24f7bc0e91'
     Author               = 'TheAbider'
     CompanyName          = 'TheAbider'
     Copyright            = '(c) TheAbider. All rights reserved.'
-    Description          = 'PowerShell cmdlet wrappers around the RackStack.exe CLI. Invoke any of the 176 CLI actions (SelfTest, UpdateSelf, ExportLogs, Batch, every audit action, etc.) as structured cmdlets from scripts and pipelines. Auto-locates the installed EXE via the Programs-and-Features registry key, PATH, or the RACKSTACK_EXE environment variable. RackStack.exe is downloaded separately from https://github.com/TheAbider/RackStack/releases — the module itself is a thin wrapper, not the tool.'
+    Description          = 'PowerShell cmdlet wrappers around the RackStack.exe CLI. Invoke any of the 201 CLI actions (SelfTest, UpdateSelf, ExportLogs, Batch, every audit action, etc.) as structured cmdlets from scripts and pipelines. Auto-locates the installed EXE via the Programs-and-Features registry key, PATH, or the RACKSTACK_EXE environment variable. RackStack.exe is downloaded separately from https://github.com/TheAbider/RackStack/releases — the module itself is a thin wrapper, not the tool.'
     PowerShellVersion    = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
 

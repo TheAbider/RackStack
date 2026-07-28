@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.122.1
+    Automated Test Runner for RackStack v1.122.2
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10390,6 +10390,70 @@ catch {
 }
 
 # ============================================================================
+# SECTION 205: RELEASE VERSION CONSISTENCY (all publish touchpoints agree)
+# ============================================================================
+# The PowerShell Gallery publish step in ci.yml refuses to publish when
+# RackStack.psd1's ModuleVersion disagrees with Header.ps1. That guard is correct, but
+# it only fires in the RELEASE job — after the GitHub release has already been created,
+# signed, and attested. v1.122.1 shipped that way: the release published fine and the
+# Gallery publish then failed, leaving the two channels on different versions and
+# skipping the winget/Chocolatey/retention steps behind it.
+#
+# The manifest was not in the version-sensitive file list, so nothing caught it earlier.
+# These assertions move the check into PR CI, where a mismatch costs a red check instead
+# of a broken release.
+Write-SectionHeader "SECTION 205: RELEASE VERSION CONSISTENCY"
+
+try {
+    $verInit205 = $null
+    $initRaw205 = Get-Content "$modulesPath\00-Initialization.ps1" -Raw
+    if ($initRaw205 -match '\$script:ScriptVersion\s*=\s*"([^"]+)"') { $verInit205 = $Matches[1] }
+    Write-TestResult "Version: 00-Initialization declares a version" (-not [string]::IsNullOrWhiteSpace($verInit205)) "Found: '$verInit205'"
+
+    # Header.ps1 .VERSION block
+    $verHeader205 = $null
+    $headerRaw205 = Get-Content (Join-Path $script:ModuleRoot "Header.ps1") -Raw
+    if ($headerRaw205 -match '(?m)^\s*\.VERSION\s*\r?\n\s*([0-9]+\.[0-9]+\.[0-9]+)') { $verHeader205 = $Matches[1] }
+    Write-TestResult "Version: Header.ps1 .VERSION matches 00-Initialization" ($verHeader205 -eq $verInit205) "Header: '$verHeader205' vs Init: '$verInit205'"
+
+    # RackStack.ps1 loader .VERSION block
+    $verLoader205 = $null
+    $loaderRaw205 = Get-Content (Join-Path $script:ModuleRoot "RackStack.ps1") -Raw
+    if ($loaderRaw205 -match '(?m)^\s*\.VERSION\s*\r?\n\s*([0-9]+\.[0-9]+\.[0-9]+)') { $verLoader205 = $Matches[1] }
+    Write-TestResult "Version: RackStack.ps1 .VERSION matches" ($verLoader205 -eq $verInit205) "Loader: '$verLoader205' vs Init: '$verInit205'"
+
+    # THE REGRESSION: the Gallery manifest must track the same version.
+    $psd1Path205 = Join-Path $script:ModuleRoot "RackStack.psd1"
+    if (Test-Path -LiteralPath $psd1Path205) {
+        $verPsd1205 = $null
+        $psd1Raw205 = Get-Content $psd1Path205 -Raw
+        if ($psd1Raw205 -match "ModuleVersion\s*=\s*'([^']+)'") { $verPsd1205 = $Matches[1] }
+        Write-TestResult "Version: RackStack.psd1 ModuleVersion matches (blocks PSGallery publish if not)" `
+            ($verPsd1205 -eq $verInit205) "psd1: '$verPsd1205' vs Init: '$verInit205'"
+        # The CLI-action count in the manifest description is covered by Section 174's
+        # documentation-freshness guard, which derives the live count from the entry point.
+    } else {
+        Write-TestResult "Version: RackStack.psd1 present" -Skipped -Message "psd1 not in this layout (work mirror)"
+    }
+
+    # Tests/Run-Tests.ps1 synopsis
+    $selfRaw205 = Get-Content $PSCommandPath -Raw -ErrorAction SilentlyContinue
+    if ($selfRaw205 -and $selfRaw205 -match 'Automated Test Runner for RackStack v([0-9]+\.[0-9]+\.[0-9]+)') {
+        Write-TestResult "Version: Run-Tests.ps1 synopsis matches" ($Matches[1] -eq $verInit205) "Synopsis: '$($Matches[1])' vs Init: '$verInit205'"
+    }
+
+    # Changelog must carry an entry for the version being shipped.
+    $clPath205 = Join-Path $script:ModuleRoot "Changelog.md"
+    if (Test-Path -LiteralPath $clPath205) {
+        $clRaw205 = Get-Content $clPath205 -Raw
+        Write-TestResult "Version: Changelog has an entry for v$verInit205" ($clRaw205 -match "(?m)^##\s+v$([regex]::Escape($verInit205))\s*$")
+    }
+}
+catch {
+    Write-TestResult "Release Version Consistency Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
@@ -10408,7 +10472,10 @@ try {
     Write-TestResult "DocFreshness: live action count resolved ($liveActionCount)" ($liveActionCount -gt 0) "Found $liveActionCount"
 
     # Doc files that quote a CLI-action count. (Wiki is a separate clone — not checked here.)
+    # RackStack.psd1 is included because its Description quotes a CLI-action count that
+    # ships to the PowerShell Gallery listing — it had drifted to 176 against a live 201.
     $docFiles = @('README.md', 'CONTRIBUTING.md', 'ROADMAP.md', 'Modules\34-Help.ps1',
+        'RackStack.psd1',
         'dist\chocolatey\rackstack.nuspec', 'dist\scoop\rackstack.json')
     $wingetDir = Join-Path $script:ModuleRoot 'dist\winget'
     if (Test-Path $wingetDir) { $docFiles += @(Get-ChildItem -Path $wingetDir -Recurse -Filter '*.yaml' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) }
