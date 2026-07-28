@@ -111,6 +111,27 @@ The EXE is not Authenticode-signed, so Windows SmartScreen may show an
 download reputation. The SHA-256 hash, cosign signature, and SLSA
 provenance are the integrity guarantees in the meantime.
 
+## Antivirus detections
+
+Being unsigned, packed by ps2exe, and capable of managing Defender
+exclusions makes `RackStack.exe` score badly with machine-learning and
+heuristic antivirus engines. Detections are reported periodically and are
+false positives; they are disputed with vendors as they come in.
+
+Please do **not** report an antivirus detection through the vulnerability
+channel above. Verify the binary first — the hash, cosign signature, and
+build provenance settle the question independently of any AV verdict — and
+then open a normal issue. [Antivirus Detections](docs/Antivirus-Detections.md)
+walks through the verification steps, how to distinguish a false positive
+from a genuinely tampered file, and how to avoid the problem entirely by
+running the `.ps1`.
+
+A detection is only a security concern if the hash does **not** match
+`release-hashes.txt`, or if `cosign verify-blob` or
+`gh attestation verify` fails. That would indicate a file that did not come
+from this project's CI, and is worth reporting privately via the channels
+at the top of this document.
+
 ## rackstack.config.json
 
 The `rackstack.config.json` file (or the legacy `defaults.json` it supersedes)

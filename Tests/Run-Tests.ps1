@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.122.0
+    Automated Test Runner for RackStack v1.122.1
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10307,6 +10307,86 @@ try {
 }
 catch {
     Write-TestResult "Namespaced Config Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 204: SELF-UPDATE INTEGRITY VERIFICATION (35-Utilities)
+# ============================================================================
+# Regression pin for the self-update hash check.
+#
+# GitHub rewrites whitespace to dots in release asset names, so the monolithic published as
+# "RackStack v1.2.3.ps1" is served as "RackStack.v1.2.3.ps1" while the SHA-256 manifest in the
+# release body still lists the ORIGINAL spaced filename. Install-ScriptUpdate looked the hash up
+# by regex-escaping $asset.name, so on the .ps1 path the lookup could never match: the expected
+# hash came back null and the code warned and installed anyway — copying an unverified payload
+# over the running script and relaunching it elevated. The EXE path was unaffected because
+# "RackStack.exe" contains no whitespace to rewrite.
+#
+# These tests exercise the real Get-ReleaseAssetHash against fixtures shaped like live GitHub
+# API responses, so a regression in the normalization fails here rather than shipping.
+Write-SectionHeader "SECTION 204: SELF-UPDATE INTEGRITY VERIFICATION (35-Utilities)"
+
+try {
+    $utilContent204 = Get-Content "$modulesPath\35-Utilities.ps1" -Raw
+
+    # -- Structural: the pieces that make the fix hold --
+    Write-TestResult "Update: Get-ReleaseAssetHash function exists" ($utilContent204 -match 'function\s+Get-ReleaseAssetHash\b')
+    Write-TestResult "Update: hash lookup is delegated, not inlined" ($utilContent204 -match '\$expectedHash\s*=\s*Get-ReleaseAssetHash\s')
+    Write-TestResult "Update: asset selection normalizes space/dot" ($utilContent204 -match '\$assetKey\s*=\s*\$assetName\s*-replace\s*''\[\\s\.\]'',\s*''\.''')
+    # The old fail-open text must never come back.
+    Write-TestResult "Update: no 'skipping verification' fail-open path" (-not ($utilContent204 -match 'skipping verification'))
+    Write-TestResult "Update: missing hash refuses the install" ($utilContent204 -match 'refusing to install an unverified update')
+    # A refusal must actually return, not just print.
+    Write-TestResult "Update: refusal path returns before install" ($utilContent204 -match 'refusing to install an unverified update[\s\S]{0,400}\breturn\b')
+
+    # -- Behavioral: real function, real-shaped fixtures --
+    # Manifest uses the ORIGINAL spaced name, exactly as ci.yml emits it.
+    $body204 = @"
+## SHA-256
+
+``````
+a2145966c1878f26f4825caaafea235f54a5b2cf6146c5a59799fef5803d4808  RackStack.exe
+d99c3ebc7ae771f25cccfac278c6b68af70fa1a995fb66cc9b82ec88f04f547b  RackStack v1.122.0.ps1
+210fd56ca3aeeb8b48b77eee1e5ff33899374ad288ae54f2d209abd1c0fd7e27  rackstack.config.example.json
+``````
+"@
+
+    # THE REGRESSION: asset name as GitHub serves it (dots) vs manifest (spaces).
+    $psHash204 = Get-ReleaseAssetHash -ReleaseBody $body204 -AssetName 'RackStack.v1.122.0.ps1'
+    Write-TestResult "Update: dotted .ps1 asset resolves its spaced manifest entry" `
+        ($psHash204 -eq 'D99C3EBC7AE771F25CCCFAC278C6B68AF70FA1A995FB66CC9B82EC88F04F547B')
+
+    # The spaced spelling must resolve too (defence against the normalization inverting).
+    $psHashSpaced204 = Get-ReleaseAssetHash -ReleaseBody $body204 -AssetName 'RackStack v1.122.0.ps1'
+    Write-TestResult "Update: spaced .ps1 asset resolves the same entry" ($psHashSpaced204 -eq $psHash204)
+
+    # EXE path must keep working — it was never broken.
+    $exeHash204 = Get-ReleaseAssetHash -ReleaseBody $body204 -AssetName 'RackStack.exe'
+    Write-TestResult "Update: EXE asset resolves its manifest entry" `
+        ($exeHash204 -eq 'A2145966C1878F26F4825CAAAFEA235F54A5B2CF6146C5A59799FEF5803D4808')
+
+    # Must not cross-match a different asset just because the names normalize similarly.
+    Write-TestResult "Update: config example resolves its own hash, not another's" `
+        ((Get-ReleaseAssetHash -ReleaseBody $body204 -AssetName 'rackstack.config.example.json') -eq '210FD56CA3AEEB8B48B77EEE1E5FF33899374AD288AE54F2D209ABD1C0FD7E27')
+
+    # Unknown asset, empty body, and hashless body must all return $null so the caller refuses.
+    Write-TestResult "Update: unknown asset returns null" `
+        ($null -eq (Get-ReleaseAssetHash -ReleaseBody $body204 -AssetName 'NotShipped.ps1'))
+    Write-TestResult "Update: empty release body returns null" `
+        ($null -eq (Get-ReleaseAssetHash -ReleaseBody '' -AssetName 'RackStack.exe'))
+    Write-TestResult "Update: body with no manifest returns null" `
+        ($null -eq (Get-ReleaseAssetHash -ReleaseBody "Just release notes.`nNo hashes here." -AssetName 'RackStack.exe'))
+
+    # A short hex string must not be mistaken for a SHA-256.
+    Write-TestResult "Update: sub-64-char hex is not accepted as a hash" `
+        ($null -eq (Get-ReleaseAssetHash -ReleaseBody "deadbeef  RackStack.exe" -AssetName 'RackStack.exe'))
+
+    # Hash comparison downstream is uppercase; a lowercase manifest must still normalize.
+    Write-TestResult "Update: lowercase manifest hash is upper-cased" `
+        ((Get-ReleaseAssetHash -ReleaseBody "d99c3ebc7ae771f25cccfac278c6b68af70fa1a995fb66cc9b82ec88f04f547b  RackStack.exe" -AssetName 'RackStack.exe') -cmatch '^[0-9A-F]{64}$')
+}
+catch {
+    Write-TestResult "Self-Update Integrity Tests" $false $_.Exception.Message
 }
 
 # ============================================================================

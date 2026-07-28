@@ -273,6 +273,42 @@ function Move-ToProtectedStaging {
     }
 }
 
+# Resolve the published SHA-256 for a release asset from the hash manifest in the release body.
+#
+# The manifest lines carry the ORIGINAL filename ("RackStack v1.2.3.ps1"), while GitHub serves
+# the asset under a rewritten name with whitespace collapsed to dots ("RackStack.v1.2.3.ps1").
+# Matching the raw asset name against the manifest therefore never hit on the .ps1 path, which
+# silently disabled integrity verification for script self-updates. Both sides are normalized to
+# one space/dot spelling so either form resolves to the other.
+#
+# Returns the uppercase hash, or $null when the asset has no manifest entry. Callers MUST treat
+# $null as "refuse to install" — the payload this guards is executed with elevation.
+function Get-ReleaseAssetHash {
+    param (
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$ReleaseBody,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$AssetName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ReleaseBody)) { return $null }
+
+    $assetHashKey = $AssetName -replace '[\s.]', '.'
+    foreach ($manifestLine in ($ReleaseBody -split "`n")) {
+        if ($manifestLine -match '([0-9a-fA-F]{64})\s+(\S.*?)\s*$') {
+            $regexMatches = $matches
+            if (($regexMatches[2] -replace '[\s.]', '.') -ieq $assetHashKey) {
+                return $regexMatches[1].ToUpper()
+            }
+        }
+    }
+
+    return $null
+}
+
 # Function to download and install an update from a GitHub release
 function Install-ScriptUpdate {
     param (
@@ -286,9 +322,16 @@ function Install-ScriptUpdate {
     $scriptDir = Split-Path $script:ScriptPath
     $scriptName = Split-Path $script:ScriptPath -Leaf
 
-    # Find the right asset to download
+    # Find the right asset to download.
+    #
+    # GitHub rewrites whitespace to dots in release asset names: the artifact published as
+    # "RackStack v1.2.3.ps1" is stored and served as "RackStack.v1.2.3.ps1". An exact-string
+    # match on the spaced name therefore NEVER hit for the .ps1 path — it always fell through
+    # to the wildcard below, which in turn left $asset.name in the dotted form and broke the
+    # SHA256 manifest lookup further down. Compare on a space/dot-normalized key instead.
     $assetName = if ($isExe) { "RackStack.exe" } else { "RackStack v$remoteVersion.ps1" }
-    $asset = $Release.assets | Where-Object { $_.name -eq $assetName }
+    $assetKey = $assetName -replace '[\s.]', '.'
+    $asset = $Release.assets | Where-Object { ($_.name -replace '[\s.]', '.') -ieq $assetKey }
 
     # Fallback: try wildcard match if exact name not found
     if (-not $asset) {
@@ -336,16 +379,9 @@ function Install-ScriptUpdate {
         return
     }
 
-    # SHA256 integrity verification
-    $expectedHash = $null
-    if ($Release.body) {
-        # Parse SHA256 hash from release notes (format: "abcdef123...  filename")
-        $hashPattern = '([0-9a-fA-F]{64})\s+' + [regex]::Escape($asset.name)
-        if ($Release.body -match $hashPattern) {
-            $regexMatches = $matches
-            $expectedHash = $regexMatches[1].ToUpper()
-        }
-    }
+    # SHA256 integrity verification. $null means the asset has no manifest entry, which is
+    # treated as a hard refusal below — never as "skip the check".
+    $expectedHash = Get-ReleaseAssetHash -ReleaseBody ([string]$Release.body) -AssetName $asset.name
 
     if ($expectedHash) {
         Write-OutputColor "  Verifying SHA256 integrity..." -color "Info"
@@ -396,7 +432,14 @@ function Install-ScriptUpdate {
         }
     }
     else {
-        Write-OutputColor "  SHA256 hash not found in release notes — skipping verification." -color "Warning"
+        # Fail closed. This function copies the payload over the running script (or stages it for
+        # the EXE replace) and relaunches with elevation, so an update whose integrity cannot be
+        # established must not be installed. Previously this warned and continued, which meant a
+        # manifest-lookup failure degraded silently into an unverified self-update.
+        Write-OutputColor "  SHA256 hash not found in release notes — refusing to install an unverified update." -color "Error"
+        Write-OutputColor "  Download and verify manually from: $($Release.html_url)" -color "Info"
+        Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        return
     }
 
     if ($isExe) {
