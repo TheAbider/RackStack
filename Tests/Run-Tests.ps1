@@ -10471,6 +10471,53 @@ catch {
 }
 
 # ============================================================================
+# SECTION 206: RELEASES ARE NEVER DELETED (package managers pin release URLs)
+# ============================================================================
+# A published package manifest pins the release asset URL for its own version, and the
+# registries keep approved versions forever. Deleting a release therefore breaks installs
+# permanently and irrecoverably — the EXE cannot be rebuilt byte-identically, so the
+# published checksum can never be satisfied again.
+#
+# This is not hypothetical. The approved Chocolatey package rackstack 1.99.0 downloads
+# .../releases/download/v1.99.0/RackStack.exe; a retention step deleted that release when
+# v1.99.1 shipped, and `choco install rackstack` returned 404 for about two months before
+# it was noticed (2026-07-29). The same step also broke the v1.122.2 Chocolatey moderation
+# submission mid-review. Prune Actions artifacts if storage ever matters — never releases.
+Write-SectionHeader "SECTION 206: RELEASES ARE NEVER DELETED"
+
+try {
+    $wfDir206 = Join-Path $script:ModuleRoot '.github\workflows'
+    if (Test-Path -LiteralPath $wfDir206) {
+        $deleters206 = @(
+            Get-ChildItem -Path $wfDir206 -Filter '*.yml' -File |
+                Where-Object {
+                    $raw = Get-Content $_.FullName -Raw
+                    # `gh release delete`, or the REST equivalent against /releases/<id>
+                    ($raw -match 'gh\s+release\s+delete') -or
+                    ($raw -match '(?i)-X\s+DELETE[^\r\n]*\/releases\/')
+                } | ForEach-Object { $_.Name }
+        )
+        Write-TestResult "Releases: no workflow deletes a GitHub release" `
+            ($deleters206.Count -eq 0) $(if ($deleters206.Count) { "found in: $($deleters206 -join ', ')" } else { "" })
+
+        # The tag must survive too — a deleted tag breaks source-based installs and the
+        # cosign certificate-identity that references the ref.
+        $tagKillers206 = @(
+            Get-ChildItem -Path $wfDir206 -Filter '*.yml' -File |
+                Where-Object { (Get-Content $_.FullName -Raw) -match '--cleanup-tag' } |
+                ForEach-Object { $_.Name }
+        )
+        Write-TestResult "Releases: no workflow deletes a release tag" `
+            ($tagKillers206.Count -eq 0) $(if ($tagKillers206.Count) { "found in: $($tagKillers206 -join ', ')" } else { "" })
+    } else {
+        Write-TestResult "Releases: workflow directory present" -Skipped -Message "no .github/workflows in this layout"
+    }
+}
+catch {
+    Write-TestResult "Release Retention Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
