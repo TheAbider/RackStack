@@ -32,12 +32,17 @@ ci.yml step -- do not hand-maintain these files after that.
   update the version, URL, SHA-256, and `ReleaseDate` in all three
   files, then run `winget validate --manifest <folder>`.
 
-## Caveat: release retention vs. winget URLs
+## Release retention: releases are never deleted
 
-The ci.yml retention step deletes the previous patch release within a
-minor when a new one publishes. The winget manifest for a version points
-at that version's release asset URL, so when the next patch ships, the
-current winget manifest's InstallerUrl goes dead until the auto-submitted
-update PR for the new version merges in winget-pkgs (moderation can take
-days). During that window `winget install TheAbider.RackStack` fails
-hash/download; installs recover as soon as the update PR merges.
+Earlier versions of `ci.yml` deleted the previous patch release within a
+minor when a new one published, which meant a published winget manifest's
+`InstallerUrl` went dead as soon as the next patch shipped.
+
+That retention step has been removed. Release assets are permanent, because
+every package registry pins the asset URL for its own version and keeps
+approved versions indefinitely. The same defect silently broke the approved
+Chocolatey package (`choco install rackstack` returned 404 for about two
+months) before it was found on 2026-07-29.
+
+Do not reintroduce release deletion. `Run-Tests` section 206 fails the suite
+if any workflow calls `gh release delete` or `--cleanup-tag`.

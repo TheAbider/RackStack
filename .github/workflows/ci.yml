@@ -538,41 +538,23 @@ jobs:
           Pop-Location
           exit 0
 
-      - name: Apply retention rule (only latest z in minor survives)
-        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $ver  = '${{ steps.vercheck.outputs.version }}'
-          $vParts = $ver -split '\.'
-          if ($vParts.Length -ne 3) {
-            Write-Host "Unexpected version format '$ver' — skipping retention cleanup"
-            exit 0
-          }
-          $thisMinor = "$($vParts[0]).$($vParts[1])"  # e.g. "1.98"
-          # Enumerate ALL existing releases (not just immediate prev) so we correctly
-          # collapse the 1.98.x lineup down to just v1.98.8 even if v1.98.7 was missed
-          # and v1.98.6 is still the latest existing release. End-state: only the new
-          # `$ver` release exists in this minor.
-          $allReleases = gh release list --json tagName --limit 200 | ConvertFrom-Json
-          $global:LASTEXITCODE = 0
-          $toDelete = @()
-          foreach ($r in $allReleases) {
-            $tag = $r.tagName
-            $tagVer = $tag -replace '^v', ''
-            $tagParts = $tagVer -split '\.'
-            if ($tagParts.Length -eq 3 -and "$($tagParts[0]).$($tagParts[1])" -eq $thisMinor -and $tagVer -ne $ver) {
-              $toDelete += $tag
-            }
-          }
-          if ($toDelete.Count -eq 0) {
-            Write-Host "Retention: no older releases in minor $thisMinor — nothing to delete"
-          } else {
-            Write-Host "Retention: deleting $($toDelete.Count) older $thisMinor.x release(s) so only v$ver survives"
-            foreach ($tag in $toDelete) {
-              Write-Host "  -> gh release delete $tag --cleanup-tag"
-              gh release delete $tag --yes --cleanup-tag 2>$null
-              $global:LASTEXITCODE = 0
-            }
-          }
-          exit 0
+      # NO RELEASE RETENTION / DELETION STEP — deliberately removed, do not re-add.
+      #
+      # A retention step used to delete every older patch release within the same minor so
+      # that only the newest survived. That silently broke the package managers, because a
+      # published package manifest pins the release asset URL for its own version and those
+      # registries keep approved versions forever:
+      #
+      #   - Chocolatey: the approved rackstack 1.99.0 package downloads
+      #     .../releases/download/v1.99.0/RackStack.exe via Get-ChocolateyWebFile. Retention
+      #     deleted that release when v1.99.1 shipped, so `choco install rackstack` returned
+      #     404 for roughly two months before anyone noticed (found 2026-07-29).
+      #   - Chocolatey moderation: v1.122.2 failed automated validation with "unable to find
+      #     a package" because v1.122.3 published while v1.122.2 was still in the review
+      #     queue, and retention deleted the release out from under the moderator.
+      #   - winget: the same hazard was already documented in dist/winget/README.md.
+      #
+      # GitHub release assets on a public repo do not count against the Actions artifact
+      # storage quota, so there is no storage argument for deleting them. If disk hygiene
+      # ever matters, prune Actions *artifacts* — never releases that a published package
+      # points at. Run-Tests section 206 asserts this workflow contains no release deletion.
