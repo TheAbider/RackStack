@@ -10518,6 +10518,92 @@ catch {
 }
 
 # ============================================================================
+# SECTION 207: SECRET-SCANNER CONFIG INTEGRITY (.gitleaks.toml)
+# ============================================================================
+# The gitleaks workflow behaves differently per event: push/pull_request scan
+# only the NEW commits, while schedule/workflow_dispatch scan the FULL history.
+# A green PR check therefore proves nothing about the weekly scan, so a broken
+# allowlist stays invisible until the next Monday failure email. These asserts
+# are the only pre-merge signal that the full-history path is still sound.
+#
+# Two failure modes pinned here:
+#   1. gitleaks 8.24.3 SILENTLY ignores the plural [[allowlists]] array at
+#      global scope — it parses without error, emits no warning, and suppresses
+#      nothing. Only the singular [allowlist] table works. Verified empirically
+#      on 8.24.3: identical regexes gave "leaks found: 2" under [[allowlists]]
+#      and "no leaks found" under [allowlist]. Most upstream docs show the
+#      plural form, so this is easy to "modernise" into a silent no-op.
+#   2. Allowlisting by `paths` or `commits` blinds the scanner to whole files
+#      or whole commits. Entries must be scoped to exact literal values, so a
+#      real credential added to the same file still fails the scan.
+#
+# History: the weekly scan was red for ~11 consecutive Mondays (2026-05-25
+# onward) on two non-secrets — a Pester redaction fixture and a base64
+# placeholder in the tunnel docs. A permanently red scanner is worse than no
+# scanner, because a genuine leak arrives as one extra line in a job everyone
+# has learned to skip.
+Write-SectionHeader "SECTION 207: SECRET-SCANNER CONFIG INTEGRITY"
+
+try {
+    $wfDir207 = Join-Path $script:ModuleRoot '.github\workflows'
+    if (Test-Path -LiteralPath $wfDir207) {
+        # A workflows directory means this is the source-repo layout, so the
+        # config must exist. The dist/monolithic layout has neither and skips.
+        $glPath207 = Join-Path $script:ModuleRoot '.gitleaks.toml'
+        $glExists207 = Test-Path -LiteralPath $glPath207
+        Write-TestResult "Gitleaks: .gitleaks.toml present at repo root" $glExists207
+
+        if ($glExists207) {
+            $glRaw207 = Get-Content -LiteralPath $glPath207 -Raw
+
+            Write-TestResult "Gitleaks: uses the singular [allowlist] table" `
+                ([bool]($glRaw207 -match '(?m)^\s*\[allowlist\]'))
+            Write-TestResult "Gitleaks: avoids [[allowlists]] (silent no-op on 8.24.3)" `
+                ([bool]($glRaw207 -notmatch '(?m)^\s*\[\[allowlists\]\]'))
+
+            # Value-scoped only — never blind a whole file or a whole commit.
+            Write-TestResult "Gitleaks: allowlist exempts no whole paths" `
+                ([bool]($glRaw207 -notmatch '(?m)^\s*paths\s*='))
+            Write-TestResult "Gitleaks: allowlist exempts no whole commits" `
+                ([bool]($glRaw207 -notmatch '(?m)^\s*commits\s*='))
+
+            # An allowlist layered on an empty ruleset would scan for nothing.
+            Write-TestResult "Gitleaks: extends the default ruleset" `
+                ([bool]($glRaw207 -match '(?m)^\s*useDefault\s*=\s*true'))
+
+            # Exactly the two reviewed false positives — no silent additions.
+            $glRegexCount207 = ([regex]::Matches($glRaw207, "'''[^']+'''")).Count
+            Write-TestResult "Gitleaks: allowlist holds exactly 2 reviewed entries" `
+                ($glRegexCount207 -eq 2) "found $glRegexCount207"
+
+            # No catch-all that would silence the scanner wholesale.
+            Write-TestResult "Gitleaks: allowlist contains no catch-all regex" `
+                ([bool]($glRaw207 -notmatch "'''\s*(\.\*|\.\+)\s*'''"))
+        }
+
+        # Without the schedule trigger and an unshallow checkout, nothing ever
+        # scans history and historical leaks become permanently invisible.
+        $glWf207 = Join-Path $wfDir207 'gitleaks.yml'
+        if (Test-Path -LiteralPath $glWf207) {
+            $wfRaw207 = Get-Content -LiteralPath $glWf207 -Raw
+            Write-TestResult "Gitleaks: workflow keeps the scheduled full-history scan" `
+                ([bool]($wfRaw207 -match '(?m)^\s*schedule:'))
+            Write-TestResult "Gitleaks: workflow checks out full history (fetch-depth: 0)" `
+                ([bool]($wfRaw207 -match 'fetch-depth:\s*0'))
+        }
+        else {
+            Write-TestResult "Gitleaks: workflow present" $false ".github/workflows/gitleaks.yml not found"
+        }
+    }
+    else {
+        Write-TestResult "Gitleaks: secret-scanner config integrity" -Skipped -Message "no .github/workflows in this layout"
+    }
+}
+catch {
+    Write-TestResult "Secret-Scanner Config Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # SECTION 174: DOCUMENTATION FRESHNESS (counts must match the codebase)
 # ============================================================================
 # Pre-release guard: every user-facing CLI-action count and module count baked
