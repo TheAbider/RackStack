@@ -1,0 +1,58 @@
+# gitleaks configuration for RackStack
+#
+# Extends the built-in gitleaks ruleset (AWS, GitHub, Slack, GCP, Stripe,
+# private keys, ...) and suppresses two verified false positives.
+#
+# Why this file exists
+# --------------------
+# The weekly `schedule` run in .github/workflows/gitleaks.yml scans the FULL
+# git history, so it re-reports every historical finding on every run. Two
+# non-secrets in old commits failed that job every Monday from 2026-05-25
+# onward, which trains maintainers to ignore a security alert -- the exact
+# condition under which a real leak gets missed. They are allowlisted here so
+# the job is green when the repo is clean and red only when it is not.
+#
+# Scope
+# -----
+# Each entry allowlists one exact literal value, NOT a file and NOT a commit.
+# A real credential added to either of these files, in any future commit, has
+# a different value and still fails the scan. Do not relax these into `paths`
+# or `commits` entries -- that would blind the scanner to entire files.
+#
+# Both values below are fake and have been public in this repository's history
+# since 2026-02-23 and 2026-05-20 respectively; repeating them here discloses
+# nothing.
+#
+# !! MAINTENANCE WARNING !!
+# Use the SINGULAR [allowlist] table below. gitleaks 8.24.3 silently ignores
+# the plural [[allowlists]] array at global scope: it parses without error,
+# reports no warning, and suppresses nothing. Verified empirically on
+# 8.24.3 -- [[allowlists]] returned "leaks found: 2", [allowlist] returned
+# "no leaks found". Because the push/pull_request runs only scan new commits,
+# a broken allowlist here stays invisible until the weekly full-history scan
+# fails. If you change this file, re-verify with a full scan:
+#
+#     gitleaks detect --source . --redact -v --exit-code=2
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Verified false positives -- see per-entry notes below (reviewed 2026-08-03)"
+regexes = [
+  # Tests/Pester/Logging.Tests.ps1 -- Pester fixture, not a credential.
+  # The test asserts that Write-StructuredLog redacts data keys named "Token".
+  # The value is deliberately Stripe-shaped so the test is meaningful, and the
+  # assertion is that it does NOT reach the log file:
+  #     Write-StructuredLog -Message 'auth' -Data @{ Token = 'sk_live_abcd1234' }
+  #     (Read-LogContent $script:logPath) | Should -Not -Match 'sk_live_abcd1234'
+  # Sibling cases use 'hunter2-plaintext' and 'topsecret-xyz'. Added in 1a052069.
+  '''sk_live_abcd1234''',
+
+  # docs/fileserver-docker.md -- documentation placeholder, not a credential.
+  # Shows readers the shape of a Cloudflare tunnel token. The base64 payload
+  # decodes to {"a":"abcdef...","t":"a1b2c3d4...","s":"ABCDEF..."} -- literal
+  # ellipses, no live tunnel, no account identifier. The next line of that doc
+  # reads "Never commit `.env` to version control." Added in 52574abb.
+  '''eyJhIjoiYWJjZGVmLi4uIiwidCI6ImExYjJjM2Q0Li4uIiwicyI6IkFCQ0RFRi4uLiJ9''',
+]
