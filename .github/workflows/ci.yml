@@ -172,7 +172,22 @@ jobs:
           $mono = "builds\RackStack v$ver.ps1"
           if (-not (Test-Path $mono)) { throw "Monolithic not found at $mono" }
           if (-not (Test-Path 'RackStack.ico')) { throw "RackStack.ico missing — required for compile" }
-          Invoke-PS2EXE -InputFile $mono -OutputFile 'builds\RackStack.exe' -Version $ver -RequireAdmin -IconFile 'RackStack.ico'
+          # Populate the full version resource. Company/Product/Description
+          # were empty in every release through v1.122.3, which is both a mild
+          # heuristic-AV signal (legitimate software fills these in) and a real
+          # UX gap: -RequireAdmin raises a UAC prompt, and UAC displays
+          # FileDescription as the program name — so users were being asked to
+          # elevate a blank. Values match the identity already published in
+          # RackStack.psd1, the Chocolatey nuspec, and the Scoop manifest.
+          Invoke-PS2EXE -InputFile $mono -OutputFile 'builds\RackStack.exe' `
+            -Version $ver `
+            -RequireAdmin `
+            -IconFile 'RackStack.ico' `
+            -title 'RackStack - Windows Server configuration toolkit' `
+            -product 'RackStack' `
+            -company 'TheAbider' `
+            -copyright 'Copyright (c) 2026 TheAbider' `
+            -description 'Menu-driven configuration and automation for Windows Server hosts.'
           $info = Get-Item 'builds\RackStack.exe'
           Write-Host "Compiled: $($info.FullName) ($([math]::Round($info.Length / 1MB, 2)) MB)"
 

@@ -13,7 +13,7 @@
     Environment-specific settings are configured via rackstack.config.json (a legacy defaults.json is still read).
 
 .VERSION
-    1.122.3
+    1.122.4
 .NOTES
     - Requires Windows Server 2012 R2 or later (or Windows 10/11 for testing)
     - Must be run as Administrator
