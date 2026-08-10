@@ -10657,6 +10657,104 @@ catch {
 }
 
 # ============================================================================
+# SECTION 208: DEFENDER INTERPRETER-EXCLUSION GUARD (17-DefenderExclusions)
+# ============================================================================
+# A Defender *process* exclusion does not exempt one application — it exempts
+# every payload that process will ever execute. Excluding powershell.exe stops
+# Defender inspecting all PowerShell on the host permanently, which is why it
+# is a catalogued attacker technique (MITRE T1562.001) and why THOR's
+# SUSP_PS1_SCRIPT_Defender_Exlusions_Interpreter rule fires on scripts that can
+# offer it.
+#
+# The custom *path* prompt has warned on OS directories since v1.98; the custom
+# *process* prompt had no validation at all — it read a name and excluded it.
+# The shipped defaults were always clean (vmms/vmwp/vmsp/vmcompute, all
+# Hyper-V), so this was a latent hole in what an operator could configure
+# rather than a bad default.
+#
+# These tests exercise the real Test-InterpreterProcessName, so a regression in
+# the normalization (case, quoting, missing extension, full path) fails here
+# instead of silently re-opening the hole.
+Write-SectionHeader "SECTION 208: DEFENDER INTERPRETER-EXCLUSION GUARD"
+
+try {
+    $defRaw208 = Get-Content "$modulesPath\17-DefenderExclusions.ps1" -Raw
+
+    # -- Structural --
+    Write-TestResult "Defender: interpreter guard function exists" `
+        ($defRaw208 -match 'function\s+Test-InterpreterProcessName\b')
+    Write-TestResult "Defender: custom process prompt consults the guard" `
+        ($defRaw208 -match 'if\s*\(\s*Test-InterpreterProcessName\s+-Name\s+\$customProc\s*\)')
+    Write-TestResult "Defender: refusal is reached before Add-MpPreference" `
+        ($defRaw208 -match 'Test-InterpreterProcessName[\s\S]{0,600}REFUSED[\s\S]{0,900}Add-MpPreference\s+-ExclusionProcess')
+    # Fail closed: no "add it anyway" escape hatch on the interpreter branch.
+    #
+    # The first cut of this check searched 'REFUSED:[\s\S]{0,800}?else\s*\{' and
+    # asserted the result had no Confirm-UserAction. Mutation testing killed it:
+    # injecting a real override prompt pushed the branch past 800 characters, the
+    # regex stopped matching, and `'' -notmatch 'Confirm-UserAction'` is vacuously
+    # TRUE — so the test went green on the exact code it exists to forbid. Any
+    # assertion built on a regex must therefore prove the regex MATCHED before
+    # trusting what it did or didn't find.
+    $refusalMatch208 = [regex]::Match($defRaw208,
+        '(?s)if \(Test-InterpreterProcessName -Name \$customProc\) \{(.*?)\r?\n\s*\}\r?\n\s*else \{')
+    Write-TestResult "Defender: refusal branch is locatable" $refusalMatch208.Success `
+        "regex found no interpreter branch — the checks below would pass vacuously"
+    $refusalBody208 = $refusalMatch208.Groups[1].Value
+    Write-TestResult "Defender: interpreter refusal offers no override prompt" `
+        ($refusalMatch208.Success -and $refusalBody208 -notmatch 'Confirm-UserAction')
+    Write-TestResult "Defender: interpreter refusal never adds the exclusion" `
+        ($refusalMatch208.Success -and $refusalBody208 -notmatch 'Add-MpPreference')
+
+    # The shipped Hyper-V process list must never gain an interpreter.
+    $builtinProcs208 = [regex]::Match($defRaw208, '\$capProcs\s*=\s*@\(([^)]*)\)').Groups[1].Value
+    $builtinBad208 = @(
+        'powershell', 'pwsh', 'cmd.exe', 'wscript', 'cscript', 'mshta', 'rundll32'
+    ) | Where-Object { $builtinProcs208 -match [regex]::Escape($_) }
+    Write-TestResult "Defender: built-in exclusion list contains no interpreter" `
+        ($builtinBad208.Count -eq 0) $(if ($builtinBad208.Count) { "found: $($builtinBad208 -join ', ')" } else { "" })
+
+    # -- Behavioral: the real function --
+    foreach ($blocked in @('powershell.exe', 'pwsh.exe', 'powershell_ise.exe', 'cmd.exe',
+                           'wscript.exe', 'cscript.exe', 'mshta.exe', 'rundll32.exe',
+                           'regsvr32.exe', 'msbuild.exe', 'installutil.exe')) {
+        Write-TestResult "Defender: '$blocked' is refused" (Test-InterpreterProcessName -Name $blocked)
+    }
+
+    # Normalization — every spelling an operator might type must reach the same verdict.
+    Write-TestResult "Defender: bare name without .exe is refused" `
+        (Test-InterpreterProcessName -Name 'powershell')
+    Write-TestResult "Defender: upper-case spelling is refused" `
+        (Test-InterpreterProcessName -Name 'POWERSHELL.EXE')
+    Write-TestResult "Defender: mixed case is refused" `
+        (Test-InterpreterProcessName -Name 'PowerShell.Exe')
+    Write-TestResult "Defender: full path is refused" `
+        (Test-InterpreterProcessName -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
+    Write-TestResult "Defender: forward-slash path is refused" `
+        (Test-InterpreterProcessName -Name 'C:/Windows/System32/cmd.exe')
+    Write-TestResult "Defender: quoted value is refused" `
+        (Test-InterpreterProcessName -Name '"powershell.exe"')
+    Write-TestResult "Defender: surrounding whitespace is refused" `
+        (Test-InterpreterProcessName -Name '  cmd.exe  ')
+
+    # Must NOT over-block — legitimate exclusions have to keep working.
+    foreach ($allowed in @('myapp.exe', 'vmms.exe', 'vmwp.exe', 'vmsp.exe', 'vmcompute.exe',
+                           'sqlservr.exe', 'notpowershell.exe', 'powershellish.exe')) {
+        Write-TestResult "Defender: '$allowed' is still allowed" `
+            (-not (Test-InterpreterProcessName -Name $allowed))
+    }
+    Write-TestResult "Defender: empty input is not treated as an interpreter" `
+        (-not (Test-InterpreterProcessName -Name ''))
+    Write-TestResult "Defender: whitespace-only input is not an interpreter" `
+        (-not (Test-InterpreterProcessName -Name '   '))
+    Write-TestResult "Defender: null input is not an interpreter" `
+        (-not (Test-InterpreterProcessName -Name $null))
+}
+catch {
+    Write-TestResult "Defender Interpreter Guard Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 

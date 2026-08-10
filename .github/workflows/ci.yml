@@ -155,9 +155,15 @@ jobs:
       - name: Install ps2exe
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         run: |
-          if (-not (Get-Module ps2exe -ListAvailable)) {
-            Install-Module ps2exe -Force -Scope CurrentUser -AllowClobber
+          # Pinned. This module compiles the binary that ships to users, so an
+          # unpinned install would let the released artifact change without a
+          # commit — the same supply-chain exposure the SHA-pinning policy
+          # closes for actions. Bump deliberately, never implicitly.
+          $ps2exeVersion = '1.0.18'
+          if (-not (Get-Module ps2exe -ListAvailable | Where-Object { $_.Version -eq $ps2exeVersion })) {
+            Install-Module ps2exe -RequiredVersion $ps2exeVersion -Force -Scope CurrentUser -AllowClobber
           }
+          Import-Module ps2exe -RequiredVersion $ps2exeVersion -Force
 
       - name: Compile RackStack.exe
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'

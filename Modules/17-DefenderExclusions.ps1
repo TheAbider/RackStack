@@ -1,4 +1,36 @@
 ﻿#region ===== WINDOWS DEFENDER EXCLUSIONS =====
+# Returns $true when the supplied process name is a script or command
+# interpreter that must never be excluded from Defender.
+#
+# A process exclusion does not exempt one application — it exempts every
+# payload that process will ever execute. Excluding powershell.exe therefore
+# stops Defender inspecting *all* PowerShell on the host, permanently, which
+# is why it is a documented attacker technique (MITRE T1562.001 Impair
+# Defenses) and why security scanners flag any script capable of offering it.
+# The correct way to exempt one application is a PATH exclusion scoped to that
+# application's own directory, which Set-DefenderExclusions already guards
+# against pointing at an OS directory.
+#
+# Matching is on the leaf name only, so a full path, a quoted value, or a bare
+# name without the extension all resolve to the same decision.
+function Test-InterpreterProcessName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+
+    $leaf = $Name.Trim().Trim('"', "'")
+    $leaf = $leaf -replace '.*[\\/]', ''
+    if ($leaf -notmatch '\.exe$') { $leaf = "$leaf.exe" }
+
+    $interpreters = @(
+        'powershell.exe', 'pwsh.exe', 'powershell_ise.exe',
+        'cmd.exe', 'wscript.exe', 'cscript.exe', 'mshta.exe',
+        'rundll32.exe', 'regsvr32.exe',
+        'msbuild.exe', 'installutil.exe', 'regasm.exe', 'regsvcs.exe'
+    )
+    return $interpreters -contains $leaf.ToLowerInvariant()
+}
+
 # Function to configure Windows Defender exclusions for Hyper-V
 function Set-DefenderExclusions {
     # Check if Windows Defender cmdlets are available (Server 2016+ only)
@@ -152,18 +184,33 @@ function Set-DefenderExclusions {
                 $navResult = Test-NavigationCommand -UserInput $customProc
                 if ($navResult.ShouldReturn) { return }
                 if ($customProc) {
-                    try {
-                        Add-MpPreference -ExclusionProcess $customProc -ErrorAction Stop
-                        Write-OutputColor "  Added process exclusion: $customProc" -color "Success"
-                        Add-SessionChange -Category "Security" -Description "Added Defender process exclusion: $customProc"
-                        Clear-MenuCache
-                        Add-UndoAction -Category "Security" -Description "Added Defender process exclusion: $customProc" -UndoScript {
-                            param($Proc)
-                            Remove-MpPreference -ExclusionProcess $Proc -ErrorAction SilentlyContinue
-                        }.GetNewClosure() -UndoParams @{ Proc = $customProc }
+                    if (Test-InterpreterProcessName -Name $customProc) {
+                        # Fail closed. Unlike the path guard above there is no
+                        # "add it anyway" prompt here: excluding an interpreter
+                        # has no legitimate server use case, and the blast
+                        # radius is every script that interpreter ever runs.
+                        Write-OutputColor "" -color "Info"
+                        Write-OutputColor "  REFUSED: '$customProc' is a script or command interpreter." -color "Error"
+                        Write-OutputColor "  Excluding it would stop Defender inspecting everything that" -color "Error"
+                        Write-OutputColor "  interpreter runs from now on, not just one application." -color "Error"
+                        Write-OutputColor "" -color "Info"
+                        Write-OutputColor "  To exempt a specific application, add a Path exclusion for" -color "Warning"
+                        Write-OutputColor "  that application's own folder instead." -color "Warning"
                     }
-                    catch {
-                        Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
+                    else {
+                        try {
+                            Add-MpPreference -ExclusionProcess $customProc -ErrorAction Stop
+                            Write-OutputColor "  Added process exclusion: $customProc" -color "Success"
+                            Add-SessionChange -Category "Security" -Description "Added Defender process exclusion: $customProc"
+                            Clear-MenuCache
+                            Add-UndoAction -Category "Security" -Description "Added Defender process exclusion: $customProc" -UndoScript {
+                                param($Proc)
+                                Remove-MpPreference -ExclusionProcess $Proc -ErrorAction SilentlyContinue
+                            }.GetNewClosure() -UndoParams @{ Proc = $customProc }
+                        }
+                        catch {
+                            Write-OutputColor "  Failed to add exclusion: $_" -color "Error"
+                        }
                     }
                 }
                 Write-PressEnter
