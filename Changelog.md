@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.122.4
+
+Hardens what the tool will let you exclude from Defender, and fixes an executable that shipped without a name.
+
+- **RackStack refuses to exclude a script interpreter from Defender.** A process exclusion does not exempt one application -- it exempts every payload that process will ever execute, so excluding `powershell.exe` stops Defender inspecting all PowerShell on the host from then on. The custom *path* prompt has warned before excluding an operating-system directory since v1.98; the custom *process* prompt accepted anything. It now declines `powershell`, `pwsh`, `cmd`, `wscript`, `cscript`, `mshta`, `rundll32`, `regsvr32` and the .NET command-line hosts, however they are spelled, and points at a path exclusion scoped to the application's own folder instead. The recommended Hyper-V exclusions this tool has always applied were never affected.
+- **The executable now carries its own identity.** Company, product, description and copyright were empty in every previous release. Windows shows the description as the program name in the elevation prompt, so users were being asked to approve a blank; it now names the tool. A complete version resource also reads as ordinary software to antivirus heuristics, which an empty one does not.
+- **The build pins the compiler that produces the executable**, so a published binary cannot change without a corresponding change in the repository.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.122.3
 
 Closes the second self-update path, and corrects a packaging claim.

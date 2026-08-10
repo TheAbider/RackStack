@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.122.3
+    Automated Test Runner for RackStack v1.122.4
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10752,6 +10752,65 @@ try {
 }
 catch {
     Write-TestResult "Defender Interpreter Guard Tests" $false $_.Exception.Message
+}
+
+# ============================================================================
+# SECTION 209: BUILD METADATA INTEGRITY (what ps2exe stamps into the EXE)
+# ============================================================================
+# Every release through v1.122.3 shipped a binary whose CompanyName,
+# ProductName, FileDescription and LegalCopyright were EMPTY — verified by
+# reading the version resource out of the published v1.122.3 artifact. Two
+# costs: an empty version resource is a mild heuristic-AV signal because
+# legitimate software populates it, and -RequireAdmin raises a UAC prompt that
+# displays FileDescription as the program name, so users were asked to elevate
+# a blank.
+#
+# The compiler version is pinned here too. ps2exe builds the binary that ships
+# to users, so an unpinned Install-Module let the released artifact change
+# without a commit — the exposure the SHA-pinning policy already closes for
+# actions, including transitive ones.
+Write-SectionHeader "SECTION 209: BUILD METADATA INTEGRITY"
+
+try {
+    $ciPath209 = Join-Path $script:ModuleRoot '.github\workflows\ci.yml'
+    if (Test-Path -LiteralPath $ciPath209) {
+        $ci209 = Get-Content -LiteralPath $ciPath209 -Raw
+
+        # Compiler must be pinned to an exact version, never floating.
+        Write-TestResult "Build: ps2exe is pinned to an explicit version" `
+            ([bool]($ci209 -match "\`$ps2exeVersion\s*=\s*'\d+\.\d+\.\d+'"))
+        Write-TestResult "Build: ps2exe install uses -RequiredVersion" `
+            ([bool]($ci209 -match 'Install-Module ps2exe -RequiredVersion'))
+        Write-TestResult "Build: ps2exe install is not unpinned" `
+            ([bool]($ci209 -notmatch 'Install-Module ps2exe -Force'))
+
+        # The version resource must actually be populated.
+        $p2e209 = [regex]::Match($ci209, '(?s)Invoke-PS2EXE.*?(?=\r?\n\s*\$info\s*=)')
+        Write-TestResult "Build: Invoke-PS2EXE call is locatable" $p2e209.Success `
+            "regex found no ps2exe invocation — the checks below would pass vacuously"
+        $call209 = $p2e209.Value
+        foreach ($flag in @('title', 'product', 'company', 'copyright', 'description')) {
+            Write-TestResult "Build: EXE metadata sets -$flag" `
+                ($p2e209.Success -and $call209 -match "-$flag\s+'")
+        }
+        Write-TestResult "Build: EXE still stamps -Version" `
+            ($p2e209.Success -and $call209 -match '-Version\s+\$ver')
+
+        # One identity across every published surface. The EXE's CompanyName
+        # must agree with the Gallery manifest rather than drifting on its own.
+        $psd209 = Get-Content (Join-Path $script:ModuleRoot 'RackStack.psd1') -Raw
+        $psdCompany209 = [regex]::Match($psd209, "CompanyName\s*=\s*'([^']+)'").Groups[1].Value
+        $exeCompany209 = [regex]::Match($call209, "-company\s+'([^']+)'").Groups[1].Value
+        Write-TestResult "Build: EXE CompanyName matches RackStack.psd1 ('$psdCompany209')" `
+            ($psdCompany209 -and $exeCompany209 -and $psdCompany209 -eq $exeCompany209) `
+            "psd1='$psdCompany209' exe='$exeCompany209'"
+    }
+    else {
+        Write-TestResult "Build: metadata integrity" -Skipped -Message "no .github/workflows in this layout"
+    }
+}
+catch {
+    Write-TestResult "Build Metadata Integrity Tests" $false $_.Exception.Message
 }
 
 # ============================================================================
