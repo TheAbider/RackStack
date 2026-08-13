@@ -10651,6 +10651,24 @@ try {
 
     # README test badge label is the specific 'structural tests' (distinct from the Pester badge).
     Write-TestResult "DocFreshness: README test badge uses a specific label" ($readmeRaw -match 'structural%20tests|structural tests')
+
+    # Header.ps1's .DESCRIPTION states the module count, and it is the text that
+    # lands at the top of the shipped monolithic and therefore inside the EXE.
+    # It was NOT covered here and rotted to "all 78 modules" against a live 81.
+    #
+    # Scope matters: everything from the first .CHANGELOG onward is version
+    # history, where "64 modules, 1873 tests" is a true statement about v1.20.4.
+    # Asserting over the whole file would demand falsifying that history, so only
+    # the current-tense preamble is checked.
+    $headerRaw = Get-Content (Join-Path $script:ModuleRoot 'Header.ps1') -Raw
+    $firstChangelog = $headerRaw.IndexOf('.CHANGELOG')
+    $headerPreamble = if ($firstChangelog -gt 0) { $headerRaw.Substring(0, $firstChangelog) } else { $headerRaw }
+    Write-TestResult "DocFreshness: Header.ps1 preamble is separable from its changelog" `
+        ($firstChangelog -gt 0) "no .CHANGELOG found — the check below would scan version history"
+    $hdrMod = @([regex]::Matches($headerPreamble, '(\d{2,4})\s+modules\b'))
+    $hdrStale = @($hdrMod | Where-Object { [int]$_.Groups[1].Value -ne $liveModuleCount })
+    Write-TestResult "DocFreshness: Header.ps1 module count == $liveModuleCount" `
+        ($hdrStale.Count -eq 0) $(if ($hdrStale.Count) { "stale: $(($hdrStale | ForEach-Object { $_.Value }) -join ', ')" } else { "" })
 }
 catch {
     Write-TestResult "Documentation Freshness Tests" $false $_.Exception.Message
