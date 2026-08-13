@@ -579,3 +579,43 @@ jobs:
       # storage quota, so there is no storage argument for deleting them. If disk hygiene
       # ever matters, prune Actions *artifacts* — never releases that a published package
       # points at. Run-Tests section 206 asserts this workflow contains no release deletion.
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Antivirus false-positive submission reminder.
+      #
+      # Microsoft clears false positives PER HASH. A clearance covers exactly the
+      # binary it was granted for, so every release starts over with the
+      # machine-learning models regardless of how small the change was. v1.122.4
+      # was cleared on 2026-08-12 ("the detection has been removed") — that
+      # clearance does nothing for the next build.
+      #
+      # This writes the new hash and the submission link into the run summary so
+      # the obligation shows up exactly where the release is already being
+      # validated, rather than depending on someone remembering.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Remind — submit this build to Microsoft
+        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.vercheck.outputs.version }}'
+          $sha = (Get-FileHash 'builds\RackStack.exe' -Algorithm SHA256).Hash.ToLower()
+          $lines = @(
+            "## Submit v$ver to Microsoft"
+            ""
+            "False-positive clearances are **per hash**, so this build is not covered by any"
+            "previous determination. Submit it, including for patch releases."
+            ""
+            "| | |"
+            "|---|---|"
+            "| Version | ``$ver`` |"
+            "| SHA-256 | ``$sha`` |"
+            ""
+            "1. https://www.microsoft.com/en-us/wdsi/filesubmission -> **Software developer**"
+            "2. Priority **Medium** — the default is Low, which states it *may never be processed by an analyst*"
+            "3. Upload the release asset verified against ``release-hashes.txt``, never a local ``builds/`` copy"
+            "4. Cite the prior clearance to speed review: submission ``665636df-07e9-4437-9f44-adb3030413ef``"
+            ""
+            "Typical turnaround: about two days."
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Host "Submission reminder written to the run summary (SHA-256 $sha)."
