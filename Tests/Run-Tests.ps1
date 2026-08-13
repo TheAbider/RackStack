@@ -10774,7 +10774,13 @@ Write-SectionHeader "SECTION 209: BUILD METADATA INTEGRITY"
 try {
     $ciPath209 = Join-Path $script:ModuleRoot '.github\workflows\ci.yml'
     if (Test-Path -LiteralPath $ciPath209) {
-        $ci209 = Get-Content -LiteralPath $ciPath209 -Raw
+        # -Encoding UTF8 is load-bearing. ci.yml has no BOM, and Windows PowerShell
+        # 5.1 decodes BOM-less files as ANSI, so its em-dashes and box-drawing
+        # characters arrive as mojibake while pwsh 7 reads them correctly. The suite
+        # is run BOTH ways — directly under pwsh, and under powershell.exe by
+        # local/Validate-Release.ps1 — so without this, assertions that touch any
+        # non-ASCII text in this file pass in one host and fail in the other.
+        $ci209 = Get-Content -LiteralPath $ciPath209 -Raw -Encoding UTF8
 
         # Compiler must be pinned to an exact version, never floating.
         Write-TestResult "Build: ps2exe is pinned to an explicit version" `
@@ -10804,6 +10810,31 @@ try {
         Write-TestResult "Build: EXE CompanyName matches RackStack.psd1 ('$psdCompany209')" `
             ($psdCompany209 -and $exeCompany209 -and $psdCompany209 -eq $exeCompany209) `
             "psd1='$psdCompany209' exe='$exeCompany209'"
+
+        # Antivirus FP clearances are granted per hash, so every release — patches
+        # included — has to be resubmitted. Depending on memory for that failed
+        # once already; the release job prints the obligation, with the new hash,
+        # into the run summary that gets read while validating the release.
+        # Anchor on ASCII only. The step name contains an em-dash; matching it would
+        # re-introduce the host-dependent decoding problem above even with -Encoding
+        # set, and 'name: Remind' is already unique in this workflow.
+        $reminder209 = [regex]::Match($ci209, '(?s)- name: Remind.*?(?=\r?\n\s{6}- name:|\r?\n\s{0,4}\S|\z)')
+        Write-TestResult "Build: release job carries the Microsoft submission reminder" `
+            $reminder209.Success "no reminder step found in ci.yml release job"
+        $rBody209 = $reminder209.Value
+        Write-TestResult "Build: reminder links the WDSI submission portal" `
+            ($reminder209.Success -and $rBody209 -match 'wdsi/filesubmission')
+        # Single-quoted so the backslash in builds\RackStack.exe stays literal — the
+        # first cut of this used a double-quoted pattern whose over-escaped \\\\
+        # required two backslashes and never matched the one that is actually there.
+        Write-TestResult "Build: reminder publishes the new SHA-256" `
+            ($reminder209.Success -and $rBody209 -match 'Get-FileHash' -and `
+             $rBody209 -match 'SHA256' -and $rBody209 -match 'RackStack\.exe')
+        Write-TestResult "Build: reminder writes to the run summary" `
+            ($reminder209.Success -and $rBody209 -match 'GITHUB_STEP_SUMMARY')
+        # Only meaningful on an actual release — must carry the same gate as the build steps.
+        Write-TestResult "Build: reminder is gated on a version bump" `
+            ($reminder209.Success -and $rBody209 -match "steps\.vercheck\.outputs\.bumped == 'true'")
     }
     else {
         Write-TestResult "Build: metadata integrity" -Skipped -Message "no .github/workflows in this layout"
