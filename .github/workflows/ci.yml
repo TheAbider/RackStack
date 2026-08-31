@@ -282,7 +282,7 @@ jobs:
         id: sbom
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         continue-on-error: true
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           # Syft can't resolve a single Windows PE .exe as a source (needs a
           # directory or recognized package format). Scan the whole repo
