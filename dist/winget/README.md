@@ -18,7 +18,7 @@ ci.yml step -- do not hand-maintain these files after that.
 ## Notes on the manifest choices
 
 - **`InstallerType: portable`** -- `RackStack.exe` is a standalone
-  ps2exe-compiled executable, not an installer. winget installs it as a
+  self-contained executable (a native launcher with the script embedded), not an installer. winget installs it as a
   portable package: it places the EXE and registers a PATH alias.
 - **`Commands: [rackstack]`** -- so `rackstack` works from any shell
   after install. The EXE auto-elevates itself when run.

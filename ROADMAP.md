@@ -65,7 +65,7 @@ of the next feature releases once they can be validated safely.
 
 | Item | Why |
 |---|---|
-| Optional: ARM64 EXE | If demand emerges. ps2exe + .NET on ARM64 is straightforward; CI matrix expansion only. |
+| Optional: ARM64 EXE | If demand emerges. The launcher is AnyCPU .NET Framework and already runs on ARM64 Windows; a native ARM64 build would be a CI matrix expansion only. |
 | Optional: PowerShell 7 module path | The thin-wrapper module already supports both editions via the `.psd1` `CompatiblePSEditions = @('Desktop', 'Core')`. A PS7-only feature track is not currently planned. |
 | `RackStack.exe -Action FleetScan` improvements (PSRemoting over WinRM HTTPS, parallel host limits) | Adoption-driven — only if a real multi-host operator surfaces concrete asks. |
 

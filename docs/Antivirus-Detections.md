@@ -22,18 +22,26 @@ If you arrived here from a VirusTotal result or a quarantine notification, start
 
 ## Why it happens
 
-Three properties of RackStack combine to score badly with behavioral and static ML classifiers.
-All three are inherent to what the tool is and does.
+Two properties of RackStack combine to score badly with behavioral and static ML classifiers.
+Both are inherent to what the tool is and does.
 
 | Property | Why a classifier dislikes it |
 |---|---|
 | **The EXE is not Authenticode-signed** | No publisher reputation exists to offset a heuristic score. Code-signing certificates that would fix this require a validated legal entity, which this project does not have. |
-| **It is a packed script host** | The EXE is a PowerShell script compiled by [ps2exe](https://github.com/MScholtes/PS2EXE) into a .NET assembly. Self-extracting script hosts are strongly associated with malware droppers, which is why detections usually carry `MSIL`, `assembly`, or generic packer labels. |
-| **It manages Defender exclusions and services** | RackStack applies Microsoft's own published antivirus exclusion recommendations for Hyper-V, Failover Clustering, and iSCSI/SAN workloads, and can disable optional Windows services. An unsigned packed binary adding its own antivirus exclusions is, behaviorally, the textbook opening move of a dropper. |
+| **It manages Defender exclusions and services** | RackStack applies Microsoft's own published antivirus exclusion recommendations for Hyper-V, Failover Clustering, and iSCSI/SAN workloads, and can disable optional Windows services. An unsigned binary whose contents mention antivirus exclusions is, to a classifier, the textbook opening move of a dropper. |
+
+A third property was removed in v1.123.0. Releases through v1.122.4 were produced by
+[ps2exe](https://github.com/MScholtes/PS2EXE), which wraps a script in its own PowerShell host
+implementation. That wrapper is widely reused by malware droppers, so every build scored as a
+packed script host regardless of the script's content: detections carried `MSIL`, `assembly`, and
+generic packer labels, a cleared hash was re-flagged within weeks, and the same file drifted from 8
+to 19 VirusTotal detections without changing a byte. The EXE is now a small launcher, compiled with
+the C# compiler that ships inside Windows, that starts Windows PowerShell's own console host and
+runs the script from an embedded plain-text resource. See [`dist/launcher/`](../dist/launcher/).
 
 The most common result is a **behavioral** detection such as `Behavior:Win32/DefenseEvasion.A!ml`,
 which fires on what the running process *does* — not on the file matching anything known. Static
-ML verdicts such as `Trojan:Win32/Sabsik.EN.A!ml` come from the same combination of features.
+ML verdicts such as `Trojan:Win32/Wacatac.B!ml` come from the same combination of features.
 
 New releases are also **low-prevalence** files, which raises heuristic scores until download
 history accumulates.
@@ -89,7 +97,7 @@ cosign verify-blob `
 
 Every release also ships a CycloneDX SBOM. There is no manual or local step anywhere in the
 release path — the published EXE is built entirely in GitHub-hosted CI from the public source in
-this repository, and the monolithic `.ps1` it was compiled from is published in the same release
+this repository, and the monolithic `.ps1` it embeds is published in the same release
 so you can read exactly what the EXE does.
 
 ---
@@ -151,7 +159,7 @@ Add-MpPreference -ExclusionPath 'C:\Path\To\RackStack.exe'
 ## Avoiding it entirely: run the script
 
 The monolithic `RackStack v{version}.ps1` published in every release is the *same code* the EXE
-is compiled from. It is unpacked, it is cosign-signed like every other release artifact, and it
+embeds. It is unpacked, it is cosign-signed like every other release artifact, and it
 is never scored by the PE classifiers that produce these detections.
 
 ```powershell
@@ -160,7 +168,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ```
 
 The PowerShell Gallery module (`Install-Module RackStack`) is another script-based route that
-avoids the packed binary.
+avoids the executable entirely.
 
 If antivirus alerts are a recurring problem in your environment, prefer one of these.
 

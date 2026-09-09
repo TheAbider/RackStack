@@ -234,7 +234,10 @@ function Exit-Script {
             try { New-EventLog -LogName Application -Source $toolName -ErrorAction SilentlyContinue } catch { }
         }
 
-        # Schedule deletion after reboot using a scheduled task
+        # Schedule deletion after reboot using a scheduled task. The task runs a plain-text
+        # script file, not an encoded command: the file is readable by anyone auditing the
+        # host (and by the deletion manifest above), whereas an -EncodedCommand blob is the
+        # signature move of a dropper and reads as one to every antivirus heuristic.
         try {
             $cleanupCommands = "Start-Sleep 60`n"
             foreach ($p in $uniquePaths) {
@@ -250,12 +253,37 @@ function Exit-Script {
             # -EA SilentlyContinue when a task doesn't exist.
             $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)-ScheduledExport' -TaskPath '\$($toolNameEsc)\' -Confirm:`$false -ErrorAction SilentlyContinue`n"
             $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)_UpdateCheck' -Confirm:`$false -ErrorAction SilentlyContinue`n"
-            $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)Cleanup' -Confirm:`$false -ErrorAction SilentlyContinue"
+            $cleanupCommands += "Unregister-ScheduledTask -TaskName '$($toolNameEsc)Cleanup' -Confirm:`$false -ErrorAction SilentlyContinue`n"
 
-            $bytes = [System.Text.Encoding]::Unicode.GetBytes($cleanupCommands)
-            $encoded = [Convert]::ToBase64String($bytes)
+            # The script runs as SYSTEM at boot, so it must live where only SYSTEM and
+            # Administrators can write. %ProgramData% lets any user create subfolders, and a
+            # pre-planted folder would leave its creator as owner with implicit WRITE_DAC —
+            # so any existing folder is removed, a fresh one is created, inheritance is cut,
+            # the DACL is reduced to SYSTEM + Administrators, and the owner is verified before
+            # a SYSTEM task is ever pointed at it.
+            $cleanupDir = Join-Path $env:ProgramData "$($script:ToolName)-cleanup"
+            if (Test-Path -LiteralPath $cleanupDir) { Remove-Item -LiteralPath $cleanupDir -Recurse -Force -ErrorAction Stop }
+            New-Item -Path $cleanupDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+            $adminsSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+            $systemSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+            $dirAcl = New-Object System.Security.AccessControl.DirectorySecurity
+            $dirAcl.SetAccessRuleProtection($true, $false)
+            foreach ($sid in @($systemSid, $adminsSid)) {
+                $dirAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+            }
+            $dirAcl.SetOwner($adminsSid)
+            Set-Acl -LiteralPath $cleanupDir -AclObject $dirAcl -ErrorAction Stop
+            $ownerSid = (Get-Acl -LiteralPath $cleanupDir).GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+            if ($ownerSid -ne $adminsSid.Value -and $ownerSid -ne $systemSid.Value) {
+                throw "cleanup directory owner is $ownerSid; refusing to schedule a SYSTEM task against it"
+            }
 
-            $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -EncodedCommand $encoded"
+            $cleanupScript = Join-Path $cleanupDir 'cleanup.ps1'
+            $cleanupDirEsc = $cleanupDir -replace "'", "''"
+            $cleanupCommands += "Remove-Item -LiteralPath '$cleanupDirEsc' -Recurse -Force -ErrorAction SilentlyContinue"
+            [System.IO.File]::WriteAllText($cleanupScript, $cleanupCommands, (New-Object System.Text.UTF8Encoding $true))
+
+            $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$cleanupScript`""
             $trigger = New-ScheduledTaskTrigger -AtStartup
             $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
             Register-ScheduledTask -TaskName "$($script:ToolName)Cleanup" -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null

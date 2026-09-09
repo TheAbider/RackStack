@@ -142,7 +142,7 @@ function Get-CISControlTable {
     # Registry paths are inlined as literals in each Check below — the Check
     # scriptblocks are invoked locally via `& $c.Check $probe`, where `$using:`
     # does NOT resolve (it is a remoting/job-scope feature only), and closing
-    # over loop/function variables is fragile under PS 5.1 + ps2exe.
+    # over loop/function variables is fragile under PS 5.1 in the compiled EXE.
     return @(
         # ---- 1.1 Password Policy (secedit [System Access]) ----
         [ordered]@{ Id = "CIS-1.1.1"; Title = "Minimum password length >= 14"; Section = "1.1 Password Policy"; Severity = "High"

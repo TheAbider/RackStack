@@ -160,14 +160,28 @@ function Assert-Elevation {
                 Write-OutputColor "  Refusing to elevate: -Config value contains disallowed characters." -color "Error"
                 throw "Invalid -Config value (contains quote/semicolon/backtick/ampersand/pipe)"
             }
-            $elevateArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
-            if ($script:CLIAction)  { $elevateArgs += @('-Action', $script:CLIAction) }
-            if ($script:CLIProfile -ne 'Standard') { $elevateArgs += @('-Tier', $script:CLIProfile) }
-            if ($script:CLIConfig)  { $elevateArgs += @('-Config', $script:CLIConfig) }
-            if ($script:CLISilent)  { $elevateArgs += '-Silent' }
-            if ($script:CLIQuiet)   { $elevateArgs += '-Quiet' }
-            if ($script:CLIOutputFormat -ne 'Console') { $elevateArgs += @('-OutputFormat', $script:CLIOutputFormat) }
-            Start-Process powershell -ArgumentList $elevateArgs -Verb RunAs -ErrorAction Stop
+            $cliArgs = @()
+            if ($script:CLIAction)  { $cliArgs += @('-Action', $script:CLIAction) }
+            if ($script:CLIProfile -ne 'Standard') { $cliArgs += @('-Tier', $script:CLIProfile) }
+            if ($script:CLIConfig)  { $cliArgs += @('-Config', $script:CLIConfig) }
+            if ($script:CLISilent)  { $cliArgs += '-Silent' }
+            if ($script:CLIQuiet)   { $cliArgs += '-Quiet' }
+            if ($script:CLIOutputFormat -ne 'Console') { $cliArgs += @('-OutputFormat', $script:CLIOutputFormat) }
+            if ($PSCommandPath) {
+                # Script file: relaunch it under an elevated powershell.exe.
+                $elevateArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath) + $cliArgs
+                Start-Process powershell -ArgumentList $elevateArgs -Verb RunAs -ErrorAction Stop
+            }
+            else {
+                # Compiled EXE: $PSCommandPath is empty, so relaunch the executable itself.
+                # Its manifest already requests elevation; this path only runs when UAC is
+                # off or the caller bypassed the manifest. -ArgumentList rejects an empty
+                # array, so pass it only when there is something to forward.
+                $exePath = $script:ScriptPath
+                if (-not $exePath -or -not (Test-Path -LiteralPath $exePath)) { throw "Cannot locate the running executable to relaunch it elevated." }
+                if ($cliArgs.Count -gt 0) { Start-Process -FilePath $exePath -ArgumentList $cliArgs -Verb RunAs -ErrorAction Stop }
+                else { Start-Process -FilePath $exePath -Verb RunAs -ErrorAction Stop }
+            }
         }
         catch {
             Write-OutputColor "  Failed to elevate: $_" -color "Error"

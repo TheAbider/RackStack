@@ -186,7 +186,7 @@ added as part of the patch that introduces them, by policy.
 | SHA-256 hash of every artifact published in `release-hashes.txt` | Every release. |
 | Sigstore cosign keyless signature on every artifact (`.sig` + `.pem`) | Every release since v1.98.54; verification command in release notes. |
 | SLSA Level 3 build provenance attestation | `actions/attest-build-provenance@v2` on every release; verifiable via `gh attestation verify`. |
-| Reproducible build from source | `.\sync-to-monolithic.ps1` produces deterministic monolithic; `Invoke-PS2EXE` output is byte-identical given the same source + version arguments. |
+| Reproducible build from source | `.\sync-to-monolithic.ps1` produces deterministic monolithic; the launcher compile (`ci.yml`, in-box `csc.exe`) is byte-identical given the same source + version, up to the PE timestamp. |
 | SHA-pinned GitHub Actions enforced at the repo policy level | `gh api repos/TheAbider/RackStack/actions/permissions` shows `"sha_pinning_required": true`. |
 
 **Counter-argument considered.** The maintainer's GitHub account could
@@ -248,14 +248,14 @@ following are acknowledged and tracked:
   whole-codebase 96%; readers should weight the regex harness's
   4990-pattern coverage alongside.
 
-### CR-4: ps2exe PE timestamp non-determinism
-- The compiled EXE has a PE COFF timestamp field that's set by ps2exe
+### CR-4: PE timestamp non-determinism
+- The compiled EXE has a PE COFF timestamp field that the in-box C# compiler sets
   to "now" at build time. Two builds from the same source produce
   different SHA-256 hashes for that reason alone.
 - Mitigation: `release-hashes.txt` is signed per-build; downstream
   verifiers check the cosign signature, not bit-for-bit reproducibility
   with their own rebuild.
-- Tracking: a ps2exe patch upstream could fix this; not currently
+- Tracking: the Roslyn compiler's `/deterministic` switch would fix this; the in-box compiler predates it. Not currently
   planned to fork.
 
 ### CR-5: Operator can disable defenses
