@@ -189,11 +189,11 @@ jobs:
           Copy-Item -LiteralPath $mono -Destination $embedded -Force
 
           & $csc /nologo /target:exe /platform:anycpu /optimize+ /debug- /warnaserror+ `
-            /r:$sma /r:$chst `
-            /win32icon:RackStack.ico `
-            /win32manifest:dist\launcher\app.manifest `
-            /resource:$embedded,RackStack.ps1 `
-            /out:builds\RackStack.exe $stamped
+            "/r:$sma" "/r:$chst" `
+            "/win32icon:RackStack.ico" `
+            "/win32manifest:dist\launcher\app.manifest" `
+            "/resource:$embedded,RackStack.ps1" `
+            "/out:builds\RackStack.exe" $stamped
           if ($LASTEXITCODE -ne 0) { throw "csc.exe exited $LASTEXITCODE" }
 
           $info = Get-Item 'builds\RackStack.exe'

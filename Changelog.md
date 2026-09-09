@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.123.1
+
+Build fix for the v1.123.0 release.
+
+- **The release compile step now quotes its compiler arguments.** Under PowerShell 7, which runs the release job, the `/resource:` argument reached the C# compiler with its variable unexpanded, so the v1.123.0 build failed before producing an executable and no release was published. The arguments are now passed as quoted strings, which both PowerShell editions expand identically.
+
+Contains everything in v1.123.0: the native launcher that replaces ps2exe.
+
 ## v1.123.0
 
 Replaces the ps2exe wrapper with a native launcher, so the executable is no longer a packed script host.
