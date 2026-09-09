@@ -67,8 +67,9 @@ limit the impact if the maintainer becomes unavailable:
 - **All source is public** at https://github.com/TheAbider/RackStack
   under the MIT License. Any forker can pick up development immediately.
 - **Full release history is reproducible** from any tagged commit via
-  `.\sync-to-monolithic.ps1` + `Invoke-PS2EXE`. The same source produces
-  byte-identical output up to ps2exe's PE timestamp.
+  `.\sync-to-monolithic.ps1` + the `ci.yml` compile step (in-box `csc.exe`, see
+  `dist/launcher/`). The same source produces byte-identical output up to
+  the PE timestamp.
 - **CI is fully automated and GitHub-hosted.** No self-hosted
   infrastructure is on the critical path; GitHub-hosted `windows-2025`
   runners are free for public repos.

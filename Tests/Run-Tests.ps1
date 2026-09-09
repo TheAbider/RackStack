@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated Test Runner for RackStack v1.122.4
+    Automated Test Runner for RackStack v1.123.0
 
 .DESCRIPTION
     Comprehensive non-interactive test suite covering:
@@ -10773,24 +10773,27 @@ catch {
 }
 
 # ============================================================================
-# SECTION 209: BUILD METADATA INTEGRITY (what ps2exe stamps into the EXE)
+# SECTION 209: BUILD INTEGRITY (how RackStack.exe is produced, and what it says it is)
 # ============================================================================
-# Every release through v1.122.3 shipped a binary whose CompanyName,
-# ProductName, FileDescription and LegalCopyright were EMPTY — verified by
-# reading the version resource out of the published v1.122.3 artifact. Two
-# costs: an empty version resource is a mild heuristic-AV signal because
-# legitimate software populates it, and -RequireAdmin raises a UAC prompt that
-# displays FileDescription as the program name, so users were asked to elevate
-# a blank.
+# Releases through v1.122.4 were produced by ps2exe. Its script-host wrapper
+# is widely reused by malware droppers, so heuristic antivirus engines scored
+# every build as a packed script host no matter what the script contained —
+# the same file drifted from 8 to 19 VirusTotal detections in four weeks
+# without changing a byte, and Microsoft re-flagged a hash it had cleared.
 #
-# The compiler version is pinned here too. ps2exe builds the binary that ships
-# to users, so an unpinned Install-Module let the released artifact change
-# without a commit — the exposure the SHA-pinning policy already closes for
-# actions, including transitive ones.
-Write-SectionHeader "SECTION 209: BUILD METADATA INTEGRITY"
+# The EXE is now a small launcher (dist/launcher/RackStack.Launcher.cs) that
+# starts Windows PowerShell's own console host and runs the monolithic script
+# from an embedded plain-text resource. It is compiled with the C# compiler
+# that ships inside Windows, so no compiler or wrapper is downloaded to build
+# the binary that ships to users. These checks pin that arrangement: a return
+# to ps2exe, an unpinned/downloaded compiler, a lost elevation manifest, or an
+# empty version resource all fail here rather than in a VirusTotal result.
+Write-SectionHeader "SECTION 209: BUILD INTEGRITY"
 
 try {
     $ciPath209 = Join-Path $script:ModuleRoot '.github\workflows\ci.yml'
+    $launcherPath209 = Join-Path $script:ModuleRoot 'dist\launcher\RackStack.Launcher.cs'
+    $manifestPath209 = Join-Path $script:ModuleRoot 'dist\launcher\app.manifest'
     if (Test-Path -LiteralPath $ciPath209) {
         # -Encoding UTF8 is load-bearing. ci.yml has no BOM, and Windows PowerShell
         # 5.1 decodes BOM-less files as ANSI, so its em-dashes and box-drawing
@@ -10800,31 +10803,74 @@ try {
         # non-ASCII text in this file pass in one host and fail in the other.
         $ci209 = Get-Content -LiteralPath $ciPath209 -Raw -Encoding UTF8
 
-        # Compiler must be pinned to an exact version, never floating.
-        Write-TestResult "Build: ps2exe is pinned to an explicit version" `
-            ([bool]($ci209 -match "\`$ps2exeVersion\s*=\s*'\d+\.\d+\.\d+'"))
-        Write-TestResult "Build: ps2exe install uses -RequiredVersion" `
-            ([bool]($ci209 -match 'Install-Module ps2exe -RequiredVersion'))
-        Write-TestResult "Build: ps2exe install is not unpinned" `
-            ([bool]($ci209 -notmatch 'Install-Module ps2exe -Force'))
+        # No ps2exe anywhere in the release path — not installed, not invoked.
+        Write-TestResult "Build: ci.yml no longer installs ps2exe" `
+            ([bool]($ci209 -notmatch 'Install-Module\s+ps2exe'))
+        Write-TestResult "Build: ci.yml no longer invokes ps2exe" `
+            ([bool]($ci209 -notmatch '(?i)Invoke-PS2EXE|Import-Module\s+ps2exe'))
 
-        # The version resource must actually be populated.
-        $p2e209 = [regex]::Match($ci209, '(?s)Invoke-PS2EXE.*?(?=\r?\n\s*\$info\s*=)')
-        Write-TestResult "Build: Invoke-PS2EXE call is locatable" $p2e209.Success `
-            "regex found no ps2exe invocation — the checks below would pass vacuously"
-        $call209 = $p2e209.Value
-        foreach ($flag in @('title', 'product', 'company', 'copyright', 'description')) {
-            Write-TestResult "Build: EXE metadata sets -$flag" `
-                ($p2e209.Success -and $call209 -match "-$flag\s+'")
+        # The compile step must be locatable, or every check on its body passes vacuously.
+        $compile209 = [regex]::Match($ci209, '(?s)- name: Compile RackStack\.exe.*?(?=\r?\n\s{6}- name:)')
+        Write-TestResult "Build: compile step is locatable" $compile209.Success `
+            "regex found no 'Compile RackStack.exe' step — the checks below would pass vacuously"
+        $cbody209 = $compile209.Value
+
+        # The compiler is the one inside Windows, referenced by its fixed path —
+        # nothing fetched from a gallery or the network decides what ships.
+        Write-TestResult "Build: compiles with the in-box .NET Framework csc.exe" `
+            ($compile209.Success -and $cbody209 -match 'Microsoft\.NET\\Framework64\\v4\.0\.30319\\csc\.exe')
+        Write-TestResult "Build: compile step downloads nothing" `
+            ($compile209.Success -and $cbody209 -notmatch '(?i)Invoke-WebRequest|Install-Module|Invoke-RestMethod|DownloadFile')
+        Write-TestResult "Build: compile step warns as errors" `
+            ($compile209.Success -and $cbody209 -match '/warnaserror\+')
+
+        # Inputs to the compile: the tracked launcher source, the tracked UAC
+        # manifest, the icon, and the monolithic embedded under its fixed name.
+        Write-TestResult "Build: compiles dist/launcher/RackStack.Launcher.cs" `
+            ($compile209.Success -and $cbody209 -match 'dist\\launcher\\RackStack\.Launcher\.cs')
+        Write-TestResult "Build: applies dist/launcher/app.manifest" `
+            ($compile209.Success -and $cbody209 -match '/win32manifest:dist\\launcher\\app\.manifest')
+        Write-TestResult "Build: embeds the icon" `
+            ($compile209.Success -and $cbody209 -match '/win32icon:RackStack\.ico')
+        Write-TestResult "Build: embeds the monolithic as resource 'RackStack.ps1'" `
+            ($compile209.Success -and $cbody209 -match '/resource:\$embedded,RackStack\.ps1')
+        Write-TestResult "Build: stamps the release version into the launcher" `
+            ($compile209.Success -and $cbody209 -match 'Replace\(''Version = "0\.0\.0\.0"''')
+        Write-TestResult "Build: verifies the compiled FileVersion equals the release version" `
+            ($compile209.Success -and $cbody209 -match 'FileVersion -ne "\$ver\.0"')
+        Write-TestResult "Build: refuses an EXE with an empty CompanyName" `
+            ($compile209.Success -and $cbody209 -match 'IsNullOrWhiteSpace\(\$vi\.CompanyName\)')
+
+        # The launcher source itself: version placeholder present (so stamping
+        # has something to replace), the embedded-resource name matches what the
+        # build embeds, and the version resource is fully populated.
+        $lsrc209 = if (Test-Path -LiteralPath $launcherPath209) { Get-Content -LiteralPath $launcherPath209 -Raw -Encoding UTF8 } else { '' }
+        Write-TestResult "Build: launcher source exists" ([bool]$lsrc209)
+        Write-TestResult "Build: launcher carries the version placeholder the build stamps" `
+            ([bool]($lsrc209 -match 'const string Version = "0\.0\.0\.0";'))
+        Write-TestResult "Build: launcher reads the resource the build embeds" `
+            ([bool]($lsrc209 -match 'ScriptName = "RackStack\.ps1";') -and [bool]($lsrc209 -match 'GetManifestResourceStream\(ScriptName\)'))
+        Write-TestResult "Build: launcher hosts PowerShell's own console host" `
+            ([bool]($lsrc209 -match 'ConsoleShell\.Start\('))
+        Write-TestResult "Build: launcher writes nothing to disk" `
+            ([bool]($lsrc209 -notmatch '(?i)File\.Write|WriteAllText|WriteAllBytes|FileStream\(|Process\.Start|Path\.GetTempPath'))
+        foreach ($attr in @('AssemblyTitle', 'AssemblyProduct', 'AssemblyCompany', 'AssemblyCopyright', 'AssemblyDescription', 'AssemblyFileVersion')) {
+            Write-TestResult "Build: launcher declares $attr" `
+                ([bool]($lsrc209 -match "\[assembly:\s*$attr\(`"?[^`")]"))
         }
-        Write-TestResult "Build: EXE still stamps -Version" `
-            ($p2e209.Success -and $call209 -match '-Version\s+\$ver')
+
+        # The UAC manifest is what makes the EXE elevate; losing it silently
+        # produces a binary that fails at the first admin cmdlet.
+        $lman209 = if (Test-Path -LiteralPath $manifestPath209) { Get-Content -LiteralPath $manifestPath209 -Raw -Encoding UTF8 } else { '' }
+        Write-TestResult "Build: UAC manifest exists" ([bool]$lman209)
+        Write-TestResult "Build: UAC manifest requests requireAdministrator" `
+            ([bool]($lman209 -match 'requestedExecutionLevel\s+level="requireAdministrator"'))
 
         # One identity across every published surface. The EXE's CompanyName
         # must agree with the Gallery manifest rather than drifting on its own.
         $psd209 = Get-Content (Join-Path $script:ModuleRoot 'RackStack.psd1') -Raw
         $psdCompany209 = [regex]::Match($psd209, "CompanyName\s*=\s*'([^']+)'").Groups[1].Value
-        $exeCompany209 = [regex]::Match($call209, "-company\s+'([^']+)'").Groups[1].Value
+        $exeCompany209 = [regex]::Match($lsrc209, 'AssemblyCompany\("([^"]+)"\)').Groups[1].Value
         Write-TestResult "Build: EXE CompanyName matches RackStack.psd1 ('$psdCompany209')" `
             ($psdCompany209 -and $exeCompany209 -and $psdCompany209 -eq $exeCompany209) `
             "psd1='$psdCompany209' exe='$exeCompany209'"
@@ -12778,7 +12824,7 @@ try {
     Write-TestResult "50-EntryPoint: JSON includes Tool field" ($mod50 -match 'Tool\s*=\s*\$script:ToolFullName')
     Write-TestResult "50-EntryPoint: JSON includes Version field" ($mod50 -match 'Version\s*=\s*\$script:ScriptVersion')
     Write-TestResult "50-EntryPoint: JSON includes Action field" ($mod50 -match "Action\s*=\s*'HealthCheck'")
-    Write-TestResult "50-EntryPoint: OutputFormat in re-elevation" ($mod50 -match 'CLIOutputFormat.*elevateArgs.*OutputFormat')
+    Write-TestResult "50-EntryPoint: OutputFormat in re-elevation" ($mod50 -match 'CLIOutputFormat.*(cliArgs|elevateArgs).*OutputFormat')
 
     # HealthCheck structured report tests
     Write-TestResult "37-HealthCheck: builds report hashtable" ($mod37 -match '\$report\s*=\s*@\{')

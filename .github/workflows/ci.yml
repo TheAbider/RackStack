@@ -152,19 +152,14 @@ jobs:
           "exists=$existsStr" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           exit 0
 
-      - name: Install ps2exe
-        if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
-        run: |
-          # Pinned. This module compiles the binary that ships to users, so an
-          # unpinned install would let the released artifact change without a
-          # commit — the same supply-chain exposure the SHA-pinning policy
-          # closes for actions. Bump deliberately, never implicitly.
-          $ps2exeVersion = '1.0.18'
-          if (-not (Get-Module ps2exe -ListAvailable | Where-Object { $_.Version -eq $ps2exeVersion })) {
-            Install-Module ps2exe -RequiredVersion $ps2exeVersion -Force -Scope CurrentUser -AllowClobber
-          }
-          Import-Module ps2exe -RequiredVersion $ps2exeVersion -Force
-
+      # The EXE is a small native host (dist/launcher/RackStack.Launcher.cs) that
+      # starts Windows PowerShell's own console host and runs the monolithic
+      # script, embedded as a plain-text resource. It is compiled with the C#
+      # compiler that ships inside Windows (.NET Framework 4.x), so nothing is
+      # downloaded or installed to produce the shipped binary. Releases through
+      # v1.122.4 used ps2exe, whose script-host wrapper is widely reused by
+      # malware droppers and drew heuristic antivirus detections on every build
+      # regardless of the script's content.
       - name: Compile RackStack.exe
         if: steps.vercheck.outputs.bumped == 'true' && steps.releasecheck.outputs.exists == 'false'
         run: |
@@ -172,24 +167,41 @@ jobs:
           $mono = "builds\RackStack v$ver.ps1"
           if (-not (Test-Path $mono)) { throw "Monolithic not found at $mono" }
           if (-not (Test-Path 'RackStack.ico')) { throw "RackStack.ico missing — required for compile" }
-          # Populate the full version resource. Company/Product/Description
-          # were empty in every release through v1.122.3, which is both a mild
-          # heuristic-AV signal (legitimate software fills these in) and a real
-          # UX gap: -RequireAdmin raises a UAC prompt, and UAC displays
-          # FileDescription as the program name — so users were being asked to
-          # elevate a blank. Values match the identity already published in
-          # RackStack.psd1, the Chocolatey nuspec, and the Scoop manifest.
-          Invoke-PS2EXE -InputFile $mono -OutputFile 'builds\RackStack.exe' `
-            -Version $ver `
-            -RequireAdmin `
-            -IconFile 'RackStack.ico' `
-            -title 'RackStack - Windows Server configuration toolkit' `
-            -product 'RackStack' `
-            -company 'TheAbider' `
-            -copyright 'Copyright (c) 2026 TheAbider' `
-            -description 'Menu-driven configuration and automation for Windows Server hosts.'
+
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (-not (Test-Path $csc)) { throw "csc.exe not found at $csc" }
+          $gac = Join-Path $env:WINDIR 'Microsoft.Net\assembly\GAC_MSIL'
+          $sma  = (Get-ChildItem "$gac\System.Management.Automation"   -Recurse -Filter System.Management.Automation.dll   | Select-Object -First 1).FullName
+          $chst = (Get-ChildItem "$gac\Microsoft.PowerShell.ConsoleHost" -Recurse -Filter Microsoft.PowerShell.ConsoleHost.dll | Select-Object -First 1).FullName
+          if (-not $sma -or -not $chst) { throw "Windows PowerShell 5.1 host assemblies not found in the GAC" }
+
+          # Stamp the release version into the assembly attributes. The version
+          # resource (Company/Product/Description/Copyright) is declared in the
+          # launcher source and must agree with RackStack.psd1 — Run-Tests
+          # Section 209 enforces that.
+          $stamped = Join-Path $env:RUNNER_TEMP 'RackStack.Launcher.cs'
+          $src = Get-Content 'dist\launcher\RackStack.Launcher.cs' -Raw
+          if ($src -notmatch 'Version = "0\.0\.0\.0"') { throw 'Version placeholder missing from launcher source' }
+          [IO.File]::WriteAllText($stamped, $src.Replace('Version = "0.0.0.0"', "Version = `"$ver.0`""))
+
+          # The resource name is fixed; the launcher looks it up by this exact string.
+          $embedded = Join-Path $env:RUNNER_TEMP 'RackStack.ps1'
+          Copy-Item -LiteralPath $mono -Destination $embedded -Force
+
+          & $csc /nologo /target:exe /platform:anycpu /optimize+ /debug- /warnaserror+ `
+            /r:$sma /r:$chst `
+            /win32icon:RackStack.ico `
+            /win32manifest:dist\launcher\app.manifest `
+            /resource:$embedded,RackStack.ps1 `
+            /out:builds\RackStack.exe $stamped
+          if ($LASTEXITCODE -ne 0) { throw "csc.exe exited $LASTEXITCODE" }
+
           $info = Get-Item 'builds\RackStack.exe'
+          $vi = $info.VersionInfo
           Write-Host "Compiled: $($info.FullName) ($([math]::Round($info.Length / 1MB, 2)) MB)"
+          Write-Host "Version resource: $($vi.CompanyName) / $($vi.ProductName) / $($vi.FileVersion) / $($vi.FileDescription)"
+          if ($vi.FileVersion -ne "$ver.0") { throw "FileVersion '$($vi.FileVersion)' does not match release version $ver" }
+          if ([string]::IsNullOrWhiteSpace($vi.CompanyName)) { throw 'CompanyName is empty in the compiled EXE' }
 
       # Release integrity is provided by SHA-256 hashes, Sigstore cosign
       # keyless signatures, and SLSA Level 3 build provenance (all below).

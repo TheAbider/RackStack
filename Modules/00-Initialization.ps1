@@ -221,11 +221,11 @@ $script:StorageBackendType = "iSCSI"
 # Store script path at startup (MUST be before functions for Exit-Script to work)
 $script:ScriptPath = $PSCommandPath
 if (-not $script:ScriptPath) {
-    # ps2exe compiled exe: $PSCommandPath is empty, use process path instead
+    # Compiled exe: $PSCommandPath is empty, use process path instead
     try { $script:ScriptPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName } catch {}
 }
 if (-not $script:ModuleRoot) { $script:ModuleRoot = $PSScriptRoot }
-# ps2exe: $PSScriptRoot may point to a temp extraction dir, not the EXE folder.
+# Compiled exe: $PSScriptRoot is empty or points elsewhere, not at the EXE folder.
 # Always prefer the EXE directory when running compiled (detected by empty $PSCommandPath).
 if (-not $PSCommandPath -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
@@ -233,7 +233,7 @@ if (-not $PSCommandPath -and $script:ScriptPath) {
 if (-not $script:ModuleRoot -and $script:ScriptPath) {
     $script:ModuleRoot = [System.IO.Path]::GetDirectoryName($script:ScriptPath)
 }
-$script:ScriptVersion = "1.122.4"
+$script:ScriptVersion = "1.123.0"
 $script:ScriptStartTime = Get-Date
 
 # Post-update cleanup: UpdateSelf / Rollback leave a `.pending-delete` sibling next to RackStack.exe.

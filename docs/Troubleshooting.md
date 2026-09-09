@@ -666,7 +666,7 @@ The sweep tool uses parallel background jobs for speed:
 
 ### Cause
 
-`RackStack.exe` is unsigned, packed by ps2exe into a .NET assembly, and manages Windows Defender
+`RackStack.exe` is unsigned and manages Windows Defender
 exclusions as a documented feature. That combination scores as evasion behaviour to ML
 classifiers. These are false positives.
 

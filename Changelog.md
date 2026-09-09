@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.123.0
+
+Replaces the ps2exe wrapper with a native launcher, so the executable is no longer a packed script host.
+
+- **`RackStack.exe` is now a small launcher around Windows PowerShell's own console host.** Every release through v1.122.4 was produced by ps2exe, which wraps a script in its own host implementation. That wrapper is widely reused by malware droppers, so antivirus heuristics scored every build as a packed script host no matter what the script did: Microsoft re-flagged a hash it had cleared two weeks earlier, and the same file drifted from 8 to 19 VirusTotal detections without changing a byte. The new executable is compiled with the C# compiler that ships inside Windows, embeds the monolithic script as a plain-text resource, and runs it under the same engine and console as `powershell.exe`. Nothing is downloaded or installed to build it. Behaviour, parameters, elevation, self-update, and package-manager installs are unchanged.
+- **The self-destruct cleanup task now runs a readable script file instead of a base64-encoded command.** The file is written to a directory restricted to SYSTEM and Administrators, with the directory's owner verified before the task is registered. What the task will do can now be audited on the host; an encoded command could not be.
+- **Elevation from the executable no longer fails when UAC is off.** The relaunch path assumed a script file and passed an empty path to PowerShell; the executable now relaunches itself.
+- **The build-integrity tests pin the new arrangement**: no ps2exe, the in-box compiler by its fixed path, nothing downloaded during the compile, the elevation manifest present, and the version resource populated and matching the Gallery manifest.
+
+No module or CLI action changes (81 modules, 201 actions).
+
 ## v1.122.4
 
 Hardens what the tool will let you exclude from Defender, and fixes an executable that shipped without a name.

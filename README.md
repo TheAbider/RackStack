@@ -28,7 +28,7 @@
   <a href="https://www.bestpractices.dev/projects/12921"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12921/badge"></a>
   <a href="https://codecov.io/gh/TheAbider/RackStack"><img alt="codecov" src="https://codecov.io/gh/TheAbider/RackStack/branch/master/graph/badge.svg"></a>
   <img alt="PSScriptAnalyzer 0 errors" src="https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen">
-  <img alt="5495 structural tests" src="https://img.shields.io/badge/structural%20tests-5495-brightgreen">
+  <img alt="5495 structural tests" src="https://img.shields.io/badge/structural%20tests-5511-brightgreen">
   <img alt="Pester 312 tests" src="https://img.shields.io/badge/Pester-312%20tests-brightgreen">
   <img alt="SLSA Level 3" src="https://slsa.dev/images/gh-badge-level3.svg">
 </p>
@@ -120,7 +120,7 @@ Grab `RackStack.exe` from the [latest release](https://github.com/TheAbider/Rack
 
 Every release artifact is signed with [Sigstore](https://www.sigstore.dev/) cosign (keyless) and carries [SLSA Level 3](https://slsa.dev/) build provenance; each release page lists SHA-256 hashes and the verification commands. The EXE is not Authenticode-signed, so Windows SmartScreen may show an "Unknown publisher" prompt on first run.
 
-> **Antivirus false positives:** because the EXE is unsigned, packed by ps2exe, and manages Defender exclusions, ML-based engines sometimes flag it. See [Antivirus Detections](docs/Antivirus-Detections.md) for why it happens and how to verify the binary you hold is the genuine published build. If AV alerts are a problem in your environment, run the `.ps1` from the same release instead — it is the same code, unpacked.
+> **Antivirus false positives:** because the EXE is unsigned and manages Defender exclusions, ML-based engines sometimes flag it. See [Antivirus Detections](docs/Antivirus-Detections.md) for why it happens and how to verify the binary you hold is the genuine published build. If AV alerts are a problem in your environment, run the `.ps1` from the same release instead — it is the same code, unpacked.
 
 On first launch, a setup wizard walks you through configuring your environment (domain, DNS, admin account, iSCSI subnet). Your settings are saved to `rackstack.config.json` next to the exe. To pre-configure, download `rackstack.config.example.json` from the release, rename it to `rackstack.config.json`, fill in your values, and place it alongside the exe. A legacy `defaults.json` from an earlier version is still read automatically when no `rackstack.config.json` exists -- no migration needed.
 
@@ -480,7 +480,7 @@ Run `RackStack.exe -ListActions` or `RackStack.exe -ListActions -OutputFormat JS
 RackStack/
 ├── RackStack.ps1                  # Modular loader -- dot-sources 81 modules (dev use)
 ├── RackStack v{version}.ps1       # Monolithic build -- all modules in one file (deploy/compile)
-├── RackStack.exe                  # Compiled from the monolithic .ps1 via ps2exe
+├── RackStack.exe                  # Native launcher with the monolithic .ps1 embedded (built in CI)
 ├── rackstack.config.json          # Your environment config (gitignored; legacy defaults.json still read)
 ├── rackstack.config.example.json  # Config template with examples
 ├── sync-to-monolithic.ps1         # Builds monolithic from Header.ps1 + Modules/
@@ -546,7 +546,7 @@ Tests cover parsing, module loading, function existence (615 functions), version
 2. Test with `.\RackStack.ps1` (modular loader -- fast iteration, no build step)
 3. Sync: `.\sync-to-monolithic.ps1` (builds `RackStack v{version}.ps1` monolithic)
 4. Test: `.\Tests\Run-Tests.ps1`
-5. Compile: `Invoke-PS2EXE -InputFile 'RackStack v{ver}.ps1' -OutputFile 'RackStack.exe'`
+5. Compile: see [`dist/launcher/README.md`](dist/launcher/README.md) -- CI does this on release; a local build is only needed to test the EXE itself
 
 The sync script matches `#region`/`#endregion` markers between modules and the monolithic file. All 77 region pairs are flat (non-nested). Use `-DryRun` to preview.
 

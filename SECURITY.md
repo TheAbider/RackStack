@@ -72,7 +72,7 @@ Issues of particular concern:
 
 Out of scope:
 - Vulnerabilities in Windows itself or third-party modules (`Pester`,
-  `PSScriptAnalyzer`, `ps2exe`) — please report those upstream
+  `PSScriptAnalyzer`) — please report those upstream
 - Operator misconfiguration where the documented default is safe
 - Findings that require an attacker who is already Administrator on the
   same machine (RackStack runs as Administrator by design)
@@ -113,7 +113,7 @@ provenance are the integrity guarantees in the meantime.
 
 ## Antivirus detections
 
-Being unsigned, packed by ps2exe, and capable of managing Defender
+Being unsigned and capable of managing Defender
 exclusions makes `RackStack.exe` score badly with machine-learning and
 heuristic antivirus engines. Detections are reported periodically and are
 false positives; they are disputed with vendors as they come in.

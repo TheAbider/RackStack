@@ -987,7 +987,7 @@ function Install-AdditionalDC {
         return
     }
 
-    # Step 4: Domain admin credentials. In console mode (ps2exe-built RackStack) Get-Credential
+    # Step 4: Domain admin credentials. In console mode (the compiled RackStack.exe) Get-Credential
     # may return a PSCredential with empty user/password instead of $null on cancel — explicitly
     # check both halves. A blank password used to make it through to Install-ADDSDomainController
     # which then blocked for many seconds before Kerberos rejected the empty secret.
@@ -1165,7 +1165,7 @@ function Install-ReadOnlyDC {
         return
     }
 
-    # Step 4: Domain admin credentials. In console mode (ps2exe-built RackStack) Get-Credential
+    # Step 4: Domain admin credentials. In console mode (the compiled RackStack.exe) Get-Credential
     # may return a PSCredential with empty user/password instead of $null on cancel — explicitly
     # check both halves. A blank password used to make it through to Install-ADDSDomainController
     # which then blocked for many seconds before Kerberos rejected the empty secret.
