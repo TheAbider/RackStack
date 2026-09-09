@@ -29,7 +29,7 @@
             Tags         = @('RackStack', 'Windows', 'WindowsServer', 'HyperV', 'Sysadmin', 'CLI', 'Automation', 'ServerConfig')
             LicenseUri   = 'https://github.com/TheAbider/RackStack/blob/master/LICENSE'
             ProjectUri   = 'https://github.com/TheAbider/RackStack'
-            IconUri      = 'https://raw.githubusercontent.com/TheAbider/RackStack/master/.github/assets/icon.png'
+            IconUri      = 'https://cdn.jsdelivr.net/gh/TheAbider/RackStack@master/.github/assets/icon.png'
             ReleaseNotes = 'See https://github.com/TheAbider/RackStack/releases for per-version changelog.'
         }
     }

@@ -4,6 +4,16 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  # Manual: rebuild and re-push the Chocolatey package for an EXISTING release, e.g.
+  # after a moderator asks for a nuspec change. Uses the published release's own
+  # hash, so the EXE is untouched and no new version (or antivirus resubmission)
+  # is needed. Chocolatey accepts a re-push of a version that is still in moderation.
+  workflow_dispatch:
+    inputs:
+      chocolatey_version:
+        description: 'Existing release version to republish to Chocolatey (e.g. 1.123.1)'
+        required: true
+        type: string
 
 # Top-level: read-only. Write privileges granted only on the test job that needs them.
 # Scorecard's Token-Permissions check awards full credit for this least-privilege pattern.
@@ -11,6 +21,7 @@ permissions: read-all
 
 jobs:
   test:
+    if: github.event_name != 'workflow_dispatch'
     permissions:
       contents: write          # needed for the auto-release step (gh release create)
       id-token: write          # needed for actions/attest-* (SLSA L3 provenance + SBOM)
@@ -549,7 +560,11 @@ jobs:
           $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLower()
           Push-Location dist/chocolatey
           # Stamp the templated nuspec + install script with this version + hash.
-          (Get-Content 'rackstack.nuspec' -Raw) -replace '<version>0\.0\.0</version>', "<version>$ver</version>" |
+          # The icon URL is pinned to this release's tag (Chocolatey moderation does not
+          # accept raw.githubusercontent.com icons; a tag-pinned CDN URL is immutable).
+          (Get-Content 'rackstack.nuspec' -Raw) `
+            -replace '<version>0\.0\.0</version>', "<version>$ver</version>" `
+            -replace '@v0\.0\.0/', "@v$ver/" |
             Set-Content 'rackstack.nuspec' -Encoding utf8
           (Get-Content 'tools/chocolateyinstall.ps1' -Raw) `
             -replace '__VERSION__', $ver `
@@ -631,3 +646,63 @@ jobs:
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           Write-Host "Submission reminder written to the run summary (SHA-256 $sha)."
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Manual republish of the Chocolatey package for an existing release
+  # (workflow_dispatch only). Rebuilds the .nupkg from the CURRENT dist/chocolatey
+  # templates and the published release's own EXE hash, then pushes it. The EXE
+  # is never rebuilt, so the release hash, cosign signature, and any antivirus
+  # clearance for that hash all stay valid. Chocolatey accepts a re-push of a
+  # version that is still in moderation, which is how a moderator's nuspec
+  # request gets answered without cutting a new version.
+  # ───────────────────────────────────────────────────────────────────────────
+  republish-chocolatey:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    runs-on: windows-2025
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Republish Chocolatey package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          $ver = '${{ inputs.chocolatey_version }}'
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') { throw "chocolatey_version '$ver' is not x.y.z" }
+          if ([string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)) { throw 'CHOCO_API_KEY secret is not set' }
+
+          # The hash comes from the published release, never from a local build.
+          $work = Join-Path $env:RUNNER_TEMP 'release'
+          New-Item -ItemType Directory -Force $work | Out-Null
+          gh release download "v$ver" --pattern 'release-hashes.txt' --dir $work --clobber
+          if ($LASTEXITCODE -ne 0) { throw "release v$ver or its release-hashes.txt not found" }
+          $line = Get-Content (Join-Path $work 'release-hashes.txt') | Where-Object { $_ -match '^\s*([a-f0-9]{64})\s+RackStack\.exe\s*$' } | Select-Object -First 1
+          if (-not $line) { throw 'RackStack.exe hash not present in release-hashes.txt' }
+          $hash = ([regex]::Match($line, '^\s*([a-f0-9]{64})')).Groups[1].Value
+          Write-Host "Release v$ver RackStack.exe SHA-256: $hash"
+
+          Push-Location dist/chocolatey
+          (Get-Content 'rackstack.nuspec' -Raw) `
+            -replace '<version>0\.0\.0</version>', "<version>$ver</version>" `
+            -replace '@v0\.0\.0/', "@v$ver/" |
+            Set-Content 'rackstack.nuspec' -Encoding utf8
+          (Get-Content 'tools/chocolateyinstall.ps1' -Raw) `
+            -replace '__VERSION__', $ver `
+            -replace '__CHECKSUM_SHA256__', $hash |
+            Set-Content 'tools/chocolateyinstall.ps1' -Encoding utf8
+          Get-Content 'rackstack.nuspec' | Select-String 'version>|iconUrl|projectUrl|projectSourceUrl|docsUrl' | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+          choco pack rackstack.nuspec
+          if ($LASTEXITCODE -ne 0) { throw "choco pack exited $LASTEXITCODE" }
+          $nupkg = Get-ChildItem -Filter "rackstack.$ver.nupkg" | Select-Object -First 1
+          if (-not $nupkg) { throw 'choco pack produced no .nupkg for this version' }
+          choco apikey --key $env:CHOCO_API_KEY --source https://push.chocolatey.org/
+          choco push $nupkg.FullName --source https://push.chocolatey.org/
+          if ($LASTEXITCODE -ne 0) { throw "choco push exited $LASTEXITCODE" }
+          Pop-Location
+          Write-Host "Republished rackstack $ver to Chocolatey."

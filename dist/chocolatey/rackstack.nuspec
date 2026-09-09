@@ -8,12 +8,12 @@
     <title>RackStack — Windows Server configuration toolkit</title>
     <authors>TheAbider</authors>
     <projectUrl>https://github.com/TheAbider/RackStack</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/TheAbider/RackStack/master/RackStack.ico</iconUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/TheAbider/RackStack@v0.0.0/.github/assets/icon.png</iconUrl>
     <copyright>Copyright (c) 2026 TheAbider</copyright>
     <licenseUrl>https://github.com/TheAbider/RackStack/blob/master/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <projectSourceUrl>https://github.com/TheAbider/RackStack</projectSourceUrl>
-    <docsUrl>https://github.com/TheAbider/RackStack#readme</docsUrl>
+    <projectSourceUrl>https://github.com/TheAbider/RackStack/tree/master</projectSourceUrl>
+    <docsUrl>https://github.com/TheAbider/RackStack/wiki</docsUrl>
     <bugTrackerUrl>https://github.com/TheAbider/RackStack/issues</bugTrackerUrl>
     <tags>windows-server hyper-v iscsi clustering powershell sysadmin automation msp admin-tools</tags>
     <summary>PowerShell automation toolkit for configuring Windows Server hosts</summary>
